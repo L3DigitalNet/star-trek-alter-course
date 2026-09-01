@@ -10,7 +10,7 @@ Use the repo-local `agent-handoff` skill at session startup and closeout. Do not
 
 <!-- prettier-ignore-end -->
 
-# C# and Godot development
+## C# and Godot development
 
 - Run `./scripts/fix.sh` when automated formatting is appropriate, then run `./scripts/verify.sh` before declaring implementation complete.
 - Fix compiler, analyzer, formatting, and test failures at their cause. Never weaken central settings or add suppression merely to pass CI.
