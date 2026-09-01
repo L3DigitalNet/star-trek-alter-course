@@ -20,6 +20,22 @@ internal static class CliTypes
         "Running AssetCtl command {Command}"
     );
 
+    internal static string ToGodotPath(EffectiveConfiguration configuration, string repositoryPath)
+    {
+        string root = PathPolicy.ResolveUnder(
+            configuration.RepositoryRoot,
+            configuration.Paths.GodotAssetRoot,
+            "godot_asset_root",
+            allowMissing: true
+        );
+        string output = PathPolicy.ResolveOutputPath(configuration, repositoryPath, allowMissing: true);
+        string relative = Path.GetRelativePath(root, output).Replace(Path.DirectorySeparatorChar, '/');
+        return "res://" + relative;
+    }
+
+    internal static void ValidateManifestState(EffectiveConfiguration configuration, AssetManifest manifest) =>
+        CommandApp.ValidateManifestState(configuration, manifest);
+
     public sealed class CommandApp(
         ConfigurationLoader configurationLoader,
         AssetRouter router,
@@ -36,6 +52,7 @@ internal static class CliTypes
             }
 
             var options = CliOptions.Parse(arguments[1..]);
+            options.RequireOnlyFor(arguments[0]);
             string output = options.Value("output") ?? "human";
             if (output is not ("human" or "json"))
             {
@@ -89,29 +106,7 @@ internal static class CliTypes
                 ManifestStore.LoadAll(configuration);
             foreach (global::AlterCourse.AssetCtl.Domain.DomainModels.AssetManifest manifest in catalog)
             {
-                if (manifest.Integrity is null)
-                {
-                    throw new AssetCtlException($"{manifest.Request.Id}: selected asset requires integrity.", 1);
-                }
-
-                ManifestStore.VerifyIntegrity(configuration, manifest);
-                byte[] bytes = File.ReadAllBytes(
-                    PathPolicy.ResolveOutputPath(configuration, manifest.Request.Output.Path, allowMissing: false)
-                );
-                global::AlterCourse.AssetCtl.Domain.DomainModels.MechanicalValidationResult validation =
-                    MechanicalValidator.Validate(
-                        manifest.Request,
-                        bytes,
-                        configuration.Limits.MaximumDownloadBytes,
-                        configuration.Limits.MaximumDecodedPixels
-                    );
-                if (!validation.Passed)
-                {
-                    throw new AssetCtlException(
-                        $"{manifest.Request.Id}: mechanical validation failed: {string.Join("; ", validation.Findings)}",
-                        1
-                    );
-                }
+                ValidateManifestState(configuration, manifest);
             }
 
             return new
@@ -123,6 +118,51 @@ internal static class CliTypes
                 offline = true,
                 read_only = true,
             };
+        }
+
+        internal static void ValidateManifestState(EffectiveConfiguration configuration, AssetManifest manifest)
+        {
+            if (manifest.Integrity is null)
+            {
+                string output = PathPolicy.ResolveOutputPath(
+                    configuration,
+                    manifest.Request.Output.Path,
+                    allowMissing: true
+                );
+                bool authoritativeRequest =
+                    manifest.Generation is null
+                    && manifest.MechanicalValidation is null
+                    && manifest.SemanticReview is null
+                    && !File.Exists(output);
+                if (!authoritativeRequest)
+                {
+                    throw new AssetCtlException(
+                        $"{manifest.Request.Id}: manifest without integrity must be an authoritative pre-generation request.",
+                        1
+                    );
+                }
+
+                return;
+            }
+
+            ManifestStore.VerifyIntegrity(configuration, manifest);
+            byte[] bytes = File.ReadAllBytes(
+                PathPolicy.ResolveOutputPath(configuration, manifest.Request.Output.Path, allowMissing: false)
+            );
+            global::AlterCourse.AssetCtl.Domain.DomainModels.MechanicalValidationResult validation =
+                MechanicalValidator.Validate(
+                    manifest.Request,
+                    bytes,
+                    configuration.Limits.MaximumDownloadBytes,
+                    configuration.Limits.MaximumDecodedPixels
+                );
+            if (!validation.Passed)
+            {
+                throw new AssetCtlException(
+                    $"{manifest.Request.Id}: mechanical validation failed: {string.Join("; ", validation.Findings)}",
+                    1
+                );
+            }
         }
 
         internal static object Doctor(EffectiveConfiguration configuration, CliOptions options)
@@ -298,7 +338,7 @@ internal static class CliTypes
                             kind = manifest.Request.Kind,
                             lifecycle = manifest.Request.Lifecycle.ToString().ToLowerInvariant(),
                             repository_path = manifest.Request.Output.Path,
-                            godot_path = ToGodotPath(manifest.Request.Output.Path),
+                            godot_path = ToGodotPath(configuration, manifest.Request.Output.Path),
                             purpose = manifest.Request.Purpose,
                         }
                 )
@@ -595,9 +635,6 @@ internal static class CliTypes
         private static string Human(string command, object result) =>
             $"{command}: {JsonSerializer.Serialize(result, JsonOptions.Stable)}";
 
-        private static string ToGodotPath(string repositoryPath) =>
-            "res://" + repositoryPath["src/AlterCourse.Godot/".Length..];
-
         private static string Capability(AssetCapability capability) =>
             capability switch
             {
@@ -623,6 +660,38 @@ internal static class CliTypes
 
     public sealed class CliOptions
     {
+        private static readonly Dictionary<string, IReadOnlySet<string>> AllowedByCommand = new Dictionary<
+            string,
+            IReadOnlySet<string>
+        >(StringComparer.Ordinal)
+        {
+            ["validate-config"] = Set("output", "offline"),
+            ["doctor"] = Set("output", "probe"),
+            ["find"] = Set("output", "query", "id", "kind", "lifecycle", "tag", "style-profile"),
+            ["status"] = Set("output"),
+            ["plan"] = Set("output", "asset-id", "manifest"),
+            ["generate"] = Set("output", "asset-id", "manifest", "force", "dry-run", "offline"),
+            ["verify"] = Set("output", "asset-id", "manifest"),
+            ["approve"] = Set(
+                "output",
+                "asset-id",
+                "manifest",
+                "approved-by",
+                "approval-note",
+                "confirm-approved-asset",
+                "dry-run"
+            ),
+            ["deprecate"] = Set(
+                "output",
+                "asset-id",
+                "manifest",
+                "actor",
+                "reason",
+                "confirm-approved-asset",
+                "dry-run"
+            ),
+        };
+
         private readonly Dictionary<string, string?> values;
 
         private CliOptions(Dictionary<string, string?> values) => this.values = values;
@@ -667,6 +736,23 @@ internal static class CliTypes
                 : false;
 
         public string Required(string key) => Value(key) ?? throw new AssetCtlException($"--{key} is required.", 2);
+
+        public void RequireOnlyFor(string command)
+        {
+            if (!AllowedByCommand.TryGetValue(command, out IReadOnlySet<string>? allowed))
+            {
+                return;
+            }
+
+            string? unknown = values.Keys.FirstOrDefault(key => !allowed.Contains(key));
+            if (unknown is not null)
+            {
+                throw new AssetCtlException($"Unknown option '--{unknown}' for command '{command}'.", 2);
+            }
+        }
+
+        private static HashSet<string> Set(params string[] values) =>
+            new HashSet<string>(values, StringComparer.Ordinal);
     }
 
     public static class RepositoryLocator

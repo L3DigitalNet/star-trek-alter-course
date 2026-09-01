@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using AlterCourse.AssetCtl.Cli;
 using AlterCourse.AssetCtl.Review;
 
 namespace AlterCourse.AssetCtl.Tests;
@@ -6,6 +7,69 @@ namespace AlterCourse.AssetCtl.Tests;
 /// <summary>Verifies CLI parsing, lifecycle review gates, and diagnostic redaction.</summary>
 public sealed class CliAndLifecycleTests
 {
+    /// <summary>Provides one complete accepted option set for each public command.</summary>
+    public static TheoryData<string, string[]> CommandOptions =>
+        new()
+        {
+            { "validate-config", ["--output", "json", "--offline"] },
+            { "doctor", ["--output", "json", "--probe"] },
+            {
+                "find",
+                [
+                    "--output",
+                    "json",
+                    "--query",
+                    "icon",
+                    "--id",
+                    "asset",
+                    "--kind",
+                    "icon",
+                    "--lifecycle",
+                    "candidate",
+                    "--tag",
+                    "ui",
+                    "--style-profile",
+                    "style",
+                ]
+            },
+            { "status", ["--output", "json"] },
+            { "plan", ["--output", "json", "--asset-id", "asset"] },
+            { "generate", ["--output", "json", "--asset-id", "asset", "--force", "--dry-run", "--offline"] },
+            { "verify", ["--output", "json", "--asset-id", "asset"] },
+            {
+                "approve",
+                [
+                    "--output",
+                    "json",
+                    "--asset-id",
+                    "asset",
+                    "--approved-by",
+                    "owner",
+                    "--approval-note",
+                    "ok",
+                    "--confirm-approved-asset",
+                    "asset",
+                    "--dry-run",
+                ]
+            },
+            {
+                "deprecate",
+                [
+                    "--output",
+                    "json",
+                    "--asset-id",
+                    "asset",
+                    "--actor",
+                    "owner",
+                    "--reason",
+                    "obsolete",
+                    "--confirm-approved-asset",
+                    "asset",
+                    "--dry-run",
+                ]
+            },
+        };
+
     /// <summary>Rejects ambiguous duplicate options and options missing required values.</summary>
     [Fact]
     public void CliRejectsDuplicateAndMissingOptionValues()
@@ -14,6 +78,55 @@ public sealed class CliAndLifecycleTests
         var options = CliOptions.Parse(["--output"]);
         Assert.Throws<AssetCtlException>(() => options.Value("output"));
     }
+
+    /// <summary>Defines and enforces a closed option allowlist for every command.</summary>
+    [Theory]
+    [MemberData(nameof(CommandOptions))]
+    public void EveryCommandHasAClosedOptionAllowlist(string command, string[] arguments)
+    {
+        CliOptions.Parse(arguments).RequireOnlyFor(command);
+        AssetCtlException exception = Assert.Throws<AssetCtlException>(() =>
+            CliOptions.Parse([.. arguments, "--offine"]).RequireOnlyFor(command)
+        );
+
+        Assert.Equal(2, exception.ExitCode);
+        Assert.Contains("--offine", exception.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>Derives Godot resource paths from the configured asset root.</summary>
+    [Fact]
+    public void GodotPathUsesConfiguredAssetRootAndRejectsEscapes()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"assetctl-godot-path-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Combine(root, "game", "content"));
+        try
+        {
+            EffectiveConfiguration configuration = PathConfiguration(root, "game/content");
+
+            Assert.Equal("res://ui/icon.png", CliTypes.ToGodotPath(configuration, "game/content/ui/icon.png"));
+            Assert.Throws<AssetCtlException>(() => CliTypes.ToGodotPath(configuration, "game/other/icon.png"));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static EffectiveConfiguration PathConfiguration(string repositoryRoot, string godotRoot) =>
+        new(
+            repositoryRoot,
+            new AssetCtlPaths(godotRoot, "catalog", "styles", "work", "runs", "state", "logs"),
+            new AssetCtlPolicy(false, true, true, true, false, "reject"),
+            new AssetCtlLimits(1, 1, 1, 1, 1, 1, 1),
+            new SpendingLimits(0, 0, 0),
+            new Dictionary<string, ProviderInstance>(StringComparer.Ordinal),
+            [],
+            [],
+            new Dictionary<string, QualityTier>(StringComparer.Ordinal),
+            new Dictionary<string, StyleProfile>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            "hash"
+        );
 
     /// <summary>Preserves semantic hard failures regardless of aggregate score.</summary>
     [Fact]

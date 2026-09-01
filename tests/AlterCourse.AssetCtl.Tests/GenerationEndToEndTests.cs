@@ -40,6 +40,8 @@ public sealed class GenerationEndToEndTests
             .Parse(JsonSerializer.Serialize(first, JsonOptions.Stable))
             .RootElement.GetProperty("receipt_path")
             .GetString()!;
+        AssetManifest published = ManifestStore.Load(fixture.Configuration, fixture.Manifest.ManifestPath);
+        Assert.Equal($"{published.Generation!.RunId}.json", Path.GetFileName(receiptPath));
         string receipt = await File.ReadAllTextAsync(Path.Combine(fixture.Root, receiptPath));
         AssertSuccessfulReceipt(receipt);
 
@@ -79,7 +81,11 @@ public sealed class GenerationEndToEndTests
     {
         var generator = new ScriptedGenerator("evidence-generator", request => Success(request.Request));
         var reviewer = new FailingReviewer();
-        using var fixture = new GenerationFixture([generator, reviewer], semanticReview: "required");
+        using var fixture = new GenerationFixture(
+            [generator, reviewer],
+            semanticReview: "required",
+            retainUnselectedCandidates: true
+        );
 
         await Assert.ThrowsAsync<ProviderException>(() => fixture.GenerateAsync());
 
@@ -313,6 +319,52 @@ public sealed class GenerationEndToEndTests
         Assert.Equal(expectedFiles, Directory.EnumerateFiles(candidateRoot).Count());
     }
 
+    /// <summary>Retains failed candidates only when diagnostic retention is enabled while preserving receipt hashes.</summary>
+    [Theory]
+    [InlineData(false, 0)]
+    [InlineData(true, 1)]
+    public async Task FailureCandidateRetentionFollowsConfiguredPolicy(bool retainUnselected, int expectedFiles)
+    {
+        var generator = new ScriptedGenerator("failure-retention", request => Success(request.Request));
+        var reviewer = new FailingReviewer();
+        using var fixture = new GenerationFixture(
+            [generator, reviewer],
+            semanticReview: "required",
+            retainUnselectedCandidates: retainUnselected
+        );
+
+        await Assert.ThrowsAsync<ProviderException>(() => fixture.GenerateAsync());
+
+        string receiptPath = Assert.Single(
+            Directory.EnumerateFiles(Path.Combine(fixture.Root, fixture.Configuration.Paths.ReceiptRoot), "*.json")
+        );
+        using var document = JsonDocument.Parse(await File.ReadAllTextAsync(receiptPath));
+        JsonElement candidate = Assert.Single(document.RootElement.GetProperty("candidates").EnumerateArray());
+        Assert.Equal(64, candidate.GetProperty("sha256").GetString()!.Length);
+        Assert.Equal(
+            retainUnselected ? JsonValueKind.String : JsonValueKind.Null,
+            candidate.GetProperty("retained_path").ValueKind
+        );
+        string candidateRoot = Path.Combine(fixture.Root, fixture.Configuration.Paths.WorkRoot);
+        int retained = Directory.Exists(candidateRoot)
+            ? Directory.EnumerateFiles(candidateRoot, "failure-candidate-*", SearchOption.AllDirectories).Count()
+            : 0;
+        Assert.Equal(expectedFiles, retained);
+    }
+
+    /// <summary>Returns Godot paths relative to an alternate configured asset root.</summary>
+    [Fact]
+    public async Task GenerationResultUsesConfiguredGodotAssetRoot()
+    {
+        var generator = new ScriptedGenerator("alternate-root", request => Success(request.Request));
+        using var fixture = new GenerationFixture([generator], "disabled", godotAssetRoot: "game/content");
+
+        object result = await fixture.GenerateAsync();
+        JsonElement json = JsonDocument.Parse(JsonSerializer.Serialize(result, JsonOptions.Stable)).RootElement;
+
+        Assert.Equal("res://test/placeholder.png", json.GetProperty("godot_path").GetString());
+    }
+
     /// <summary>Preserves billed-attempt evidence when a provider fails before producing candidates.</summary>
     [Fact]
     public async Task BillableProviderFailureWritesNonAuthoritativeFailureReceipt()
@@ -535,12 +587,13 @@ public sealed class GenerationEndToEndTests
             int candidates = 1,
             decimal modelCost = 0m,
             byte[]? referenceBytes = null,
-            long maximumReferenceBytes = 1_000_000
+            long maximumReferenceBytes = 1_000_000,
+            string godotAssetRoot = "src/AlterCourse.Godot/assets"
         )
         {
             Root = Path.Combine(Path.GetTempPath(), "assetctl-e2e-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(Root);
-            AssetRequest request = CreateRequest(referenceBytes);
+            AssetRequest request = CreateRequest(referenceBytes, godotAssetRoot);
             var providers = adapters.ToDictionary(
                 adapter => adapter.AdapterId,
                 adapter => Provider(adapter, modelCost),
@@ -557,7 +610,8 @@ public sealed class GenerationEndToEndTests
                 maximumTotalAttempts,
                 retainUnselectedCandidates,
                 candidates,
-                maximumReferenceBytes
+                maximumReferenceBytes,
+                godotAssetRoot
             );
             Manifest = CreateManifest(request);
             string manifestPath = Path.Combine(Root, Manifest.ManifestPath);
@@ -576,11 +630,14 @@ public sealed class GenerationEndToEndTests
             Orchestrator = new GenerationOrchestrator(registry, new AssetRouter(registry));
         }
 
-        private static AssetRequest CreateRequest(byte[]? referenceBytes)
+        private static AssetRequest CreateRequest(byte[]? referenceBytes, string godotAssetRoot)
         {
             AssetRequest request = TestData.Request() with
             {
-                Output = TestData.Request().Output with { Path = "src/AlterCourse.Godot/assets/test/placeholder.png" },
+                Output = TestData.Request().Output with
+                {
+                    Path = Path.Combine(godotAssetRoot, "test", "placeholder.png"),
+                },
             };
             return referenceBytes is null
                 ? request
@@ -657,12 +714,13 @@ public sealed class GenerationEndToEndTests
             int maximumTotalAttempts,
             bool retainUnselectedCandidates,
             int candidates,
-            long maximumReferenceBytes
+            long maximumReferenceBytes,
+            string godotAssetRoot
         ) =>
             new(
                 root,
                 new AssetCtlPaths(
-                    "src/AlterCourse.Godot/assets",
+                    godotAssetRoot,
                     "config/assets/catalog",
                     "config/assets/styles",
                     ".assetctl/work",

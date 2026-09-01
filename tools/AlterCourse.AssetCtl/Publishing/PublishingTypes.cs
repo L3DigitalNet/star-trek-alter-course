@@ -802,7 +802,7 @@ internal static class PublishingTypes
 
     public static class ReceiptWriter
     {
-        public static string Write(EffectiveConfiguration configuration, object receipt)
+        public static string Write(EffectiveConfiguration configuration, string runId, object receipt)
         {
             string root = PathPolicy.ResolveUnder(
                 configuration.RepositoryRoot,
@@ -811,15 +811,24 @@ internal static class PublishingTypes
                 allowMissing: true
             );
             Directory.CreateDirectory(root);
-            string id = Guid.NewGuid().ToString();
-            string path = Path.Combine(root, id + ".json");
+            if (
+                string.IsNullOrWhiteSpace(runId)
+                || runId.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
+                || runId.Contains(Path.DirectorySeparatorChar, StringComparison.Ordinal)
+                || runId.Contains(Path.AltDirectorySeparatorChar, StringComparison.Ordinal)
+            )
+            {
+                throw new AssetCtlException("run_id is not safe for a receipt filename.", 2);
+            }
+
+            string path = Path.Combine(root, runId + ".json");
             string stage = path + ".tmp";
             File.WriteAllText(
                 stage,
                 JsonSerializer.Serialize(receipt, JsonOptions.Indented),
                 new System.Text.UTF8Encoding(false)
             );
-            File.Move(stage, path);
+            File.Move(stage, path, overwrite: false);
             return Path.GetRelativePath(configuration.RepositoryRoot, path);
         }
     }

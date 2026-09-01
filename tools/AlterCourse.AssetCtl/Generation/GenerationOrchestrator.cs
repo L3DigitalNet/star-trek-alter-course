@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using AlterCourse.AssetCtl.Cli;
 using AlterCourse.AssetCtl.Providers;
 using AlterCourse.AssetCtl.Routing;
 using AlterCourse.AssetCtl.Validation;
@@ -262,7 +263,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
                     configuration.EffectiveHash,
                     StringComparison.Ordinal
                 )
-                ? Result(manifest, null, existing: true)
+                ? Result(configuration, manifest, null, existing: true)
                 : null;
         }
         catch (AssetCtlException)
@@ -622,7 +623,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
             runId,
             bytes
         );
-        return Result(generated, receipt, existing: false);
+        return Result(configuration, generated, receipt, existing: false);
     }
 
     private static string PublishAndWriteReceipt(
@@ -714,7 +715,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         );
         try
         {
-            return ReceiptWriter.Write(configuration, receipt);
+            return ReceiptWriter.Write(configuration, runId, receipt);
         }
         catch (Exception exception) when (exception is AssetCtlException or IOException)
         {
@@ -819,7 +820,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
                 reason = "mechanical-pass, semantic-policy-pass, score-descending, readability, creation-order",
                 selected_sha256 = integrity.Sha256,
             },
-            publication = PublicationReceipt(generated, publication, failure),
+            publication = PublicationReceipt(configuration, generated, publication, failure),
             authoritative = false,
         };
 
@@ -874,6 +875,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
     }
 
     private static object PublicationReceipt(
+        EffectiveConfiguration configuration,
         AssetManifest generated,
         AtomicPublisher.PublicationResult? publication,
         string? failure
@@ -887,7 +889,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
             failure,
             repository_path = publication?.Published == true ? generated.Request.Output.Path : null,
             godot_path = publication?.Published == true
-                ? "res://" + generated.Request.Output.Path["src/AlterCourse.Godot/".Length..]
+                ? CliTypes.ToGodotPath(configuration, generated.Request.Output.Path)
                 : null,
             manifest_path = publication?.Published == true ? generated.ManifestPath : null,
         };
@@ -960,7 +962,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
     {
         try
         {
-            ReceiptWriter.Write(configuration, receipt);
+            ReceiptWriter.Write(configuration, runId, receipt);
         }
         catch (Exception exception) when (exception is AssetCtlException or IOException)
         {
@@ -1402,7 +1404,9 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
                 new
                 {
                     item.Candidate.CreationOrder,
-                    retained_path = FailureCandidatePath(configuration, runId, item.Candidate, index),
+                    retained_path = configuration.Policy.RetainUnselectedCandidates
+                        ? FailureCandidatePath(configuration, runId, item.Candidate, index)
+                        : null,
                     sha256 = Convert.ToHexStringLower(SHA256.HashData(item.Candidate.Bytes)),
                     item.Candidate.MediaType,
                     item.Candidate.ProviderRequestId,
@@ -1419,6 +1423,11 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         IReadOnlyList<ReceiptCandidateEvidence> candidates
     )
     {
+        if (!configuration.Policy.RetainUnselectedCandidates)
+        {
+            return;
+        }
+
         for (int index = 0; index < candidates.Count; index++)
         {
             ReceiptCandidateEvidence item = candidates[index];
@@ -1510,12 +1519,17 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         return (Path.GetFileName(path), mediaType, bytes);
     }
 
-    private static object Result(AssetManifest manifest, string? receipt, bool existing) =>
+    private static object Result(
+        EffectiveConfiguration configuration,
+        AssetManifest manifest,
+        string? receipt,
+        bool existing
+    ) =>
         new
         {
             asset_id = manifest.Request.Id,
             repository_path = manifest.Request.Output.Path,
-            godot_path = "res://" + manifest.Request.Output.Path["src/AlterCourse.Godot/".Length..],
+            godot_path = CliTypes.ToGodotPath(configuration, manifest.Request.Output.Path),
             lifecycle = manifest.Request.Lifecycle.ToString().ToLowerInvariant(),
             validation = manifest.MechanicalValidation?.Passed == false ? "fail" : "pass",
             estimated_cost_usd = manifest.Generation?.EstimatedCostUsd ?? 0,

@@ -13,8 +13,9 @@ internal static class Program
 {
     public static async Task<int> Main(string[] arguments)
     {
-        string repository = TryFindRepository();
-        using ILoggerFactory loggerFactory = CreateLoggerFactory(repository);
+        string? repository = TryFindRepository();
+        string? logRoot = TryLoadLogRoot(repository);
+        using ILoggerFactory loggerFactory = CreateLoggerFactory(repository, logRoot);
         using var httpClient = new HttpClient(CreateProviderHandler());
         return await RunAsync(arguments, loggerFactory, httpClient).ConfigureAwait(false);
     }
@@ -22,11 +23,17 @@ internal static class Program
     internal static SocketsHttpHandler CreateProviderHandler() =>
         new() { AllowAutoRedirect = false, ConnectTimeout = TimeSpan.FromSeconds(15) };
 
-    internal static ILoggerFactory CreateLoggerFactory(string repository)
+    internal static ILoggerFactory CreateLoggerFactory(string? repository, string? configuredLogRoot = ".assetctl/logs")
     {
+        if (repository is null || configuredLogRoot is null)
+        {
+            return LoggerFactory.Create(builder => builder.AddProvider(new StderrLoggerProvider()));
+        }
+
         try
         {
-            Directory.CreateDirectory(Path.Combine(repository, ".assetctl", "logs"));
+            string logRoot = PathPolicy.ResolveUnder(repository, configuredLogRoot, "log_root", allowMissing: true);
+            Directory.CreateDirectory(logRoot);
             Log.Logger = new LoggerConfiguration()
                 .MinimumLevel.Information()
                 .WriteTo.Console(
@@ -36,7 +43,7 @@ internal static class Program
                 )
                 .WriteTo.File(
                     new JsonFormatter(renderMessage: true, formatProvider: CultureInfo.InvariantCulture),
-                    Path.Combine(repository, ".assetctl", "logs", "assetctl-.json"),
+                    Path.Combine(logRoot, "assetctl-.json"),
                     rollingInterval: RollingInterval.Day,
                     retainedFileCountLimit: 7,
                     fileSizeLimitBytes: 4 * 1024 * 1024,
@@ -93,7 +100,7 @@ internal static class Program
         }
     }
 
-    private static string TryFindRepository()
+    private static string? TryFindRepository()
     {
         try
         {
@@ -101,7 +108,32 @@ internal static class Program
         }
         catch (AssetCtlException)
         {
-            return Environment.CurrentDirectory;
+            return null;
+        }
+    }
+
+    private static string? TryLoadLogRoot(string? repository)
+    {
+        if (repository is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            using var client = new HttpClient(CreateProviderHandler());
+            AdapterRegistry registry = new([
+                new LocalPlaceholderGenerator(),
+                new RecraftImageAdapter(client),
+                new OpenAiImageAdapter(client),
+                new XaiImageAdapter(client),
+                new OpenAiVisionReviewer(client),
+            ]);
+            return new ConfigurationLoader(registry.Descriptors).Load(repository).Paths.LogRoot;
+        }
+        catch (AssetCtlException)
+        {
+            return null;
         }
     }
 

@@ -6,6 +6,90 @@ namespace AlterCourse.AssetCtl.Tests;
 /// <summary>Verifies versioned configuration values, schema documents, routes, and operational diagnostics.</summary>
 public sealed class ConfigurationContractTests
 {
+    /// <summary>Accepts the authoritative manifest-only request used before first publication.</summary>
+    [Fact]
+    public void ValidateConfigAcceptsManifestOnlyPreGenerationState()
+    {
+        EffectiveConfiguration configuration = ManifestOnlyConfiguration();
+        try
+        {
+            AssetManifest manifest = ManifestOnlyManifest();
+
+            CliTypes.ValidateManifestState(configuration, manifest);
+        }
+        finally
+        {
+            Directory.Delete(configuration.RepositoryRoot, recursive: true);
+        }
+    }
+
+    /// <summary>Rejects partial generated state without an integrity-bound output.</summary>
+    [Fact]
+    public void ValidateConfigRejectsUnsafePartialManifestState()
+    {
+        EffectiveConfiguration configuration = ManifestOnlyConfiguration();
+        try
+        {
+            AssetManifest manifest = ManifestOnlyManifest() with
+            {
+                MechanicalValidation = new MechanicalValidationResult(
+                    true,
+                    "image/png",
+                    1,
+                    1,
+                    true,
+                    [],
+                    [1],
+                    new Dictionary<int, byte[]>()
+                ),
+            };
+
+            Assert.Throws<AssetCtlException>(() => CliTypes.ValidateManifestState(configuration, manifest));
+        }
+        finally
+        {
+            Directory.Delete(configuration.RepositoryRoot, recursive: true);
+        }
+    }
+
+    private static EffectiveConfiguration ManifestOnlyConfiguration()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"assetctl-manifest-only-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Combine(root, "assets"));
+        return new EffectiveConfiguration(
+            root,
+            new AssetCtlPaths("assets", "catalog", "styles", "work", "runs", "state", "logs"),
+            new AssetCtlPolicy(false, true, true, true, false, "reject"),
+            new AssetCtlLimits(1_000_000, 1_000_000, 4, 4, 10, 30, 1_000_000),
+            new SpendingLimits(0, 0, 0),
+            new Dictionary<string, ProviderInstance>(StringComparer.Ordinal),
+            [],
+            [],
+            new Dictionary<string, QualityTier>(StringComparer.Ordinal),
+            new Dictionary<string, StyleProfile>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            "hash"
+        );
+    }
+
+    private static AssetManifest ManifestOnlyManifest() =>
+        new(
+            "1",
+            TestData.Request() with
+            {
+                Output = TestData.Request().Output with { Path = "assets/request.png" },
+            },
+            0,
+            new RightsRecord("unreviewed-generated-placeholder", null, null, null, null),
+            null,
+            null,
+            null,
+            null,
+            new ApprovalRecord(null, null, null),
+            null,
+            "catalog/request.asset.yaml"
+        );
+
     /// <summary>Accepts only the three version-one semantic-review policy values.</summary>
     [Theory]
     [InlineData("disabled")]

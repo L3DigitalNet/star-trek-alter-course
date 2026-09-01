@@ -246,6 +246,40 @@ public sealed class ProviderStrictBoundaryTests
         }
     }
 
+    /// <summary>Writes structured logs under the configured log root rather than a built-in path.</summary>
+    [Fact]
+    public void RollingLogUsesConfiguredRoot()
+    {
+        string repository = Path.Combine(Path.GetTempPath(), $"assetctl-log-root-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(repository);
+        try
+        {
+            using (ILoggerFactory factory = Program.CreateLoggerFactory(repository, "var/assetctl/logs"))
+            {
+                LogAttempt(factory.CreateLogger("contract"), 1, null);
+            }
+
+            Assert.Single(Directory.GetFiles(Path.Combine(repository, "var", "assetctl", "logs"), "*.json"));
+            Assert.False(Directory.Exists(Path.Combine(repository, ".assetctl", "logs")));
+        }
+        finally
+        {
+            Directory.Delete(repository, recursive: true);
+        }
+    }
+
+    /// <summary>Does not create diagnostic directories when no repository was discovered.</summary>
+    [Fact]
+    public void LoggingWithoutRepositoryUsesStderrOnly()
+    {
+        string outside = Path.Combine(Path.GetTempPath(), $"assetctl-no-repo-{Guid.NewGuid():N}");
+
+        using ILoggerFactory factory = Program.CreateLoggerFactory(null, null);
+
+        Assert.NotNull(factory);
+        Assert.False(Directory.Exists(outside));
+    }
+
     /// <summary>Gets semantic payloads that each violate one exact schema rule.</summary>
     public static TheoryData<string> InvalidSemanticReviews =>
         new()
