@@ -31,7 +31,7 @@ jobs:
         with:
           global-json-file: global.json
           cache: true
-          cache-dependency-path: '**/packages.lock.json'
+          cache-dependency-path: "**/packages.lock.json"
 
       - name: Run canonical verification
         run: ./scripts/verify.sh

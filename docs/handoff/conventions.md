@@ -2,11 +2,11 @@
 
 ## Quick reference
 
-| ID  | Convention |
-| --- | ---------- |
+| ID    | Convention                                        |
+| ----- | ------------------------------------------------- |
 | C-001 | Run the canonical quality gate before completion. |
-| C-002 | Keep simulation code independent from Godot. |
-| C-003 | Make diagnostic exceptions explicit and narrow. |
+| C-002 | Keep simulation code independent from Godot.      |
+| C-003 | Make diagnostic exceptions explicit and narrow.   |
 
 ## Numbered conventions
 

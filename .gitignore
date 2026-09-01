@@ -17,7 +17,9 @@ data_*/
 mono_crash.*.json
 
 # .NET and test outputs
-**/bin/
-**/obj/
+/src/*/bin/
+/src/*/obj/
+/tests/*/bin/
+/tests/*/obj/
 TestResults/
 StrykerOutput/
