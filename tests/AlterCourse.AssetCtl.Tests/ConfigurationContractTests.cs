@@ -78,6 +78,75 @@ public sealed class ConfigurationContractTests
         }
     }
 
+    /// <summary>Rejects a validation keyword whose JSON type violates the draft 2020-12 meta-schema.</summary>
+    [Fact]
+    public void SchemaValidationRejectsInvalidMinimumKeywordType()
+    {
+        AssertInvalidSchema("""{ "$schema": "https://json-schema.org/draft/2020-12/schema", "minimum": "invalid" }""");
+    }
+
+    /// <summary>Rejects a malformed reference rather than treating it as an inert annotation.</summary>
+    [Fact]
+    public void SchemaValidationRejectsMalformedReference()
+    {
+        AssertInvalidSchema("""{ "$schema": "https://json-schema.org/draft/2020-12/schema", "$ref": 7 }""");
+    }
+
+    /// <summary>Rejects an unsupported dialect before schema evaluation can select ambiguous semantics.</summary>
+    [Fact]
+    public void SchemaValidationRejectsUnsupportedDialect()
+    {
+        AssertInvalidSchema("""{ "$schema": "https://example.invalid/unknown-dialect", "type": "object" }""");
+    }
+
+    /// <summary>Requires route identifiers to remain unique across generation and review routes.</summary>
+    [Fact]
+    public void ConfigurationLoadRejectsRouteIdDuplicatedAcrossRouteKinds()
+    {
+        string root = CopyTrackedConfiguration();
+        try
+        {
+            string routing = Path.Combine(root, "config", "assets", "routing.yaml");
+            File.WriteAllText(
+                routing,
+                File.ReadAllText(routing)
+                    .Replace("default-semantic-review", "vector-placeholder", StringComparison.Ordinal)
+            );
+
+            Assert.Throws<AssetCtlException>(() => Loader().Load(root));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    /// <summary>Preserves the strict tracked candidate-retention policy in the effective configuration.</summary>
+    [Fact]
+    public void EffectivePolicyPreservesRetainUnselectedCandidates()
+    {
+        string root = CopyTrackedConfiguration();
+        try
+        {
+            string tracked = Path.Combine(root, "config", "assets", "assetctl.yaml");
+            File.WriteAllText(
+                tracked,
+                File.ReadAllText(tracked)
+                    .Replace(
+                        "retain_unselected_candidates: false",
+                        "retain_unselected_candidates: true",
+                        StringComparison.Ordinal
+                    )
+            );
+
+            Assert.True(Loader().Load(root).Policy.RetainUnselectedCandidates);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     /// <summary>Applies the untracked local override after tracked policy without accepting secret fields.</summary>
     [Fact]
     public void LocalOverrideHasDeterministicPrecedenceOverTrackedPolicy()
@@ -96,6 +165,8 @@ public sealed class ConfigurationContractTests
                   local_placeholder_fallback: false
                 spending:
                   maximum_estimated_cost_per_asset_usd: 0.25
+                  maximum_estimated_cost_per_run_usd: 0.50
+                  maximum_estimated_cost_per_day_usd: 0.75
                 """
             );
 
@@ -103,8 +174,62 @@ public sealed class ConfigurationContractTests
 
             Assert.True(configuration.Policy.ExternalGenerationEnabled);
             Assert.False(configuration.Policy.LocalPlaceholderFallback);
+            Assert.True(configuration.Policy.ProtectApprovedAssets);
+            Assert.False(configuration.Policy.RetainUnselectedCandidates);
             Assert.Equal(0.25m, configuration.Spending.PerAssetUsd);
-            Assert.Equal(0.00m, configuration.Spending.PerRunUsd);
+            Assert.Equal(0.50m, configuration.Spending.PerRunUsd);
+            Assert.Equal(0.75m, configuration.Spending.PerDayUsd);
+            Assert.Contains(".assetctl/config.local.yaml", configuration.FileHashes.Keys, StringComparer.Ordinal);
+            Assert.Equal(64, configuration.FileHashes[".assetctl/config.local.yaml"].Length);
+            Assert.Equal(64, configuration.EffectiveHash.Length);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    /// <summary>Keeps invocation-only CLI flags outside the merged configuration and its provenance hash.</summary>
+    [Fact]
+    public void InvocationFlagsDoNotBecomeHiddenConfigurationOverrides()
+    {
+        string root = CopyTrackedConfiguration();
+        try
+        {
+            EffectiveConfiguration before = Loader().Load(root);
+            var options = CliTypes.CliOptions.Parse(["--offline", "--dry-run"]);
+            EffectiveConfiguration after = Loader().Load(root);
+
+            Assert.True(options.Flag("offline"));
+            Assert.True(options.Flag("dry-run"));
+            Assert.Equal(before.FileHashes, after.FileHashes);
+            Assert.Equal(before.EffectiveHash, after.EffectiveHash);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    /// <summary>Rejects a non-boolean retained-candidate policy instead of coercing configuration text.</summary>
+    [Fact]
+    public void RetainUnselectedCandidatesRequiresStrictBoolean()
+    {
+        string root = CopyTrackedConfiguration();
+        try
+        {
+            string tracked = Path.Combine(root, "config", "assets", "assetctl.yaml");
+            File.WriteAllText(
+                tracked,
+                File.ReadAllText(tracked)
+                    .Replace(
+                        "retain_unselected_candidates: false",
+                        "retain_unselected_candidates: keep",
+                        StringComparison.Ordinal
+                    )
+            );
+
+            Assert.Throws<AssetCtlException>(() => Loader().Load(root));
         }
         finally
         {
@@ -235,6 +360,24 @@ public sealed class ConfigurationContractTests
         string root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         return root;
+    }
+
+    private static void AssertInvalidSchema(string schema)
+    {
+        string root = TemporaryRepository();
+        try
+        {
+            string schemas = Path.Combine(root, "config", "assets", "schemas");
+            Directory.CreateDirectory(schemas);
+            File.WriteAllText(Path.Combine(schemas, "invalid.json"), schema);
+            Assert.Throws<AssetCtlException>(() =>
+                ConfigurationTypes.JsonSchemaDocumentValidator.ValidateTrackedSchemas(root)
+            );
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
     }
 
     private static void CopyDirectory(string source, string destination)

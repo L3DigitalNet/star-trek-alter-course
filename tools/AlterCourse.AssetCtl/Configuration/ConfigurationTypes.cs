@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Json.Schema;
 using YamlDotNet.RepresentationModel;
 using OutputTransparency = AlterCourse.AssetCtl.Domain.DomainModels.OutputTransparency;
 using RouteFallbackPolicy = AlterCourse.AssetCtl.Domain.DomainModels.RouteFallbackPolicy;
@@ -125,7 +126,8 @@ internal static class ConfigurationTypes
                 node.Boolean("local_placeholder_fallback", "policy"),
                 node.Boolean("require_https_endpoints", "policy"),
                 node.Boolean("allow_remote_reference_urls", "policy"),
-                unknownPrice
+                unknownPrice,
+                node.Boolean("retain_unselected_candidates", "policy")
             );
         }
 
@@ -494,10 +496,31 @@ internal static class ConfigurationTypes
             );
             document.RequireOnly("routing", "schema_version", "routes", "review_routes");
             RequireVersion(document, "routing");
-            return (
-                ReadRouteList(document.Sequence("routes", "routing"), false, providers, limits),
-                ReadRouteList(document.Sequence("review_routes", "routing"), true, providers, limits)
+            List<RouteDefinition> routes = ReadRouteList(
+                document.Sequence("routes", "routing"),
+                false,
+                providers,
+                limits
             );
+            List<RouteDefinition> reviewRoutes = ReadRouteList(
+                document.Sequence("review_routes", "routing"),
+                true,
+                providers,
+                limits
+            );
+            string? duplicate = routes
+                .Select(route => route.Id)
+                .Intersect(reviewRoutes.Select(route => route.Id), StringComparer.Ordinal)
+                .FirstOrDefault();
+            if (duplicate is not null)
+            {
+                throw new AssetCtlException(
+                    $"routing: route id '{duplicate}' is duplicated across routes and review_routes.",
+                    2
+                );
+            }
+
+            return (routes, reviewRoutes);
         }
 
         private static List<RouteDefinition> ReadRouteList(
@@ -938,7 +961,48 @@ internal static class ConfigurationTypes
                 throw new AssetCtlException($"{field}: path is outside configured root '{configuredRoot}'.", 2);
             }
 
+            EnsurePhysicalContainment(allowedRoot, candidate, field, allowMissing);
+
             return candidate;
+        }
+
+        /// <summary>Require every existing path component to resolve beneath the physical configured root.</summary>
+        private static void EnsurePhysicalContainment(
+            string configuredRoot,
+            string candidate,
+            string field,
+            bool allowMissing
+        )
+        {
+            string physicalRoot = ResolvePhysicalPath(configuredRoot);
+            string current = configuredRoot;
+            foreach (
+                string segment in Path.GetRelativePath(configuredRoot, candidate).Split(Path.DirectorySeparatorChar)
+            )
+            {
+                current = Path.Combine(current, segment);
+                if (!File.Exists(current) && !Directory.Exists(current))
+                {
+                    if (allowMissing)
+                    {
+                        break;
+                    }
+
+                    throw new AssetCtlException($"{field}: path does not exist.", 2);
+                }
+
+                string physicalCurrent = ResolvePhysicalPath(current);
+                if (!IsContained(physicalRoot, physicalCurrent))
+                {
+                    throw new AssetCtlException($"{field}: symlink escapes configured root.", 2);
+                }
+            }
+        }
+
+        private static string ResolvePhysicalPath(string path)
+        {
+            FileSystemInfo info = Directory.Exists(path) ? new DirectoryInfo(path) : new FileInfo(path);
+            return Path.GetFullPath(info.ResolveLinkTarget(returnFinalTarget: true)?.FullName ?? path);
         }
 
         public static string ResolveManifestPath(
@@ -996,15 +1060,36 @@ internal static class ConfigurationTypes
                 string relative = Path.GetRelativePath(repositoryRoot, path);
                 try
                 {
-                    using var document = JsonDocument.Parse(
-                        File.ReadAllBytes(path),
+                    string contents = File.ReadAllText(path);
+                    using var parsed = JsonDocument.Parse(
+                        contents,
                         new JsonDocumentOptions
                         {
                             AllowTrailingCommas = false,
                             CommentHandling = JsonCommentHandling.Disallow,
                         }
                     );
-                    ValidateSchema(document.RootElement, document.RootElement, relative, isRoot: true);
+                    JsonElement document = parsed.RootElement;
+                    string? dialect =
+                        document.TryGetProperty("$schema", out JsonElement dialectElement)
+                        && dialectElement.ValueKind == JsonValueKind.String
+                            ? dialectElement.GetString()
+                            : null;
+                    if (!string.Equals(dialect, SupportedDraft, StringComparison.Ordinal))
+                    {
+                        throw new AssetCtlException($"{relative}.$schema: expected '{SupportedDraft}'.", 2);
+                    }
+
+                    EvaluationResults evaluation = MetaSchemas.Draft202012.Evaluate(
+                        document,
+                        new EvaluationOptions { OutputFormat = OutputFormat.List }
+                    );
+                    if (!evaluation.IsValid)
+                    {
+                        throw new AssetCtlException($"{relative}: invalid draft 2020-12 schema: {evaluation}", 2);
+                    }
+
+                    _ = JsonSchema.FromText(contents);
                 }
                 catch (JsonException exception)
                 {
@@ -1020,196 +1105,6 @@ internal static class ConfigurationTypes
             }
 
             return results;
-        }
-
-        private static void ValidateSchema(JsonElement schema, JsonElement document, string path, bool isRoot = false)
-        {
-            if (schema.ValueKind == JsonValueKind.True || schema.ValueKind == JsonValueKind.False)
-            {
-                return;
-            }
-
-            if (schema.ValueKind != JsonValueKind.Object)
-            {
-                throw new AssetCtlException($"{path}: schema must be an object or boolean.", 2);
-            }
-
-            if (isRoot)
-            {
-                if (
-                    !schema.TryGetProperty("$schema", out JsonElement draft)
-                    || draft.ValueKind != JsonValueKind.String
-                    || !string.Equals(draft.GetString(), SupportedDraft, StringComparison.Ordinal)
-                )
-                {
-                    throw new AssetCtlException($"{path}.$schema: expected '{SupportedDraft}'.", 2);
-                }
-            }
-
-            ValidateType(schema, path);
-            ValidateStringArrayKeyword(schema, "required", path, requireUnique: true);
-            ValidateStringArrayKeyword(schema, "enum", path, requireUnique: false, allowNonStrings: true);
-            ValidateSchemaMap(schema, "properties", document, path);
-            ValidateSchemaMap(schema, "patternProperties", document, path);
-            ValidateSchemaMap(schema, "$defs", document, path);
-            ValidateSchemaKeyword(schema, "items", document, path);
-            ValidateSchemaKeyword(schema, "additionalProperties", document, path);
-            ValidateSchemaArrayKeyword(schema, "allOf", document, path);
-            ValidateSchemaArrayKeyword(schema, "anyOf", document, path);
-            ValidateSchemaArrayKeyword(schema, "oneOf", document, path);
-            ValidateSchemaKeyword(schema, "not", document, path);
-            if (schema.TryGetProperty("$ref", out JsonElement reference))
-            {
-                if (reference.ValueKind != JsonValueKind.String || reference.GetString() is not { } value)
-                {
-                    throw new AssetCtlException($"{path}.$ref: expected string.", 2);
-                }
-
-                if (value.StartsWith('#') && !TryResolvePointer(document, value, out _))
-                {
-                    throw new AssetCtlException($"{path}.$ref: unresolved local reference '{value}'.", 2);
-                }
-            }
-        }
-
-        private static void ValidateType(JsonElement schema, string path)
-        {
-            if (!schema.TryGetProperty("type", out JsonElement type))
-            {
-                return;
-            }
-
-            var allowed = new HashSet<string>(
-                ["null", "boolean", "object", "array", "number", "string", "integer"],
-                StringComparer.Ordinal
-            );
-            if (type.ValueKind == JsonValueKind.String && allowed.Contains(type.GetString()!))
-            {
-                return;
-            }
-
-            if (
-                type.ValueKind == JsonValueKind.Array
-                && type.GetArrayLength() > 0
-                && type.EnumerateArray()
-                    .All(item => item.ValueKind == JsonValueKind.String && allowed.Contains(item.GetString()!))
-                && type.EnumerateArray().Select(item => item.GetString()).Distinct(StringComparer.Ordinal).Count()
-                    == type.GetArrayLength()
-            )
-            {
-                return;
-            }
-
-            throw new AssetCtlException($"{path}.type: invalid JSON Schema type declaration.", 2);
-        }
-
-        private static void ValidateStringArrayKeyword(
-            JsonElement schema,
-            string keyword,
-            string path,
-            bool requireUnique,
-            bool allowNonStrings = false
-        )
-        {
-            if (!schema.TryGetProperty(keyword, out JsonElement value))
-            {
-                return;
-            }
-
-            if (value.ValueKind != JsonValueKind.Array || value.GetArrayLength() == 0)
-            {
-                throw new AssetCtlException($"{path}.{keyword}: expected a non-empty array.", 2);
-            }
-
-            if (allowNonStrings)
-            {
-                return;
-            }
-
-            string?[] values = value.EnumerateArray().Select(item => item.GetString()).ToArray();
-            if (
-                values.Any(item => item is null)
-                || requireUnique && values.Distinct(StringComparer.Ordinal).Count() != values.Length
-            )
-            {
-                throw new AssetCtlException($"{path}.{keyword}: expected unique strings.", 2);
-            }
-        }
-
-        private static void ValidateSchemaMap(JsonElement schema, string keyword, JsonElement document, string path)
-        {
-            if (!schema.TryGetProperty(keyword, out JsonElement map))
-            {
-                return;
-            }
-
-            if (map.ValueKind != JsonValueKind.Object)
-            {
-                throw new AssetCtlException($"{path}.{keyword}: expected object.", 2);
-            }
-
-            foreach (JsonProperty property in map.EnumerateObject())
-            {
-                ValidateSchema(property.Value, document, $"{path}.{keyword}.{property.Name}");
-            }
-        }
-
-        private static void ValidateSchemaKeyword(JsonElement schema, string keyword, JsonElement document, string path)
-        {
-            if (schema.TryGetProperty(keyword, out JsonElement value))
-            {
-                ValidateSchema(value, document, $"{path}.{keyword}");
-            }
-        }
-
-        private static void ValidateSchemaArrayKeyword(
-            JsonElement schema,
-            string keyword,
-            JsonElement document,
-            string path
-        )
-        {
-            if (!schema.TryGetProperty(keyword, out JsonElement values))
-            {
-                return;
-            }
-
-            if (values.ValueKind != JsonValueKind.Array || values.GetArrayLength() == 0)
-            {
-                throw new AssetCtlException($"{path}.{keyword}: expected a non-empty schema array.", 2);
-            }
-
-            int index = 0;
-            foreach (JsonElement value in values.EnumerateArray())
-            {
-                ValidateSchema(value, document, $"{path}.{keyword}[{index++}]");
-            }
-        }
-
-        private static bool TryResolvePointer(JsonElement document, string reference, out JsonElement value)
-        {
-            value = document;
-            if (string.Equals(reference, "#", StringComparison.Ordinal))
-            {
-                return true;
-            }
-
-            if (!reference.StartsWith("#/", StringComparison.Ordinal))
-            {
-                return false;
-            }
-
-            foreach (string raw in reference[2..].Split('/'))
-            {
-                string segment = raw.Replace("~1", "/", StringComparison.Ordinal)
-                    .Replace("~0", "~", StringComparison.Ordinal);
-                if (value.ValueKind != JsonValueKind.Object || !value.TryGetProperty(segment, out value))
-                {
-                    return false;
-                }
-            }
-
-            return true;
         }
     }
 }

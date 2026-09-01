@@ -4,6 +4,19 @@ namespace AlterCourse.AssetCtl.Domain;
 
 internal static class DomainModels
 {
+    /// <summary>Version identifiers for durable AssetCtl provenance and semantic-review contracts.</summary>
+    public static class AssetContractVersions
+    {
+        /// <summary>Current provider-adapter provenance contract.</summary>
+        public const string Adapter = "1";
+
+        /// <summary>Current generation provenance schema.</summary>
+        public const string Provenance = "1";
+
+        /// <summary>Current structured semantic-review rubric.</summary>
+        public const string SemanticRubric = "1";
+    }
+
     public enum AssetLifecycle
     {
         Placeholder,
@@ -114,7 +127,9 @@ internal static class DomainModels
         string EffectiveConfigSha256,
         string? ProviderRequestId,
         decimal EstimatedCostUsd,
-        decimal? ActualCostUsd
+        decimal? ActualCostUsd,
+        string AdapterVersion = AssetContractVersions.Adapter,
+        string ProvenanceSchemaVersion = AssetContractVersions.Provenance
     );
 
     public sealed record IntegrityRecord(string Sha256, long ByteLength, string MediaType);
@@ -145,7 +160,8 @@ internal static class DomainModels
         string Independence,
         string? EvidenceSha256 = null,
         string? ReviewerProvider = null,
-        string? ReviewerModelProfile = null
+        string? ReviewerModelProfile = null,
+        string SemanticRubricVersion = AssetContractVersions.SemanticRubric
     )
     {
         public bool HasHardFailure =>
@@ -309,7 +325,8 @@ internal static class DomainModels
         bool LocalPlaceholderFallback,
         bool RequireHttpsEndpoints,
         bool AllowRemoteReferenceUrls,
-        string UnknownPricePolicy
+        string UnknownPricePolicy,
+        bool RetainUnselectedCandidates = false
     );
 
     public sealed record AssetCtlLimits(

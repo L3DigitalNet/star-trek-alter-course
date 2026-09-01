@@ -5,6 +5,7 @@
 		<AssemblyName>AlterCourse.AssetCtl</AssemblyName>
 	</PropertyGroup>
 	<ItemGroup>
+		<PackageReference Include="JsonSchema.Net" />
 		<PackageReference Include="Microsoft.Extensions.Logging" />
 		<PackageReference Include="Serilog" />
 		<PackageReference Include="Serilog.Extensions.Logging" />

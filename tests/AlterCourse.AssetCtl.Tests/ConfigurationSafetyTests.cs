@@ -108,6 +108,34 @@ public sealed class ConfigurationSafetyTests
         }
     }
 
+    /// <summary>Rejects an output symlink that stays in the repository but resolves outside the configured Godot asset root.</summary>
+    [Fact]
+    public void OutputRootRejectsPhysicalEscapeWithinRepository()
+    {
+        string root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        string assets = Path.Combine(root, "src", "game", "assets");
+        string sibling = Path.Combine(root, "src", "other-assets");
+        Directory.CreateDirectory(assets);
+        Directory.CreateDirectory(sibling);
+        Directory.CreateSymbolicLink(Path.Combine(assets, "escaped"), sibling);
+        try
+        {
+            Assert.Throws<AssetCtlException>(() =>
+                PathPolicy.ResolveUnderConfiguredRoot(
+                    root,
+                    "src/game/assets",
+                    "src/game/assets/escaped/image.png",
+                    "output path",
+                    allowMissing: true
+                )
+            );
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     /// <summary>Reports unknown configuration keys with their precise logical path.</summary>
     [Fact]
     public void UnknownKeysArePathSpecific()
