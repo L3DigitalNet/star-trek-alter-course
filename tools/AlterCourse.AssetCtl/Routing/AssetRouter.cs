@@ -52,9 +52,41 @@ internal sealed class AssetRouter(AdapterRegistry adapters)
         List<PlannedTarget> targets = [];
         foreach (RouteDefinition route in configuration.Routes.Where(route => Matches(route, request)))
         {
+            var seen = new HashSet<(string ProviderId, string ModelProfileId)>();
             foreach (RouteTarget target in route.Targets)
             {
                 targets.Add(Evaluate(configuration, route, target, required, tier.Candidates, request.Lifecycle));
+                seen.Add((target.ProviderId, target.ModelProfileId));
+            }
+
+            if (route.FallbackPolicy?.CapabilityMatch == true)
+            {
+                foreach (
+                    ProviderInstance provider in configuration.Providers.Values.OrderBy(
+                        provider => provider.Id,
+                        StringComparer.Ordinal
+                    )
+                )
+                {
+                    foreach (
+                        ModelProfile model in provider.Models.Values.OrderBy(model => model.Id, StringComparer.Ordinal)
+                    )
+                    {
+                        if (seen.Add((provider.Id, model.Id)))
+                        {
+                            targets.Add(
+                                Evaluate(
+                                    configuration,
+                                    route,
+                                    new RouteTarget(provider.Id, model.Id),
+                                    required,
+                                    tier.Candidates,
+                                    request.Lifecycle
+                                )
+                            );
+                        }
+                    }
+                }
             }
         }
 

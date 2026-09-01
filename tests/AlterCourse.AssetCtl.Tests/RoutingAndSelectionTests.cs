@@ -1,5 +1,6 @@
 using AlterCourse.AssetCtl.Generation;
 using AlterCourse.AssetCtl.Routing;
+using AssetReference = AlterCourse.AssetCtl.Domain.DomainModels.AssetReference;
 using GenerationPlan = AlterCourse.AssetCtl.Domain.DomainModels.GenerationPlan;
 using RouteFallbackPolicy = AlterCourse.AssetCtl.Domain.DomainModels.RouteFallbackPolicy;
 using RouteRetryPolicy = AlterCourse.AssetCtl.Domain.DomainModels.RouteRetryPolicy;
@@ -210,17 +211,105 @@ public sealed class RoutingAndSelectionTests
     public void PromptOrderAndHashAreStable()
     {
         var style = new StyleProfile("style", "summary", ["style required"], ["style prohibited"]);
-        (string Prompt, string Hash) first = PromptCompiler.Compile(TestData.Request(), style);
-        (string Prompt, string Hash) second = PromptCompiler.Compile(TestData.Request(), style);
+        AssetRequest request = TestData.Request() with
+        {
+            References =
+            [
+                new AssetReference("references/z.png", new string('b', 64), "project-original"),
+                new AssetReference("references/a.png", new string('a', 64), "CC-BY-4.0"),
+            ],
+        };
+        (string Prompt, string Hash) first = PromptCompiler.Compile(request, style);
+        (string Prompt, string Hash) second = PromptCompiler.Compile(request, style);
         Assert.Equal(first, second);
+        string[] ordered =
+        [
+            "Identity:",
+            "Purpose:",
+            "Visual kind:",
+            "Output contract:",
+            "Resolved style summary:",
+            "Required constraints:",
+            "Prohibited content:",
+            "Dimensions:",
+            "Target display sizes:",
+            "Reference instructions:",
+            "Hard technical constraints:",
+            "Lifecycle reminder:",
+        ];
+        int previous = -1;
+        foreach (string heading in ordered)
+        {
+            int current = first.Prompt.IndexOf(heading, StringComparison.Ordinal);
+            Assert.True(current > previous, $"{heading} was missing or out of order");
+            previous = current;
+        }
         Assert.True(
-            first.Prompt.IndexOf("Purpose:", StringComparison.Ordinal)
-                < first.Prompt.IndexOf("Output:", StringComparison.Ordinal)
+            first.Prompt.IndexOf("references/a.png", StringComparison.Ordinal)
+                < first.Prompt.IndexOf("references/z.png", StringComparison.Ordinal)
         );
-        Assert.True(
-            first.Prompt.IndexOf("Output:", StringComparison.Ordinal)
-                < first.Prompt.IndexOf("Style:", StringComparison.Ordinal)
+        Assert.Contains("simple silhouette", first.Prompt, StringComparison.Ordinal);
+        Assert.Contains("watermark", first.Prompt, StringComparison.Ordinal);
+        Assert.Contains("transparency required", first.Prompt, StringComparison.Ordinal);
+        Assert.EndsWith(
+            "placeholder assets are not approval-ready.\nPrompt contract version: 2",
+            first.Prompt,
+            StringComparison.Ordinal
         );
+    }
+
+    /// <summary>Appends deterministic capability matches without duplicating explicit route entries.</summary>
+    [Fact]
+    public void CapabilityFallbackDiscoversEligibleProfilesAfterExplicitTargets()
+    {
+        var explicitAdapter = new FakeGenerator("explicit-adapter");
+        var discoveredAdapter = new FakeGenerator("discovered-adapter");
+        var registry = new AdapterRegistry([explicitAdapter, discoveredAdapter]);
+        AssetRequest request = TestData.Request();
+        ProviderInstance explicitProvider = Provider(
+            "z-explicit",
+            explicitAdapter.AdapterId,
+            0m,
+            AssetCapability.RasterGenerate
+        );
+        ProviderInstance discoveredProvider = Provider(
+            "a-discovered",
+            discoveredAdapter.AdapterId,
+            0m,
+            AssetCapability.RasterGenerate
+        );
+        var route = new RouteDefinition(
+            "generation",
+            100,
+            request.Lifecycle,
+            request.Output.Format,
+            AssetCapability.RasterGenerate,
+            [new RouteTarget(explicitProvider.Id, "profile")],
+            0,
+            new RouteFallbackPolicy(true, new HashSet<ProviderErrorCategory>())
+        );
+        var providers = new Dictionary<string, ProviderInstance>(StringComparer.Ordinal)
+        {
+            [explicitProvider.Id] = explicitProvider,
+            [discoveredProvider.Id] = discoveredProvider,
+        };
+
+        GenerationPlan plan = new AssetRouter(registry).Plan(
+            Configuration(
+                providers,
+                request,
+                route,
+                new RouteDefinition("review", 1, null, null, AssetCapability.ReviewSemantic, [], 0)
+            ),
+            request
+        );
+
+        Assert.Equal(
+            ["z-explicit", "a-discovered"],
+            plan.Targets.Select(target => target.ProviderId),
+            StringComparer.Ordinal
+        );
+        Assert.Equal(2, plan.Targets.Select(target => (target.ProviderId, target.ModelProfileId)).Distinct().Count());
     }
 
     private static EffectiveConfiguration Configuration(ProviderInstance provider, AssetRequest request)

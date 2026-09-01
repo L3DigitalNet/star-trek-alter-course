@@ -2,6 +2,7 @@ using System.Text.Json;
 using AlterCourse.AssetCtl.Generation;
 using AlterCourse.AssetCtl.Routing;
 using Microsoft.Extensions.Logging;
+using AssetReference = AlterCourse.AssetCtl.Domain.DomainModels.AssetReference;
 using IAdapterDescriptor = AlterCourse.AssetCtl.Configuration.ConfigurationTypes.IAdapterDescriptor;
 using RouteFallbackPolicy = AlterCourse.AssetCtl.Domain.DomainModels.RouteFallbackPolicy;
 using RouteRetryPolicy = AlterCourse.AssetCtl.Domain.DomainModels.RouteRetryPolicy;
@@ -220,6 +221,146 @@ public sealed class GenerationEndToEndTests
         Assert.Equal(0, fallback.Calls);
     }
 
+    /// <summary>Retains only the selected candidate unless diagnostics retention is explicitly enabled.</summary>
+    [Theory]
+    [InlineData(false, 1)]
+    [InlineData(true, 2)]
+    public async Task CandidateRetentionFollowsConfiguredPolicy(bool retainUnselected, int expectedFiles)
+    {
+        var generator = new ScriptedGenerator(
+            "retention-generator",
+            request => new GenerationBatchResult(
+                [
+                    new GeneratedCandidate(
+                        0,
+                        LocalPlaceholderGenerator.RenderPng(request.Request),
+                        "image/png",
+                        "one",
+                        0m
+                    ),
+                    new GeneratedCandidate(
+                        1,
+                        LocalPlaceholderGenerator.RenderPng(request.Request),
+                        "image/png",
+                        "two",
+                        0m
+                    ),
+                ],
+                "batch",
+                0m
+            )
+        );
+        using var fixture = new GenerationFixture(
+            [generator],
+            "disabled",
+            retainUnselectedCandidates: retainUnselected,
+            candidates: 2
+        );
+
+        await fixture.GenerateAsync();
+
+        AssetManifest current = ManifestStore.Load(fixture.Configuration, fixture.Manifest.ManifestPath);
+        string candidateRoot = Path.Combine(
+            fixture.Root,
+            fixture.Configuration.Paths.WorkRoot,
+            current.Generation!.RunId
+        );
+        Assert.Equal(expectedFiles, Directory.EnumerateFiles(candidateRoot).Count());
+    }
+
+    /// <summary>Preserves billed-attempt evidence when a provider fails before producing candidates.</summary>
+    [Fact]
+    public async Task BillableProviderFailureWritesNonAuthoritativeFailureReceipt()
+    {
+        var generator = new ScriptedGenerator(
+            "billable-failure",
+            _ => throw new ProviderException(ProviderErrorCategory.Authentication, "denied?token=secret")
+        );
+        using var fixture = new GenerationFixture([generator], "disabled", modelCost: 0.25m);
+
+        await Assert.ThrowsAsync<AssetCtlException>(() => fixture.GenerateAsync());
+
+        string receiptPath = Assert.Single(
+            Directory.EnumerateFiles(Path.Combine(fixture.Root, fixture.Configuration.Paths.ReceiptRoot), "*.json")
+        );
+        string receipt = await File.ReadAllTextAsync(receiptPath);
+        Assert.Contains("\"status\": \"failure\"", receipt, StringComparison.Ordinal);
+        Assert.Contains("\"estimated_maximum_cost_usd\": 0.25", receipt, StringComparison.Ordinal);
+        Assert.Contains("\"repository_path\": null", receipt, StringComparison.Ordinal);
+        Assert.DoesNotContain("token=secret", receipt, StringComparison.Ordinal);
+    }
+
+    /// <summary>Keeps installed publication truth when the primary receipt sink fails afterward.</summary>
+    [Fact]
+    public async Task ReceiptSinkFailureAfterPublishPreservesPublicationTruth()
+    {
+        var generator = new ScriptedGenerator("sink-failure", request => Success(request.Request));
+        using var fixture = new GenerationFixture([generator], "disabled");
+        await File.WriteAllTextAsync(Path.Combine(fixture.Root, "blocked-receipts"), "not a directory");
+        EffectiveConfiguration configuration = fixture.Configuration with
+        {
+            Paths = fixture.Configuration.Paths with { ReceiptRoot = "blocked-receipts" },
+        };
+
+        object result = await fixture.GenerateAsync(configuration);
+
+        JsonElement json = JsonDocument.Parse(JsonSerializer.Serialize(result, JsonOptions.Stable)).RootElement;
+        string receiptPath = json.GetProperty("receipt_path").GetString()!;
+        Assert.StartsWith(".assetctl/work/receipt-fallback", receiptPath, StringComparison.Ordinal);
+        string receipt = await File.ReadAllTextAsync(Path.Combine(fixture.Root, receiptPath));
+        Assert.Contains("\"published\": true", receipt, StringComparison.Ordinal);
+        Assert.Contains("\"recovered_pending_transactions\": 0", receipt, StringComparison.Ordinal);
+        Assert.True(File.Exists(Path.Combine(fixture.Root, fixture.Manifest.Request.Output.Path)));
+    }
+
+    /// <summary>Rejects arbitrary bytes bearing an image extension before adapter invocation.</summary>
+    [Fact]
+    public async Task InvalidReferenceIsRejectedBeforeProviderInvocation()
+    {
+        var generator = new ScriptedGenerator("reference-generator", request => Success(request.Request));
+        using var fixture = new GenerationFixture([generator], "disabled", referenceBytes: "not an image"u8.ToArray());
+
+        await Assert.ThrowsAsync<AssetCtlException>(() => fixture.GenerateAsync());
+
+        Assert.Equal(0, generator.Calls);
+    }
+
+    /// <summary>Enforces the configured reference byte ceiling before adapter invocation.</summary>
+    [Fact]
+    public async Task OversizedReferenceIsRejectedBeforeProviderInvocation()
+    {
+        var generator = new ScriptedGenerator("oversized-reference", request => Success(request.Request));
+        using var fixture = new GenerationFixture(
+            [generator],
+            "disabled",
+            referenceBytes: new byte[32],
+            maximumReferenceBytes: 16
+        );
+
+        await Assert.ThrowsAsync<AssetCtlException>(() => fixture.GenerateAsync());
+
+        Assert.Equal(0, generator.Calls);
+    }
+
+    /// <summary>Rejects a physical escape from the configured asset root even when it remains in the repository.</summary>
+    [Fact]
+    public async Task OutputSymlinkEscapeWithinRepositoryIsRejectedBeforeProviderInvocation()
+    {
+        var generator = new ScriptedGenerator("symlink-generator", request => Success(request.Request));
+        using var fixture = new GenerationFixture([generator], "disabled");
+        string outputDirectory = Path.GetDirectoryName(
+            Path.Combine(fixture.Root, fixture.Manifest.Request.Output.Path)
+        )!;
+        Directory.Delete(outputDirectory, recursive: true);
+        string escaped = Path.Combine(fixture.Root, "escaped-output");
+        Directory.CreateDirectory(escaped);
+        Directory.CreateSymbolicLink(outputDirectory, escaped);
+
+        await Assert.ThrowsAsync<AssetCtlException>(() => fixture.GenerateAsync());
+
+        Assert.Equal(0, generator.Calls);
+    }
+
     /// <summary>Degrades to the safe logger when the structured sink path cannot be created.</summary>
     [Fact]
     public void LoggingSinkFailureDoesNotEscapeComposition()
@@ -246,7 +387,12 @@ public sealed class GenerationEndToEndTests
         public int Calls { get; private set; }
 
         public IReadOnlySet<AssetCapability> SupportedCapabilities { get; } =
-            new HashSet<AssetCapability> { AssetCapability.RasterGenerate, AssetCapability.ImageTransparentOutput };
+            new HashSet<AssetCapability>
+            {
+                AssetCapability.RasterGenerate,
+                AssetCapability.ImageTransparentOutput,
+                AssetCapability.ImageReferenceInput,
+            };
 
         public IReadOnlySet<string> AllowedEndpointHosts { get; } =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -315,15 +461,20 @@ public sealed class GenerationEndToEndTests
             IReadOnlyList<IAdapterDescriptor> adapters,
             string semanticReview,
             RouteRetryPolicy? retry = null,
-            int maximumTotalAttempts = 12
+            int maximumTotalAttempts = 12,
+            bool retainUnselectedCandidates = false,
+            int candidates = 1,
+            decimal modelCost = 0m,
+            byte[]? referenceBytes = null,
+            long maximumReferenceBytes = 1_000_000
         )
         {
             Root = Path.Combine(Path.GetTempPath(), "assetctl-e2e-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(Root);
-            AssetRequest request = CreateRequest();
+            AssetRequest request = CreateRequest(referenceBytes);
             var providers = adapters.ToDictionary(
                 adapter => adapter.AdapterId,
-                adapter => Provider(adapter),
+                adapter => Provider(adapter, modelCost),
                 StringComparer.Ordinal
             );
             (RouteDefinition generationRoute, RouteDefinition[] reviewRoutes) = Routes(adapters, retry);
@@ -334,7 +485,10 @@ public sealed class GenerationEndToEndTests
                 providers,
                 generationRoute,
                 reviewRoutes,
-                maximumTotalAttempts
+                maximumTotalAttempts,
+                retainUnselectedCandidates,
+                candidates,
+                maximumReferenceBytes
             );
             Manifest = CreateManifest(request);
             string manifestPath = Path.Combine(Root, Manifest.ManifestPath);
@@ -343,15 +497,36 @@ public sealed class GenerationEndToEndTests
             string outputPath = Path.Combine(Root, Manifest.Request.Output.Path);
             Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
             File.WriteAllBytes(outputPath, LocalPlaceholderGenerator.RenderPng(request));
+            if (referenceBytes is not null)
+            {
+                string referencePath = Path.Combine(Root, request.References.Single().Path);
+                Directory.CreateDirectory(Path.GetDirectoryName(referencePath)!);
+                File.WriteAllBytes(referencePath, referenceBytes);
+            }
             var registry = new AdapterRegistry(adapters);
             Orchestrator = new GenerationOrchestrator(registry, new AssetRouter(registry));
         }
 
-        private static AssetRequest CreateRequest() =>
-            TestData.Request() with
+        private static AssetRequest CreateRequest(byte[]? referenceBytes)
+        {
+            AssetRequest request = TestData.Request() with
             {
                 Output = TestData.Request().Output with { Path = "src/AlterCourse.Godot/assets/test/placeholder.png" },
             };
+            return referenceBytes is null
+                ? request
+                : request with
+                {
+                    References =
+                    [
+                        new AssetReference(
+                            "references/input.png",
+                            Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(referenceBytes)),
+                            "project-original"
+                        ),
+                    ],
+                };
+        }
 
         private static (RouteDefinition Generation, RouteDefinition[] Review) Routes(
             IReadOnlyList<IAdapterDescriptor> adapters,
@@ -406,7 +581,10 @@ public sealed class GenerationEndToEndTests
             IReadOnlyDictionary<string, ProviderInstance> providers,
             RouteDefinition generationRoute,
             IReadOnlyList<RouteDefinition> reviewRoutes,
-            int maximumTotalAttempts
+            int maximumTotalAttempts,
+            bool retainUnselectedCandidates,
+            int candidates,
+            long maximumReferenceBytes
         ) =>
             new(
                 root,
@@ -419,15 +597,15 @@ public sealed class GenerationEndToEndTests
                     ".assetctl/state",
                     ".assetctl/logs"
                 ),
-                new AssetCtlPolicy(true, true, true, true, false, "reject"),
-                new AssetCtlLimits(1_000_000, 1_000_000, 4, maximumTotalAttempts, 10, 30, 1_000_000),
+                new AssetCtlPolicy(true, true, true, true, false, "reject", retainUnselectedCandidates),
+                new AssetCtlLimits(1_000_000, maximumReferenceBytes, 4, maximumTotalAttempts, 10, 30, 1_000_000),
                 new SpendingLimits(10m, 10m, 10m),
                 providers,
                 [generationRoute],
                 reviewRoutes,
                 new Dictionary<string, QualityTier>(StringComparer.Ordinal)
                 {
-                    [request.QualityTier] = new(request.QualityTier, 1, 1, semanticReview, true, 0.80),
+                    [request.QualityTier] = new(request.QualityTier, candidates, 1, semanticReview, true, 0.80),
                 },
                 new Dictionary<string, StyleProfile>(StringComparer.Ordinal)
                 {
@@ -467,7 +645,17 @@ public sealed class GenerationEndToEndTests
 
         public void Dispose() => Directory.Delete(Root, recursive: true);
 
-        private static ProviderInstance Provider(IAdapterDescriptor adapter)
+        public Task<object> GenerateAsync(EffectiveConfiguration? configuration = null) =>
+            Orchestrator.GenerateAsync(
+                configuration ?? Configuration,
+                Manifest,
+                force: false,
+                dryRun: false,
+                offline: false,
+                CancellationToken.None
+            );
+
+        private static ProviderInstance Provider(IAdapterDescriptor adapter, decimal modelCost)
         {
             IReadOnlySet<AssetCapability> capabilities =
                 adapter is IAssetGenerator
@@ -475,13 +663,14 @@ public sealed class GenerationEndToEndTests
                     {
                         AssetCapability.RasterGenerate,
                         AssetCapability.ImageTransparentOutput,
+                        AssetCapability.ImageReferenceInput,
                     }
                     : new HashSet<AssetCapability> { AssetCapability.ReviewSemantic };
             var model = new ModelProfile(
                 "profile",
                 "vendor-model",
                 capabilities,
-                0m,
+                modelCost,
                 "fixed-output",
                 new Dictionary<string, string>(StringComparer.Ordinal)
             );

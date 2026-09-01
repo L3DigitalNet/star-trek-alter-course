@@ -1,8 +1,10 @@
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using AlterCourse.AssetCtl.Providers;
 using AlterCourse.AssetCtl.Routing;
 using AlterCourse.AssetCtl.Validation;
+using SkiaSharp;
 using RouteRetryPolicy = AlterCourse.AssetCtl.Domain.DomainModels.RouteRetryPolicy;
 using SemanticReviewPolicy = AlterCourse.AssetCtl.Domain.DomainModels.SemanticReviewPolicy;
 
@@ -26,6 +28,19 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
             throw new AssetCtlException("Approved and deprecated assets cannot be generated or overwritten.", 8);
         }
 
+        string runId = Guid.NewGuid().ToString();
+        var attempts = new List<object>();
+        try
+        {
+            // Resolve against the physical configured asset root before any provider or idempotency work.
+            PathPolicy.ResolveOutputPath(configuration, manifest.Request.Output.Path, allowMissing: true);
+        }
+        catch (AssetCtlException exception)
+        {
+            WriteFailureReceipt(configuration, manifest, null, attempts, runId, exception);
+            throw;
+        }
+
         object? existingResult = await TryExistingAsync(configuration, manifest, force, cancellationToken)
             .ConfigureAwait(false);
         if (existingResult is not null)
@@ -33,73 +48,92 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
             return existingResult;
         }
 
-        GenerationPlan plan = BuildPlan(configuration, manifest.Request, offline);
+        GenerationPlan plan;
+        try
+        {
+            plan = BuildPlan(configuration, manifest.Request, offline);
+        }
+        catch (Exception exception) when (exception is AssetCtlException or IOException)
+        {
+            WriteFailureReceipt(configuration, manifest, null, attempts, runId, exception);
+            throw;
+        }
 
         if (dryRun)
         {
             return new { dry_run = true, plan };
         }
 
-        return await GenerateNewAsync(configuration, manifest, plan, offline, cancellationToken).ConfigureAwait(false);
+        return await GenerateNewAsync(configuration, manifest, plan, runId, attempts, offline, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private async Task<object> GenerateNewAsync(
         EffectiveConfiguration configuration,
         AssetManifest manifest,
         GenerationPlan plan,
+        string runId,
+        List<object> attempts,
         bool offline,
         CancellationToken cancellationToken
     )
     {
-        global::AlterCourse.AssetCtl.Domain.DomainModels.StyleProfile style = configuration.Styles[
-            manifest.Request.StyleProfile
-        ];
-        (string prompt, string promptHash) = PromptCompiler.Compile(manifest.Request, style);
-        string requestHash = ConfigurationLoader.Hash(JsonSerializer.Serialize(manifest.Request, JsonOptions.Stable));
-        string runId = Guid.NewGuid().ToString();
-        (string FileName, string MediaType, byte[] Bytes)[] references = manifest
-            .Request.References.Select(reference => LoadReference(configuration, reference))
-            .ToArray();
-        global::AlterCourse.AssetCtl.Domain.DomainModels.QualityTier tier = configuration.QualityTiers[
-            manifest.Request.QualityTier
-        ];
-        var spend = new SpendGuard(configuration);
-        var attemptBudget = new AttemptBudget(configuration.Limits.MaximumTotalAttempts);
-        (TargetOutcome? outcome, List<object> attempts) = await GenerateFromRoutesAsync(
+        try
+        {
+            StyleProfile style = configuration.Styles[manifest.Request.StyleProfile];
+            (string prompt, string promptHash) = PromptCompiler.Compile(manifest.Request, style);
+            string requestHash = ConfigurationLoader.Hash(
+                JsonSerializer.Serialize(manifest.Request, JsonOptions.Stable)
+            );
+            (string FileName, string MediaType, byte[] Bytes)[] references = LoadReferences(
+                configuration,
+                manifest.Request.References
+            );
+            QualityTier tier = configuration.QualityTiers[manifest.Request.QualityTier];
+            var spend = new SpendGuard(configuration);
+            var attemptBudget = new AttemptBudget(configuration.Limits.MaximumTotalAttempts);
+            TargetOutcome? outcome = await GenerateFromRoutesAsync(
+                    configuration,
+                    manifest,
+                    plan,
+                    prompt,
+                    references,
+                    tier,
+                    runId,
+                    offline,
+                    spend,
+                    attemptBudget,
+                    attempts,
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+            if (outcome is null)
+            {
+                throw new AssetCtlException(
+                    "Every eligible generation route failed provider, validation, or review policy.",
+                    4
+                );
+            }
+
+            return Publish(
                 configuration,
                 manifest,
                 plan,
-                prompt,
-                references,
                 tier,
+                outcome,
+                attempts,
+                prompt,
+                promptHash,
+                requestHash,
                 runId,
-                offline,
-                spend,
-                attemptBudget,
-                cancellationToken
-            )
-            .ConfigureAwait(false);
-        if (outcome is null)
-        {
-            throw new AssetCtlException(
-                "Every eligible generation route failed provider, validation, or review policy.",
-                4
+                plan.EstimatedMaximumCost!.Value
             );
         }
-
-        return Publish(
-            configuration,
-            manifest,
-            plan,
-            tier,
-            outcome,
-            attempts,
-            prompt,
-            promptHash,
-            requestHash,
-            runId,
-            plan.EstimatedMaximumCost!.Value
-        );
+        catch (Exception exception) when (exception is AssetCtlException or ProviderException or IOException)
+        {
+            WriteFailureReceiptUnlessWritten(configuration, manifest, plan, attempts, runId, exception);
+            throw;
+        }
     }
 
     private GenerationPlan BuildPlan(EffectiveConfiguration configuration, AssetRequest request, bool offline)
@@ -231,7 +265,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         return review.EvidenceSha256.Length == 64;
     }
 
-    private async Task<(TargetOutcome? Outcome, List<object> Attempts)> GenerateFromRoutesAsync(
+    private async Task<TargetOutcome?> GenerateFromRoutesAsync(
         EffectiveConfiguration configuration,
         AssetManifest manifest,
         GenerationPlan plan,
@@ -242,10 +276,10 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         bool offline,
         SpendGuard spend,
         AttemptBudget attemptBudget,
+        List<object> attempts,
         CancellationToken cancellationToken
     )
     {
-        List<object> attempts = [];
         IEnumerable<PlannedTarget> eligibleTargets = plan.Targets.Where(target =>
             target.Eligible && (!offline || configuration.Providers[target.ProviderId].Endpoint is null)
         );
@@ -272,7 +306,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
                         cancellationToken
                     )
                     .ConfigureAwait(false);
-                return (outcome, attempts);
+                return outcome;
             }
             catch (ProviderException exception)
             {
@@ -284,7 +318,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
             }
         }
 
-        return (null, attempts);
+        return null;
     }
 
     private static void RecordFallback(
@@ -550,37 +584,22 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         byte[] bytes
     )
     {
+        AtomicPublisher.PublicationResult publication;
         try
         {
-            AtomicPublisher.Publish(
+            publication = AtomicPublisher.Publish(
                 configuration,
                 generated.Request.Output.Path,
                 bytes,
                 generated.ManifestPath,
                 ManifestStore.Serialize(generated)
             );
-            return ReceiptWriter.Write(
-                configuration,
-                CreateReceipt(
-                    configuration,
-                    generated,
-                    plan,
-                    outcome,
-                    attempts,
-                    integrity,
-                    requestHash,
-                    promptHash,
-                    runId,
-                    true,
-                    "not-required",
-                    null
-                )
-            );
         }
         catch (Exception exception) when (exception is AssetCtlException or IOException)
         {
-            ReceiptWriter.Write(
+            WriteReceiptWithFallback(
                 configuration,
+                runId,
                 CreateReceipt(
                     configuration,
                     generated,
@@ -591,12 +610,78 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
                     requestHash,
                     promptHash,
                     runId,
-                    false,
-                    "completed-or-no-change",
+                    null,
                     Redactor.Sanitize(exception.Message)
                 )
             );
+            exception.Data["AlterCourse.AssetCtl.ReceiptWritten"] = true;
             throw;
+        }
+
+        return WritePublishedReceipt(
+            configuration,
+            generated,
+            plan,
+            outcome,
+            attempts,
+            integrity,
+            requestHash,
+            promptHash,
+            runId,
+            publication
+        );
+    }
+
+    private static string WritePublishedReceipt(
+        EffectiveConfiguration configuration,
+        AssetManifest generated,
+        GenerationPlan plan,
+        TargetOutcome outcome,
+        List<object> attempts,
+        IntegrityRecord integrity,
+        string requestHash,
+        string promptHash,
+        string runId,
+        AtomicPublisher.PublicationResult publication
+    )
+    {
+        object receipt = CreateReceipt(
+            configuration,
+            generated,
+            plan,
+            outcome,
+            attempts,
+            integrity,
+            requestHash,
+            promptHash,
+            runId,
+            publication,
+            null
+        );
+        try
+        {
+            return ReceiptWriter.Write(configuration, receipt);
+        }
+        catch (Exception exception) when (exception is AssetCtlException or IOException)
+        {
+            // Publication is authoritative once AtomicPublisher returns; a provenance sink failure cannot undo it.
+            return WriteFallbackReceipt(
+                configuration,
+                runId,
+                CreateReceipt(
+                    configuration,
+                    generated,
+                    plan,
+                    outcome,
+                    attempts,
+                    integrity,
+                    requestHash,
+                    promptHash,
+                    runId,
+                    publication,
+                    $"primary receipt write failed: {Redactor.Sanitize(exception.Message)}"
+                )
+            );
         }
     }
 
@@ -648,8 +733,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         string requestHash,
         string promptHash,
         string runId,
-        bool published,
-        string rollback,
+        AtomicPublisher.PublicationResult? publication,
         string? failure
     ) =>
         new
@@ -680,7 +764,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
                 reason = "mechanical-pass, semantic-policy-pass, score-descending, readability, creation-order",
                 selected_sha256 = integrity.Sha256,
             },
-            publication = PublicationReceipt(generated, published, rollback, failure),
+            publication = PublicationReceipt(generated, publication, failure),
             authoritative = false,
         };
 
@@ -692,7 +776,9 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         outcome.Evaluated.Select(item => new
         {
             item.Candidate.CreationOrder,
-            temporary_path = CandidatePath(configuration, runId, item.Candidate),
+            temporary_path = ShouldRetain(configuration, outcome, item.Candidate)
+                ? CandidatePath(configuration, runId, item.Candidate)
+                : null,
             sha256 = Convert.ToHexStringLower(SHA256.HashData(item.Candidate.Bytes)),
             item.Candidate.MediaType,
             item.Candidate.ProviderRequestId,
@@ -708,7 +794,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
                 GeneratedCandidate Candidate,
                 MechanicalValidationResult Mechanical,
                 SemanticReviewResult? Review
-            ) item in outcome.Evaluated
+            ) item in outcome.Evaluated.Where(item => ShouldRetain(configuration, outcome, item.Candidate))
         )
         {
             string path = Path.Combine(
@@ -734,19 +820,126 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
 
     private static object PublicationReceipt(
         AssetManifest generated,
-        bool published,
-        string rollback,
+        AtomicPublisher.PublicationResult? publication,
         string? failure
     ) =>
         new
         {
-            published,
-            rollback,
+            published = publication?.Published ?? false,
+            recovered_pending_transactions = publication?.RecoveredPendingTransactions ?? 0,
+            active_transactions_skipped = publication?.ActiveTransactionsSkipped ?? 0,
+            rollback = publication?.Rollback ?? "completed-or-no-change",
             failure,
-            repository_path = published ? generated.Request.Output.Path : null,
-            godot_path = published ? "res://" + generated.Request.Output.Path["src/AlterCourse.Godot/".Length..] : null,
-            manifest_path = published ? generated.ManifestPath : null,
+            repository_path = publication?.Published == true ? generated.Request.Output.Path : null,
+            godot_path = publication?.Published == true
+                ? "res://" + generated.Request.Output.Path["src/AlterCourse.Godot/".Length..]
+                : null,
+            manifest_path = publication?.Published == true ? generated.ManifestPath : null,
         };
+
+    private static bool ShouldRetain(
+        EffectiveConfiguration configuration,
+        TargetOutcome outcome,
+        GeneratedCandidate candidate
+    ) =>
+        configuration.Policy.RetainUnselectedCandidates
+        || candidate.CreationOrder == outcome.Selected.Candidate.CreationOrder;
+
+    private static void WriteFailureReceipt(
+        EffectiveConfiguration configuration,
+        AssetManifest manifest,
+        GenerationPlan? plan,
+        IReadOnlyList<object> attempts,
+        string runId,
+        Exception exception
+    )
+    {
+        string requestHash = ConfigurationLoader.Hash(JsonSerializer.Serialize(manifest.Request, JsonOptions.Stable));
+        object receipt = new
+        {
+            command = "generate",
+            run_id = runId,
+            asset_id = manifest.Request.Id,
+            semantic_request = manifest.Request,
+            request_sha256 = requestHash,
+            effective_configuration_hash = configuration.EffectiveHash,
+            contributing_file_hashes = configuration.FileHashes,
+            estimated_cost_basis = plan?.Targets.Select(target => new
+            {
+                target.RouteId,
+                target.ProviderId,
+                target.ModelProfileId,
+                target.EstimatedMaximumCost,
+            }),
+            estimated_maximum_cost_usd = plan?.EstimatedMaximumCost,
+            plan,
+            attempts,
+            candidates = Array.Empty<object>(),
+            selection = new
+            {
+                status = "failure",
+                reason = Redactor.Sanitize(exception.Message),
+                candidate = (int?)null,
+                selected_sha256 = (string?)null,
+            },
+            publication = new
+            {
+                published = false,
+                recovered_pending_transactions = 0,
+                active_transactions_skipped = 0,
+                rollback = "completed-or-no-change",
+                failure = Redactor.Sanitize(exception.Message),
+                repository_path = (string?)null,
+                godot_path = (string?)null,
+                manifest_path = (string?)null,
+            },
+            authoritative = false,
+        };
+        WriteReceiptWithFallback(configuration, runId, receipt);
+    }
+
+    private static void WriteReceiptWithFallback(EffectiveConfiguration configuration, string runId, object receipt)
+    {
+        try
+        {
+            ReceiptWriter.Write(configuration, receipt);
+        }
+        catch (Exception exception) when (exception is AssetCtlException or IOException)
+        {
+            try
+            {
+                WriteFallbackReceipt(
+                    configuration,
+                    runId,
+                    new
+                    {
+                        receipt,
+                        primary_receipt_failure = Redactor.Sanitize(exception.Message),
+                        authoritative = false,
+                    }
+                );
+            }
+            catch (Exception fallbackException) when (fallbackException is AssetCtlException or IOException)
+            {
+                // A provenance sink must not replace the provider, validation, budget, or publication failure.
+            }
+        }
+    }
+
+    private static string WriteFallbackReceipt(EffectiveConfiguration configuration, string runId, object receipt)
+    {
+        string workRoot = PathPolicy.ResolveUnder(
+            configuration.RepositoryRoot,
+            configuration.Paths.WorkRoot,
+            "work_root",
+            allowMissing: true
+        );
+        string root = Path.Combine(workRoot, "receipt-fallback");
+        Directory.CreateDirectory(root);
+        string path = Path.Combine(root, runId + ".json");
+        File.WriteAllText(path, JsonSerializer.Serialize(receipt, JsonOptions.Indented), new UTF8Encoding(false));
+        return Path.GetRelativePath(configuration.RepositoryRoot, path);
+    }
 
     private static async Task<GenerationBatchResult> InvokeWithRetry(
         IAssetGenerator generator,
@@ -769,7 +962,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
             var stopwatch = global::System.Diagnostics.Stopwatch.StartNew();
             try
             {
-                spend.Reserve(context.Model.EstimatedCostPerOutput, request.CandidateCount, "generation attempt");
+                ReserveCost(spend, context.Model, request.CandidateCount, events, physicalAttempt, target);
                 GenerationBatchResult result = await generator
                     .GenerateAsync(context, request, cancellationToken)
                     .ConfigureAwait(false);
@@ -987,7 +1180,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
             var stopwatch = global::System.Diagnostics.Stopwatch.StartNew();
             try
             {
-                spend.Reserve(context.Model.EstimatedCostPerOutput, 1, "semantic review");
+                ReserveCost(spend, context.Model, 1, events, physicalAttempt, target);
                 SemanticReviewResult result = await reviewer
                     .ReviewAsync(context, request, cancellationToken)
                     .ConfigureAwait(false);
@@ -1063,17 +1256,70 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
     private static bool AllowsFallback(RouteDefinition route, ProviderErrorCategory category) =>
         route.FallbackPolicy is not null && route.FallbackPolicy.AllowedErrorCategories.Contains(category);
 
+    private static void RecordCostReservation(
+        List<object> events,
+        string eventType,
+        int physicalAttempt,
+        PlannedTarget target,
+        decimal? reservedUsd
+    ) =>
+        events.Add(
+            new
+            {
+                event_type = eventType,
+                physical_attempt = physicalAttempt,
+                target.ProviderId,
+                target.ModelProfileId,
+                reserved_usd = reservedUsd,
+            }
+        );
+
+    private static void ReserveCost(
+        SpendGuard spend,
+        ModelProfile model,
+        int outputs,
+        List<object> events,
+        int physicalAttempt,
+        PlannedTarget target
+    )
+    {
+        string operation = outputs == 1 ? "semantic review or generation attempt" : "generation attempt";
+        spend.Reserve(model.EstimatedCostPerOutput, outputs, operation);
+        RecordCostReservation(
+            events,
+            "cost-reservation",
+            physicalAttempt,
+            target,
+            model.EstimatedCostPerOutput * outputs
+        );
+    }
+
+    private static void WriteFailureReceiptUnlessWritten(
+        EffectiveConfiguration configuration,
+        AssetManifest manifest,
+        GenerationPlan plan,
+        IReadOnlyList<object> attempts,
+        string runId,
+        Exception exception
+    )
+    {
+        if (!exception.Data.Contains("AlterCourse.AssetCtl.ReceiptWritten"))
+        {
+            WriteFailureReceipt(configuration, manifest, plan, attempts, runId, exception);
+        }
+    }
+
+    private static (string FileName, string MediaType, byte[] Bytes)[] LoadReferences(
+        EffectiveConfiguration configuration,
+        IReadOnlyList<AssetReference> references
+    ) => references.Select(reference => LoadReference(configuration, reference)).ToArray();
+
     private static (string FileName, string MediaType, byte[] Bytes) LoadReference(
         EffectiveConfiguration configuration,
         AssetReference reference
     )
     {
-        string path = PathPolicy.ResolveUnder(
-            configuration.RepositoryRoot,
-            reference.Path,
-            "reference",
-            allowMissing: false
-        );
+        string path = PathPolicy.ResolveReferencePath(configuration, reference.Path, allowMissing: false);
         byte[] bytes = File.ReadAllBytes(path);
         if (
             bytes.LongLength > configuration.Limits.MaximumReferenceBytes
@@ -1087,11 +1333,42 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
             throw new AssetCtlException($"Reference '{reference.Path}' exceeds limits or has changed.", 1);
         }
 
-        return (
-            Path.GetFileName(path),
-            Path.GetExtension(path).Equals(".png", StringComparison.OrdinalIgnoreCase) ? "image/png" : "image/jpeg",
-            bytes
+        string extension = Path.GetExtension(path).ToLowerInvariant();
+        SKEncodedImageFormat expectedFormat = extension switch
+        {
+            ".png" => SKEncodedImageFormat.Png,
+            ".jpg" or ".jpeg" => SKEncodedImageFormat.Jpeg,
+            _ => throw new AssetCtlException($"Reference '{reference.Path}' has an unsupported media extension.", 1),
+        };
+        using var codec = SKCodec.Create(new SKMemoryStream(bytes));
+        if (
+            codec is null
+            || codec.EncodedFormat != expectedFormat
+            || codec.Info.AlphaType == SKAlphaType.Unknown
+            || !OutputContractPolicy.AllowsDimensions(
+                codec.Info.Width,
+                codec.Info.Height,
+                configuration.Limits.MaximumDecodedPixels
+            )
+        )
+        {
+            throw new AssetCtlException($"Reference '{reference.Path}' failed media or dimension policy.", 1);
+        }
+
+        var decodeInfo = new SKImageInfo(
+            codec.Info.Width,
+            codec.Info.Height,
+            SKColorType.Rgba8888,
+            SKAlphaType.Unpremul
         );
+        using var bitmap = new SKBitmap(decodeInfo);
+        if (codec.GetPixels(decodeInfo, bitmap.GetPixels()) is not SKCodecResult.Success)
+        {
+            throw new AssetCtlException($"Reference '{reference.Path}' failed full image decode.", 1);
+        }
+
+        string mediaType = expectedFormat == SKEncodedImageFormat.Png ? "image/png" : "image/jpeg";
+        return (Path.GetFileName(path), mediaType, bytes);
     }
 
     private static object Result(AssetManifest manifest, string? receipt, bool existing) =>
