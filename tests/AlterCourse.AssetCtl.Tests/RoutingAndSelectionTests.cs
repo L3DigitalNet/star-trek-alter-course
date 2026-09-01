@@ -252,9 +252,17 @@ public sealed class RoutingAndSelectionTests
         Assert.Contains("watermark", first.Prompt, StringComparison.Ordinal);
         Assert.Contains("transparency required", first.Prompt, StringComparison.Ordinal);
         Assert.EndsWith(
-            "placeholder assets are not approval-ready.\nPrompt contract version: 2",
+            "Lifecycle reminder: placeholder assets must remain functionally clear rather than polished.\nPrompt contract version: 2",
             first.Prompt,
             StringComparison.Ordinal
+        );
+        Assert.Equal(
+            ordered,
+            first
+                .Prompt.Split('\n')
+                .Where(line => ordered.Any(heading => line.StartsWith(heading, StringComparison.Ordinal)))
+                .Select(line => ordered.Single(heading => line.StartsWith(heading, StringComparison.Ordinal))),
+            StringComparer.Ordinal
         );
     }
 
@@ -310,6 +318,60 @@ public sealed class RoutingAndSelectionTests
             StringComparer.Ordinal
         );
         Assert.Equal(2, plan.Targets.Select(target => (target.ProviderId, target.ModelProfileId)).Distinct().Count());
+    }
+
+    /// <summary>Uses capability fallback for review routes after their explicit targets.</summary>
+    [Fact]
+    public void ReviewerCapabilityFallbackDiscoversEligibleReviewer()
+    {
+        var generator = new FakeGenerator("generator");
+        var reviewer = new FakeReviewer();
+        var registry = new AdapterRegistry([generator, reviewer]);
+        AssetRequest request = TestData.Request();
+        ProviderInstance generatorProvider = Provider(
+            "generator",
+            generator.AdapterId,
+            0m,
+            AssetCapability.RasterGenerate
+        );
+        ProviderInstance reviewerProvider = Provider(
+            "reviewer",
+            reviewer.AdapterId,
+            0m,
+            AssetCapability.ReviewSemantic
+        );
+        var route = new RouteDefinition(
+            "generation",
+            100,
+            request.Lifecycle,
+            request.Output.Format,
+            AssetCapability.RasterGenerate,
+            [new RouteTarget(generatorProvider.Id, "profile")],
+            0
+        );
+        var reviewRoute = new RouteDefinition(
+            "review",
+            100,
+            null,
+            null,
+            AssetCapability.ReviewSemantic,
+            [],
+            0,
+            new RouteFallbackPolicy(true, new HashSet<ProviderErrorCategory>())
+        );
+        var providers = new Dictionary<string, ProviderInstance>(StringComparer.Ordinal)
+        {
+            [generatorProvider.Id] = generatorProvider,
+            [reviewerProvider.Id] = reviewerProvider,
+        };
+
+        GenerationPlan plan = new AssetRouter(registry).Plan(
+            Configuration(providers, request, route, reviewRoute),
+            request
+        );
+
+        Assert.Equal("reviewer", plan.Reviewer!.ProviderId);
+        Assert.Equal("profile", plan.Reviewer.ModelProfileId);
     }
 
     private static EffectiveConfiguration Configuration(ProviderInstance provider, AssetRequest request)

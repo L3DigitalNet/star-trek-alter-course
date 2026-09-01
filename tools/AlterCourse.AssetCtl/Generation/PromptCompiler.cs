@@ -80,7 +80,7 @@ internal static class PromptCompiler
         );
         builder.AppendLine(
             CultureInfo.InvariantCulture,
-            $"Lifecycle reminder: {request.Lifecycle.ToString().ToLowerInvariant()} assets are not approval-ready."
+            $"Lifecycle reminder: {request.Lifecycle.ToString().ToLowerInvariant()} assets must remain functionally clear rather than polished."
         );
         builder.Append($"Prompt contract version: {Version}");
         string prompt = builder.ToString();

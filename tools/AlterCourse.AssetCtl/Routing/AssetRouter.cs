@@ -52,41 +52,9 @@ internal sealed class AssetRouter(AdapterRegistry adapters)
         List<PlannedTarget> targets = [];
         foreach (RouteDefinition route in configuration.Routes.Where(route => Matches(route, request)))
         {
-            var seen = new HashSet<(string ProviderId, string ModelProfileId)>();
-            foreach (RouteTarget target in route.Targets)
+            foreach (RouteTarget target in RouteTargets(configuration, route))
             {
                 targets.Add(Evaluate(configuration, route, target, required, tier.Candidates, request.Lifecycle));
-                seen.Add((target.ProviderId, target.ModelProfileId));
-            }
-
-            if (route.FallbackPolicy?.CapabilityMatch == true)
-            {
-                foreach (
-                    ProviderInstance provider in configuration.Providers.Values.OrderBy(
-                        provider => provider.Id,
-                        StringComparer.Ordinal
-                    )
-                )
-                {
-                    foreach (
-                        ModelProfile model in provider.Models.Values.OrderBy(model => model.Id, StringComparer.Ordinal)
-                    )
-                    {
-                        if (seen.Add((provider.Id, model.Id)))
-                        {
-                            targets.Add(
-                                Evaluate(
-                                    configuration,
-                                    route,
-                                    new RouteTarget(provider.Id, model.Id),
-                                    required,
-                                    tier.Candidates,
-                                    request.Lifecycle
-                                )
-                            );
-                        }
-                    }
-                }
             }
         }
 
@@ -146,7 +114,7 @@ internal sealed class AssetRouter(AdapterRegistry adapters)
     {
         foreach (RouteDefinition route in configuration.ReviewRoutes)
         {
-            foreach (RouteTarget target in route.Targets)
+            foreach (RouteTarget target in RouteTargets(configuration, route))
             {
                 PlannedTarget evaluated = Evaluate(
                     configuration,
@@ -164,6 +132,39 @@ internal sealed class AssetRouter(AdapterRegistry adapters)
         }
 
         return null;
+    }
+
+    private static IEnumerable<RouteTarget> RouteTargets(EffectiveConfiguration configuration, RouteDefinition route)
+    {
+        var seen = new HashSet<(string ProviderId, string ModelProfileId)>();
+        foreach (RouteTarget target in route.Targets)
+        {
+            if (seen.Add((target.ProviderId, target.ModelProfileId)))
+            {
+                yield return target;
+            }
+        }
+
+        if (route.FallbackPolicy?.CapabilityMatch != true)
+        {
+            yield break;
+        }
+
+        foreach (
+            ProviderInstance provider in configuration.Providers.Values.OrderBy(
+                value => value.Id,
+                StringComparer.Ordinal
+            )
+        )
+        {
+            foreach (ModelProfile model in provider.Models.Values.OrderBy(value => value.Id, StringComparer.Ordinal))
+            {
+                if (seen.Add((provider.Id, model.Id)))
+                {
+                    yield return new RouteTarget(provider.Id, model.Id);
+                }
+            }
+        }
     }
 
     private PlannedTarget Evaluate(

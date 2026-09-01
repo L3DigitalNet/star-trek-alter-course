@@ -23,23 +23,20 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
     {
         using var assetLock = AssetLock.Acquire(configuration, manifest.Request.Id);
         manifest = ManifestMutation.ReloadForMutation(configuration, manifest);
-        if (manifest.Request.Lifecycle is AssetLifecycle.Approved or AssetLifecycle.Deprecated)
-        {
-            throw new AssetCtlException("Approved and deprecated assets cannot be generated or overwritten.", 8);
-        }
-
         string runId = Guid.NewGuid().ToString();
-        var attempts = new List<object>();
-        try
+        var attempts = new List<object>
         {
-            // Resolve against the physical configured asset root before any provider or idempotency work.
-            PathPolicy.ResolveOutputPath(configuration, manifest.Request.Output.Path, allowMissing: true);
-        }
-        catch (AssetCtlException exception)
-        {
-            WriteFailureReceipt(configuration, manifest, null, attempts, runId, exception);
-            throw;
-        }
+            new
+            {
+                event_type = "invocation",
+                command = "generate",
+                force,
+                dry_run = dryRun,
+                offline,
+            },
+        };
+        var failureCandidates = new List<ReceiptCandidateEvidence>();
+        ValidateGenerationBoundary(configuration, manifest, attempts, failureCandidates, runId);
 
         object? existingResult = await TryExistingAsync(configuration, manifest, force, cancellationToken)
             .ConfigureAwait(false);
@@ -55,7 +52,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         }
         catch (Exception exception) when (exception is AssetCtlException or IOException)
         {
-            WriteFailureReceipt(configuration, manifest, null, attempts, runId, exception);
+            WriteFailureReceipt(configuration, manifest, null, attempts, failureCandidates, runId, exception);
             throw;
         }
 
@@ -64,7 +61,16 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
             return new { dry_run = true, plan };
         }
 
-        return await GenerateNewAsync(configuration, manifest, plan, runId, attempts, offline, cancellationToken)
+        return await GenerateNewAsync(
+                configuration,
+                manifest,
+                plan,
+                runId,
+                attempts,
+                failureCandidates,
+                offline,
+                cancellationToken
+            )
             .ConfigureAwait(false);
     }
 
@@ -74,36 +80,29 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         GenerationPlan plan,
         string runId,
         List<object> attempts,
+        List<ReceiptCandidateEvidence> failureCandidates,
         bool offline,
         CancellationToken cancellationToken
     )
     {
         try
         {
-            StyleProfile style = configuration.Styles[manifest.Request.StyleProfile];
-            (string prompt, string promptHash) = PromptCompiler.Compile(manifest.Request, style);
-            string requestHash = ConfigurationLoader.Hash(
-                JsonSerializer.Serialize(manifest.Request, JsonOptions.Stable)
-            );
-            (string FileName, string MediaType, byte[] Bytes)[] references = LoadReferences(
-                configuration,
-                manifest.Request.References
-            );
-            QualityTier tier = configuration.QualityTiers[manifest.Request.QualityTier];
+            GenerationInputs inputs = PrepareInputs(configuration, manifest.Request);
             var spend = new SpendGuard(configuration);
             var attemptBudget = new AttemptBudget(configuration.Limits.MaximumTotalAttempts);
             TargetOutcome? outcome = await GenerateFromRoutesAsync(
                     configuration,
                     manifest,
                     plan,
-                    prompt,
-                    references,
-                    tier,
+                    inputs.Prompt,
+                    inputs.References,
+                    inputs.Tier,
                     runId,
                     offline,
                     spend,
                     attemptBudget,
                     attempts,
+                    failureCandidates,
                     cancellationToken
                 )
                 .ConfigureAwait(false);
@@ -119,19 +118,27 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
                 configuration,
                 manifest,
                 plan,
-                tier,
+                inputs.Tier,
                 outcome,
                 attempts,
-                prompt,
-                promptHash,
-                requestHash,
+                inputs.Prompt,
+                inputs.PromptHash,
+                inputs.RequestHash,
                 runId,
                 plan.EstimatedMaximumCost!.Value
             );
         }
         catch (Exception exception) when (exception is AssetCtlException or ProviderException or IOException)
         {
-            WriteFailureReceiptUnlessWritten(configuration, manifest, plan, attempts, runId, exception);
+            WriteFailureReceiptUnlessWritten(
+                configuration,
+                manifest,
+                plan,
+                attempts,
+                failureCandidates,
+                runId,
+                exception
+            );
             throw;
         }
     }
@@ -171,6 +178,45 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         }
 
         return plan;
+    }
+
+    private static void ValidateGenerationBoundary(
+        EffectiveConfiguration configuration,
+        AssetManifest manifest,
+        IReadOnlyList<object> attempts,
+        IReadOnlyList<ReceiptCandidateEvidence> candidates,
+        string runId
+    )
+    {
+        try
+        {
+            if (manifest.Request.Lifecycle is AssetLifecycle.Approved or AssetLifecycle.Deprecated)
+            {
+                throw new AssetCtlException("Approved and deprecated assets cannot be generated or overwritten.", 8);
+            }
+
+            // Resolve against the physical configured asset root before any provider or idempotency work.
+            PathPolicy.ResolveOutputPath(configuration, manifest.Request.Output.Path, allowMissing: true);
+        }
+        catch (AssetCtlException exception)
+        {
+            WriteFailureReceipt(configuration, manifest, null, attempts, candidates, runId, exception);
+            throw;
+        }
+    }
+
+    private static GenerationInputs PrepareInputs(EffectiveConfiguration configuration, AssetRequest request)
+    {
+        StyleProfile style = configuration.Styles[request.StyleProfile];
+        (string prompt, string promptHash) = PromptCompiler.Compile(request, style);
+        string requestHash = ConfigurationLoader.Hash(JsonSerializer.Serialize(request, JsonOptions.Stable));
+        return new GenerationInputs(
+            prompt,
+            promptHash,
+            requestHash,
+            LoadReferences(configuration, request.References),
+            configuration.QualityTiers[request.QualityTier]
+        );
     }
 
     private static async Task<object?> TryExistingAsync(
@@ -277,6 +323,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         SpendGuard spend,
         AttemptBudget attemptBudget,
         List<object> attempts,
+        List<ReceiptCandidateEvidence> failureCandidates,
         CancellationToken cancellationToken
     )
     {
@@ -303,6 +350,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
                         spend,
                         attemptBudget,
                         attempts,
+                        failureCandidates,
                         cancellationToken
                     )
                     .ConfigureAwait(false);
@@ -336,12 +384,12 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
                 target.ProviderId,
                 target.ModelProfileId,
                 category,
-                diagnostic = Redactor.Sanitize(diagnostic),
+                diagnostic = SanitizeReceiptDiagnostic(diagnostic),
             }
         );
         if (!AllowsFallback(route, category))
         {
-            throw new ProviderException(category, Redactor.Sanitize(diagnostic));
+            throw new ProviderException(category, SanitizeReceiptDiagnostic(diagnostic));
         }
 
         events.Add(
@@ -367,6 +415,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         SpendGuard spend,
         AttemptBudget attemptBudget,
         List<object> attempts,
+        List<ReceiptCandidateEvidence> failureCandidates,
         CancellationToken cancellationToken
     )
     {
@@ -403,6 +452,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
                 spend,
                 attemptBudget,
                 attempts,
+                failureCandidates,
                 cancellationToken
             )
             .ConfigureAwait(false);
@@ -472,6 +522,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         SpendGuard spend,
         AttemptBudget attemptBudget,
         List<object> attempts,
+        List<ReceiptCandidateEvidence> failureCandidates,
         CancellationToken cancellationToken
     )
     {
@@ -489,6 +540,8 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
                 configuration.Limits.MaximumDecodedPixels
             );
             SemanticReviewResult? review = null;
+            var failureEvidence = new ReceiptCandidateEvidence(candidate, mechanical, null);
+            failureCandidates.Add(failureEvidence);
             if (mechanical.Passed && plan.Reviewer is not null && !offline)
             {
                 try
@@ -506,6 +559,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
                             cancellationToken
                         )
                         .ConfigureAwait(false);
+                    failureCandidates[^1] = failureEvidence with { Review = review };
                 }
                 catch (ProviderException)
                     when (tier.ReviewPolicy is SemanticReviewPolicy.WhenAvailable && tier.AllowUnreviewedPlaceholder)
@@ -611,7 +665,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
                     promptHash,
                     runId,
                     null,
-                    Redactor.Sanitize(exception.Message)
+                    SanitizeReceiptDiagnostic(exception.Message)
                 )
             );
             exception.Data["AlterCourse.AssetCtl.ReceiptWritten"] = true;
@@ -679,7 +733,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
                     promptHash,
                     runId,
                     publication,
-                    $"primary receipt write failed: {Redactor.Sanitize(exception.Message)}"
+                    $"primary receipt write failed: {SanitizeReceiptDiagnostic(exception.Message)}"
                 )
             );
         }
@@ -739,6 +793,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         new
         {
             command = "generate",
+            invocation = attempts.Count == 0 ? null : attempts[0],
             run_id = runId,
             asset_id = generated.Request.Id,
             semantic_request = generated.Request,
@@ -850,14 +905,17 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         AssetManifest manifest,
         GenerationPlan? plan,
         IReadOnlyList<object> attempts,
+        IReadOnlyList<ReceiptCandidateEvidence> candidates,
         string runId,
         Exception exception
     )
     {
+        RetainFailureCandidates(configuration, runId, candidates);
         string requestHash = ConfigurationLoader.Hash(JsonSerializer.Serialize(manifest.Request, JsonOptions.Stable));
         object receipt = new
         {
             command = "generate",
+            invocation = attempts.Count == 0 ? null : attempts[0],
             run_id = runId,
             asset_id = manifest.Request.Id,
             semantic_request = manifest.Request,
@@ -874,11 +932,11 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
             estimated_maximum_cost_usd = plan?.EstimatedMaximumCost,
             plan,
             attempts,
-            candidates = Array.Empty<object>(),
+            candidates = FailureReceiptCandidates(configuration, runId, candidates),
             selection = new
             {
                 status = "failure",
-                reason = Redactor.Sanitize(exception.Message),
+                reason = SanitizeReceiptDiagnostic(exception.Message),
                 candidate = (int?)null,
                 selected_sha256 = (string?)null,
             },
@@ -888,7 +946,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
                 recovered_pending_transactions = 0,
                 active_transactions_skipped = 0,
                 rollback = "completed-or-no-change",
-                failure = Redactor.Sanitize(exception.Message),
+                failure = SanitizeReceiptDiagnostic(exception.Message),
                 repository_path = (string?)null,
                 godot_path = (string?)null,
                 manifest_path = (string?)null,
@@ -914,7 +972,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
                     new
                     {
                         receipt,
-                        primary_receipt_failure = Redactor.Sanitize(exception.Message),
+                        primary_receipt_failure = SanitizeReceiptDiagnostic(exception.Message),
                         authoritative = false,
                     }
                 );
@@ -1063,9 +1121,23 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
                 started_at = started,
                 duration_milliseconds = stopwatch.ElapsedMilliseconds,
                 category = exception.Category,
-                diagnostic = Redactor.Sanitize(exception.Message),
+                diagnostic = SanitizeReceiptDiagnostic(exception.Message),
             }
         );
+
+    private static string SanitizeReceiptDiagnostic(string diagnostic)
+    {
+        string sanitized = Redactor.Sanitize(diagnostic);
+        int query = sanitized.IndexOf('?', StringComparison.Ordinal);
+        if (query < 0)
+        {
+            return sanitized;
+        }
+
+        // Provider diagnostics can embed a signed URL inside prose, so whole-value URL redaction is insufficient.
+        int end = sanitized.IndexOfAny([' ', '\r', '\n', '"', '\''], query);
+        return end < 0 ? sanitized[..query] + "?[REDACTED]" : sanitized[..query] + "?[REDACTED]" + sanitized[end..];
+    }
 
     private static TimeSpan RetryDelay(RouteRetryPolicy retry, ProviderException exception, string runId, int attempt)
     {
@@ -1121,7 +1193,11 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
                 cancellationToken
             )
             .ConfigureAwait(false);
-        string independence = string.Equals(provider.AdapterId, generatorAdapterId, StringComparison.Ordinal)
+        string independence = string.Equals(
+            ProviderFamily(provider.AdapterId),
+            ProviderFamily(generatorAdapterId),
+            StringComparison.Ordinal
+        )
             ? "same-provider-family"
             : "different-provider-family";
         result = result with
@@ -1158,6 +1234,12 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
             style.Required.Concat(request.Required).ToArray(),
             style.Prohibited.Concat(request.Prohibited).ToArray()
         );
+
+    private static string ProviderFamily(string adapterId)
+    {
+        int separator = adapterId.IndexOf('-', StringComparison.Ordinal);
+        return separator < 0 ? adapterId : adapterId[..separator];
+    }
 
     private static async Task<SemanticReviewResult> InvokeReviewWithRetry(
         IAssetReviewer reviewer,
@@ -1299,14 +1381,71 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         AssetManifest manifest,
         GenerationPlan plan,
         IReadOnlyList<object> attempts,
+        IReadOnlyList<ReceiptCandidateEvidence> candidates,
         string runId,
         Exception exception
     )
     {
         if (!exception.Data.Contains("AlterCourse.AssetCtl.ReceiptWritten"))
         {
-            WriteFailureReceipt(configuration, manifest, plan, attempts, runId, exception);
+            WriteFailureReceipt(configuration, manifest, plan, attempts, candidates, runId, exception);
         }
+    }
+
+    private static IEnumerable<object> FailureReceiptCandidates(
+        EffectiveConfiguration configuration,
+        string runId,
+        IReadOnlyList<ReceiptCandidateEvidence> candidates
+    ) =>
+        candidates.Select(
+            (item, index) =>
+                new
+                {
+                    item.Candidate.CreationOrder,
+                    retained_path = FailureCandidatePath(configuration, runId, item.Candidate, index),
+                    sha256 = Convert.ToHexStringLower(SHA256.HashData(item.Candidate.Bytes)),
+                    item.Candidate.MediaType,
+                    item.Candidate.ProviderRequestId,
+                    item.Candidate.ActualCostUsd,
+                    mechanical = item.Mechanical,
+                    semantic = item.Review,
+                    score = item.Review?.OverallScore,
+                }
+        );
+
+    private static void RetainFailureCandidates(
+        EffectiveConfiguration configuration,
+        string runId,
+        IReadOnlyList<ReceiptCandidateEvidence> candidates
+    )
+    {
+        for (int index = 0; index < candidates.Count; index++)
+        {
+            ReceiptCandidateEvidence item = candidates[index];
+            string path = Path.Combine(
+                configuration.RepositoryRoot,
+                FailureCandidatePath(configuration, runId, item.Candidate, index)
+            );
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllBytes(path, item.Candidate.Bytes);
+        }
+    }
+
+    private static string FailureCandidatePath(
+        EffectiveConfiguration configuration,
+        string runId,
+        GeneratedCandidate candidate,
+        int index
+    )
+    {
+        string extension = string.Equals(candidate.MediaType, "image/svg+xml", StringComparison.Ordinal)
+            ? ".svg"
+            : ".png";
+        return Path.Combine(
+            configuration.Paths.WorkRoot,
+            runId,
+            $"failure-candidate-{index}-{candidate.CreationOrder}{extension}"
+        );
     }
 
     private static (string FileName, string MediaType, byte[] Bytes)[] LoadReferences(
@@ -1395,6 +1534,20 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
             SemanticReviewResult? Review
         )> Evaluated,
         (GeneratedCandidate Candidate, MechanicalValidationResult Mechanical, SemanticReviewResult? Review) Selected
+    );
+
+    private sealed record ReceiptCandidateEvidence(
+        GeneratedCandidate Candidate,
+        MechanicalValidationResult Mechanical,
+        SemanticReviewResult? Review
+    );
+
+    private sealed record GenerationInputs(
+        string Prompt,
+        string PromptHash,
+        string RequestHash,
+        IReadOnlyList<(string FileName, string MediaType, byte[] Bytes)> References,
+        QualityTier Tier
     );
 
     private sealed class AttemptBudget(int maximumAttempts)

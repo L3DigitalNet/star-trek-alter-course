@@ -59,6 +59,51 @@ public sealed class GenerationEndToEndTests
         Assert.Equal(1, reviewer.Calls);
     }
 
+    /// <summary>Treats image generation and vision review adapters from one configured family as non-independent.</summary>
+    [Fact]
+    public async Task ReviewerIndependenceUsesProviderFamilyRatherThanAdapterIdentity()
+    {
+        var generator = new ScriptedGenerator("openai-images", request => Success(request.Request));
+        var reviewer = new CapturingReviewer("openai-vision-review");
+        using var fixture = new GenerationFixture([generator, reviewer], semanticReview: "required");
+
+        await fixture.GenerateAsync();
+
+        AssetManifest current = ManifestStore.Load(fixture.Configuration, fixture.Manifest.ManifestPath);
+        Assert.Equal("same-provider-family", current.SemanticReview!.Independence);
+    }
+
+    /// <summary>Retains generated evidence when a normalized malformed review response fails the run.</summary>
+    [Fact]
+    public async Task MalformedReviewFailureReceiptPreservesCandidateEvidenceAndInvocation()
+    {
+        var generator = new ScriptedGenerator("evidence-generator", request => Success(request.Request));
+        var reviewer = new FailingReviewer();
+        using var fixture = new GenerationFixture([generator, reviewer], semanticReview: "required");
+
+        await Assert.ThrowsAsync<ProviderException>(() => fixture.GenerateAsync());
+
+        string receiptPath = Assert.Single(
+            Directory.EnumerateFiles(Path.Combine(fixture.Root, fixture.Configuration.Paths.ReceiptRoot), "*.json")
+        );
+        using var document = JsonDocument.Parse(await File.ReadAllTextAsync(receiptPath));
+        JsonElement root = document.RootElement;
+        Assert.False(root.GetProperty("invocation").GetProperty("force").GetBoolean());
+        Assert.False(root.GetProperty("invocation").GetProperty("offline").GetBoolean());
+        JsonElement candidate = Assert.Single(root.GetProperty("candidates").EnumerateArray());
+        string retainedPath = candidate.GetProperty("retained_path").GetString()!;
+        Assert.True(File.Exists(Path.Combine(fixture.Root, retainedPath)));
+        Assert.Equal(64, candidate.GetProperty("sha256").GetString()!.Length);
+        Assert.True(candidate.GetProperty("mechanical").GetProperty("passed").GetBoolean());
+        Assert.Equal(JsonValueKind.Null, candidate.GetProperty("semantic").ValueKind);
+        Assert.Contains(
+            root.GetProperty("attempts").EnumerateArray(),
+            item =>
+                string.Equals(item.GetProperty("event_type").GetString(), "review-attempt", StringComparison.Ordinal)
+        );
+        Assert.DoesNotContain("sig=secret", root.GetRawText(), StringComparison.Ordinal);
+    }
+
     private static void AssertSuccessfulReceipt(string receipt)
     {
         Assert.Contains("physical-attempt", receipt, StringComparison.Ordinal);
@@ -411,9 +456,10 @@ public sealed class GenerationEndToEndTests
         }
     }
 
-    private sealed class CapturingReviewer : AlterCourse.AssetCtl.Providers.ProviderContracts.IAssetReviewer
+    private sealed class CapturingReviewer(string adapterId = "different-reviewer")
+        : AlterCourse.AssetCtl.Providers.ProviderContracts.IAssetReviewer
     {
-        public string AdapterId => "fake-reviewer";
+        public string AdapterId => adapterId;
 
         public int Calls { get; private set; }
 
@@ -453,6 +499,29 @@ public sealed class GenerationEndToEndTests
                 )
             );
         }
+    }
+
+    private sealed class FailingReviewer : AlterCourse.AssetCtl.Providers.ProviderContracts.IAssetReviewer
+    {
+        public string AdapterId => "malformed-reviewer";
+
+        public IReadOnlySet<AssetCapability> SupportedCapabilities { get; } =
+            new HashSet<AssetCapability> { AssetCapability.ReviewSemantic };
+
+        public IReadOnlySet<string> AllowedEndpointHosts { get; } =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        public void ValidateOptions(IReadOnlyDictionary<string, string> options) { }
+
+        public Task<SemanticReviewResult> ReviewAsync(
+            ProviderExecutionContext context,
+            SemanticReviewRequest request,
+            CancellationToken cancellationToken
+        ) =>
+            throw new ProviderException(
+                ProviderErrorCategory.MalformedResponse,
+                "null response from https://provider.example/result?sig=secret"
+            );
     }
 
     private sealed class GenerationFixture : IDisposable
@@ -557,18 +626,22 @@ public sealed class GenerationEndToEndTests
                 ),
                 retry ?? new RouteRetryPolicy(1, 0, 0, 0, new HashSet<ProviderErrorCategory>())
             );
-            RouteDefinition[] review = adapters.Any(adapter => adapter is CapturingReviewer) ? [ReviewRoute()] : [];
+            string? reviewerId = adapters
+                .Where(adapter => adapter is AlterCourse.AssetCtl.Providers.ProviderContracts.IAssetReviewer)
+                .Select(adapter => adapter.AdapterId)
+                .SingleOrDefault();
+            RouteDefinition[] review = reviewerId is null ? [] : [ReviewRoute(reviewerId)];
             return (generation, review);
         }
 
-        private static RouteDefinition ReviewRoute() =>
+        private static RouteDefinition ReviewRoute(string reviewerId) =>
             new(
                 "review",
                 100,
                 null,
                 null,
                 AssetCapability.ReviewSemantic,
-                [new RouteTarget("fake-reviewer", "profile")],
+                [new RouteTarget(reviewerId, "profile")],
                 0,
                 new RouteFallbackPolicy(true, new HashSet<ProviderErrorCategory>()),
                 new RouteRetryPolicy(1, 0, 0, 0, new HashSet<ProviderErrorCategory>())
