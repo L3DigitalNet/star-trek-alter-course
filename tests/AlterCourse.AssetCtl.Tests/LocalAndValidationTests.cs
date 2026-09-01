@@ -40,6 +40,65 @@ public sealed class LocalAndValidationTests
         Assert.Equal(3, result.TargetPreviews.Count);
     }
 
+    /// <summary>Removes an entire provider metadata subtree before validating retained SVG namespaces.</summary>
+    [Fact]
+    public void SvgRemovesProviderMetadataSubtreeBeforeValidation()
+    {
+        const string svg =
+            "<svg xmlns='http://www.w3.org/2000/svg' xmlns:rdf='http://www.w3.org/1999/02/22-rdf-syntax-ns#' xmlns:dc='http://purl.org/dc/elements/1.1/' width='64' height='64' viewBox='0 0 64 64'><metadata><rdf:RDF><rdf:Description><dc:creator>Provider Name</dc:creator></rdf:Description></rdf:RDF></metadata><path d='M8 8h48v48H8z'/></svg>";
+
+        MechanicalValidationResult result = MechanicalValidator.Validate(
+            TestData.Request(AssetFormat.Svg),
+            Encoding.UTF8.GetBytes(svg),
+            1_000_000,
+            1_000_000
+        );
+
+        Assert.True(result.Passed, string.Join("; ", result.Findings));
+        string normalized = Encoding.UTF8.GetString(result.NormalizedBytes);
+        Assert.DoesNotContain("metadata", normalized, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Provider Name", normalized, StringComparison.Ordinal);
+    }
+
+    /// <summary>Allows only a short sanitized identifier when the manifest permits SVG text.</summary>
+    [Theory]
+    [InlineData("ui.test", true)]
+    [InlineData("Unsafe text!", false)]
+    [InlineData("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.extra", false)]
+    public void SvgTextMustBeAPermittedShortSanitizedIdentifier(string identifier, bool expectedPass)
+    {
+        string svg =
+            $"<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'><path d='M1 1h62v62H1z'/><text x='2' y='20'>{identifier}</text></svg>";
+        AssetRequest request = TestData.Request(AssetFormat.Svg) with { Prohibited = ["watermark"] };
+
+        MechanicalValidationResult result = MechanicalValidator.Validate(
+            request,
+            Encoding.UTF8.GetBytes(svg),
+            1_000_000,
+            1_000_000
+        );
+
+        Assert.Equal(expectedPass, result.Passed);
+    }
+
+    /// <summary>Rejects an SVG whose target-size render contains no drawable output.</summary>
+    [Fact]
+    public void SvgRejectsTargetSizeRenderFailure()
+    {
+        const string svg =
+            "<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'><defs><path id='unused' d='M0 0h64v64z'/></defs></svg>";
+
+        MechanicalValidationResult result = MechanicalValidator.Validate(
+            TestData.Request(AssetFormat.Svg),
+            Encoding.UTF8.GetBytes(svg),
+            1_000_000,
+            1_000_000
+        );
+
+        Assert.False(result.Passed);
+        Assert.Contains("target-size", string.Join("; ", result.Findings), StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>Rejects active, external, embedded, and manifest-prohibited SVG content.</summary>
     [Theory]
     [InlineData("<script>alert(1)</script>", "script")]

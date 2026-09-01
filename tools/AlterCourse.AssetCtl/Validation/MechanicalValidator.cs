@@ -27,6 +27,7 @@ internal static class MechanicalValidator
         "title",
         "desc",
         "metadata",
+        "text",
         "use",
         "clipPath",
         "mask",
@@ -288,6 +289,11 @@ internal static class MechanicalValidator
 
     private static string? ValidateSvgElements(XElement root, AssetRequest request)
     {
+        foreach (XElement metadata in root.Descendants(SvgNamespace + "metadata").ToArray())
+        {
+            metadata.Remove();
+        }
+
         foreach (XElement element in root.DescendantsAndSelf().ToArray())
         {
             string local = element.Name.LocalName;
@@ -302,10 +308,9 @@ internal static class MechanicalValidator
                 return $"prohibited SVG element '{local}'";
             }
 
-            if (string.Equals(local, "metadata", StringComparison.Ordinal))
+            if (string.Equals(local, "text", StringComparison.Ordinal) && !IsSanitizedIdentifier(element))
             {
-                element.Remove();
-                continue;
+                return "SVG text must be a short sanitized identifier";
             }
 
             foreach (XAttribute attribute in element.Attributes().ToArray())
@@ -329,6 +334,15 @@ internal static class MechanicalValidator
         }
 
         return null;
+    }
+
+    private static bool IsSanitizedIdentifier(XElement element)
+    {
+        const int maximumLength = 64;
+        string value = element.Value;
+        return !element.HasElements
+            && value.Length is > 0 and <= maximumLength
+            && value.All(character => char.IsAsciiLetterOrDigit(character) || character is '.' or '-' or '_');
     }
 
     private static bool IsExternalResource(string name, string value)
@@ -378,16 +392,23 @@ internal static class MechanicalValidator
         Dictionary<int, byte[]> previews = [];
         foreach (int size in sizes)
         {
-            using var surface = SKSurface.Create(new SKImageInfo(size, size, SKColorType.Rgba8888, SKAlphaType.Premul));
-            surface.Canvas.Clear(SKColors.Transparent);
-            if (surface is null || svg.Picture is null)
+            using var bitmap = new SKBitmap(new SKImageInfo(size, size, SKColorType.Rgba8888, SKAlphaType.Premul));
+            using var canvas = new SKCanvas(bitmap);
+            canvas.Clear(SKColors.Transparent);
+            if (svg.Picture is null)
             {
                 throw new InvalidOperationException("target-size SVG render surface was unavailable");
             }
 
-            surface.Canvas.Scale(Math.Min(size / (float)width, size / (float)height));
-            surface.Canvas.DrawPicture(svg.Picture);
-            using SKImage image = surface.Snapshot();
+            canvas.Scale(Math.Min(size / (float)width, size / (float)height));
+            canvas.DrawPicture(svg.Picture);
+            canvas.Flush();
+            if (!HasVisiblePixel(bitmap))
+            {
+                throw new InvalidOperationException("target-size SVG render produced no visible pixels");
+            }
+
+            using var image = SKImage.FromBitmap(bitmap);
             using SKData data =
                 image.Encode(SKEncodedImageFormat.Png, 100)
                 ?? throw new InvalidOperationException("target-size SVG preview encoding failed");
@@ -395,6 +416,22 @@ internal static class MechanicalValidator
         }
 
         return previews;
+    }
+
+    private static bool HasVisiblePixel(SKBitmap bitmap)
+    {
+        for (int y = 0; y < bitmap.Height; y++)
+        {
+            for (int x = 0; x < bitmap.Width; x++)
+            {
+                if (bitmap.GetPixel(x, y).Alpha != 0)
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private static int ParseDimension(string? value, string name)
