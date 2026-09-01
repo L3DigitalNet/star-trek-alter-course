@@ -17,3 +17,6 @@
 - Releases use SemVer `v*` tags and immutable GitHub Releases; no playable release has been published yet.
 - ADR 0013 and its design brief define the branch, PR, commit, hotfix, and release lifecycle.
 - Public presentation includes a corrected description, eleven GitHub topics, contributor guidance, and community health at 87%.
+- The asset-pipeline specification is aligned with the repository ADRs and was merged through governed PR #15.
+- A legacy-named PR was auto-closed by branch enforcement; its content was recovered through Issue #14 and policy-compliant PR #15.
+- Local and remote topic branches are pruned; only permanent `dev` and `main` branches remain, with `origin/HEAD` at `dev`.
