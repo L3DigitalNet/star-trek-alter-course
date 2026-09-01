@@ -56,6 +56,58 @@ public sealed class ConfigurationSafetyTests
         }
     }
 
+    /// <summary>Rejects an existing symlink component that redirects a configured-root path outside the repository.</summary>
+    [Fact]
+    public void ConfiguredRootRejectsSymlinkEscape()
+    {
+        string root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        string outside = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "catalog"));
+        Directory.CreateDirectory(outside);
+        Directory.CreateSymbolicLink(Path.Combine(root, "catalog", "escaped"), outside);
+        try
+        {
+            Assert.Throws<AssetCtlException>(() =>
+                PathPolicy.ResolveUnderConfiguredRoot(
+                    root,
+                    "catalog",
+                    "catalog/escaped/manifest.asset.yaml",
+                    "manifest path",
+                    allowMissing: true
+                )
+            );
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+            Directory.Delete(outside, recursive: true);
+        }
+    }
+
+    /// <summary>Rejects a repository-confined path that is outside the configured catalog root.</summary>
+    [Fact]
+    public void ConfiguredRootRejectsSiblingPath()
+    {
+        string root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "catalog"));
+        try
+        {
+            Assert.Throws<AssetCtlException>(() =>
+                PathPolicy.ResolveUnderConfiguredRoot(
+                    root,
+                    "catalog",
+                    "other/manifest.asset.yaml",
+                    "manifest path",
+                    allowMissing: true
+                )
+            );
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     /// <summary>Reports unknown configuration keys with their precise logical path.</summary>
     [Fact]
     public void UnknownKeysArePathSpecific()

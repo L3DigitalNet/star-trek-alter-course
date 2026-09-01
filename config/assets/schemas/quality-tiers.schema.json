@@ -10,12 +10,20 @@
 			"type": "object",
 			"additionalProperties": {
 				"type": "object",
+				"additionalProperties": false,
 				"required": [
 					"candidates",
 					"attempts_per_route",
 					"semantic_review",
 					"allow_unreviewed_placeholder"
-				]
+				],
+				"properties": {
+					"candidates": { "type": "integer", "minimum": 1 },
+					"attempts_per_route": { "type": "integer", "minimum": 1 },
+					"semantic_review": { "enum": ["disabled", "when-available", "required"] },
+					"allow_unreviewed_placeholder": { "type": "boolean" },
+					"minimum_semantic_score": { "type": "number", "minimum": 0, "maximum": 1 }
+				}
 			}
 		}
 	}

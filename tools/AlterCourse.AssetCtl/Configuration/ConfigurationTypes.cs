@@ -1,7 +1,13 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using YamlDotNet.RepresentationModel;
+using OutputTransparency = AlterCourse.AssetCtl.Domain.DomainModels.OutputTransparency;
+using RouteFallbackPolicy = AlterCourse.AssetCtl.Domain.DomainModels.RouteFallbackPolicy;
+using RouteRetryPolicy = AlterCourse.AssetCtl.Domain.DomainModels.RouteRetryPolicy;
+using SchemaDocumentStatus = AlterCourse.AssetCtl.Domain.DomainModels.SchemaDocumentStatus;
+using SemanticReviewPolicy = AlterCourse.AssetCtl.Domain.DomainModels.SemanticReviewPolicy;
 
 namespace AlterCourse.AssetCtl.Configuration;
 
@@ -44,7 +50,8 @@ internal static class ConfigurationTypes
             (IReadOnlyList<RouteDefinition> routes, IReadOnlyList<RouteDefinition> reviewRoutes) = ReadRoutes(
                 repositoryRoot,
                 hashes,
-                providers
+                providers,
+                limits
             );
             global::System.Collections.Generic.Dictionary<
                 string,
@@ -476,7 +483,8 @@ internal static class ConfigurationTypes
         private static (IReadOnlyList<RouteDefinition>, IReadOnlyList<RouteDefinition>) ReadRoutes(
             string root,
             IDictionary<string, string> hashes,
-            IReadOnlyDictionary<string, ProviderInstance> providers
+            IReadOnlyDictionary<string, ProviderInstance> providers,
+            AssetCtlLimits limits
         )
         {
             global::YamlDotNet.RepresentationModel.YamlMappingNode document = Load(
@@ -487,15 +495,16 @@ internal static class ConfigurationTypes
             document.RequireOnly("routing", "schema_version", "routes", "review_routes");
             RequireVersion(document, "routing");
             return (
-                ReadRouteList(document.Sequence("routes", "routing"), false, providers),
-                ReadRouteList(document.Sequence("review_routes", "routing"), true, providers)
+                ReadRouteList(document.Sequence("routes", "routing"), false, providers, limits),
+                ReadRouteList(document.Sequence("review_routes", "routing"), true, providers, limits)
             );
         }
 
         private static List<RouteDefinition> ReadRouteList(
             YamlSequenceNode sequence,
             bool review,
-            IReadOnlyDictionary<string, ProviderInstance> providers
+            IReadOnlyDictionary<string, ProviderInstance> providers,
+            AssetCtlLimits limits
         )
         {
             var result = new List<RouteDefinition>();
@@ -504,7 +513,17 @@ internal static class ConfigurationTypes
             {
                 var node = (YamlMappingNode)sequence.Children[index];
                 string path = review ? $"review_routes[{index}]" : $"routes[{index}]";
-                node.RequireOnly(path, "id", "priority", "lifecycle", "format", "capability", "targets");
+                node.RequireOnly(
+                    path,
+                    "id",
+                    "priority",
+                    "lifecycle",
+                    "format",
+                    "capability",
+                    "targets",
+                    "fallback",
+                    "retry"
+                );
                 string id = node.Scalar("id", path);
                 if (!ids.Add(id))
                 {
@@ -523,12 +542,76 @@ internal static class ConfigurationTypes
                         ParseFormat(node.OptionalScalar("format", path), path),
                         ParseCapability(node.Scalar("capability", path), path),
                         targets,
-                        index
+                        index,
+                        ReadFallback(node.Mapping("fallback", path), path),
+                        ReadRetry(node.Mapping("retry", path), path, limits)
                     )
                 );
             }
 
             return result.OrderByDescending(route => route.Priority).ThenBy(route => route.ConfigurationOrder).ToList();
+        }
+
+        private static RouteFallbackPolicy ReadFallback(YamlMappingNode node, string path)
+        {
+            string fallbackPath = $"{path}.fallback";
+            node.RequireOnly(fallbackPath, "capability_match", "allowed_error_categories");
+            return new RouteFallbackPolicy(
+                node.Boolean("capability_match", fallbackPath),
+                ReadErrorCategories(node.Sequence("allowed_error_categories", fallbackPath), fallbackPath)
+            );
+        }
+
+        private static RouteRetryPolicy ReadRetry(YamlMappingNode node, string path, AssetCtlLimits limits)
+        {
+            string retryPath = $"{path}.retry";
+            node.RequireOnly(
+                retryPath,
+                "maximum_attempts_per_target",
+                "initial_delay_milliseconds",
+                "maximum_delay_milliseconds",
+                "jitter_ratio",
+                "error_categories"
+            );
+            int attempts = node.Integer("maximum_attempts_per_target", retryPath);
+            int initialDelay = node.Integer("initial_delay_milliseconds", retryPath);
+            int maximumDelay = node.Integer("maximum_delay_milliseconds", retryPath);
+            double jitter = double.Parse(node.Scalar("jitter_ratio", retryPath), CultureInfo.InvariantCulture);
+            if (
+                attempts < 1
+                || attempts > limits.MaximumTotalAttempts
+                || initialDelay < 0
+                || maximumDelay < initialDelay
+                || jitter is < 0 or > 1
+            )
+            {
+                throw new AssetCtlException(
+                    $"{retryPath}: retry metadata exceeds maximum_total_attempts or delay safety bounds.",
+                    2
+                );
+            }
+
+            return new RouteRetryPolicy(
+                attempts,
+                initialDelay,
+                maximumDelay,
+                jitter,
+                ReadErrorCategories(node.Sequence("error_categories", retryPath), retryPath)
+            );
+        }
+
+        private static HashSet<ProviderErrorCategory> ReadErrorCategories(YamlSequenceNode sequence, string path)
+        {
+            var result = new HashSet<ProviderErrorCategory>();
+            foreach (string value in YamlValues.Strings(sequence, path))
+            {
+                if (!result.Add(ParseErrorCategory(value, path)))
+                {
+                    throw new AssetCtlException($"{path}: duplicate error category '{value}'.", 2);
+                }
+            }
+
+            return result;
         }
 
         private static RouteTarget ParseTarget(
@@ -607,7 +690,7 @@ internal static class ConfigurationTypes
                         id,
                         candidates,
                         attempts,
-                        node.Scalar("semantic_review", path),
+                        SemanticReviewValue(ParseSemanticReviewPolicy(node.Scalar("semantic_review", path), path)),
                         node.Boolean("allow_unreviewed_placeholder", path),
                         score
                     )
@@ -708,6 +791,56 @@ internal static class ConfigurationTypes
                 _ => throw new AssetCtlException($"{path}: unknown capability '{value}'.", 2),
             };
 
+        public static SemanticReviewPolicy ParseSemanticReviewPolicy(string value, string path) =>
+            value switch
+            {
+                "disabled" => SemanticReviewPolicy.Disabled,
+                "when-available" => SemanticReviewPolicy.WhenAvailable,
+                "required" => SemanticReviewPolicy.Required,
+                _ => throw new AssetCtlException(
+                    $"{path}.semantic_review: expected disabled, when-available, or required; found '{value}'.",
+                    2
+                ),
+            };
+
+        public static OutputTransparency ParseOutputTransparency(string value, string path) =>
+            value switch
+            {
+                "required" => OutputTransparency.Required,
+                "optional" => OutputTransparency.Optional,
+                _ => throw new AssetCtlException(
+                    $"{path}.transparency: expected required or optional; found '{value}'.",
+                    2
+                ),
+            };
+
+        private static string SemanticReviewValue(SemanticReviewPolicy value) =>
+            value switch
+            {
+                SemanticReviewPolicy.Disabled => "disabled",
+                SemanticReviewPolicy.WhenAvailable => "when-available",
+                SemanticReviewPolicy.Required => "required",
+                _ => throw new ArgumentOutOfRangeException(nameof(value)),
+            };
+
+        private static ProviderErrorCategory ParseErrorCategory(string value, string path) =>
+            value switch
+            {
+                "invalid-request" => ProviderErrorCategory.InvalidRequest,
+                "authentication" => ProviderErrorCategory.Authentication,
+                "authorization" => ProviderErrorCategory.Authorization,
+                "insufficient-balance" => ProviderErrorCategory.InsufficientBalance,
+                "rate-limit" => ProviderErrorCategory.RateLimit,
+                "transient-network" => ProviderErrorCategory.TransientNetwork,
+                "provider-server" => ProviderErrorCategory.ProviderServer,
+                "timeout" => ProviderErrorCategory.Timeout,
+                "malformed-response" => ProviderErrorCategory.MalformedResponse,
+                "unsafe-download" => ProviderErrorCategory.UnsafeDownload,
+                "unsupported-output" => ProviderErrorCategory.UnsupportedOutput,
+                "validation" => ProviderErrorCategory.Validation,
+                _ => throw new AssetCtlException($"{path}: unknown error category '{value}'.", 2),
+            };
+
         private static AssetLifecycle? ParseLifecycle(string? value, string path) =>
             value switch
             {
@@ -757,7 +890,7 @@ internal static class ConfigurationTypes
 
             root = Path.GetFullPath(root);
             string candidate = Path.GetFullPath(relativePath, root);
-            if (!candidate.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+            if (!IsContained(root, candidate))
             {
                 throw new AssetCtlException($"{field}: path escapes the repository.", 2);
             }
@@ -780,11 +913,7 @@ internal static class ConfigurationTypes
                 if ((attributes & FileAttributes.ReparsePoint) == FileAttributes.ReparsePoint)
                 {
                     string? resolved = File.ResolveLinkTarget(current, returnFinalTarget: true)?.FullName;
-                    if (
-                        resolved is null
-                        || !Path.GetFullPath(resolved)
-                            .StartsWith(root + Path.DirectorySeparatorChar, StringComparison.Ordinal)
-                    )
+                    if (resolved is null || !IsContained(root, Path.GetFullPath(resolved)))
                     {
                         throw new AssetCtlException($"{field}: symlink escapes the repository.", 2);
                     }
@@ -792,6 +921,295 @@ internal static class ConfigurationTypes
             }
 
             return candidate;
+        }
+
+        public static string ResolveUnderConfiguredRoot(
+            string repositoryRoot,
+            string configuredRoot,
+            string repositoryRelativePath,
+            string field,
+            bool allowMissing
+        )
+        {
+            string allowedRoot = ResolveUnder(repositoryRoot, configuredRoot, $"{field} root", allowMissing: true);
+            string candidate = ResolveUnder(repositoryRoot, repositoryRelativePath, field, allowMissing);
+            if (!IsContained(allowedRoot, candidate))
+            {
+                throw new AssetCtlException($"{field}: path is outside configured root '{configuredRoot}'.", 2);
+            }
+
+            return candidate;
+        }
+
+        public static string ResolveManifestPath(
+            EffectiveConfiguration configuration,
+            string repositoryRelativePath,
+            bool allowMissing
+        ) =>
+            ResolveUnderConfiguredRoot(
+                configuration.RepositoryRoot,
+                configuration.Paths.CatalogRoot,
+                repositoryRelativePath,
+                "manifest path",
+                allowMissing
+            );
+
+        public static string ResolveOutputPath(
+            EffectiveConfiguration configuration,
+            string repositoryRelativePath,
+            bool allowMissing
+        ) =>
+            ResolveUnderConfiguredRoot(
+                configuration.RepositoryRoot,
+                configuration.Paths.GodotAssetRoot,
+                repositoryRelativePath,
+                "output path",
+                allowMissing
+            );
+
+        public static string ResolveReferencePath(
+            EffectiveConfiguration configuration,
+            string repositoryRelativePath,
+            bool allowMissing
+        ) => ResolveUnder(configuration.RepositoryRoot, repositoryRelativePath, "reference path", allowMissing);
+
+        private static bool IsContained(string root, string candidate) =>
+            string.Equals(root, candidate, StringComparison.Ordinal)
+            || candidate.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.Ordinal);
+    }
+
+    public static class JsonSchemaDocumentValidator
+    {
+        private const string SupportedDraft = "https://json-schema.org/draft/2020-12/schema";
+
+        public static IReadOnlyList<SchemaDocumentStatus> ValidateTrackedSchemas(string repositoryRoot)
+        {
+            string schemaRoot = PathPolicy.ResolveUnder(
+                repositoryRoot,
+                "config/assets/schemas",
+                "schema root",
+                allowMissing: false
+            );
+            var results = new List<SchemaDocumentStatus>();
+            foreach (string path in Directory.EnumerateFiles(schemaRoot, "*.json").Order(StringComparer.Ordinal))
+            {
+                string relative = Path.GetRelativePath(repositoryRoot, path);
+                try
+                {
+                    using var document = JsonDocument.Parse(
+                        File.ReadAllBytes(path),
+                        new JsonDocumentOptions
+                        {
+                            AllowTrailingCommas = false,
+                            CommentHandling = JsonCommentHandling.Disallow,
+                        }
+                    );
+                    ValidateSchema(document.RootElement, document.RootElement, relative, isRoot: true);
+                }
+                catch (JsonException exception)
+                {
+                    throw new AssetCtlException($"{relative}: invalid JSON Schema document: {exception.Message}", 2);
+                }
+
+                results.Add(new SchemaDocumentStatus(relative, SupportedDraft, true));
+            }
+
+            if (results.Count == 0)
+            {
+                throw new AssetCtlException("config/assets/schemas: no tracked JSON Schema documents found.", 2);
+            }
+
+            return results;
+        }
+
+        private static void ValidateSchema(JsonElement schema, JsonElement document, string path, bool isRoot = false)
+        {
+            if (schema.ValueKind == JsonValueKind.True || schema.ValueKind == JsonValueKind.False)
+            {
+                return;
+            }
+
+            if (schema.ValueKind != JsonValueKind.Object)
+            {
+                throw new AssetCtlException($"{path}: schema must be an object or boolean.", 2);
+            }
+
+            if (isRoot)
+            {
+                if (
+                    !schema.TryGetProperty("$schema", out JsonElement draft)
+                    || draft.ValueKind != JsonValueKind.String
+                    || !string.Equals(draft.GetString(), SupportedDraft, StringComparison.Ordinal)
+                )
+                {
+                    throw new AssetCtlException($"{path}.$schema: expected '{SupportedDraft}'.", 2);
+                }
+            }
+
+            ValidateType(schema, path);
+            ValidateStringArrayKeyword(schema, "required", path, requireUnique: true);
+            ValidateStringArrayKeyword(schema, "enum", path, requireUnique: false, allowNonStrings: true);
+            ValidateSchemaMap(schema, "properties", document, path);
+            ValidateSchemaMap(schema, "patternProperties", document, path);
+            ValidateSchemaMap(schema, "$defs", document, path);
+            ValidateSchemaKeyword(schema, "items", document, path);
+            ValidateSchemaKeyword(schema, "additionalProperties", document, path);
+            ValidateSchemaArrayKeyword(schema, "allOf", document, path);
+            ValidateSchemaArrayKeyword(schema, "anyOf", document, path);
+            ValidateSchemaArrayKeyword(schema, "oneOf", document, path);
+            ValidateSchemaKeyword(schema, "not", document, path);
+            if (schema.TryGetProperty("$ref", out JsonElement reference))
+            {
+                if (reference.ValueKind != JsonValueKind.String || reference.GetString() is not { } value)
+                {
+                    throw new AssetCtlException($"{path}.$ref: expected string.", 2);
+                }
+
+                if (value.StartsWith('#') && !TryResolvePointer(document, value, out _))
+                {
+                    throw new AssetCtlException($"{path}.$ref: unresolved local reference '{value}'.", 2);
+                }
+            }
+        }
+
+        private static void ValidateType(JsonElement schema, string path)
+        {
+            if (!schema.TryGetProperty("type", out JsonElement type))
+            {
+                return;
+            }
+
+            var allowed = new HashSet<string>(
+                ["null", "boolean", "object", "array", "number", "string", "integer"],
+                StringComparer.Ordinal
+            );
+            if (type.ValueKind == JsonValueKind.String && allowed.Contains(type.GetString()!))
+            {
+                return;
+            }
+
+            if (
+                type.ValueKind == JsonValueKind.Array
+                && type.GetArrayLength() > 0
+                && type.EnumerateArray()
+                    .All(item => item.ValueKind == JsonValueKind.String && allowed.Contains(item.GetString()!))
+                && type.EnumerateArray().Select(item => item.GetString()).Distinct(StringComparer.Ordinal).Count()
+                    == type.GetArrayLength()
+            )
+            {
+                return;
+            }
+
+            throw new AssetCtlException($"{path}.type: invalid JSON Schema type declaration.", 2);
+        }
+
+        private static void ValidateStringArrayKeyword(
+            JsonElement schema,
+            string keyword,
+            string path,
+            bool requireUnique,
+            bool allowNonStrings = false
+        )
+        {
+            if (!schema.TryGetProperty(keyword, out JsonElement value))
+            {
+                return;
+            }
+
+            if (value.ValueKind != JsonValueKind.Array || value.GetArrayLength() == 0)
+            {
+                throw new AssetCtlException($"{path}.{keyword}: expected a non-empty array.", 2);
+            }
+
+            if (allowNonStrings)
+            {
+                return;
+            }
+
+            string?[] values = value.EnumerateArray().Select(item => item.GetString()).ToArray();
+            if (
+                values.Any(item => item is null)
+                || requireUnique && values.Distinct(StringComparer.Ordinal).Count() != values.Length
+            )
+            {
+                throw new AssetCtlException($"{path}.{keyword}: expected unique strings.", 2);
+            }
+        }
+
+        private static void ValidateSchemaMap(JsonElement schema, string keyword, JsonElement document, string path)
+        {
+            if (!schema.TryGetProperty(keyword, out JsonElement map))
+            {
+                return;
+            }
+
+            if (map.ValueKind != JsonValueKind.Object)
+            {
+                throw new AssetCtlException($"{path}.{keyword}: expected object.", 2);
+            }
+
+            foreach (JsonProperty property in map.EnumerateObject())
+            {
+                ValidateSchema(property.Value, document, $"{path}.{keyword}.{property.Name}");
+            }
+        }
+
+        private static void ValidateSchemaKeyword(JsonElement schema, string keyword, JsonElement document, string path)
+        {
+            if (schema.TryGetProperty(keyword, out JsonElement value))
+            {
+                ValidateSchema(value, document, $"{path}.{keyword}");
+            }
+        }
+
+        private static void ValidateSchemaArrayKeyword(
+            JsonElement schema,
+            string keyword,
+            JsonElement document,
+            string path
+        )
+        {
+            if (!schema.TryGetProperty(keyword, out JsonElement values))
+            {
+                return;
+            }
+
+            if (values.ValueKind != JsonValueKind.Array || values.GetArrayLength() == 0)
+            {
+                throw new AssetCtlException($"{path}.{keyword}: expected a non-empty schema array.", 2);
+            }
+
+            int index = 0;
+            foreach (JsonElement value in values.EnumerateArray())
+            {
+                ValidateSchema(value, document, $"{path}.{keyword}[{index++}]");
+            }
+        }
+
+        private static bool TryResolvePointer(JsonElement document, string reference, out JsonElement value)
+        {
+            value = document;
+            if (string.Equals(reference, "#", StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            if (!reference.StartsWith("#/", StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            foreach (string raw in reference[2..].Split('/'))
+            {
+                string segment = raw.Replace("~1", "/", StringComparison.Ordinal)
+                    .Replace("~0", "~", StringComparison.Ordinal);
+                if (value.ValueKind != JsonValueKind.Object || !value.TryGetProperty(segment, out value))
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
     }
 }

@@ -4,6 +4,10 @@ using AlterCourse.AssetCtl.Generation;
 using AlterCourse.AssetCtl.Routing;
 using AlterCourse.AssetCtl.Validation;
 using Microsoft.Extensions.Logging;
+using JsonSchemaDocumentValidator = AlterCourse.AssetCtl.Configuration.ConfigurationTypes.JsonSchemaDocumentValidator;
+using RouteIntegrityStatus = AlterCourse.AssetCtl.Domain.DomainModels.RouteIntegrityStatus;
+using SchemaDocumentStatus = AlterCourse.AssetCtl.Domain.DomainModels.SchemaDocumentStatus;
+using WritableRootStatus = AlterCourse.AssetCtl.Domain.DomainModels.WritableRootStatus;
 
 namespace AlterCourse.AssetCtl.Cli;
 
@@ -77,6 +81,9 @@ internal static class CliTypes
 
         private static object ValidateConfig(EffectiveConfiguration configuration)
         {
+            IReadOnlyList<SchemaDocumentStatus> schemas = JsonSchemaDocumentValidator.ValidateTrackedSchemas(
+                configuration.RepositoryRoot
+            );
             global::System.Collections.Generic.IReadOnlyList<global::AlterCourse.AssetCtl.Domain.DomainModels.AssetManifest> catalog =
                 ManifestStore.LoadAll(configuration);
             foreach (global::AlterCourse.AssetCtl.Domain.DomainModels.AssetManifest manifest in catalog)
@@ -88,7 +95,7 @@ internal static class CliTypes
 
                 ManifestStore.VerifyIntegrity(configuration, manifest);
                 byte[] bytes = File.ReadAllBytes(
-                    Path.Combine(configuration.RepositoryRoot, manifest.Request.Output.Path)
+                    PathPolicy.ResolveOutputPath(configuration, manifest.Request.Output.Path, allowMissing: false)
                 );
                 global::AlterCourse.AssetCtl.Domain.DomainModels.MechanicalValidationResult validation =
                     MechanicalValidator.Validate(
@@ -110,13 +117,14 @@ internal static class CliTypes
             {
                 valid = true,
                 configuration_hash = configuration.EffectiveHash,
+                schemas,
                 manifests = catalog.Count,
                 offline = true,
                 read_only = true,
             };
         }
 
-        private static object Doctor(EffectiveConfiguration configuration, CliOptions options)
+        internal static object Doctor(EffectiveConfiguration configuration, CliOptions options)
         {
             if (options.Flag("probe"))
             {
@@ -126,9 +134,11 @@ internal static class CliTypes
                 );
             }
 
+            IReadOnlyList<WritableRootStatus> writableRoots = DoctorDiagnostics.CheckWritableRoots(configuration);
+            RouteIntegrityStatus routeIntegrity = DoctorDiagnostics.CheckRouteIntegrity(configuration);
             return new
             {
-                healthy = true,
+                healthy = writableRoots.All(root => root.Writable) && routeIntegrity.Valid,
                 configuration_files = configuration.FileHashes,
                 configuration_hash = configuration.EffectiveHash,
                 providers = configuration
@@ -148,12 +158,105 @@ internal static class CliTypes
                                 ),
                             },
                         models = provider.Models.Keys.Order(StringComparer.Ordinal),
-                    }),
+                    })
+                    .ToArray(),
+                writable_roots = writableRoots,
+                route_integrity = routeIntegrity,
                 decoder = "SkiaSharp",
                 renderer = "Svg.Skia",
                 probe = "not-run",
                 may_spend = false,
             };
+        }
+
+        internal static class DoctorDiagnostics
+        {
+            public static IReadOnlyList<WritableRootStatus> CheckWritableRoots(EffectiveConfiguration configuration)
+            {
+                return new[]
+                {
+                    CheckWritableRoot(configuration, "work_root", configuration.Paths.WorkRoot),
+                    CheckWritableRoot(configuration, "receipt_root", configuration.Paths.ReceiptRoot),
+                    CheckWritableRoot(configuration, "state_root", configuration.Paths.StateRoot),
+                    CheckWritableRoot(configuration, "log_root", configuration.Paths.LogRoot),
+                };
+            }
+
+            public static RouteIntegrityStatus CheckRouteIntegrity(EffectiveConfiguration configuration)
+            {
+                RouteDefinition[] routes = configuration.Routes.Concat(configuration.ReviewRoutes).ToArray();
+                bool complete =
+                    routes.All(route =>
+                        route.Targets.Count > 0
+                        && route.FallbackPolicy is not null
+                        && route.RetryPolicy is not null
+                        && route.Targets.All(target =>
+                            configuration.Providers.TryGetValue(target.ProviderId, out ProviderInstance? provider)
+                            && provider.Models.ContainsKey(target.ModelProfileId)
+                        )
+                    )
+                    && routes.Select(route => route.Id).Distinct(StringComparer.Ordinal).Count() == routes.Length;
+                return new RouteIntegrityStatus(
+                    complete,
+                    configuration.Routes.Count,
+                    configuration.ReviewRoutes.Count,
+                    routes.Sum(route => route.Targets.Count),
+                    routes.Count(route => route.FallbackPolicy is not null),
+                    routes.Count(route => route.RetryPolicy is not null)
+                );
+            }
+
+            private static WritableRootStatus CheckWritableRoot(
+                EffectiveConfiguration configuration,
+                string name,
+                string relativePath
+            )
+            {
+                string path = PathPolicy.ResolveUnder(
+                    configuration.RepositoryRoot,
+                    relativePath,
+                    name,
+                    allowMissing: true
+                );
+                string probeRoot = path;
+                while (!Directory.Exists(probeRoot))
+                {
+                    probeRoot =
+                        Path.GetDirectoryName(probeRoot)
+                        ?? throw new AssetCtlException($"{name}: cannot locate an existing parent directory.", 2);
+                }
+
+                string probe = Path.Combine(probeRoot, $".assetctl-doctor-{Guid.NewGuid():N}.tmp");
+                try
+                {
+                    using (
+                        new FileStream(
+                            probe,
+                            FileMode.CreateNew,
+                            FileAccess.Write,
+                            FileShare.Delete,
+                            1,
+                            FileOptions.DeleteOnClose
+                        )
+                    ) { }
+                    return new WritableRootStatus(name, relativePath, true, "transient-create-delete-probe");
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    return new WritableRootStatus(name, relativePath, false, "access-denied");
+                }
+                catch (IOException)
+                {
+                    return new WritableRootStatus(name, relativePath, false, "io-denied");
+                }
+                finally
+                {
+                    if (File.Exists(probe))
+                    {
+                        File.Delete(probe);
+                    }
+                }
+            }
         }
 
         private static object Find(EffectiveConfiguration configuration, CliOptions options)

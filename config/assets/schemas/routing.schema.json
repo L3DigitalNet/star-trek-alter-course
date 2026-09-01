@@ -12,7 +12,69 @@
 	"$defs": {
 		"route": {
 			"type": "object",
-			"required": ["id", "priority", "capability", "targets"]
+			"additionalProperties": false,
+			"required": ["id", "priority", "capability", "targets", "fallback", "retry"],
+			"properties": {
+				"id": { "type": "string", "minLength": 1 },
+				"priority": { "type": "integer" },
+				"lifecycle": { "enum": ["placeholder", "candidate", "approved", "deprecated"] },
+				"format": { "enum": ["svg", "png"] },
+				"capability": { "type": "string", "minLength": 1 },
+				"targets": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+				"fallback": { "$ref": "#/$defs/fallback" },
+				"retry": { "$ref": "#/$defs/retry" }
+			}
+		},
+		"fallback": {
+			"type": "object",
+			"additionalProperties": false,
+			"required": ["capability_match", "allowed_error_categories"],
+			"properties": {
+				"capability_match": { "type": "boolean" },
+				"allowed_error_categories": {
+					"type": "array",
+					"uniqueItems": true,
+					"items": { "$ref": "#/$defs/error_category" }
+				}
+			}
+		},
+		"retry": {
+			"type": "object",
+			"additionalProperties": false,
+			"required": [
+				"maximum_attempts_per_target",
+				"initial_delay_milliseconds",
+				"maximum_delay_milliseconds",
+				"jitter_ratio",
+				"error_categories"
+			],
+			"properties": {
+				"maximum_attempts_per_target": { "type": "integer", "minimum": 1 },
+				"initial_delay_milliseconds": { "type": "integer", "minimum": 0 },
+				"maximum_delay_milliseconds": { "type": "integer", "minimum": 0 },
+				"jitter_ratio": { "type": "number", "minimum": 0, "maximum": 1 },
+				"error_categories": {
+					"type": "array",
+					"uniqueItems": true,
+					"items": { "$ref": "#/$defs/error_category" }
+				}
+			}
+		},
+		"error_category": {
+			"enum": [
+				"invalid-request",
+				"authentication",
+				"authorization",
+				"insufficient-balance",
+				"rate-limit",
+				"transient-network",
+				"provider-server",
+				"timeout",
+				"malformed-response",
+				"unsafe-download",
+				"unsupported-output",
+				"validation"
+			]
 		}
 	}
 }

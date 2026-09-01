@@ -18,6 +18,19 @@ internal static class DomainModels
         Png,
     }
 
+    public enum OutputTransparency
+    {
+        Required,
+        Optional,
+    }
+
+    public enum SemanticReviewPolicy
+    {
+        Disabled,
+        WhenAvailable,
+        Required,
+    }
+
     public enum AssetCapability
     {
         RasterGenerate,
@@ -54,7 +67,11 @@ internal static class DomainModels
         int Height,
         bool TransparencyRequired,
         IReadOnlyList<int> TargetDisplaySizes
-    );
+    )
+    {
+        public OutputTransparency Transparency =>
+            TransparencyRequired ? OutputTransparency.Required : OutputTransparency.Optional;
+    }
 
     public sealed record AssetReference(string Path, string Sha256, string RightsBasis);
 
@@ -190,6 +207,19 @@ internal static class DomainModels
 
     public sealed record RouteTarget(string ProviderId, string ModelProfileId);
 
+    public sealed record RouteFallbackPolicy(
+        bool CapabilityMatch,
+        IReadOnlySet<ProviderErrorCategory> AllowedErrorCategories
+    );
+
+    public sealed record RouteRetryPolicy(
+        int MaximumAttemptsPerTarget,
+        int InitialDelayMilliseconds,
+        int MaximumDelayMilliseconds,
+        double JitterRatio,
+        IReadOnlySet<ProviderErrorCategory> ErrorCategories
+    );
+
     public sealed record RouteDefinition(
         string Id,
         int Priority,
@@ -197,7 +227,9 @@ internal static class DomainModels
         AssetFormat? Format,
         AssetCapability Capability,
         IReadOnlyList<RouteTarget> Targets,
-        int ConfigurationOrder
+        int ConfigurationOrder,
+        RouteFallbackPolicy? FallbackPolicy = null,
+        RouteRetryPolicy? RetryPolicy = null
     );
 
     public sealed record QualityTier(
@@ -207,6 +239,29 @@ internal static class DomainModels
         string SemanticReview,
         bool AllowUnreviewedPlaceholder,
         double MinimumSemanticScore
+    )
+    {
+        public SemanticReviewPolicy ReviewPolicy =>
+            SemanticReview switch
+            {
+                "disabled" => SemanticReviewPolicy.Disabled,
+                "when-available" => SemanticReviewPolicy.WhenAvailable,
+                "required" => SemanticReviewPolicy.Required,
+                _ => throw new InvalidOperationException($"Unsupported semantic-review policy '{SemanticReview}'."),
+            };
+    }
+
+    public sealed record SchemaDocumentStatus(string Path, string Draft, bool Valid);
+
+    public sealed record WritableRootStatus(string Name, string Path, bool Writable, string Basis);
+
+    public sealed record RouteIntegrityStatus(
+        bool Valid,
+        int GenerationRoutes,
+        int ReviewRoutes,
+        int Targets,
+        int FallbackPolicies,
+        int RetryPolicies
     );
 
     public sealed record PlannedTarget(
