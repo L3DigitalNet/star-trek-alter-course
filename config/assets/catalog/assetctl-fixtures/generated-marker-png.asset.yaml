@@ -1,6 +1,7 @@
 schema_version: "1"
 id: "tooling.assetctl.fixture.generated-marker-png"
 lifecycle: "placeholder"
+quality_tier: "development"
 kind: "map-marker"
 revision: 1
 purpose: "Prove that a normalized generated-style RGBA PNG imports through the selected Godot runtime."

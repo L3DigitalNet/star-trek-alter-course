@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text;
 
 namespace AlterCourse.AssetCtl.Generation;
@@ -46,46 +45,30 @@ internal static class PromptCompiler
     public static (string Prompt, string Hash) Compile(AssetRequest request, StyleProfile style)
     {
         var builder = new StringBuilder();
-        builder.AppendLine(CultureInfo.InvariantCulture, $"Identity: {request.Id}");
-        builder.AppendLine(CultureInfo.InvariantCulture, $"Purpose: {request.Purpose}");
-        builder.AppendLine(CultureInfo.InvariantCulture, $"Visual kind: {request.Kind}");
-        builder.AppendLine(
-            CultureInfo.InvariantCulture,
-            $"Output contract: {request.Output.Format.ToString().ToLowerInvariant()}"
-        );
-        builder.AppendLine(CultureInfo.InvariantCulture, $"Resolved style summary: {style.Summary}");
-        builder.AppendLine(
-            CultureInfo.InvariantCulture,
-            $"Required constraints: {string.Join("; ", style.Required.Concat(request.Required))}"
-        );
-        builder.AppendLine(
-            CultureInfo.InvariantCulture,
-            $"Prohibited content: {string.Join("; ", style.Prohibited.Concat(request.Prohibited))}"
-        );
-        builder.AppendLine(
-            CultureInfo.InvariantCulture,
-            $"Dimensions: {request.Output.Width}x{request.Output.Height} px"
-        );
-        builder.AppendLine(
-            CultureInfo.InvariantCulture,
-            $"Target display sizes: {string.Join(", ", request.Output.TargetDisplaySizes)} px"
-        );
-        builder.AppendLine(
-            CultureInfo.InvariantCulture,
-            $"Reference instructions: {ReferenceInstructions(request.References)}"
-        );
-        builder.AppendLine(
-            CultureInfo.InvariantCulture,
+        AppendLine(builder, $"Identity: {request.Id}");
+        AppendLine(builder, $"Purpose: {request.Purpose}");
+        AppendLine(builder, $"Visual kind: {request.Kind}");
+        AppendLine(builder, $"Output contract: {request.Output.Format.ToString().ToLowerInvariant()}");
+        AppendLine(builder, $"Resolved style summary: {style.Summary}");
+        AppendLine(builder, $"Required constraints: {string.Join("; ", style.Required.Concat(request.Required))}");
+        AppendLine(builder, $"Prohibited content: {string.Join("; ", style.Prohibited.Concat(request.Prohibited))}");
+        AppendLine(builder, $"Dimensions: {request.Output.Width}x{request.Output.Height} px");
+        AppendLine(builder, $"Target display sizes: {string.Join(", ", request.Output.TargetDisplaySizes)} px");
+        AppendLine(builder, $"Reference instructions: {ReferenceInstructions(request.References)}");
+        AppendLine(
+            builder,
             $"Hard technical constraints: exact {request.Output.Width}x{request.Output.Height} {request.Output.Format.ToString().ToLowerInvariant()}; transparency {(request.Output.TransparencyRequired ? "required" : "optional")}; no external resources"
         );
-        builder.AppendLine(
-            CultureInfo.InvariantCulture,
+        AppendLine(
+            builder,
             $"Lifecycle reminder: {request.Lifecycle.ToString().ToLowerInvariant()} assets must remain functionally clear rather than polished."
         );
         builder.Append($"Prompt contract version: {Version}");
         string prompt = builder.ToString();
         return (prompt, ConfigurationLoader.Hash(prompt));
     }
+
+    private static void AppendLine(StringBuilder builder, string value) => builder.Append(value).Append('\n');
 
     private static string ReferenceInstructions(IReadOnlyList<AssetReference> references) =>
         references.Count == 0

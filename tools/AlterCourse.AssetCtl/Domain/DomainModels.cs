@@ -105,6 +105,7 @@ internal static class DomainModels
         string Purpose,
         OutputContract Output,
         string StyleProfile,
+        string Importance,
         IReadOnlyList<string> Required,
         IReadOnlyList<string> Prohibited,
         IReadOnlyList<string> Tags,

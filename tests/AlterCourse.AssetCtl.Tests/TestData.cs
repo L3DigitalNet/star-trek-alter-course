@@ -21,6 +21,7 @@ internal static class TestData
                 [16, 24, 64]
             ),
             "engineering-icons",
+            "secondary",
             ["simple silhouette"],
             ["text", "watermark"],
             ["test"],

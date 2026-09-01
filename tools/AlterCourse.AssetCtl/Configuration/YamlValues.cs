@@ -1,5 +1,6 @@
 using System.Globalization;
 using YamlDotNet.Core;
+using YamlDotNet.Core.Events;
 using YamlDotNet.RepresentationModel;
 
 namespace AlterCourse.AssetCtl.Configuration;
@@ -48,55 +49,27 @@ internal static class YamlValues
 
     private static void RejectProhibitedSyntax(string path, string text)
     {
-        int lineNumber = 0;
-        foreach (string line in text.Split('\n'))
+        var parser = new Parser(new StringReader(text));
+        try
         {
-            lineNumber++;
-            string content = StripQuotedAndComment(line);
-            if (
-                content.Contains('&', StringComparison.Ordinal)
-                || content.Contains('*', StringComparison.Ordinal)
-                || content.Contains('!', StringComparison.Ordinal)
-            )
+            while (parser.MoveNext())
             {
-                throw new AssetCtlException($"{path}:{lineNumber}: YAML tags, anchors, and aliases are prohibited.", 2);
+                if (
+                    parser.Current is AnchorAlias
+                    || parser.Current is NodeEvent node && (!node.Anchor.IsEmpty || !node.Tag.IsEmpty)
+                )
+                {
+                    throw new AssetCtlException(
+                        $"{path}:{parser.Current.Start.Line}: YAML tags, anchors, and aliases are prohibited.",
+                        2
+                    );
+                }
             }
         }
-    }
-
-    private static string StripQuotedAndComment(string value)
-    {
-        char[] result = new char[value.Length];
-        int output = 0;
-        bool single = false;
-        bool doubleQuoted = false;
-        for (int index = 0; index < value.Length; index++)
+        catch (YamlException exception)
         {
-            char character = value[index];
-            if (character == '\'' && !doubleQuoted)
-            {
-                single = !single;
-                continue;
-            }
-
-            if (character == '"' && !single && (index == 0 || value[index - 1] != '\\'))
-            {
-                doubleQuoted = !doubleQuoted;
-                continue;
-            }
-
-            if (character == '#' && !single && !doubleQuoted)
-            {
-                break;
-            }
-
-            if (!single && !doubleQuoted)
-            {
-                result[output++] = character;
-            }
+            throw new AssetCtlException($"{path}: invalid YAML: {exception.Message}", 2);
         }
-
-        return new string(result, 0, output);
     }
 
     private static void ValidateTree(YamlNode node, int depth, ref int count, string path)

@@ -158,12 +158,8 @@ internal static class ManifestStore
         constraints.RequireOnly("manifest.constraints", "required", "prohibited");
         IReadOnlyList<AssetReference> references = ReadReferences(root.OptionalSequence("references", "manifest"));
         RightsRecord rights = ReadRights(root.Mapping("rights", "manifest"), lifecycle, references);
-        string qualityTier = lifecycle == AssetLifecycle.Placeholder ? "development" : "production-candidate";
+        string qualityTier = root.Scalar("quality_tier", "manifest");
         GenerationProvenance? generation = ReadGeneration(root.OptionalMapping("generation", "manifest"), qualityTier);
-        if (generation is not null)
-        {
-            qualityTier = generation.QualityTier;
-        }
 
         var request = new AssetRequest(
             id,
@@ -172,6 +168,7 @@ internal static class ManifestStore
             root.Scalar("purpose", "manifest"),
             output,
             style,
+            visual.Scalar("importance", "manifest.visual"),
             YamlValues.Strings(
                 constraints.OptionalSequence("required", "manifest.constraints"),
                 "manifest.constraints.required"
@@ -194,6 +191,7 @@ internal static class ManifestStore
             "schema_version",
             "id",
             "lifecycle",
+            "quality_tier",
             "kind",
             "revision",
             "purpose",
@@ -288,6 +286,7 @@ internal static class ManifestStore
         Line(builder, 0, "schema_version", "1");
         Line(builder, 0, "id", manifest.Request.Id);
         Line(builder, 0, "lifecycle", Lifecycle(manifest.Request.Lifecycle));
+        Line(builder, 0, "quality_tier", manifest.Request.QualityTier);
         Line(builder, 0, "kind", manifest.Request.Kind);
         builder.AppendLine(CultureInfo.InvariantCulture, $"revision: {manifest.Revision}");
         Line(builder, 0, "purpose", manifest.Request.Purpose);
@@ -305,7 +304,7 @@ internal static class ManifestStore
         );
         builder.AppendLine("visual:");
         Line(builder, 2, "style_profile", manifest.Request.StyleProfile);
-        Line(builder, 2, "importance", "secondary");
+        Line(builder, 2, "importance", manifest.Request.Importance);
         Sequence(builder, 2, "tags", manifest.Request.Tags);
         builder.AppendLine("constraints:");
         Sequence(builder, 2, "required", manifest.Request.Required);
@@ -359,7 +358,7 @@ internal static class ManifestStore
         Line(builder, 2, "model_profile", generation.ModelProfile);
         Line(builder, 2, "model", generation.Model);
         Line(builder, 2, "quality_tier", generation.QualityTier);
-        Line(builder, 2, "final_prompt", generation.FinalPrompt);
+        BlockScalar(builder, 2, "final_prompt", generation.FinalPrompt);
         Line(builder, 2, "prompt_sha256", generation.PromptSha256);
         Line(builder, 2, "request_sha256", generation.RequestSha256);
         Line(builder, 2, "effective_config_sha256", generation.EffectiveConfigSha256);
@@ -386,6 +385,33 @@ internal static class ManifestStore
                 .AppendLine("'");
             Line(builder, 4, "sha256", reference.Sha256);
             Line(builder, 4, "rights_basis", reference.RightsBasis);
+        }
+    }
+
+    private static void BlockScalar(StringBuilder builder, int indentation, string key, string value)
+    {
+        if (value.Contains('\r', StringComparison.Ordinal))
+        {
+            throw new AssetCtlException($"{key}: expected canonical LF line endings.", 2);
+        }
+
+        int trailingLineFeeds = value.Length - value.TrimEnd('\n').Length;
+        string chomping = trailingLineFeeds switch
+        {
+            0 => "|-",
+            1 => "|",
+            _ => "|+",
+        };
+        builder.Append(' ', indentation).Append(key).Append(": ").AppendLine(chomping);
+        string content = trailingLineFeeds == 0 ? value : value[..^trailingLineFeeds];
+        foreach (string line in content.Split('\n'))
+        {
+            builder.Append(' ', indentation + 2).AppendLine(line);
+        }
+
+        for (int index = 1; index < trailingLineFeeds; index++)
+        {
+            builder.AppendLine();
         }
     }
 

@@ -23,6 +23,24 @@ public sealed class ConfigurationSafetyTests
         }
     }
 
+    /// <summary>Accepts tag-like punctuation when it is scalar data rather than YAML graph syntax.</summary>
+    [Theory]
+    [InlineData("value: 'Use A & B, show * literally, and keep ! plus # text.'\n")]
+    [InlineData("value: |-\n  Use A & B.\n  Show * and ! literally. # remains text here\n")]
+    public void StrictYamlAcceptsPunctuationInsideScalarValues(string yaml)
+    {
+        string path = TemporaryFile(yaml);
+        try
+        {
+            global::YamlDotNet.RepresentationModel.YamlMappingNode root = StrictYaml.LoadMapping(path);
+            Assert.Contains("&", root.Scalar("value", "root"), StringComparison.Ordinal);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     /// <summary>Rejects duplicate YAML keys instead of silently choosing a value.</summary>
     [Fact]
     public void StrictYamlRejectsDuplicateKeys()

@@ -94,6 +94,7 @@ public sealed class CliStatusAndTerminalLifecycleTests : IDisposable
             {
                 ["development"] = new QualityTier("development", 1, 1, "disabled", true, 0),
                 ["production-candidate"] = new QualityTier("production-candidate", 1, 1, "required", false, 0.8),
+                ["required"] = new QualityTier("required", 1, 1, "required", false, 0.8),
             },
             new Dictionary<string, StyleProfile>(StringComparer.Ordinal)
             {

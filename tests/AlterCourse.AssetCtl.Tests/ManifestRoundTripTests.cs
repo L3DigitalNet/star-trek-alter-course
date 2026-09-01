@@ -90,6 +90,62 @@ public sealed class ManifestRoundTripTests : IDisposable
         );
     }
 
+    /// <summary>Preserves authored request policy independently from lifecycle and generated provenance.</summary>
+    [Fact]
+    public void SerializationRoundTripsImportanceAndAuthoredQualityTier()
+    {
+        EffectiveConfiguration configuration = Configuration();
+        AssetManifest expected = Manifest() with
+        {
+            Request = Manifest().Request with { Importance = "critical", QualityTier = "bespoke-preview" },
+        };
+        WriteManifest(expected);
+
+        AssetManifest actual = ManifestStore.Load(configuration, expected.ManifestPath);
+
+        Assert.Equal("critical", actual.Request.Importance);
+        Assert.Equal("bespoke-preview", actual.Request.QualityTier);
+        Assert.Contains(
+            "quality_tier: 'bespoke-preview'",
+            File.ReadAllText(Path.Combine(root, expected.ManifestPath)),
+            StringComparison.Ordinal
+        );
+    }
+
+    /// <summary>Preserves the exact canonical prompt bytes and their hash through YAML serialization.</summary>
+    [Fact]
+    public void SerializationRoundTripsMultilinePromptAndHashWithHostilePunctuation()
+    {
+        EffectiveConfiguration configuration = Configuration();
+        string prompt = "Role: tactical ! alert #1\nKeep A & B distinct; render * literally.\nFinal line";
+        string promptHash = ConfigurationLoader.Hash(prompt);
+        AssetManifest expected = ManifestWithProvenance() with
+        {
+            Generation = ManifestWithProvenance().Generation! with { FinalPrompt = prompt, PromptSha256 = promptHash },
+        };
+        WriteManifest(expected);
+
+        AssetManifest actual = ManifestStore.Load(configuration, expected.ManifestPath);
+
+        Assert.Equal(prompt, actual.Generation!.FinalPrompt);
+        Assert.Equal(promptHash, actual.Generation.PromptSha256);
+        Assert.Equal(ConfigurationLoader.Hash(actual.Generation.FinalPrompt), actual.Generation.PromptSha256);
+    }
+
+    /// <summary>Rejects noncanonical prompt line endings instead of changing hash-bearing provenance bytes.</summary>
+    [Fact]
+    public void SerializationRejectsCarriageReturnsInFinalPrompt()
+    {
+        AssetManifest manifest = ManifestWithProvenance() with
+        {
+            Generation = ManifestWithProvenance().Generation! with { FinalPrompt = "first\r\nsecond" },
+        };
+
+        AssetCtlException exception = Assert.Throws<AssetCtlException>(() => ManifestStore.Serialize(manifest));
+
+        Assert.Contains("canonical LF", exception.Message, StringComparison.Ordinal);
+    }
+
     /// <summary>Fails closed when committed provenance names an unsupported adapter or schema contract.</summary>
     [Theory]
     [InlineData("adapter_version: '1'", "adapter_version: '999'")]

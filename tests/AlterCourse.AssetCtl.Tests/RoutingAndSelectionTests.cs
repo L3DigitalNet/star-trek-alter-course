@@ -266,6 +266,19 @@ public sealed class RoutingAndSelectionTests
         );
     }
 
+    /// <summary>Uses canonical LF bytes for prompts even when the host platform newline differs.</summary>
+    [Fact]
+    public void PromptUsesCanonicalLineFeedSeparators()
+    {
+        (string prompt, string hash) = PromptCompiler.Compile(
+            TestData.Request(),
+            new StyleProfile("style", "summary", [], [])
+        );
+
+        Assert.DoesNotContain('\r', prompt);
+        Assert.Equal(ConfigurationLoader.Hash(prompt), hash);
+    }
+
     /// <summary>Appends deterministic capability matches without duplicating explicit route entries.</summary>
     [Fact]
     public void CapabilityFallbackDiscoversEligibleProfilesAfterExplicitTargets()
