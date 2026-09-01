@@ -2,7 +2,7 @@
 schema_version: '1.1'
 id: 'adr-0012-star-trek-alter-course-keep-branching-narrative-subordinate-to-simulation'
 title: 'ADR 0012: Keep Branching Narrative Subordinate to the Simulation'
-description: 'Defines narrative authority, typed consequence boundaries, package evaluation, save state, and localization ownership.'
+description: 'Defines narrative authority, typed consequence boundaries, package evaluation, save state, localization ownership, and narrative assembly placement.'
 doc_type: 'adr'
 status: 'active'
 created: '2026-09-01'
@@ -18,8 +18,8 @@ aliases: []
 related:
   - 'docs/adr/0001-separate-simulation-from-godot.md'
   - 'docs/adr/0003-prefer-native-capabilities-and-demand-driven-dependencies.md'
-  - 'docs/adr/0005-use-json-and-schema-validation-for-domain-content.md'
   - 'docs/adr/0006-use-versioned-json-snapshot-saves.md'
+  - 'docs/adr/0007-use-deterministic-simulation-time-scheduling-and-randomness.md'
   - 'docs/adr/0010-use-explainable-domain-ai-and-demand-driven-state-machines.md'
 supersedes: []
 superseded_by: null
@@ -37,7 +37,8 @@ project:
     - 'project owner'
   consulted: []
   informed: []
-  amends: []
+  amends:
+    - 'docs/adr/0005-use-json-and-schema-validation-for-domain-content.md'
   amended_by: []
 ---
 
@@ -51,7 +52,9 @@ The game is not a sequence of isolated scripted encounters. Factions, ships, tre
 
 Ink is a mature engine-agnostic narrative runtime written in C# and designed to integrate with a host game's own UI and logic. Dialogue Manager is a Godot-native alternative with editor integration and a stateless design. Either could help, but adopting one before the project has an authored branching use case would add syntax, tooling, save state, and content workflow prematurely.
 
-This decision governs authored branching narrative, dialogue-runtime authority, communication with Core, narrative-package evaluation, persistence of in-progress narrative, and localization boundaries. It applies whenever authored text or choices can lead to simulation consequences.
+This decision governs authored branching narrative, dialogue-runtime authority, communication with Core, narrative-package evaluation, persistence of in-progress narrative, localization boundaries, and the architectural placement of a future narrative runtime. It applies whenever authored text or choices can lead to simulation consequences.
+
+This ADR explicitly amends ADR 0005 for narrative content: when a narrative-runtime dependency is admitted under the trigger defined here, its specialized narrative source language may be the canonical representation for that narrative domain instead of JSON. The exception is limited to narrative content and retains ADR 0005's requirements for stable identity, deterministic build and validation, explicit versioning, typed Core integration, headless compatibility where applicable, and save compatibility.
 
 It does not govern ordinary UI labels, procedurally assembled status reports, autonomous faction AI, diplomacy formulas, mission generation, voice synthesis, or optional generative text. Those concerns remain under their own systems.
 
@@ -68,7 +71,7 @@ How should the project use narrative tooling without allowing authored scripts t
 - Localization should use stable text identities and existing Godot capabilities where practical.
 - A mature narrative runtime can avoid building parsers, branching flow, and authoring tools.
 - Engine coupling is acceptable only when editor benefits outweigh loss of portability.
-- No narrative package should be installed before a concrete authored branching feature exists.
+- No narrative package or dedicated narrative assembly should be added before a concrete authored branching feature exists.
 
 ## Considered Options
 
@@ -110,6 +113,33 @@ A narrative runtime owns only narrative-local flow, such as:
 - narrative-local history needed by that runtime.
 
 A script cannot directly set arbitrary Core fields, create unrestricted entities, change faction state, grant resources, or bypass validation.
+
+### Narrative assembly boundary
+
+When a concrete feature triggers adoption of a narrative runtime, its integration belongs in a separate pure-.NET assembly, provisionally `AlterCourse.Narrative`.
+
+The intended dependency direction is:
+
+```text
+AlterCourse.Godot -------> AlterCourse.Core
+        |
+        +---------------> AlterCourse.Narrative -------> AlterCourse.Core
+```
+
+`AlterCourse.Narrative` owns:
+
+- the selected narrative runtime and its package-specific adapters;
+- compilation or loading of canonical narrative source;
+- narrative-local runtime state;
+- construction of narrative context projections from Core-facing contracts;
+- translation of narrative requests into finite typed consequences or Core commands;
+- narrative-specific validation and compatibility handling.
+
+`AlterCourse.Core` must not reference `AlterCourse.Narrative`. Narrative orchestration may depend on Core contracts, but Core remains usable, testable, and complete as the authoritative simulation without the narrative runtime.
+
+`AlterCourse.Godot` may reference both Core and Narrative for presentation and interaction. The Narrative assembly must not depend on Godot merely to evaluate authored flow or validate narrative content.
+
+This assembly is not created in anticipation of future dialogue. It is introduced only when a concrete branching feature satisfies the narrative-package trigger below and a runtime is actually admitted. Until then, small linear interactions use existing Core/content/UI mechanisms.
 
 ### Context adapter
 
@@ -181,7 +211,7 @@ No narrative-runtime package is added until a concrete feature needs at least on
 
 Linear messages and small fixed menus use ordinary content and UI.
 
-At the trigger, the implementation performs a focused prototype rather than constructing a general narrative platform.
+At the trigger, the implementation performs a focused prototype rather than constructing a general narrative platform. If the prototype results in runtime adoption, the dedicated pure-.NET Narrative assembly is created at that time rather than beforehand.
 
 ### Ink as the first prototype
 
@@ -206,7 +236,7 @@ The prototype must verify:
 - license and distribution requirements;
 - acceptable authoring and debugging workflow.
 
-If the prototype satisfies these criteria, Ink may be adopted under ADR 0003 without another foundational ADR.
+If the prototype satisfies these criteria, Ink may be adopted under ADR 0003 without another foundational ADR. Ink source then becomes canonical only for the narrative domain under this ADR's explicit amendment to ADR 0005.
 
 Ink variables do not become the canonical storage for world state. Values copied from Core are refreshed or reconciled through the context contract; durable consequences are committed through typed Core commands.
 
@@ -225,14 +255,14 @@ It should be compared with Ink when the concrete feature values:
 The comparison must account for:
 
 - engine-version and addon lifecycle coupling;
-- headless Core testability;
+- headless evaluation and validation outside presentation concerns;
 - C# integration;
 - persistence of narrative-local progress;
 - command and context adapters;
 - validation in CI;
 - export-platform behavior.
 
-Choosing Dialogue Manager requires documenting why its editor and engine benefits outweigh Ink's engine-agnostic runtime for the actual feature. It remains subordinate to the same Core authority boundary.
+Choosing Dialogue Manager requires documenting why its editor and engine benefits outweigh Ink's engine-agnostic runtime for the actual feature. It remains subordinate to the same Core authority boundary. If its runtime cannot satisfy the pure-.NET Narrative assembly boundary without making Godot authoritative for narrative evaluation, that is architectural evidence against adoption rather than a reason to weaken the boundary silently.
 
 ### Narrative persistence
 
@@ -306,30 +336,34 @@ An LLM is not used to adjudicate narrative consequences or replace the typed com
 
 - Good, because authored narrative can be expressive without becoming a second rules engine.
 - Good, because choices use the same validated commands and durable consequences as other gameplay.
+- Good, because specialized narrative source can remain canonical without weakening JSON as the ordinary domain-content default.
 - Good, because Ink can be evaluated through a focused engine-independent prototype.
-- Good, because Dialogue Manager remains available when Godot-native authoring has demonstrated value.
+- Good, because a dedicated pure-.NET narrative layer prevents either Core or Godot from becoming the package-specific narrative authority.
+- Good, because Dialogue Manager remains available only if it can satisfy the established authority and assembly boundaries.
 - Good, because in-progress narrative state can be saved without duplicating the world.
 - Good, because localization and presentation remain in the Godot layer.
 - Bad, because every consequential narrative action needs a typed adapter and failure path.
 - Bad, because authors cannot freely mutate arbitrary game variables from scripts.
-- Bad, because package selection remains deferred until a concrete branching feature exists.
+- Bad, because package selection and the Narrative assembly remain deferred until a concrete branching feature exists.
 - Bad, because resuming a conversation after the autonomous world changes requires explicit design.
+- Bad, because the eventual solution contains one additional pure-.NET assembly once narrative complexity justifies it.
 
 ### Confirmation
 
-A change is in scope when it adds branching narrative, dialogue variables, narrative-to-Core calls, an Ink or Dialogue Manager dependency, narrative save state, or generated conversational text.
+A change is in scope when it adds branching narrative, dialogue variables, narrative-to-Core calls, an Ink or Dialogue Manager dependency, narrative save state, generated conversational text, or creates or changes the Narrative assembly boundary.
 
 Conformance is confirmed by:
 
-- tests that narrative evaluation works against read-only context;
+- tests that narrative evaluation works against read-only context without requiring Godot;
 - a finite registry of typed consequences and payload validation;
 - failure tests when a consequence becomes illegal before commitment;
-- architecture checks preventing narrative packages from becoming Core world repositories;
-- build-time compilation or parsing of narrative content;
+- architecture checks that prevent Core from depending on Narrative and prevent narrative packages from becoming Core world repositories;
+- build-time compilation or parsing of canonical narrative content;
 - save and resume tests for supported in-progress sequences;
 - localization tests that preserve stable command and branch identities;
 - scenario tests proving unrelated autonomous state is not frozen or overwritten by narrative;
-- dependency-admission evidence before selecting a runtime package.
+- dependency-admission evidence before selecting a runtime package;
+- confirmation that the dedicated Narrative assembly is introduced only when a concrete runtime is adopted.
 
 ## Pros and Cons of the Options
 
@@ -339,8 +373,10 @@ Conformance is confirmed by:
 - Good, because Ink can run and test outside Godot.
 - Good, because package adoption follows a real authoring requirement.
 - Good, because another runtime can replace Ink without changing Core commands.
+- Good, because the eventual Narrative assembly isolates package-specific orchestration from both simulation truth and presentation.
 - Bad, because adapters and context schemas require deliberate maintenance.
 - Bad, because authors need explicit support for every new consequence type.
+- Bad, because runtime adoption eventually adds one justified assembly and dependency boundary.
 
 ### Adopt Ink immediately as the narrative authority
 
@@ -385,6 +421,4 @@ Conformance is confirmed by:
 
 ## More Information
 
-Narrative is one presentation of the simulation, not the container for it. The same diplomatic offer could be presented as an authored conversation, a concise command panel, or an automated report while producing the same typed Core decision.
-
-The preferred package order records current evidence without installing a dependency prematurely: prototype Ink first for engine-independent branching; compare Dialogue Manager when Godot-native authoring is a material requirement.
+Narrative is one presentation of the simulation, not the simulation itself. A specialized narrative language may own authored flow, but it remains subordinate to Core authority and must cross into durable world state only through typed, validated commands.
