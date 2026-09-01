@@ -3,28 +3,43 @@ namespace AlterCourse.AssetCtl.Tests;
 /// <summary>Verifies atomic publication, process locking, and game-layer independence.</summary>
 public sealed class PublishingAndBoundaryTests
 {
-    /// <summary>Restores the prior asset when its paired manifest cannot be published.</summary>
+    /// <summary>Restores the prior pair when the manifest's final rename cannot complete.</summary>
     [Fact]
     public void AtomicPublisherRestoresPriorAssetWhenManifestPublicationFails()
     {
         string root = Path.Combine(Path.GetTempPath(), "assetctl-publish-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path.Combine(root, "assets"));
-        Directory.CreateDirectory(Path.Combine(root, "catalog", "blocked.asset.yaml"));
-        File.WriteAllText(Path.Combine(root, "assets", "asset.png"), "old-asset");
+        Directory.CreateDirectory(Path.Combine(root, "catalog"));
+        byte[] oldBytes = "old-asset"u8.ToArray();
+        byte[] newBytes = "new-asset"u8.ToArray();
+        File.WriteAllBytes(Path.Combine(root, "assets", "asset.png"), oldBytes);
         global::AlterCourse.AssetCtl.Domain.DomainModels.EffectiveConfiguration configuration = Configuration(root);
+        AssetManifest oldManifest = Manifest(oldBytes);
+        AssetManifest newManifest = Manifest(newBytes) with { Revision = 2 };
+        File.WriteAllText(Path.Combine(root, oldManifest.ManifestPath), ManifestStore.Serialize(oldManifest));
         try
         {
-            Assert.ThrowsAny<IOException>(() =>
+            Assert.Throws<IOException>(() =>
                 AtomicPublisher.Publish(
                     configuration,
                     "assets/asset.png",
-                    "new-asset"u8.ToArray(),
-                    "catalog/blocked.asset.yaml",
-                    "new-manifest"
+                    newBytes,
+                    newManifest.ManifestPath,
+                    ManifestStore.Serialize(newManifest),
+                    new AtomicPublisher.PublicationTestHooks(BeforeMove: move =>
+                    {
+                        if (move == AtomicPublisher.PublicationMove.InstallManifest)
+                        {
+                            throw new IOException("simulated manifest rename failure");
+                        }
+                    })
                 )
             );
             Assert.Equal("old-asset", File.ReadAllText(Path.Combine(root, "assets", "asset.png")));
-            Assert.True(Directory.Exists(Path.Combine(root, "catalog", "blocked.asset.yaml")));
+            Assert.Equal(
+                oldManifest.Integrity!.Sha256,
+                ManifestStore.Load(configuration, oldManifest.ManifestPath).Integrity!.Sha256
+            );
         }
         finally
         {
@@ -74,8 +89,33 @@ public sealed class PublishingAndBoundaryTests
             [],
             [],
             new Dictionary<string, QualityTier>(StringComparer.Ordinal),
-            new Dictionary<string, StyleProfile>(StringComparer.Ordinal),
+            new Dictionary<string, StyleProfile>(StringComparer.Ordinal)
+            {
+                ["engineering-icons"] = new StyleProfile("engineering-icons", "test", [], []),
+            },
             new Dictionary<string, string>(StringComparer.Ordinal),
             "hash"
+        );
+
+    private static AssetManifest Manifest(byte[] bytes) =>
+        new(
+            "1",
+            TestData.Request() with
+            {
+                Output = TestData.Request().Output with { Path = "assets/asset.png" },
+            },
+            1,
+            new RightsRecord("original-project-created", "project", null, null, "test"),
+            null,
+            null,
+            null,
+            new IntegrityRecord(
+                Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes)),
+                bytes.LongLength,
+                "image/png"
+            ),
+            new ApprovalRecord(null, null, null),
+            null,
+            "catalog/test.asset.yaml"
         );
 }

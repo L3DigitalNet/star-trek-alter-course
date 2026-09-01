@@ -60,19 +60,13 @@ internal static class ManifestStore
 
     public static AssetManifest Load(EffectiveConfiguration configuration, string path)
     {
-        string catalogRoot = PathPolicy.ResolveUnder(
-            configuration.RepositoryRoot,
-            configuration.Paths.CatalogRoot,
-            "catalog_root",
-            allowMissing: false
-        );
-        string absolute = Path.IsPathRooted(path)
-            ? Path.GetFullPath(path)
-            : Path.GetFullPath(path, configuration.RepositoryRoot);
-        if (!absolute.StartsWith(catalogRoot + Path.DirectorySeparatorChar, StringComparison.Ordinal))
-        {
-            throw new AssetCtlException("Manifest path is outside catalog root.", 2);
-        }
+        string repositoryRelativePath = Path.IsPathRooted(path)
+            ? Path.GetRelativePath(configuration.RepositoryRoot, path)
+            : path;
+        // The configured-root resolver walks every existing path component before StrictYaml opens the file.
+        // A textual prefix check cannot detect a catalog symlink that resolves outside the repository.
+        string absolute = PathPolicy.ResolveManifestPath(configuration, repositoryRelativePath, allowMissing: false);
+        EnsurePhysicalCatalogContainment(configuration, absolute);
 
         global::YamlDotNet.RepresentationModel.YamlMappingNode root = StrictYaml.LoadMapping(absolute);
         string id = ValidateHeader(root);
@@ -112,6 +106,35 @@ internal static class ManifestStore
             root.OptionalScalar("supersedes", "manifest"),
             Path.GetRelativePath(configuration.RepositoryRoot, absolute)
         );
+    }
+
+    private static void EnsurePhysicalCatalogContainment(EffectiveConfiguration configuration, string manifestPath)
+    {
+        string catalogRoot = PathPolicy.ResolveUnder(
+            configuration.RepositoryRoot,
+            configuration.Paths.CatalogRoot,
+            "catalog_root",
+            allowMissing: false
+        );
+        string current = catalogRoot;
+        foreach (string segment in Path.GetRelativePath(catalogRoot, manifestPath).Split(Path.DirectorySeparatorChar))
+        {
+            current = Path.Combine(current, segment);
+            if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != FileAttributes.ReparsePoint)
+            {
+                continue;
+            }
+
+            string? resolved = File.ResolveLinkTarget(current, returnFinalTarget: true)?.FullName;
+            if (
+                resolved is null
+                || !Path.GetFullPath(resolved)
+                    .StartsWith(catalogRoot + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+            )
+            {
+                throw new AssetCtlException("Manifest path symlink escapes the configured catalog root.", 2);
+            }
+        }
     }
 
     private static (AssetRequest Request, RightsRecord Rights, GenerationProvenance? Generation) ReadManifestBody(
@@ -235,12 +258,17 @@ internal static class ManifestStore
             throw new AssetCtlException("manifest.output: extension does not match format.", 2);
         }
 
+        global::AlterCourse.AssetCtl.Domain.DomainModels.OutputTransparency transparency =
+            ConfigurationTypes.ConfigurationLoader.ParseOutputTransparency(
+                node.Scalar("transparency", "manifest.output"),
+                "manifest.output"
+            );
         var output = new OutputContract(
             outputPath,
             format,
             node.Integer("width", "manifest.output"),
             node.Integer("height", "manifest.output"),
-            string.Equals(node.Scalar("transparency", "manifest.output"), "required", StringComparison.Ordinal),
+            transparency == global::AlterCourse.AssetCtl.Domain.DomainModels.OutputTransparency.Required,
             YamlValues
                 .Strings(
                     node.Sequence("target_display_sizes", "manifest.output"),
@@ -281,7 +309,7 @@ internal static class ManifestStore
         builder.AppendLine("constraints:");
         Sequence(builder, 2, "required", manifest.Request.Required);
         Sequence(builder, 2, "prohibited", manifest.Request.Prohibited);
-        builder.AppendLine("references: []");
+        WriteReferences(builder, manifest.Request.References);
         builder.AppendLine("rights:");
         Line(builder, 2, "classification", manifest.Rights.Classification);
         NullableLine(builder, 2, "license", manifest.Rights.License);
@@ -336,6 +364,26 @@ internal static class ManifestStore
         builder.AppendLine(CultureInfo.InvariantCulture, $"  estimated_cost_usd: {generation.EstimatedCostUsd}");
         string actualCost = generation.ActualCostUsd?.ToString(CultureInfo.InvariantCulture) ?? "null";
         builder.AppendLine(CultureInfo.InvariantCulture, $"  actual_cost_usd: {actualCost}");
+    }
+
+    private static void WriteReferences(StringBuilder builder, IReadOnlyList<AssetReference> references)
+    {
+        if (references.Count == 0)
+        {
+            builder.AppendLine("references: []");
+            return;
+        }
+
+        builder.AppendLine("references:");
+        foreach (AssetReference reference in references)
+        {
+            builder
+                .Append("  - path: '")
+                .Append(reference.Path.Replace("'", "''", StringComparison.Ordinal))
+                .AppendLine("'");
+            Line(builder, 4, "sha256", reference.Sha256);
+            Line(builder, 4, "rights_basis", reference.RightsBasis);
+        }
     }
 
     private static void WriteValidation(

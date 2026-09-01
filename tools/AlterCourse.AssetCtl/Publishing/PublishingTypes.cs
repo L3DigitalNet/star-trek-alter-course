@@ -1,4 +1,8 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
+using AlterCourse.AssetCtl.Configuration;
+using YamlDotNet.RepresentationModel;
 
 namespace AlterCourse.AssetCtl.Publishing;
 
@@ -48,103 +52,442 @@ internal static class PublishingTypes
 
     public static class AtomicPublisher
     {
+        internal enum PublicationMove
+        {
+            BackupAsset,
+            BackupManifest,
+            InstallAsset,
+            InstallManifest,
+        }
+
+        internal sealed record PublicationTestHooks(
+            Action<string, string>? AfterWorkFilesStaged = null,
+            Action<PublicationMove>? BeforeMove = null,
+            Action<PublicationMove>? AfterMove = null
+        );
+
+        internal sealed class SimulatedPublicationInterruptionException : Exception;
+
         public static void Publish(
             EffectiveConfiguration configuration,
             string assetRelativePath,
             byte[] assetBytes,
             string manifestRelativePath,
             string manifestText
+        ) => Publish(configuration, assetRelativePath, assetBytes, manifestRelativePath, manifestText, null);
+
+        internal static void Publish(
+            EffectiveConfiguration configuration,
+            string assetRelativePath,
+            byte[] assetBytes,
+            string manifestRelativePath,
+            string manifestText,
+            PublicationTestHooks? testHooks
         )
         {
-            string asset = PathPolicy.ResolveUnder(
-                configuration.RepositoryRoot,
+            RecoverPending(configuration);
+            PreparedPublication publication = PreparePublication(
+                configuration,
                 assetRelativePath,
-                "asset output",
-                allowMissing: true
-            );
-            string manifest = PathPolicy.ResolveUnder(
-                configuration.RepositoryRoot,
+                assetBytes,
                 manifestRelativePath,
-                "manifest output",
-                allowMissing: true
+                manifestText,
+                testHooks
             );
+            PublishPrepared(configuration, publication, testHooks);
+        }
+
+        private static PreparedPublication PreparePublication(
+            EffectiveConfiguration configuration,
+            string assetRelativePath,
+            byte[] assetBytes,
+            string manifestRelativePath,
+            string manifestText,
+            PublicationTestHooks? testHooks
+        )
+        {
+            string asset = PathPolicy.ResolveOutputPath(configuration, assetRelativePath, allowMissing: true);
+            string manifest = PathPolicy.ResolveManifestPath(configuration, manifestRelativePath, allowMissing: true);
             Directory.CreateDirectory(Path.GetDirectoryName(asset)!);
             Directory.CreateDirectory(Path.GetDirectoryName(manifest)!);
 
-            string transaction = Guid.NewGuid().ToString("N");
-            string assetStage = asset + $".assetctl-stage-{transaction}";
-            string manifestStage = manifest + $".assetctl-stage-{transaction}";
-            string assetBackup = asset + $".assetctl-backup-{transaction}";
-            string manifestBackup = manifest + $".assetctl-backup-{transaction}";
-            File.WriteAllBytes(assetStage, assetBytes);
-            File.WriteAllText(manifestStage, manifestText, new System.Text.UTF8Encoding(false));
+            StagedPublication staged = StagePublication(configuration, assetBytes, manifestText, testHooks);
+            string assetBackup = asset + $".assetctl-backup-{staged.TransactionId}";
+            string manifestBackup = manifest + $".assetctl-backup-{staged.TransactionId}";
 
             bool assetExisted = File.Exists(asset);
             bool manifestExisted = File.Exists(manifest);
-            PublishStaged(
-                asset,
-                manifest,
-                assetStage,
-                manifestStage,
-                assetBackup,
-                manifestBackup,
+            if (assetExisted != manifestExisted)
+            {
+                DeleteTree(staged.TransactionRoot);
+                throw new AssetCtlException("Existing asset and manifest do not form a complete publish pair.", 7);
+            }
+
+            var journal = new PublicationJournal(
+                staged.TransactionId,
+                Path.GetRelativePath(configuration.RepositoryRoot, asset),
+                Path.GetRelativePath(configuration.RepositoryRoot, manifest),
+                Path.GetRelativePath(configuration.RepositoryRoot, staged.AssetStage),
+                Path.GetRelativePath(configuration.RepositoryRoot, staged.ManifestStage),
+                Path.GetRelativePath(configuration.RepositoryRoot, assetBackup),
+                Path.GetRelativePath(configuration.RepositoryRoot, manifestBackup),
                 assetExisted,
-                manifestExisted
+                manifestExisted,
+                staged.AssetHash,
+                staged.AssetLength,
+                staged.ManifestHash
             );
+            string journalPath = WriteJournal(configuration, journal);
+            PublicationJournal resolvedJournal = journal with
+            {
+                AssetStagePath = staged.AssetStage,
+                ManifestStagePath = staged.ManifestStage,
+                AssetBackupPath = assetBackup,
+                ManifestBackupPath = manifestBackup,
+            };
+            return new PreparedPublication(asset, manifest, journalPath, resolvedJournal, journal);
         }
 
-        private static void PublishStaged(
-            string asset,
-            string manifest,
-            string assetStage,
-            string manifestStage,
-            string assetBackup,
-            string manifestBackup,
-            bool assetExisted,
-            bool manifestExisted
+        private static StagedPublication StagePublication(
+            EffectiveConfiguration configuration,
+            byte[] assetBytes,
+            string manifestText,
+            PublicationTestHooks? testHooks
         )
         {
+            string transaction = Guid.NewGuid().ToString("N");
+            string workRoot = PathPolicy.ResolveUnder(
+                configuration.RepositoryRoot,
+                configuration.Paths.WorkRoot,
+                "work_root",
+                allowMissing: true
+            );
+            string transactionRoot = Path.Combine(workRoot, "publish", transaction);
+            Directory.CreateDirectory(transactionRoot);
+            string assetStage = Path.Combine(transactionRoot, "asset.stage");
+            string manifestStage = Path.Combine(transactionRoot, "manifest.stage");
             try
             {
-                // Both replacements are fully staged before either live file moves; rollback can therefore restore the prior matching pair.
-                if (assetExisted)
-                {
-                    File.Move(asset, assetBackup);
-                }
-
-                if (manifestExisted)
-                {
-                    File.Move(manifest, manifestBackup);
-                }
-
-                File.Move(assetStage, asset);
-                File.Move(manifestStage, manifest);
-                DeleteIfExists(assetBackup);
-                DeleteIfExists(manifestBackup);
+                WriteDurable(assetStage, assetBytes);
+                WriteDurable(manifestStage, new UTF8Encoding(false).GetBytes(manifestText));
+                testHooks?.AfterWorkFilesStaged?.Invoke(assetStage, manifestStage);
+                (string assetHash, long assetLength, string manifestHash) = VerifyStaged(
+                    assetStage,
+                    manifestStage,
+                    assetBytes,
+                    manifestText
+                );
+                return new StagedPublication(
+                    transaction,
+                    transactionRoot,
+                    assetStage,
+                    manifestStage,
+                    assetHash,
+                    assetLength,
+                    manifestHash
+                );
             }
             catch
             {
-                // A manifest must never survive claiming bytes that were not published; remove the partial pair before restoring backups.
-                DeleteIfExists(asset);
-                DeleteIfExists(manifest);
-                if (assetExisted && File.Exists(assetBackup))
-                {
-                    File.Move(assetBackup, asset);
-                }
-
-                if (manifestExisted && File.Exists(manifestBackup))
-                {
-                    File.Move(manifestBackup, manifest);
-                }
-
+                DeleteTree(transactionRoot);
                 throw;
             }
-            finally
+        }
+
+        private static void PublishPrepared(
+            EffectiveConfiguration configuration,
+            PreparedPublication publication,
+            PublicationTestHooks? testHooks
+        )
+        {
+            PublicationJournal journal = publication.Journal;
+            try
             {
-                DeleteIfExists(assetStage);
-                DeleteIfExists(manifestStage);
-                DeleteIfExists(assetBackup);
-                DeleteIfExists(manifestBackup);
+                // The journal becomes durable before the first rename. Recovery can therefore distinguish a complete
+                // new pair from every partial sequence and deterministically finish or restore the previous pair.
+                if (journal.AssetExisted)
+                {
+                    Move(publication.Asset, journal.AssetBackupPath, PublicationMove.BackupAsset, testHooks);
+                }
+
+                if (journal.ManifestExisted)
+                {
+                    Move(publication.Manifest, journal.ManifestBackupPath, PublicationMove.BackupManifest, testHooks);
+                }
+
+                Move(journal.AssetStagePath, publication.Asset, PublicationMove.InstallAsset, testHooks);
+                Move(journal.ManifestStagePath, publication.Manifest, PublicationMove.InstallManifest, testHooks);
+                if (!NewPairMatches(journal, publication.Asset, publication.Manifest))
+                {
+                    throw new AssetCtlException("Published pair does not match its staged integrity evidence.", 7);
+                }
+
+                Complete(publication.JournalPath, journal, configuration);
+            }
+            catch (SimulatedPublicationInterruptionException)
+            {
+                // Tests use this exception to model process loss: production never catches an actual terminated process,
+                // so retaining the journal and files is necessary to exercise next-publish recovery faithfully.
+                throw;
+            }
+            catch
+            {
+                RecoverJournal(configuration, publication.JournalPath, publication.RecoveryJournal);
+                throw;
+            }
+        }
+
+        internal static void RecoverPending(EffectiveConfiguration configuration)
+        {
+            string journalRoot = JournalRoot(configuration);
+            if (!Directory.Exists(journalRoot))
+            {
+                return;
+            }
+
+            foreach (string path in Directory.EnumerateFiles(journalRoot, "*.json").Order(StringComparer.Ordinal))
+            {
+                PublicationJournal journal;
+                try
+                {
+                    journal =
+                        JsonSerializer.Deserialize<PublicationJournal>(File.ReadAllBytes(path), JsonOptions.Stable)
+                        ?? throw new JsonException("empty journal");
+                }
+                catch (JsonException exception)
+                {
+                    throw new AssetCtlException(
+                        $"Publication journal '{Path.GetFileName(path)}' is invalid: {exception.Message}",
+                        7
+                    );
+                }
+
+                RecoverJournal(configuration, path, journal);
+            }
+        }
+
+        private static (string AssetHash, long AssetLength, string ManifestHash) VerifyStaged(
+            string assetStage,
+            string manifestStage,
+            byte[] expectedAssetBytes,
+            string expectedManifestText
+        )
+        {
+            byte[] stagedAsset = File.ReadAllBytes(assetStage);
+            byte[] stagedManifest = File.ReadAllBytes(manifestStage);
+            string assetHash = Hash(stagedAsset);
+            string expectedAssetHash = Hash(expectedAssetBytes);
+            string manifestHash = Hash(stagedManifest);
+            string expectedManifestHash = Hash(new UTF8Encoding(false).GetBytes(expectedManifestText));
+            if (
+                !string.Equals(assetHash, expectedAssetHash, StringComparison.Ordinal)
+                || !string.Equals(manifestHash, expectedManifestHash, StringComparison.Ordinal)
+            )
+            {
+                throw new AssetCtlException("Staged publication bytes changed before verification.", 7);
+            }
+
+            YamlMappingNode root = StrictYaml.LoadMapping(manifestStage);
+            YamlMappingNode integrity = root.Mapping("integrity", "manifest");
+            string claimedHash = integrity.Scalar("sha256", "manifest.integrity");
+            long claimedLength = integrity.Long("byte_length", "manifest.integrity");
+            if (
+                !string.Equals(assetHash, claimedHash, StringComparison.Ordinal)
+                || stagedAsset.LongLength != claimedLength
+            )
+            {
+                throw new AssetCtlException("Staged manifest integrity does not match staged asset bytes.", 7);
+            }
+
+            return (assetHash, stagedAsset.LongLength, manifestHash);
+        }
+
+        private static void Move(
+            string source,
+            string destination,
+            PublicationMove move,
+            PublicationTestHooks? testHooks
+        )
+        {
+            testHooks?.BeforeMove?.Invoke(move);
+            File.Move(source, destination);
+            testHooks?.AfterMove?.Invoke(move);
+        }
+
+        private static string WriteJournal(EffectiveConfiguration configuration, PublicationJournal journal)
+        {
+            string root = JournalRoot(configuration);
+            Directory.CreateDirectory(root);
+            string path = Path.Combine(root, journal.TransactionId + ".json");
+            string stage = path + ".tmp";
+            WriteDurable(stage, JsonSerializer.SerializeToUtf8Bytes(journal, JsonOptions.Stable));
+            File.Move(stage, path);
+            return path;
+        }
+
+        private static string JournalRoot(EffectiveConfiguration configuration)
+        {
+            string stateRoot = PathPolicy.ResolveUnder(
+                configuration.RepositoryRoot,
+                configuration.Paths.StateRoot,
+                "state_root",
+                allowMissing: true
+            );
+            return Path.Combine(stateRoot, "publish-transactions");
+        }
+
+        private static void RecoverJournal(
+            EffectiveConfiguration configuration,
+            string journalPath,
+            PublicationJournal journal
+        )
+        {
+            string asset = PathPolicy.ResolveOutputPath(configuration, journal.AssetPath, allowMissing: true);
+            string manifest = PathPolicy.ResolveManifestPath(configuration, journal.ManifestPath, allowMissing: true);
+            string assetStage = ResolveWorkPath(configuration, journal.AssetStagePath);
+            string manifestStage = ResolveWorkPath(configuration, journal.ManifestStagePath);
+            string assetBackup = PathPolicy.ResolveOutputPath(
+                configuration,
+                journal.AssetBackupPath,
+                allowMissing: true
+            );
+            string manifestBackup = PathPolicy.ResolveManifestPath(
+                configuration,
+                journal.ManifestBackupPath,
+                allowMissing: true
+            );
+            PublicationJournal resolved = journal with
+            {
+                AssetStagePath = assetStage,
+                ManifestStagePath = manifestStage,
+                AssetBackupPath = assetBackup,
+                ManifestBackupPath = manifestBackup,
+            };
+
+            if (NewPairMatches(journal, asset, manifest))
+            {
+                Complete(journalPath, resolved, configuration);
+                return;
+            }
+
+            // A backup's presence proves that its old live file already moved. Without a backup, the old
+            // file is still live and must not be deleted merely because the paired move was interrupted.
+            RestoreOldFile(asset, assetBackup, journal.AssetExisted);
+            RestoreOldFile(manifest, manifestBackup, journal.ManifestExisted);
+            DeleteIfExists(assetStage);
+            DeleteIfExists(manifestStage);
+            DeleteIfExists(journalPath);
+            DeleteEmptyTransactionDirectory(assetStage, configuration);
+        }
+
+        private static string ResolveWorkPath(EffectiveConfiguration configuration, string path) =>
+            PathPolicy.ResolveUnderConfiguredRoot(
+                configuration.RepositoryRoot,
+                configuration.Paths.WorkRoot,
+                path,
+                "publication work path",
+                allowMissing: true
+            );
+
+        private static bool NewPairMatches(PublicationJournal journal, string asset, string manifest)
+        {
+            if (!File.Exists(asset) || !File.Exists(manifest))
+            {
+                return false;
+            }
+
+            byte[] assetBytes = File.ReadAllBytes(asset);
+            byte[] manifestBytes = File.ReadAllBytes(manifest);
+            if (
+                assetBytes.LongLength != journal.AssetLength
+                || !string.Equals(Hash(assetBytes), journal.AssetHash, StringComparison.Ordinal)
+                || !string.Equals(Hash(manifestBytes), journal.ManifestHash, StringComparison.Ordinal)
+            )
+            {
+                return false;
+            }
+
+            try
+            {
+                YamlMappingNode root = StrictYaml.LoadMapping(manifest);
+                YamlMappingNode integrity = root.Mapping("integrity", "manifest");
+                return string.Equals(
+                        integrity.Scalar("sha256", "manifest.integrity"),
+                        journal.AssetHash,
+                        StringComparison.Ordinal
+                    )
+                    && integrity.Long("byte_length", "manifest.integrity") == journal.AssetLength;
+            }
+            catch (AssetCtlException)
+            {
+                return false;
+            }
+        }
+
+        private static void RestoreOldFile(string live, string backup, bool existed)
+        {
+            if (!existed)
+            {
+                DeleteIfExists(live);
+                DeleteIfExists(backup);
+                return;
+            }
+
+            if (File.Exists(backup))
+            {
+                DeleteIfExists(live);
+                File.Move(backup, live);
+            }
+        }
+
+        private static void Complete(
+            string journalPath,
+            PublicationJournal journal,
+            EffectiveConfiguration configuration
+        )
+        {
+            DeleteIfExists(journal.AssetStagePath);
+            DeleteIfExists(journal.ManifestStagePath);
+            DeleteIfExists(journal.AssetBackupPath);
+            DeleteIfExists(journal.ManifestBackupPath);
+            DeleteIfExists(journalPath);
+            DeleteEmptyTransactionDirectory(journal.AssetStagePath, configuration);
+        }
+
+        private static void DeleteEmptyTransactionDirectory(string assetStage, EffectiveConfiguration configuration)
+        {
+            string workRoot = PathPolicy.ResolveUnder(
+                configuration.RepositoryRoot,
+                configuration.Paths.WorkRoot,
+                "work_root",
+                allowMissing: true
+            );
+            string? transactionRoot = Path.GetDirectoryName(assetStage);
+            if (
+                transactionRoot is not null
+                && transactionRoot.StartsWith(workRoot + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+                && Directory.Exists(transactionRoot)
+                && !Directory.EnumerateFileSystemEntries(transactionRoot).Any()
+            )
+            {
+                Directory.Delete(transactionRoot);
+            }
+        }
+
+        private static void WriteDurable(string path, byte[] bytes)
+        {
+            using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            stream.Write(bytes);
+            stream.Flush(flushToDisk: true);
+        }
+
+        private static string Hash(byte[] bytes) => Convert.ToHexStringLower(SHA256.HashData(bytes));
+
+        private static void DeleteTree(string path)
+        {
+            if (Directory.Exists(path))
+            {
+                Directory.Delete(path, recursive: true);
             }
         }
 
@@ -155,6 +498,39 @@ internal static class PublishingTypes
                 File.Delete(path);
             }
         }
+
+        private sealed record PublicationJournal(
+            string TransactionId,
+            string AssetPath,
+            string ManifestPath,
+            string AssetStagePath,
+            string ManifestStagePath,
+            string AssetBackupPath,
+            string ManifestBackupPath,
+            bool AssetExisted,
+            bool ManifestExisted,
+            string AssetHash,
+            long AssetLength,
+            string ManifestHash
+        );
+
+        private sealed record PreparedPublication(
+            string Asset,
+            string Manifest,
+            string JournalPath,
+            PublicationJournal Journal,
+            PublicationJournal RecoveryJournal
+        );
+
+        private sealed record StagedPublication(
+            string TransactionId,
+            string TransactionRoot,
+            string AssetStage,
+            string ManifestStage,
+            string AssetHash,
+            long AssetLength,
+            string ManifestHash
+        );
     }
 
     public static class ReceiptWriter
