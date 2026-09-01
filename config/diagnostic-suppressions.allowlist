@@ -1,0 +1,3 @@
+# mechanism|path|diagnostic|justification
+editorconfig|.editorconfig|IDE0055|CSharpier is the sole C# whitespace formatter, so Roslyn formatting diagnostics would create a competing formatter.
+editorconfig|src/AlterCourse.Godot/.editorconfig|MA0004|Godot continuations normally need the engine main-thread synchronization context.

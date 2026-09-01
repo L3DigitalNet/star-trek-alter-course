@@ -1,1 +1,12 @@
-{ "recommendations": ["DavidAnson.vscode-markdownlint", "esbenp.prettier-vscode"] }
+{
+	"recommendations": [
+		"DavidAnson.vscode-markdownlint",
+		"csharpier.csharpier-vscode",
+		"esbenp.prettier-vscode",
+		"geequlim.godot-tools",
+		"ms-dotnettools.csharp",
+		"ms-dotnettools.csdevkit",
+		"redhat.vscode-yaml",
+		"timonwong.shellcheck"
+	]
+}

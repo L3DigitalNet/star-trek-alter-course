@@ -17,3 +17,7 @@ See:
 - [`LICENSE.md`](LICENSE.md) — repository licensing policy and scope
 - [`LICENSES/MIT.txt`](LICENSES/MIT.txt) — MIT License text for covered original software
 - [`LEGAL.md`](LEGAL.md) — fan-project and third-party intellectual-property notice
+
+## Development
+
+The project targets Godot 4.7.2 .NET/C# and .NET SDK 10.0.111. See [Development quality](docs/development-quality.md) for setup, the canonical `./scripts/verify.sh` gate, and deep validation.

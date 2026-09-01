@@ -1,0 +1,22 @@
+; Engine configuration file.
+; Edit through the Godot editor when possible because not all parameters are self-explanatory.
+
+config_version=5
+
+[application]
+
+config/name="Star Trek: Alter Course"
+run/main_scene="res://Main.tscn"
+
+[dotnet]
+
+project/assembly_name="AlterCourse.Godot"
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/gdUnit4/plugin.cfg")
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"

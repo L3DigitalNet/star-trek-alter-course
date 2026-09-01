@@ -1,0 +1,9 @@
+{
+	"stryker-config": {
+		"solution": "AlterCourse.sln",
+		"project": "src/AlterCourse.Core/AlterCourse.Core.csproj",
+		"test-projects": ["tests/AlterCourse.Core.Tests/AlterCourse.Core.Tests.csproj"],
+		"reporters": ["cleartext", "html"],
+		"mutate": ["src/AlterCourse.Core/**/*.cs", "!src/AlterCourse.Core/obj/**/*.cs"]
+	}
+}

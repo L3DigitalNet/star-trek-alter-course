@@ -1,0 +1,26 @@
+<Project>
+	<PropertyGroup>
+		<Nullable>enable</Nullable>
+		<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+		<EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+		<AnalysisLevel>latest-recommended</AnalysisLevel>
+		<LangVersion>13.0</LangVersion>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Deterministic>true</Deterministic>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(CI)' == 'true'">
+		<ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Meziantou.Analyzer" PrivateAssets="all" />
+	</ItemGroup>
+
+	<ItemGroup Condition="'$(MSBuildProjectName)' == 'AlterCourse.Core'">
+		<PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" PrivateAssets="all" />
+		<AdditionalFiles Include="$(MSBuildThisFileDirectory)config/BannedSymbols.Core.txt" />
+	</ItemGroup>
+</Project>

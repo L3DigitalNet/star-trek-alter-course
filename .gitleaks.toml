@@ -1,0 +1,14 @@
+title = "Star Trek: Alter Course gitleaks configuration"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Vendored GdUnit4 6.2.0 source is verified upstream content, not repository-authored secret material."
+paths = ['''^src/AlterCourse\.Godot/addons/gdUnit4/''']
+
+[[allowlists]]
+description = "The managed Agent Handoff policy names a private-key header as a scanner pattern; it contains no key material."
+condition = "AND"
+paths = ['''^\.standards/packages/agent-handoff/policy\.toml$''']
+rules = ["private-key"]
