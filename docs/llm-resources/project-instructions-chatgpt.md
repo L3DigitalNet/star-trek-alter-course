@@ -1,3 +1,17 @@
+---
+schema_version: '1.1'
+id: 'prompt-pbv8u1-project-instructions-chatgpt'
+title: 'Star Trek: Alter Course Project Instructions for ChatGPT'
+description: 'Defines project-specific guidance for ChatGPT conversations about Star Trek: Alter Course.'
+doc_type: 'prompt'
+status: 'active'
+created: '2026-09-01'
+updated: '2026-09-01'
+tags: []
+aliases: []
+related: []
+---
+
 # Star Trek: Alter Course — Project Instructions
 
 ## Source of Truth and References
