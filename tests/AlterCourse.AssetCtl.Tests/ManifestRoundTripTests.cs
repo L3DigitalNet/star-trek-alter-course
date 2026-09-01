@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Cryptography;
 using AssetReference = AlterCourse.AssetCtl.Domain.DomainModels.AssetReference;
 
@@ -63,6 +64,89 @@ public sealed class ManifestRoundTripTests : IDisposable
 
         Assert.Equal(observed.Request.References, actual.Request.References);
         Assert.Equal(observed.Rights, actual.Rights);
+    }
+
+    /// <summary>Preserves every committed generation and semantic-review field through a manifest rewrite.</summary>
+    [Fact]
+    public void LifecycleMutationRoundTripsCompleteProvenanceAndReview()
+    {
+        EffectiveConfiguration configuration = Configuration();
+        AssetManifest observed = ManifestWithProvenance();
+        WriteManifest(observed);
+
+        AssetManifest loaded = ManifestStore.Load(configuration, observed.ManifestPath);
+        AssetManifest replacement = loaded with { Revision = loaded.Revision + 1 };
+        ManifestMutation.WriteCas(configuration, loaded, replacement);
+        AssetManifest actual = ManifestStore.Load(configuration, observed.ManifestPath);
+
+        Assert.Equal(observed.Generation, actual.Generation);
+        Assert.Equal(observed.SemanticReview!.VisualDefects, actual.SemanticReview!.VisualDefects);
+        Assert.Equal(
+            observed.SemanticReview with
+            {
+                VisualDefects = actual.SemanticReview.VisualDefects,
+            },
+            actual.SemanticReview
+        );
+    }
+
+    /// <summary>Fails closed when committed provenance names an unsupported adapter or schema contract.</summary>
+    [Theory]
+    [InlineData("adapter_version: '1'", "adapter_version: '999'")]
+    [InlineData("provenance_schema_version: '1'", "provenance_schema_version: '999'")]
+    [InlineData("semantic_rubric_version: '1'", "semantic_rubric_version: '999'")]
+    public void ManifestRejectsUnsupportedProvenanceVersions(string current, string unsupported)
+    {
+        EffectiveConfiguration configuration = Configuration();
+        AssetManifest manifest = Manifest() with
+        {
+            Generation = new GenerationProvenance(
+                DateTimeOffset.UtcNow,
+                "run",
+                "route",
+                "provider",
+                "adapter",
+                "profile",
+                "model",
+                "development",
+                "prompt",
+                new string('1', 64),
+                new string('2', 64),
+                new string('3', 64),
+                null,
+                0,
+                null
+            ),
+            MechanicalValidation = new MechanicalValidationResult(
+                true,
+                "image/png",
+                1,
+                1,
+                false,
+                [],
+                [],
+                new Dictionary<int, byte[]>()
+            ),
+            SemanticReview = new SemanticReviewResult(
+                true,
+                true,
+                true,
+                true,
+                1,
+                1,
+                [],
+                false,
+                false,
+                1,
+                "pass",
+                "local-only"
+            ),
+        };
+        string serialized = ManifestStore.Serialize(manifest).Replace(current, unsupported, StringComparison.Ordinal);
+        Assert.DoesNotContain(current, serialized, StringComparison.Ordinal);
+        File.WriteAllText(Path.Combine(root, manifest.ManifestPath), serialized);
+
+        Assert.Throws<AssetCtlException>(() => ManifestStore.Load(configuration, manifest.ManifestPath));
     }
 
     /// <summary>Rejects unknown transparency instead of silently weakening it to optional.</summary>
@@ -147,6 +231,58 @@ public sealed class ManifestRoundTripTests : IDisposable
             "catalog/test.asset.yaml"
         );
     }
+
+    private static AssetManifest ManifestWithProvenance() =>
+        Manifest() with
+        {
+            Generation = new GenerationProvenance(
+                DateTimeOffset.Parse("2026-09-01T12:34:56Z", CultureInfo.InvariantCulture),
+                "run-17",
+                "vector-primary",
+                "provider-a",
+                "adapter-a",
+                "profile-a",
+                "model-a",
+                "production-candidate",
+                "final prompt",
+                new string('1', 64),
+                new string('2', 64),
+                new string('3', 64),
+                "provider-request-9",
+                0.42m,
+                0.39m,
+                "1",
+                "1"
+            ),
+            MechanicalValidation = new MechanicalValidationResult(
+                true,
+                "image/png",
+                64,
+                64,
+                true,
+                ["normalized"],
+                [],
+                new Dictionary<int, byte[]>()
+            ),
+            SemanticReview = new SemanticReviewResult(
+                true,
+                false,
+                true,
+                false,
+                0.73,
+                0.61,
+                ["aliased edge", "ambiguous silhouette"],
+                true,
+                false,
+                0.66,
+                "fail",
+                "different-provider-family",
+                new string('4', 64),
+                "reviewer-a",
+                "review-profile-a",
+                "1"
+            ),
+        };
 
     private void WriteManifest(AssetManifest manifest) =>
         File.WriteAllText(Path.Combine(root, manifest.ManifestPath), ManifestStore.Serialize(manifest));

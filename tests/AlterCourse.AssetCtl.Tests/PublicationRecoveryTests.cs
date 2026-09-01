@@ -43,7 +43,7 @@ public sealed class PublicationRecoveryTests : IDisposable
         byte[] bytes = "first-asset"u8.ToArray();
         AssetManifest manifest = Manifest(bytes, revision: 1);
 
-        AtomicPublisher.Publish(
+        AtomicPublisher.PublicationResult result = AtomicPublisher.Publish(
             configuration,
             manifest.Request.Output.Path,
             bytes,
@@ -51,6 +51,8 @@ public sealed class PublicationRecoveryTests : IDisposable
             ManifestStore.Serialize(manifest)
         );
 
+        Assert.True(result.Published);
+        Assert.Equal("not-required", result.Rollback);
         AssertPair(bytes, manifest);
         Assert.Empty(
             Directory.EnumerateFiles(Path.Combine(root, ".assetctl", "state"), "*.json", SearchOption.AllDirectories)
@@ -122,8 +124,10 @@ public sealed class PublicationRecoveryTests : IDisposable
             )
         );
 
-        AtomicPublisher.RecoverPending(configuration);
+        AtomicPublisher.PublicationRecoveryResult recovery = AtomicPublisher.RecoverPending(configuration);
 
+        Assert.Equal(1, recovery.RecoveredTransactions);
+        Assert.Equal(0, recovery.ActiveTransactionsSkipped);
         if (completesNewPair)
         {
             AssertPair(interruptedBytes, interruptedManifest);
@@ -135,6 +139,106 @@ public sealed class PublicationRecoveryTests : IDisposable
         Assert.Empty(
             Directory.EnumerateFiles(Path.Combine(root, ".assetctl", "state"), "*.json", SearchOption.AllDirectories)
         );
+    }
+
+    /// <summary>Does not recover a live transaction while another asset publishes concurrently.</summary>
+    [Fact]
+    public async Task ConcurrentDifferentAssetPublishDoesNotDisturbActiveTransaction()
+    {
+        EffectiveConfiguration configuration = Configuration();
+        using var transactionActive = new ManualResetEventSlim(false);
+        using var allowFirstToFinish = new ManualResetEventSlim(false);
+        byte[] firstBytes = "first-new"u8.ToArray();
+        byte[] secondBytes = "second-new"u8.ToArray();
+        AssetManifest first = Manifest(firstBytes, 1, "first");
+        AssetManifest second = Manifest(secondBytes, 1, "second");
+
+        Task firstPublish = Task.Run(() =>
+            AtomicPublisher.Publish(
+                configuration,
+                first.Request.Output.Path,
+                firstBytes,
+                first.ManifestPath,
+                ManifestStore.Serialize(first),
+                new AtomicPublisher.PublicationTestHooks(AfterMove: move =>
+                {
+                    if (move == AtomicPublisher.PublicationMove.InstallAsset)
+                    {
+                        transactionActive.Set();
+                        Assert.True(allowFirstToFinish.Wait(TimeSpan.FromSeconds(10)));
+                    }
+                })
+            )
+        );
+        Assert.True(transactionActive.Wait(TimeSpan.FromSeconds(10)));
+
+        Task<AtomicPublisher.PublicationResult> secondPublish = Task.Run(() =>
+            AtomicPublisher.Publish(
+                configuration,
+                second.Request.Output.Path,
+                secondBytes,
+                second.ManifestPath,
+                ManifestStore.Serialize(second)
+            )
+        );
+        AtomicPublisher.PublicationResult secondResult = await secondPublish.WaitAsync(TimeSpan.FromSeconds(10));
+        allowFirstToFinish.Set();
+        await firstPublish.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(1, secondResult.ActiveTransactionsSkipped);
+        AssertPair(firstBytes, first);
+        AssertPair(secondBytes, second);
+    }
+
+    /// <summary>Bounds ignored journal input and quarantines it inside the configured state root.</summary>
+    [Fact]
+    public void OversizedPublicationJournalIsQuarantined()
+    {
+        EffectiveConfiguration configuration = Configuration();
+        string journalRoot = Path.Combine(root, ".assetctl", "state", "publish-transactions");
+        Directory.CreateDirectory(journalRoot);
+        string journal = Path.Combine(journalRoot, "oversized.json");
+        File.WriteAllText(journal, new string('x', 70_000));
+
+        Assert.Throws<AssetCtlException>(() => AtomicPublisher.RecoverPending(configuration));
+
+        Assert.False(File.Exists(journal));
+        Assert.Single(Directory.EnumerateFiles(Path.Combine(journalRoot, "quarantine"), "*.invalid"));
+    }
+
+    /// <summary>Rejects JSON nesting beyond the bounded journal contract before any recovery path is resolved.</summary>
+    [Fact]
+    public void DeeplyNestedPublicationJournalIsQuarantined()
+    {
+        EffectiveConfiguration configuration = Configuration();
+        string journalRoot = Path.Combine(root, ".assetctl", "state", "publish-transactions");
+        Directory.CreateDirectory(journalRoot);
+        string journal = Path.Combine(journalRoot, Guid.NewGuid().ToString("N") + ".json");
+        File.WriteAllText(journal, "{\"padding\":" + new string('[', 20) + "0" + new string(']', 20) + "}");
+
+        Assert.Throws<AssetCtlException>(() => AtomicPublisher.RecoverPending(configuration));
+
+        Assert.False(File.Exists(journal));
+        Assert.Single(Directory.EnumerateFiles(Path.Combine(journalRoot, "quarantine"), "*.invalid"));
+    }
+
+    /// <summary>Quarantines a journal symlink without reading or moving its external target.</summary>
+    [Fact]
+    public void PublicationJournalSymlinkCannotEscapeStateRoot()
+    {
+        EffectiveConfiguration configuration = Configuration();
+        string journalRoot = Path.Combine(root, ".assetctl", "state", "publish-transactions");
+        string outside = Path.Combine(root, "outside-journal.json");
+        Directory.CreateDirectory(journalRoot);
+        File.WriteAllText(outside, "external evidence");
+        string journal = Path.Combine(journalRoot, Guid.NewGuid().ToString("N") + ".json");
+        File.CreateSymbolicLink(journal, outside);
+
+        Assert.Throws<AssetCtlException>(() => AtomicPublisher.RecoverPending(configuration));
+
+        Assert.Equal("external evidence", File.ReadAllText(outside));
+        Assert.False(File.Exists(journal));
+        Assert.Single(Directory.EnumerateFiles(Path.Combine(journalRoot, "quarantine"), "*.invalid"));
     }
 
     /// <summary>Removes the isolated repository used by each publication test.</summary>
@@ -178,12 +282,13 @@ public sealed class PublicationRecoveryTests : IDisposable
         return (bytes, manifest);
     }
 
-    private static AssetManifest Manifest(byte[] bytes, int revision) =>
+    private static AssetManifest Manifest(byte[] bytes, int revision, string name = "asset") =>
         new(
             "1",
             TestData.Request() with
             {
-                Output = TestData.Request().Output with { Path = "assets/asset.png" },
+                Id = $"test.{name}",
+                Output = TestData.Request().Output with { Path = $"assets/{name}.png" },
             },
             revision,
             new RightsRecord("original-project-created", "project", null, null, "test"),
@@ -193,7 +298,7 @@ public sealed class PublicationRecoveryTests : IDisposable
             new IntegrityRecord(Convert.ToHexStringLower(SHA256.HashData(bytes)), bytes.LongLength, "image/png"),
             new ApprovalRecord(null, null, null),
             null,
-            "catalog/test.asset.yaml"
+            $"catalog/test.{name}.asset.yaml"
         );
 
     private void AssertPair(byte[] expectedBytes, AssetManifest expectedManifest)

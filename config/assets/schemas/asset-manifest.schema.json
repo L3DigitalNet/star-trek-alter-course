@@ -58,13 +58,21 @@
 		},
 		"references": { "type": "array", "items": { "type": "object" } },
 		"rights": { "type": "object" },
-		"generation": { "type": ["object", "null"] },
+		"generation": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/generation" }] },
 		"validation": { "type": ["object", "null"] },
 		"integrity": { "type": ["object", "null"] },
 		"approval": { "type": "object" },
 		"supersedes": { "type": ["string", "null"] }
 	},
 	"$defs": {
+		"generation": {
+			"type": "object",
+			"required": ["adapter_version", "provenance_schema_version"],
+			"properties": {
+				"adapter_version": { "const": "1" },
+				"provenance_schema_version": { "const": "1" }
+			}
+		},
 		"output": {
 			"type": "object",
 			"additionalProperties": false,

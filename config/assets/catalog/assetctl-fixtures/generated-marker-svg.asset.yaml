@@ -40,6 +40,8 @@ generation:
   route: "vector-placeholder"
   provider: "local-placeholder"
   adapter: "local-placeholder"
+  adapter_version: "1"
+  provenance_schema_version: "1"
   model_profile: "default"
   model: "local-placeholder-v1"
   quality_tier: "development"

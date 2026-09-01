@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using AlterCourse.AssetCtl.Configuration;
 using YamlDotNet.RepresentationModel;
+using AssetContractVersions = AlterCourse.AssetCtl.Domain.DomainModels.AssetContractVersions;
 
 namespace AlterCourse.AssetCtl.Catalog;
 
@@ -353,6 +354,8 @@ internal static class ManifestStore
         Line(builder, 2, "route", generation.Route);
         Line(builder, 2, "provider", generation.Provider);
         Line(builder, 2, "adapter", generation.Adapter);
+        Line(builder, 2, "adapter_version", generation.AdapterVersion);
+        Line(builder, 2, "provenance_schema_version", generation.ProvenanceSchemaVersion);
         Line(builder, 2, "model_profile", generation.ModelProfile);
         Line(builder, 2, "model", generation.Model);
         Line(builder, 2, "quality_tier", generation.QualityTier);
@@ -412,7 +415,36 @@ internal static class ManifestStore
         );
         if (semantic is not null)
         {
+            Line(builder, 2, "semantic_rubric_version", semantic.SemanticRubricVersion);
+            builder.AppendLine(
+                CultureInfo.InvariantCulture,
+                $"  semantic_matches_subject: {BooleanValue(semantic.MatchesSubject)}"
+            );
+            builder.AppendLine(
+                CultureInfo.InvariantCulture,
+                $"  semantic_required_constraints_satisfied: {BooleanValue(semantic.RequiredConstraintsSatisfied)}"
+            );
+            builder.AppendLine(
+                CultureInfo.InvariantCulture,
+                $"  semantic_prohibited_content_absent: {BooleanValue(semantic.ProhibitedContentAbsent)}"
+            );
+            builder.AppendLine(
+                CultureInfo.InvariantCulture,
+                $"  semantic_readable_at_target_sizes: {BooleanValue(semantic.ReadableAtTargetSizes)}"
+            );
+            builder.AppendLine(CultureInfo.InvariantCulture, $"  semantic_style_adherence: {semantic.StyleAdherence}");
+            builder.AppendLine(CultureInfo.InvariantCulture, $"  semantic_clarity: {semantic.SemanticClarity}");
+            Sequence(builder, 2, "semantic_visual_defects", semantic.VisualDefects);
+            builder.AppendLine(
+                CultureInfo.InvariantCulture,
+                $"  semantic_unrequested_text_detected: {BooleanValue(semantic.UnrequestedTextDetected)}"
+            );
+            builder.AppendLine(
+                CultureInfo.InvariantCulture,
+                $"  semantic_logo_or_watermark_detected: {BooleanValue(semantic.LogoOrWatermarkDetected)}"
+            );
             builder.AppendLine(CultureInfo.InvariantCulture, $"  semantic_score: {semantic.OverallScore}");
+            Line(builder, 2, "semantic_decision", semantic.Decision);
             Line(builder, 2, "semantic_independence", semantic.Independence);
             NullableLine(builder, 2, "semantic_evidence_sha256", semantic.EvidenceSha256);
             NullableLine(builder, 2, "semantic_reviewer_provider", semantic.ReviewerProvider);
@@ -537,6 +569,8 @@ internal static class ManifestStore
             "route",
             "provider",
             "adapter",
+            "adapter_version",
+            "provenance_schema_version",
             "model_profile",
             "model",
             "quality_tier",
@@ -548,6 +582,19 @@ internal static class ManifestStore
             "estimated_cost_usd",
             "actual_cost_usd"
         );
+        string adapterVersion = node.Scalar("adapter_version", "generation");
+        string provenanceVersion = node.Scalar("provenance_schema_version", "generation");
+        RequireContractVersion(adapterVersion, AssetContractVersions.Adapter, "generation.adapter_version");
+        RequireContractVersion(
+            provenanceVersion,
+            AssetContractVersions.Provenance,
+            "generation.provenance_schema_version"
+        );
+        if (!string.Equals(node.Scalar("source_type", "generation"), "generated", StringComparison.Ordinal))
+        {
+            throw new AssetCtlException("generation.source_type: unsupported source type.", 2);
+        }
+
         return new GenerationProvenance(
             DateTimeOffset.Parse(node.Scalar("generated_at", "generation"), CultureInfo.InvariantCulture),
             node.Scalar("run_id", "generation"),
@@ -563,7 +610,9 @@ internal static class ManifestStore
             node.Scalar("effective_config_sha256", "generation"),
             node.OptionalScalar("provider_request_id", "generation"),
             decimal.Parse(node.Scalar("estimated_cost_usd", "generation"), CultureInfo.InvariantCulture),
-            ParseNullableDecimal(node.OptionalScalar("actual_cost_usd", "generation"))
+            ParseNullableDecimal(node.OptionalScalar("actual_cost_usd", "generation")),
+            adapterVersion,
+            provenanceVersion
         );
     }
 
@@ -601,7 +650,18 @@ internal static class ManifestStore
             "mechanical_validator_version",
             "mechanical_findings",
             "semantic_status",
+            "semantic_rubric_version",
+            "semantic_matches_subject",
+            "semantic_required_constraints_satisfied",
+            "semantic_prohibited_content_absent",
+            "semantic_readable_at_target_sizes",
+            "semantic_style_adherence",
+            "semantic_clarity",
+            "semantic_visual_defects",
+            "semantic_unrequested_text_detected",
+            "semantic_logo_or_watermark_detected",
             "semantic_score",
+            "semantic_decision",
             "semantic_independence",
             "semantic_evidence_sha256",
             "semantic_reviewer_provider",
@@ -636,26 +696,88 @@ internal static class ManifestStore
 
     private static SemanticReviewResult ReadSemantic(YamlMappingNode node, string semanticStatus)
     {
-        double score = double.Parse(node.Scalar("semantic_score", "manifest.validation"), CultureInfo.InvariantCulture);
-        bool semanticPassed = string.Equals(semanticStatus, "pass", StringComparison.Ordinal);
+        string rubricVersion = node.Scalar("semantic_rubric_version", "manifest.validation");
+        RequireContractVersion(
+            rubricVersion,
+            AssetContractVersions.SemanticRubric,
+            "manifest.validation.semantic_rubric_version"
+        );
         SemanticReviewResult semantic = new(
-            semanticPassed,
-            semanticPassed,
-            semanticPassed,
-            semanticPassed,
-            score,
-            score,
-            [],
-            false,
-            false,
-            score,
-            semanticStatus,
+            ParseBoolean(node, "semantic_matches_subject"),
+            ParseBoolean(node, "semantic_required_constraints_satisfied"),
+            ParseBoolean(node, "semantic_prohibited_content_absent"),
+            ParseBoolean(node, "semantic_readable_at_target_sizes"),
+            ParseScore(node, "semantic_style_adherence"),
+            ParseScore(node, "semantic_clarity"),
+            YamlValues.Strings(
+                node.Sequence("semantic_visual_defects", "manifest.validation"),
+                "manifest.validation.semantic_visual_defects"
+            ),
+            ParseBoolean(node, "semantic_unrequested_text_detected"),
+            ParseBoolean(node, "semantic_logo_or_watermark_detected"),
+            ParseScore(node, "semantic_score"),
+            ParseDecision(node.Scalar("semantic_decision", "manifest.validation")),
             node.Scalar("semantic_independence", "manifest.validation"),
             node.OptionalScalar("semantic_evidence_sha256", "manifest.validation"),
             node.OptionalScalar("semantic_reviewer_provider", "manifest.validation"),
-            node.OptionalScalar("semantic_reviewer_model_profile", "manifest.validation")
+            node.OptionalScalar("semantic_reviewer_model_profile", "manifest.validation"),
+            rubricVersion
         );
+        bool statusPassed = semanticStatus switch
+        {
+            "pass" => true,
+            "fail" => false,
+            _ => throw new AssetCtlException("manifest.validation.semantic_status: unsupported status.", 2),
+        };
+        if (statusPassed == semantic.HasHardFailure)
+        {
+            throw new AssetCtlException(
+                "manifest.validation.semantic_status does not match the structured semantic result.",
+                2
+            );
+        }
+
         return semantic;
+    }
+
+    private static bool ParseBoolean(YamlMappingNode node, string key) =>
+        node.Scalar(key, "manifest.validation") switch
+        {
+            "true" => true,
+            "false" => false,
+            _ => throw new AssetCtlException($"manifest.validation.{key}: expected true or false.", 2),
+        };
+
+    private static double ParseScore(YamlMappingNode node, string key)
+    {
+        if (
+            !double.TryParse(
+                node.Scalar(key, "manifest.validation"),
+                NumberStyles.Float,
+                CultureInfo.InvariantCulture,
+                out double value
+            )
+            || !double.IsFinite(value)
+            || value is < 0 or > 1
+        )
+        {
+            throw new AssetCtlException($"manifest.validation.{key}: expected a finite value from 0 to 1.", 2);
+        }
+
+        return value;
+    }
+
+    private static string ParseDecision(string value) =>
+        value is "pass" or "fail"
+            ? value
+            : throw new AssetCtlException("manifest.validation.semantic_decision: unsupported decision.", 2);
+
+    private static void RequireContractVersion(string actual, string expected, string path)
+    {
+        if (!string.Equals(actual, expected, StringComparison.Ordinal))
+        {
+            throw new AssetCtlException($"{path}: unsupported version '{actual}'.", 2);
+        }
     }
 
     private static ApprovalRecord ReadApproval(YamlMappingNode? node)
@@ -711,6 +833,8 @@ internal static class ManifestStore
 
     private static decimal? ParseNullableDecimal(string? value) =>
         value is null ? null : decimal.Parse(value, CultureInfo.InvariantCulture);
+
+    private static string BooleanValue(bool value) => value ? "true" : "false";
 
     private static void Line(StringBuilder builder, int indentation, string key, string value) =>
         builder
