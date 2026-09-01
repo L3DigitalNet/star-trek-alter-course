@@ -1,0 +1,18 @@
+name: Format
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  format:
+    permissions:
+      contents: read
+    uses: L3DigitalNet/project-standards/.github/workflows/format.yml@v5
+    with:
+      prettier: true
+      globs: "**/*.md\n**/*.json\n**/*.jsonc\n**/*.yml\n**/*.yaml"
+      exclusions: ".agents/skills/agent-handoff/**\n.claude/skills/agent-handoff/**"

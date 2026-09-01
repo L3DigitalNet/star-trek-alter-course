@@ -1,0 +1,5 @@
+{
+	"mcpServers": {
+		"project-standards": { "command": "project-standards", "args": ["mcp"] }
+	}
+}

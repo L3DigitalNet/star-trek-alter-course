@@ -1,0 +1,69 @@
+# Baseline organization schema: the five Issue Types and seven Issue Fields this
+# standard expects, with their exact value lists. This file is the audit oracle —
+# `gh-workflow audit` compares live organization state against it read-only, and
+# `gh-workflow set` validates field values against it. It describes the schema,
+# it does not apply it: schema changes are applied by a human in the GitHub UI or
+# API, and schema growth ships as a new payload version, never as an edit here.
+issue_types:
+  - Bug
+  - Feature
+  - Task
+  - Initiative
+  - Research
+
+issue_fields:
+  Workflow:
+    type: single_select
+    values:
+      - Inbox
+      - Needs definition
+      - Ready
+      - In progress
+      - Blocked
+      - In review
+      - Done
+      - Dropped
+
+  Priority:
+    type: single_select
+    values:
+      - P0 Immediate
+      - P1 Next
+      - P2 Planned
+      - P3 Opportunistic
+      - P4 Someday
+
+  Size:
+    type: single_select
+    values:
+      - XS
+      - S
+      - M
+      - L
+      - XL
+
+  Change risk:
+    type: single_select
+    values:
+      - R1 Low
+      - R2 Moderate
+      - R3 High
+      - R4 Critical
+
+  Execution mode:
+    type: single_select
+    values:
+      - Unattended agent
+      - Interactive agent
+      - Human only
+
+  Target date:
+    type: date
+
+  Severity:
+    type: single_select
+    values:
+      - S0 Critical
+      - S1 High
+      - S2 Moderate
+      - S3 Low

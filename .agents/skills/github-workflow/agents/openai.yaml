@@ -1,0 +1,7 @@
+interface:
+  display_name: "GitHub Workflow"
+  short_description: "Apply the packaged GitHub work discipline before touching work state."
+  default_prompt: "Use $github-workflow for triage, an organization-schema audit, a T0 or governing-relationship judgment, and uncommon recovery — the managed AGENTS.md block already routes ordinary issue, field, draft-PR, and summary work without it. SKILL.md is one read of about 69 lines and its routing table is the complete flag surface, so read it whole and do not spend calls on gh-workflow help. Route every action through the row that names it; keep type, value, content, and admission judgment with the agent; honor the skill's refusals."
+
+policy:
+  allow_implicit_invocation: true

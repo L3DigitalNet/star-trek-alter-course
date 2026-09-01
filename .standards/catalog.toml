@@ -1,0 +1,594 @@
+[project_standards]
+schema_version = "1.0"
+catalog = "5"
+release = "5.27.0"
+digest = "sha256:c0088be396daff93c349e89f470b503f6c45f313569eec7131af8b695c5896dc"
+
+[standards.adr]
+status = "active"
+available = ["1.1", "1.2", "1.3", "1.4", "1.5", "1.6"]
+default = "1.6"
+candidates = []
+
+[standards.adr.versions."1.1"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:82e9e3ae5d50a641b4b47366ef5d66fd85b13555ffda0d9ac1c99aadd1c6c719"
+
+[standards.adr.versions."1.2"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:5b36e6f63a2477f2c7c5bcef647edc8b674366eb64937aba646aefc65d8a6f21"
+
+[standards.adr.versions."1.3"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:6c5d8da41c80658cb701b5aedd17a93149aab5e8dab4caa58f8e0047bf645d1f"
+
+[standards.adr.versions."1.4"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:d23b7f6c66d7684f716ef2f3dd778d9be3de39e5914d91d6481997cc9d5184e3"
+
+[standards.adr.versions."1.5"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:52be37d8f0d26ed41971de6a508dae5a6a4cd796c8e31945f06e000a11c31b92"
+
+[standards.adr.versions."1.6"]
+channel = "stable"
+availability = "consumer"
+payload_digest = "sha256:12b9490be7cf3284bfb7f510b03b2cd555ab7c57f0a7628c9f95c659c241ba42"
+
+[standards.agent-handoff]
+status = "active"
+available = ["1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15", "1.16"]
+default = "1.16"
+candidates = []
+
+[standards.agent-handoff.versions."1.1"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:e5e300e761c3b95bb36a95d0e001c2fa428c21843e15cdbf66202327fdb6ded1"
+
+[standards.agent-handoff.versions."1.2"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:197d9c6877781abf1a9f0a3d3f37092413600ebaff604371ae10c7405925cf5b"
+
+[standards.agent-handoff.versions."1.3"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:3e6e53f9ba889b7f68624c1c3861c5e26ac889a6025c4fb7b819b49e140d1f78"
+
+[standards.agent-handoff.versions."1.4"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:17bdc8b25c6cc6ac644057a85f55ed244adf88b58f4ad052d68222d20c24120a"
+
+[standards.agent-handoff.versions."1.5"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:4acf48a8dbb987088700c558128d9b180718e1001a8bc7d4364950b0f05dc3da"
+
+[standards.agent-handoff.versions."1.6"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:97041fb9a47c28cf0e2dd38c2de32be827af4b079de3943d6b74675bf52d81f8"
+
+[standards.agent-handoff.versions."1.7"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:a9e432a0ad5531d75791bbb72293af9d571471e976a950952151617dd23b1217"
+
+[standards.agent-handoff.versions."1.8"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:65eccfe9b6b51f39ade2c3c45d9a01b4cb2b5c86557c848e3000b736707de6ce"
+
+[standards.agent-handoff.versions."1.9"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:4ee3187635bada1fdf9a1fcb5966fbbe5eecc56c84a2ccce220adfa595edbc99"
+
+[standards.agent-handoff.versions."1.10"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:ea1fbc843a8d9bb627dda4c4c8d12d15b59be9361ae5c312dac3101e01c8d56f"
+
+[standards.agent-handoff.versions."1.11"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:570cc7cf345fc953d535e1fab8f7ad52bcea5d81eaf3d5a3641d1b40580c9ea2"
+
+[standards.agent-handoff.versions."1.12"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:176dceeca8b02df1eebd468eec26bc0e2713ed17cd67f4ff0651646795e43b7f"
+
+[standards.agent-handoff.versions."1.13"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:324fa4d81c62da450ea29e5b06207e94379d4cbbeb59c2d8e3baee7581ab298b"
+
+[standards.agent-handoff.versions."1.14"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:87f39801ca47f9c0575034e0d15b5c19f64f7ecb63f3e154fcd41e0b0341189f"
+
+[standards.agent-handoff.versions."1.15"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:96a8ed59dbbc870fd6d1335d557f48798ff3d63544cab673b4bcd789a2d5e8d3"
+
+[standards.agent-handoff.versions."1.16"]
+channel = "stable"
+availability = "consumer"
+payload_digest = "sha256:c5740e1c40ae3643f3df67014ac1458a78e9d5f1682cdcaa1adcfc2f259d28ff"
+
+[standards.cli-documentation]
+status = "active"
+available = ["1.1", "1.2", "1.3", "1.4", "1.5", "1.6"]
+default = "1.6"
+candidates = []
+
+[standards.cli-documentation.versions."1.1"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:a6aa0b4a9e0f2247a0795dac3073a55e72d9047581493e1326eeb42d43442445"
+
+[standards.cli-documentation.versions."1.2"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:edde1a4011314a9b05f372731a8d50e3b5a0663d39369089256d442430e4943c"
+
+[standards.cli-documentation.versions."1.3"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:2c15f700fd343327b675295579220572fea9f2735386da5aa266d38839a7f9c4"
+
+[standards.cli-documentation.versions."1.4"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:8c2f1e9cd6538954d8ace67146133c6864a149ae0a1a97d6aba75560d5ecf346"
+
+[standards.cli-documentation.versions."1.5"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:90bd59f457ec467da0990bbf89667f534753768be79530c7bfdde9c791d3b618"
+
+[standards.cli-documentation.versions."1.6"]
+channel = "stable"
+availability = "consumer"
+payload_digest = "sha256:7c6e609bdccdf526cb1426b817b26efcc5622552138ac5e826d917aad91c09ba"
+
+[standards.github-workflow]
+status = "active"
+available = ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8"]
+default = "1.8"
+candidates = []
+
+[standards.github-workflow.versions."1.0"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:65afb66cd3aaf1e0fa9bb896e63b2275290e93aa8fff6d4e0fb5129b9fb99d86"
+
+[standards.github-workflow.versions."1.1"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:a6ad7da622a3f7f56f87521be787c7f36761e476029ed2ac009c32db82a5fad6"
+
+[standards.github-workflow.versions."1.2"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:06041b632e15eee8258d7eaf311dfd0560f15d54d34ed2ac44076a069228d13f"
+
+[standards.github-workflow.versions."1.3"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:0aef4418dbb4e382d5992f93c33432aafeb43501e4501c51bd0ccd2a8464d25e"
+
+[standards.github-workflow.versions."1.4"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:6bd63f74d43baf8a49bc87c28b6a25fb1aa2d0bfdf185229b74e7b685dee522e"
+
+[standards.github-workflow.versions."1.5"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:cb91ea5899362690402729633ac547017a5dd262b87a64ea45d3a253b6d93dc8"
+
+[standards.github-workflow.versions."1.6"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:ff4430c5c4b2335a5c9c5e06c0b6527d1d97eb8a929023c4b1e654553bc9922d"
+
+[standards.github-workflow.versions."1.7"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:9758d1dab58643cb6f8461bd11dd139233c346e37e54c5580ba6a1cd4a17c17a"
+
+[standards.github-workflow.versions."1.8"]
+channel = "stable"
+availability = "consumer"
+payload_digest = "sha256:f98d80968f74cacec42711b82265f692368917130365097fe72c29ed0e6356a4"
+
+[standards.markdown-frontmatter]
+status = "active"
+available = ["1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15"]
+default = "1.15"
+candidates = []
+
+[standards.markdown-frontmatter.versions."1.2"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:e1e2ac7d41fb2b7be8772717292d5d8afadcbe878a70d562e82d7f4c1bdd606c"
+
+[standards.markdown-frontmatter.versions."1.3"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:97327fffde61fd981c08949292c504a930f4fe6786af455cb1f6c7d204dc7c43"
+
+[standards.markdown-frontmatter.versions."1.4"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:a981a54cb6c6a36e2bfb73eca61c9b84100da67b072cd07c7c4ffea4b0593647"
+
+[standards.markdown-frontmatter.versions."1.5"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:b31b9a97edb48334bbb6af2988272baf071449a457a303e218dbb8c6436a540c"
+
+[standards.markdown-frontmatter.versions."1.6"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:cf1e2c975d5f139f1b3864090e6fcc0e45dcb895a97dd07113c0eeb7af0d0f32"
+
+[standards.markdown-frontmatter.versions."1.7"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:d61d35208e6e2f1c1772ce994459ab1d4b8fd8174b5d22a9caebfdce531eb518"
+
+[standards.markdown-frontmatter.versions."1.8"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:79410e07c98f8f9fcc69e1c31b8b2971134c8d19b855fe81008c296fb6850470"
+
+[standards.markdown-frontmatter.versions."1.9"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:5f08a86214605fb25db4bc48f78ccb68bae52a707506e0adf28117d3ae1d76a5"
+
+[standards.markdown-frontmatter.versions."1.10"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:d893620234a47e02dd2252a933829520b4366fb64cc802fc1f7c83a762dce111"
+
+[standards.markdown-frontmatter.versions."1.11"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:7eb63ac167668b5b0e0d5d79fbb83ae256c8bb73be5153e9ce81f9d8442fa32f"
+
+[standards.markdown-frontmatter.versions."1.12"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:568f19172b8324a9b1ba19f730b7e621abbd719d97cf469bd25fddd76231e8cb"
+
+[standards.markdown-frontmatter.versions."1.13"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:40cbd73ee6f8c28cd0d5b7befbfd8c54c277c00563627f5d0d3c9d9a36dcf0b9"
+
+[standards.markdown-frontmatter.versions."1.14"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:530491a10ed1f6bcfafcfcbd80f99206de9e28da66aa81dc38d74f2ec938a144"
+
+[standards.markdown-frontmatter.versions."1.15"]
+channel = "stable"
+availability = "consumer"
+payload_digest = "sha256:a71148b696725c5fc31e0c0e57bf7060dd7e63fcfe9d690bbe95b8047d357edd"
+
+[standards.markdown-tooling]
+status = "active"
+available = ["1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15"]
+default = "1.15"
+candidates = []
+
+[standards.markdown-tooling.versions."1.2"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:0d4f89403c4b4c4a2d1dc9c579deddf717f5e01d1c424cac4a103ecb03be12ae"
+
+[standards.markdown-tooling.versions."1.3"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:e6bf4dafb75f1c87a5ce763a3f52c98749fdff4902cd1e1beb13eebaff12deca"
+
+[standards.markdown-tooling.versions."1.4"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:31a4bfd502cf332a68a20b3682b83ec8a797d58c4b7f565cbfe6043cf787c8b5"
+
+[standards.markdown-tooling.versions."1.5"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:2f06b126747822b330ed0239630b0dad413afb9f8c56380d72848403a9c23091"
+
+[standards.markdown-tooling.versions."1.6"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:cf123371ac92c23942a37a5765b99d1af4f3c2481e2b75c2a239b6b17bc1ba8b"
+
+[standards.markdown-tooling.versions."1.7"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:87376b5d4c3ce027ca3db249d5d27bb7a1bc6d2e7f843b7074f8f73d2a084c10"
+
+[standards.markdown-tooling.versions."1.8"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:22ebe7b95ca82daa276746c9bf3f0688d15ce4b47314b7e4abea206df7212783"
+
+[standards.markdown-tooling.versions."1.9"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:2952838b146eddf054cc2f81c05e8cd931ff4e5de1a1e2b120760aca50927456"
+
+[standards.markdown-tooling.versions."1.10"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:db6b97d120ac9f31ab589c2d48926acb5713b840738dd13b6460d34632e4fc9b"
+
+[standards.markdown-tooling.versions."1.11"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:3bf59aa23a857174bfcaf604de07318b61ec177b9fab1f016ad4c6516e4ff882"
+
+[standards.markdown-tooling.versions."1.12"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:105d742c188f78cd908cd715a396722912d031114ea1e5e6445d1dc879a1e7b8"
+
+[standards.markdown-tooling.versions."1.13"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:271cfbb5e5abde80439cb1f90b9d2eb55720fd52bff3d78f51057efa72aabfba"
+
+[standards.markdown-tooling.versions."1.14"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:25a8b52890c056f50fc424a76fe63d46fac68bdeee0c7e79d58ab440c9520999"
+
+[standards.markdown-tooling.versions."1.15"]
+channel = "stable"
+availability = "consumer"
+payload_digest = "sha256:aa3e3ae249cf2720355b1b33c987af11a546be4bf456c9e977903e5f9fe00f03"
+
+[standards.project-spec]
+status = "active"
+available = ["1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11"]
+default = "1.11"
+candidates = []
+
+[standards.project-spec.versions."1.1"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:ed1445342d72836707dd455fd5771f28b71b53acbb1499e4f9250e33f548d36e"
+
+[standards.project-spec.versions."1.2"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:d5474ab7035937ac96d0551ecf9c076a71752e9e18dcfe14789d960933418c47"
+
+[standards.project-spec.versions."1.3"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:56de712072c586549c68cdadfe4598b63d9d7d3ea7cb4f7727fd48c6ef4084a6"
+
+[standards.project-spec.versions."1.4"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:8ea9d9a5f82156c1f177defa4bd78d5f55693013ced2ab9d07cabce63969e845"
+
+[standards.project-spec.versions."1.5"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:e4286963cf591e3ee1454e5be317519b6610d3257dc61eb08de489d47ba407e1"
+
+[standards.project-spec.versions."1.6"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:0f3bc8952fe4ef58e7619fecf1476ebd863a6cbb4eddf93bdbdea758f835be4c"
+
+[standards.project-spec.versions."1.7"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:2d012e3de7699dc44bdf4ee8605cf350caca3ba05b0c490b8ff795ce5014df8f"
+
+[standards.project-spec.versions."1.8"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:dc7c7f7c91d70717675c0de5bcd5759b498c6431db62f38f51ea060637a286d2"
+
+[standards.project-spec.versions."1.9"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:980f922a3980de82e1302db6d2d22ec88ca2457b2affd64876ada4dc09ab669e"
+
+[standards.project-spec.versions."1.10"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:6797253d6982f041bc65d007cf023285a0aaff2fac21640ebfdc95e1c420706e"
+
+[standards.project-spec.versions."1.11"]
+channel = "stable"
+availability = "consumer"
+payload_digest = "sha256:cb239f1ff669c38000da6b42be203c1dc6d094b089304a5b0280c1b8045dd081"
+
+[standards.project-toolbox]
+status = "active"
+available = ["1.0", "1.1"]
+default = "1.1"
+candidates = []
+
+[standards.project-toolbox.versions."1.0"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:48020eacd25a34578b6cc9c2cd7314af14bc6a808bd6d21531df29726c754bf8"
+
+[standards.project-toolbox.versions."1.1"]
+channel = "stable"
+availability = "consumer"
+payload_digest = "sha256:74b53ba82d783e13d554980ab7f3a90c4a0553ff65fa4f36036310e39a27018a"
+
+[standards.python-coding]
+status = "draft"
+available = ["0.5", "0.6"]
+candidates = []
+
+[standards.python-coding.versions."0.5"]
+channel = "reference-only"
+availability = "reference-only"
+payload_digest = "sha256:c027af45f85e84717e7ce9909adcd71363745e688538bd88a303dd813a351d80"
+
+[standards.python-coding.versions."0.6"]
+channel = "reference-only"
+availability = "reference-only"
+payload_digest = "sha256:a4c4d6f0d61f81beeabefe48a8ef29f9789b55d7159ab01bb64b1da8417db14d"
+
+[standards.python-tooling]
+status = "active"
+available = ["1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15", "1.16", "1.17"]
+default = "1.17"
+candidates = []
+
+[standards.python-tooling.versions."1.1"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:bf36d035e20c3533546f4c0aebfad6b737902aa79cb7bad2566b017925ac910e"
+
+[standards.python-tooling.versions."1.2"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:04264e67678708fd5f1f44a7145f3a1e23acfb14b72a6cba1dad61ca5a6ace84"
+
+[standards.python-tooling.versions."1.3"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:3da255cdc757f55aaa4983a5e7c24593be5bf2fcc1406f5f817265602186769b"
+
+[standards.python-tooling.versions."1.4"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:6cece71c53909b6dcd04a50e873ce16eb98aa800203b186e472439f7986c3e5e"
+
+[standards.python-tooling.versions."1.5"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:734c2b975c01307ed0a27a14c8a391ca4e73334180275d50012076b506021de3"
+
+[standards.python-tooling.versions."1.6"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:78e9f7737e78990bdb32b559b87d3ba4f975ddf4b0d0bd5f1ecac1e772da1e5b"
+
+[standards.python-tooling.versions."1.7"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:6ffff0fe5b82d15b1a30e23cb49dd0fba7ff8766a42bbf31f83eabb16e63e92b"
+
+[standards.python-tooling.versions."1.8"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:7397498723a1f683b09037c233e1872df825cd70a27c514a45bb2bacf24cb312"
+
+[standards.python-tooling.versions."1.9"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:299356c05185ce85d015abc04ad34c1c476d77b41e400377aa2aa942dbe7ad23"
+
+[standards.python-tooling.versions."1.10"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:1f397497be8e925d79f46003d7297813a7d02ea7ff0112cf523354e0a4300398"
+
+[standards.python-tooling.versions."1.11"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:8d288645905cbf8954f246e3631d8636353ac590d62eacc70e68ae75e1057fb2"
+
+[standards.python-tooling.versions."1.12"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:7595019e39b209fb700817b0563aa2e5db50d368c3c5042eeb714e234076de5f"
+
+[standards.python-tooling.versions."1.13"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:1bb7b7d11e41fccb6faa658d97130b01c754b36faf69cff508a6908c199e36d8"
+
+[standards.python-tooling.versions."1.14"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:50f96c72d73253d7bd2016a374a3e46e31b6da51bba8a2dd79a56041fe2937db"
+
+[standards.python-tooling.versions."1.15"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:61631defaf36143fa4862fafae82f404a41187cb72b649aae61fc8f6fb8bc985"
+
+[standards.python-tooling.versions."1.16"]
+channel = "retained"
+availability = "consumer"
+payload_digest = "sha256:60d3a68c9973942b7a92f7affcd3fbac553b3c79c31bcd63b723e1186bd3c734"
+
+[standards.python-tooling.versions."1.17"]
+channel = "stable"
+availability = "consumer"
+payload_digest = "sha256:4c5ec078fd033cf3bf14c16f6fbc5b48e58d24ffe03b026b30b1e76b9b0a0950"
+
+[standards.standard-bundle-authoring]
+status = "active"
+available = ["2.0", "2.1", "2.2", "2.3", "2.4", "2.5", "2.6", "2.7"]
+candidates = []
+
+[standards.standard-bundle-authoring.versions."2.0"]
+channel = "internal"
+availability = "internal"
+payload_digest = "sha256:5fec499e321fc4d20ea9ddb50f6dceae1da800dd66d909ebea2dbd23e84597ca"
+
+[standards.standard-bundle-authoring.versions."2.1"]
+channel = "internal"
+availability = "internal"
+payload_digest = "sha256:480d81333159337279a493896478298ba3d46c72ca4e6b09205438435017705b"
+
+[standards.standard-bundle-authoring.versions."2.2"]
+channel = "internal"
+availability = "internal"
+payload_digest = "sha256:538d8afa6760bddd3f4be13b7b001257f028f94df4385a42e3aba5a19559bc83"
+
+[standards.standard-bundle-authoring.versions."2.3"]
+channel = "internal"
+availability = "internal"
+payload_digest = "sha256:dbe940f518534224ccf58956a3ce02660f99be20cf161241308444eddccee7d5"
+
+[standards.standard-bundle-authoring.versions."2.4"]
+channel = "internal"
+availability = "internal"
+payload_digest = "sha256:b2bdf94dffb7c8536debca60fdb4eb557cfcc364e47165a2634dccf002ca099f"
+
+[standards.standard-bundle-authoring.versions."2.5"]
+channel = "internal"
+availability = "internal"
+payload_digest = "sha256:3eb5d86979755372bbe851b06b82235410378cba71c6f1b9dbc7c49557623c4d"
+
+[standards.standard-bundle-authoring.versions."2.6"]
+channel = "internal"
+availability = "internal"
+payload_digest = "sha256:28756752d9a4a7c50240f178fdbc72be7f3f04faa8f8af9eabe5b0ba7b94f9d5"
+
+[standards.standard-bundle-authoring.versions."2.7"]
+channel = "internal"
+availability = "internal"
+payload_digest = "sha256:68c01e7af871f1b15c7cc94227e05961511305f3a75d1456cdc066e009dc17eb"
