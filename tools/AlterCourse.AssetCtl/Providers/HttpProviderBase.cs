@@ -51,7 +51,11 @@ internal abstract class HttpProviderBase(HttpClient httpClient, IReadOnlySet<str
         {
             if (!response.IsSuccessStatusCode)
             {
-                throw Normalize(response.StatusCode, response.Headers.RetryAfter is not null);
+                throw Normalize(
+                    response.StatusCode,
+                    response.Headers.RetryAfter,
+                    context.MaximumRetryAfterDelayMilliseconds
+                );
             }
 
             if (response.Content.Headers.ContentLength > context.MaximumJsonResponseBytes)
@@ -62,14 +66,26 @@ internal abstract class HttpProviderBase(HttpClient httpClient, IReadOnlySet<str
                 );
             }
 
-            byte[] json = await ReadBoundedAsync(
-                    response.Content,
-                    context.MaximumJsonResponseBytes,
-                    timeout.Token,
-                    ProviderErrorCategory.MalformedResponse,
-                    "Provider JSON response exceeded byte limit while streaming."
-                )
-                .ConfigureAwait(false);
+            byte[] json;
+            try
+            {
+                json = await ReadBoundedAsync(
+                        response.Content,
+                        context.MaximumJsonResponseBytes,
+                        ProviderErrorCategory.MalformedResponse,
+                        "Provider JSON response exceeded byte limit while streaming.",
+                        timeout.Token
+                    )
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                throw new ProviderException(
+                    ProviderErrorCategory.Timeout,
+                    "Provider response timed out.",
+                    retryable: true
+                );
+            }
             try
             {
                 return JsonDocument.Parse(json, new JsonDocumentOptions { MaxDepth = 32 });
@@ -131,6 +147,7 @@ internal abstract class HttpProviderBase(HttpClient httpClient, IReadOnlySet<str
     protected async Task<IReadOnlyList<GeneratedCandidate>> ParseImageDataAsync(
         JsonElement root,
         ProviderExecutionContext context,
+        int requestedCandidateCount,
         CancellationToken cancellationToken
     )
     {
@@ -142,24 +159,36 @@ internal abstract class HttpProviderBase(HttpClient httpClient, IReadOnlySet<str
             );
         }
 
-        var candidates = new List<GeneratedCandidate>();
+        ValidateCandidateCount(data, requestedCandidateCount);
+
+        var candidates = new List<GeneratedCandidate>(data.GetArrayLength());
+        long retainedBytes = 0;
         int index = 0;
         foreach (global::System.Text.Json.JsonElement item in data.EnumerateArray())
         {
+            long remainingBytes = context.MaximumDownloadBytes - retainedBytes;
+            if (remainingBytes <= 0)
+            {
+                throw new ProviderException(
+                    ProviderErrorCategory.UnsafeDownload,
+                    "Provider candidates exceed the aggregate byte limit."
+                );
+            }
+
+            GeneratedCandidate candidate;
             if (item.TryGetProperty("b64_json", out JsonElement encoded) && encoded.ValueKind == JsonValueKind.String)
             {
-                candidates.Add(DecodeInlineCandidate(encoded, index++, context.MaximumDownloadBytes));
+                candidate = DecodeInlineCandidate(encoded, index++, remainingBytes);
             }
             else if (item.TryGetProperty("url", out JsonElement urlNode) && urlNode.ValueKind == JsonValueKind.String)
             {
-                candidates.Add(
-                    new GeneratedCandidate(
-                        index++,
-                        await DownloadAsync(urlNode.GetString()!, context, cancellationToken).ConfigureAwait(false),
-                        "image/png",
-                        null,
-                        null
-                    )
+                candidate = new GeneratedCandidate(
+                    index++,
+                    await DownloadAsync(urlNode.GetString()!, context, remainingBytes, cancellationToken)
+                        .ConfigureAwait(false),
+                    "image/png",
+                    null,
+                    null
                 );
             }
             else
@@ -169,6 +198,9 @@ internal abstract class HttpProviderBase(HttpClient httpClient, IReadOnlySet<str
                     "Provider did not return inline image bytes."
                 );
             }
+
+            retainedBytes = checked(retainedBytes + candidate.Bytes.LongLength);
+            candidates.Add(candidate);
         }
 
         return candidates.Count != 0
@@ -176,12 +208,27 @@ internal abstract class HttpProviderBase(HttpClient httpClient, IReadOnlySet<str
             : throw new ProviderException(ProviderErrorCategory.MalformedResponse, "Provider returned no candidates.");
     }
 
+    private static void ValidateCandidateCount(JsonElement data, int requestedCandidateCount)
+    {
+        if (requestedCandidateCount <= 0 || data.GetArrayLength() > requestedCandidateCount)
+        {
+            throw new ProviderException(
+                ProviderErrorCategory.MalformedResponse,
+                "Provider returned more candidates than requested."
+            );
+        }
+    }
+
     private static GeneratedCandidate DecodeInlineCandidate(JsonElement encoded, int index, long maximumBytes)
     {
         try
         {
             string value = encoded.GetString()!;
-            if (Base64.GetMaxDecodedFromUtf8Length(value.Length) > maximumBytes)
+            int maximumDecodedLength = Base64.GetMaxDecodedFromUtf8Length(value.Length);
+            if (
+                maximumDecodedLength > maximumBytes
+                && maximumDecodedLength - Math.Min(2, maximumDecodedLength) > maximumBytes
+            )
             {
                 throw new ProviderException(
                     ProviderErrorCategory.UnsafeDownload,
@@ -189,7 +236,16 @@ internal abstract class HttpProviderBase(HttpClient httpClient, IReadOnlySet<str
                 );
             }
 
-            return new GeneratedCandidate(index, Convert.FromBase64String(value), "image/png", null, null);
+            byte[] bytes = Convert.FromBase64String(value);
+            if (bytes.LongLength > maximumBytes)
+            {
+                throw new ProviderException(
+                    ProviderErrorCategory.UnsafeDownload,
+                    "Provider candidates exceed the aggregate byte limit."
+                );
+            }
+
+            return new GeneratedCandidate(index, bytes, "image/png", null, null);
         }
         catch (FormatException)
         {
@@ -203,6 +259,7 @@ internal abstract class HttpProviderBase(HttpClient httpClient, IReadOnlySet<str
     private async Task<byte[]> DownloadAsync(
         string value,
         ProviderExecutionContext context,
+        long maximumBytes,
         CancellationToken cancellationToken
     )
     {
@@ -214,6 +271,8 @@ internal abstract class HttpProviderBase(HttpClient httpClient, IReadOnlySet<str
             throw new ProviderException(ProviderErrorCategory.UnsafeDownload, "Provider download URL must use HTTPS.");
         }
 
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(context.TimeoutSeconds));
         for (int redirect = 0; redirect <= 5; redirect++)
         {
             if (!context.Provider.AllowedDownloadHosts.Contains(current.Host))
@@ -225,39 +284,89 @@ internal abstract class HttpProviderBase(HttpClient httpClient, IReadOnlySet<str
             }
 
             using var request = new HttpRequestMessage(HttpMethod.Get, current);
-            using global::System.Net.Http.HttpResponseMessage response = await Client
-                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+            using global::System.Net.Http.HttpResponseMessage response = await SendDownloadAsync(
+                    request,
+                    cancellationToken,
+                    timeout.Token
+                )
                 .ConfigureAwait(false);
             if ((int)response.StatusCode is >= 300 and < 400)
             {
-                global::System.Uri location =
-                    response.Headers.Location
-                    ?? throw new ProviderException(
-                        ProviderErrorCategory.UnsafeDownload,
-                        "Provider redirect omitted Location."
-                    );
-                current = location.IsAbsoluteUri ? location : new Uri(current, location);
-                if (!string.Equals(current.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal))
-                {
-                    throw new ProviderException(ProviderErrorCategory.UnsafeDownload, "Provider redirect left HTTPS.");
-                }
-
+                current = ResolveRedirect(current, response);
                 continue;
             }
 
-            ValidateDownloadResponse(response, context.MaximumDownloadBytes);
-            return await ReadBoundedAsync(response.Content, context.MaximumDownloadBytes, cancellationToken)
-                .ConfigureAwait(false);
+            ValidateDownloadResponse(response, maximumBytes, context.MaximumRetryAfterDelayMilliseconds);
+            try
+            {
+                return await ReadBoundedAsync(
+                        response.Content,
+                        maximumBytes,
+                        ProviderErrorCategory.UnsafeDownload,
+                        "Provider download exceeded byte limit while streaming.",
+                        timeout.Token
+                    )
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                throw new ProviderException(
+                    ProviderErrorCategory.Timeout,
+                    "Provider download timed out.",
+                    retryable: true
+                );
+            }
         }
 
         throw new ProviderException(ProviderErrorCategory.UnsafeDownload, "Provider download exceeded redirect limit.");
     }
 
-    private static void ValidateDownloadResponse(HttpResponseMessage response, long maximumBytes)
+    private static Uri ResolveRedirect(Uri current, HttpResponseMessage response)
+    {
+        global::System.Uri location =
+            response.Headers.Location
+            ?? throw new ProviderException(ProviderErrorCategory.UnsafeDownload, "Provider redirect omitted Location.");
+        Uri redirect = location.IsAbsoluteUri ? location : new Uri(current, location);
+        return string.Equals(redirect.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal)
+            ? redirect
+            : throw new ProviderException(ProviderErrorCategory.UnsafeDownload, "Provider redirect left HTTPS.");
+    }
+
+    private async Task<HttpResponseMessage> SendDownloadAsync(
+        HttpRequestMessage request,
+        CancellationToken callerToken,
+        CancellationToken timeoutToken
+    )
+    {
+        try
+        {
+            return await Client
+                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeoutToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!callerToken.IsCancellationRequested)
+        {
+            throw new ProviderException(ProviderErrorCategory.Timeout, "Provider download timed out.", retryable: true);
+        }
+        catch (HttpRequestException exception)
+        {
+            throw new ProviderException(
+                ProviderErrorCategory.TransientNetwork,
+                Redactor.Sanitize(exception.Message),
+                retryable: true
+            );
+        }
+    }
+
+    private static void ValidateDownloadResponse(
+        HttpResponseMessage response,
+        long maximumBytes,
+        int maximumRetryAfterDelayMilliseconds
+    )
     {
         if (!response.IsSuccessStatusCode)
         {
-            throw Normalize(response.StatusCode, response.Headers.RetryAfter is not null);
+            throw Normalize(response.StatusCode, response.Headers.RetryAfter, maximumRetryAfterDelayMilliseconds);
         }
 
         string? mediaType = response.Content.Headers.ContentType?.MediaType;
@@ -278,9 +387,9 @@ internal abstract class HttpProviderBase(HttpClient httpClient, IReadOnlySet<str
     private static async Task<byte[]> ReadBoundedAsync(
         HttpContent content,
         long maximumBytes,
-        CancellationToken cancellationToken,
-        ProviderErrorCategory category = ProviderErrorCategory.UnsafeDownload,
-        string message = "Provider download exceeded byte limit while streaming."
+        ProviderErrorCategory category,
+        string message,
+        CancellationToken cancellationToken
     )
     {
         Stream input = await content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
@@ -303,8 +412,13 @@ internal abstract class HttpProviderBase(HttpClient httpClient, IReadOnlySet<str
         return output.ToArray();
     }
 
-    protected static ProviderException Normalize(HttpStatusCode status, bool hasRetryAfter) =>
-        status switch
+    protected static ProviderException Normalize(
+        HttpStatusCode status,
+        RetryConditionHeaderValue? retryAfter,
+        int maximumRetryAfterDelayMilliseconds
+    )
+    {
+        ProviderException exception = status switch
         {
             HttpStatusCode.BadRequest => new ProviderException(
                 ProviderErrorCategory.InvalidRequest,
@@ -325,7 +439,9 @@ internal abstract class HttpProviderBase(HttpClient httpClient, IReadOnlySet<str
             ),
             HttpStatusCode.TooManyRequests => new ProviderException(
                 ProviderErrorCategory.RateLimit,
-                hasRetryAfter ? "Provider rate limit included Retry-After." : "Provider rate limited the request.",
+                retryAfter is not null
+                    ? "Provider rate limit included Retry-After."
+                    : "Provider rate limited the request.",
                 retryable: true
             ),
             >= HttpStatusCode.InternalServerError => new ProviderException(
@@ -335,4 +451,30 @@ internal abstract class HttpProviderBase(HttpClient httpClient, IReadOnlySet<str
             ),
             _ => new ProviderException(ProviderErrorCategory.InvalidRequest, $"Provider returned HTTP {(int)status}."),
         };
+
+        TimeSpan? delay = NormalizeRetryAfter(retryAfter, maximumRetryAfterDelayMilliseconds);
+        if (exception.Retryable && delay is not null)
+        {
+            exception.Data[ProviderContracts.RetryAfterDelayDataKey] = delay.Value;
+        }
+
+        return exception;
+    }
+
+    private static TimeSpan? NormalizeRetryAfter(
+        RetryConditionHeaderValue? retryAfter,
+        int maximumRetryAfterDelayMilliseconds
+    )
+    {
+        if (retryAfter is null)
+        {
+            return null;
+        }
+
+        TimeSpan requested = retryAfter.Delta ?? retryAfter.Date - DateTimeOffset.UtcNow ?? TimeSpan.Zero;
+        var maximum = TimeSpan.FromMilliseconds(Math.Max(0, maximumRetryAfterDelayMilliseconds));
+        return requested <= TimeSpan.Zero ? TimeSpan.Zero
+            : requested > maximum ? maximum
+            : requested;
+    }
 }

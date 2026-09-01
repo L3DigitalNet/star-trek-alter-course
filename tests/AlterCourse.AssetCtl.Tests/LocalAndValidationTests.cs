@@ -62,6 +62,43 @@ public sealed class LocalAndValidationTests
         Assert.Contains(expected, string.Join("; ", result.Findings), StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>Rejects an external URL hidden after a safe local fragment in the same SVG value.</summary>
+    [Fact]
+    public void SvgRejectsExternalResourceAfterLocalFragment()
+    {
+        const string svg =
+            "<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'><path fill=\"url(#safe) url('https://untrusted.example/paint')\" d='M0 0h64v64z'/></svg>";
+
+        global::AlterCourse.AssetCtl.Domain.DomainModels.MechanicalValidationResult result =
+            MechanicalValidator.Validate(
+                TestData.Request(AssetFormat.Svg),
+                Encoding.UTF8.GetBytes(svg),
+                1_000_000,
+                1_000_000
+            );
+
+        Assert.False(result.Passed);
+        Assert.Contains("fill", string.Join("; ", result.Findings), StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Preserves local fragment URL references used by safe SVG gradients.</summary>
+    [Fact]
+    public void SvgAllowsLocalFragmentResources()
+    {
+        const string svg =
+            "<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'><defs><linearGradient id='paint'><stop offset='0' stop-color='#fff'/><stop offset='1' stop-color='#000'/></linearGradient></defs><rect width='64' height='64' fill='url(#paint)'/></svg>";
+
+        global::AlterCourse.AssetCtl.Domain.DomainModels.MechanicalValidationResult result =
+            MechanicalValidator.Validate(
+                TestData.Request(AssetFormat.Svg),
+                Encoding.UTF8.GetBytes(svg),
+                1_000_000,
+                1_000_000
+            );
+
+        Assert.True(result.Passed, string.Join("; ", result.Findings));
+    }
+
     /// <summary>Rejects SVG document types before entity expansion can occur.</summary>
     [Fact]
     public void SvgRejectsDtdBeforeEntityExpansion()

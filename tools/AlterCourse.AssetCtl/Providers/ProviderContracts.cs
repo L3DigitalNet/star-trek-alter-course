@@ -9,7 +9,8 @@ internal static class ProviderContracts
         int TimeoutSeconds,
         long MaximumDownloadBytes,
         long MaximumJsonResponseBytes,
-        string RunId
+        string RunId,
+        int MaximumRetryAfterDelayMilliseconds = 30_000
     );
 
     public sealed record NormalizedGenerationRequest(
@@ -24,8 +25,16 @@ internal static class ProviderContracts
         byte[] Original,
         string MediaType,
         IReadOnlyDictionary<int, byte[]> TargetPreviews,
-        string RubricJsonSchema
+        string RubricJsonSchema,
+        string StyleSummary = "",
+        IReadOnlyList<string>? StyleRequired = null,
+        IReadOnlyList<string>? StyleProhibited = null
     );
+
+    internal const string RetryAfterDelayDataKey = "AlterCourse.AssetCtl.RetryAfterDelay";
+
+    public static TimeSpan? RetryAfterDelay(ProviderException exception) =>
+        exception.Data[RetryAfterDelayDataKey] is TimeSpan delay ? delay : null;
 
     public interface IAssetGenerator : IAdapterDescriptor
     {

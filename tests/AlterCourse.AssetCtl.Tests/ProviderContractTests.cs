@@ -109,6 +109,62 @@ public sealed class ProviderContractTests
         Assert.DoesNotContain(credential, exception.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>Preserves a bounded Retry-After delay for the routing layer without retaining response data.</summary>
+    [Theory]
+    [InlineData("12", 5_000)]
+    [InlineData("1", 1_000)]
+    public async Task RetryAfterDelayIsParsedAndCapped(string retryAfter, int expectedMilliseconds)
+    {
+        HttpResponseMessage response = Json(HttpStatusCode.TooManyRequests, "{}");
+        response.Headers.TryAddWithoutValidation("Retry-After", retryAfter);
+        var adapter = new RecraftImageAdapter(new HttpClient(new RecordingHandler(_ => response)));
+        ProviderExecutionContext context = TestData.Context(adapter.AdapterId) with
+        {
+            MaximumRetryAfterDelayMilliseconds = 5_000,
+        };
+
+        ProviderException exception = await Assert.ThrowsAsync<ProviderException>(() =>
+            adapter.GenerateAsync(
+                context,
+                new NormalizedGenerationRequest(TestData.Request(), "prompt", 1, []),
+                CancellationToken.None
+            )
+        );
+
+        Assert.Equal(
+            TimeSpan.FromMilliseconds(expectedMilliseconds),
+            AlterCourse.AssetCtl.Providers.ProviderContracts.RetryAfterDelay(exception)
+        );
+    }
+
+    /// <summary>Parses an HTTP-date Retry-After value and caps it to the configured retry ceiling.</summary>
+    [Fact]
+    public async Task RetryAfterDateIsParsedAndCapped()
+    {
+        HttpResponseMessage response = Json(HttpStatusCode.ServiceUnavailable, "{}");
+        response.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(
+            DateTimeOffset.UtcNow.AddMinutes(1)
+        );
+        var adapter = new RecraftImageAdapter(new HttpClient(new RecordingHandler(_ => response)));
+        ProviderExecutionContext context = TestData.Context(adapter.AdapterId) with
+        {
+            MaximumRetryAfterDelayMilliseconds = 5_000,
+        };
+
+        ProviderException exception = await Assert.ThrowsAsync<ProviderException>(() =>
+            adapter.GenerateAsync(
+                context,
+                new NormalizedGenerationRequest(TestData.Request(), "prompt", 1, []),
+                CancellationToken.None
+            )
+        );
+
+        Assert.Equal(
+            TimeSpan.FromMilliseconds(5_000),
+            AlterCourse.AssetCtl.Providers.ProviderContracts.RetryAfterDelay(exception)
+        );
+    }
+
     /// <summary>Accepts only schema-valid structured semantic review output.</summary>
     [Fact]
     public async Task SemanticReviewerRequiresSchemaValidStructuredResult()
@@ -133,6 +189,42 @@ public sealed class ProviderContractTests
         Assert.Equal(0.85, result.OverallScore);
         Assert.False(result.HasHardFailure);
         Assert.Equal("/v1/responses", handler.Request!.RequestUri!.AbsolutePath);
+    }
+
+    /// <summary>Supplies resolved style constraints and every target-size preview to structured vision review.</summary>
+    [Fact]
+    public async Task SemanticReviewerSendsResolvedStyleAndTargetPreviews()
+    {
+        const string review =
+            "{\"matches_subject\":true,\"required_constraints_satisfied\":true,\"prohibited_content_absent\":true,\"readable_at_target_sizes\":true,\"style_adherence\":0.9,\"semantic_clarity\":0.8,\"visual_defects\":[],\"unrequested_text_detected\":false,\"logo_or_watermark_detected\":false,\"overall_score\":0.85,\"decision\":\"pass\"}";
+        var handler = new RecordingHandler(_ =>
+            Json(HttpStatusCode.OK, JsonSerializer.Serialize(new { output_text = review }))
+        );
+        using var client = new HttpClient(handler);
+        var reviewer = new OpenAiVisionReviewer(client);
+        ProviderExecutionContext context = TestData.Context(reviewer.AdapterId);
+        await reviewer.ReviewAsync(
+            context,
+            new SemanticReviewRequest(
+                TestData.Request(),
+                [1, 2, 3],
+                "image/png",
+                new Dictionary<int, byte[]> { [16] = [4, 5], [24] = [6, 7] },
+                SemanticReviewSchema.Json,
+                "resolved LCARS line language",
+                ["style-required"],
+                ["style-prohibited"]
+            ),
+            CancellationToken.None
+        );
+
+        Assert.Contains("resolved LCARS line language", handler.Body, StringComparison.Ordinal);
+        Assert.Contains("style-required", handler.Body, StringComparison.Ordinal);
+        Assert.Contains("style-prohibited", handler.Body, StringComparison.Ordinal);
+        Assert.Contains("Target-size preview: 16x16 pixels", handler.Body, StringComparison.Ordinal);
+        Assert.Contains("Target-size preview: 24x24 pixels", handler.Body, StringComparison.Ordinal);
+        Assert.Equal(3, Occurrences(handler.Body, "\"type\":\"input_image\""));
+        Assert.DoesNotContain(context.Credential, handler.Body, StringComparison.Ordinal);
     }
 
     /// <summary>Removes credentials and signed query values from diagnostic text.</summary>
@@ -223,6 +315,19 @@ public sealed class ProviderContractTests
 
     private static HttpResponseMessage Json(HttpStatusCode status, string json) =>
         new(status) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
+
+    private static int Occurrences(string value, string pattern)
+    {
+        int count = 0;
+        int offset = 0;
+        while ((offset = value.IndexOf(pattern, offset, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            offset += pattern.Length;
+        }
+
+        return count;
+    }
 
     private sealed class RecordingHandler(Func<HttpRequestMessage, HttpResponseMessage> response) : HttpMessageHandler
     {

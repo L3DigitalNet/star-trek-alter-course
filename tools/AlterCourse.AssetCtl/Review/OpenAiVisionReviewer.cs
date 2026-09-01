@@ -57,8 +57,10 @@ internal sealed class OpenAiVisionReviewer(HttpClient client) : HttpProviderBase
     )
     {
         ValidateOptions(context.Model.Options);
+        IEnumerable<string> required = (request.StyleRequired ?? []).Concat(request.Request.Required);
+        IEnumerable<string> prohibited = (request.StyleProhibited ?? []).Concat(request.Request.Prohibited);
         string prompt =
-            $"Review asset '{request.Request.Id}'. Purpose: {request.Request.Purpose}. Required: {string.Join("; ", request.Request.Required)}. Prohibited: {string.Join("; ", request.Request.Prohibited)}. Return only the required structured rubric.";
+            $"Review asset '{request.Request.Id}'. Purpose: {request.Request.Purpose}. Resolved style: {request.StyleSummary}. Required: {string.Join("; ", required)}. Prohibited: {string.Join("; ", prohibited)}. Return only the required structured rubric.";
         using HttpRequestMessage message = CreateRequest(context, request, prompt);
         using global::System.Text.Json.JsonDocument response = await SendJsonAsync(message, context, cancellationToken)
             .ConfigureAwait(false);
@@ -90,25 +92,28 @@ internal sealed class OpenAiVisionReviewer(HttpClient client) : HttpProviderBase
         string prompt
     )
     {
+        var content = new List<object>
+        {
+            new { type = "input_text", text = prompt },
+            new
+            {
+                type = "input_image",
+                image_url = $"data:{request.MediaType};base64,{Convert.ToBase64String(request.Original)}",
+            },
+        };
+        foreach ((int size, byte[] preview) in request.TargetPreviews.OrderBy(pair => pair.Key))
+        {
+            content.Add(new { type = "input_text", text = $"Target-size preview: {size}x{size} pixels" });
+            content.Add(
+                new { type = "input_image", image_url = $"data:image/png;base64,{Convert.ToBase64String(preview)}" }
+            );
+        }
+
+        using var schema = JsonDocument.Parse(request.RubricJsonSchema);
         var payload = new
         {
             model = context.Model.VendorModel,
-            input = new object[]
-            {
-                new
-                {
-                    role = "user",
-                    content = new object[]
-                    {
-                        new { type = "input_text", text = prompt },
-                        new
-                        {
-                            type = "input_image",
-                            image_url = $"data:{request.MediaType};base64,{Convert.ToBase64String(request.Original)}",
-                        },
-                    },
-                },
-            },
+            input = new object[] { new { role = "user", content } },
             text = new
             {
                 format = new
@@ -116,7 +121,7 @@ internal sealed class OpenAiVisionReviewer(HttpClient client) : HttpProviderBase
                     type = "json_schema",
                     name = "asset_review",
                     strict = true,
-                    schema = JsonDocument.Parse(request.RubricJsonSchema).RootElement,
+                    schema = schema.RootElement.Clone(),
                 },
             },
         };

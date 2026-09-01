@@ -63,7 +63,8 @@ internal static class ProviderAdapters
                 )
                 .ConfigureAwait(false);
             global::System.Collections.Generic.IReadOnlyList<global::AlterCourse.AssetCtl.Domain.DomainModels.GeneratedCandidate> candidates =
-                await ParseImageDataAsync(response.RootElement, context, cancellationToken).ConfigureAwait(false);
+                await ParseImageDataAsync(response.RootElement, context, request.CandidateCount, cancellationToken)
+                    .ConfigureAwait(false);
             return new GenerationBatchResult(candidates, RequestId(response.RootElement), null);
         }
 
@@ -167,7 +168,8 @@ internal static class ProviderAdapters
                 )
                 .ConfigureAwait(false);
             return new GenerationBatchResult(
-                await ParseImageDataAsync(response.RootElement, context, cancellationToken).ConfigureAwait(false),
+                await ParseImageDataAsync(response.RootElement, context, request.CandidateCount, cancellationToken)
+                    .ConfigureAwait(false),
                 RecraftImageAdapter.RequestId(response.RootElement),
                 null
             );
@@ -234,7 +236,8 @@ internal static class ProviderAdapters
                 )
                 .ConfigureAwait(false);
             return new GenerationBatchResult(
-                await ParseImageDataAsync(response.RootElement, context, cancellationToken).ConfigureAwait(false),
+                await ParseImageDataAsync(response.RootElement, context, request.CandidateCount, cancellationToken)
+                    .ConfigureAwait(false),
                 RecraftImageAdapter.RequestId(response.RootElement),
                 null
             );

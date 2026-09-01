@@ -10,6 +10,8 @@ namespace AlterCourse.AssetCtl.Validation;
 internal static class MechanicalValidator
 {
     private static readonly XNamespace SvgNamespace = "http://www.w3.org/2000/svg";
+    private static readonly System.Buffers.SearchValues<char> InvalidLocalFragmentCharacters =
+        System.Buffers.SearchValues.Create(" \t\r\n'\"()");
     private static readonly HashSet<string> AllowedSvgElements = new(StringComparer.Ordinal)
     {
         "svg",
@@ -263,18 +265,38 @@ internal static class MechanicalValidator
     {
         if (name is "href" or "src")
         {
-            return !value.StartsWith('#');
+            return !IsLocalFragment(value);
         }
 
-        int urlStart = value.IndexOf("url(", StringComparison.OrdinalIgnoreCase);
-        if (urlStart >= 0)
+        int searchFrom = 0;
+        while (value.IndexOf("url(", searchFrom, StringComparison.OrdinalIgnoreCase) is int urlStart && urlStart >= 0)
         {
-            string target = value[(urlStart + 4)..].TrimStart(' ', '\'', '"');
-            return !target.StartsWith('#');
+            int targetStart = urlStart + 4;
+            int targetEnd = value.IndexOf(')', targetStart);
+            if (targetEnd < 0)
+            {
+                return true;
+            }
+
+            string target = value[targetStart..targetEnd].Trim();
+            if (target.Length >= 2 && target[0] is '\'' or '"' && target[^1] == target[0])
+            {
+                target = target[1..^1].Trim();
+            }
+
+            if (!IsLocalFragment(target))
+            {
+                return true;
+            }
+
+            searchFrom = targetEnd + 1;
         }
 
         return Uri.TryCreate(value, UriKind.Absolute, out _);
     }
+
+    private static bool IsLocalFragment(string value) =>
+        value.Length > 1 && value[0] == '#' && value.AsSpan(1).IndexOfAny(InvalidLocalFragmentCharacters) < 0;
 
     private static Dictionary<int, byte[]> RenderSvgPreviews(SKSvg svg, IReadOnlyList<int> sizes, int width, int height)
     {
