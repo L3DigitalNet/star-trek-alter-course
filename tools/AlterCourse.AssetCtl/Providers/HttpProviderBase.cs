@@ -2,7 +2,6 @@ using System.Buffers.Text;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 
 namespace AlterCourse.AssetCtl.Providers;
 
@@ -12,7 +11,6 @@ internal abstract class HttpProviderBase(HttpClient httpClient, IReadOnlySet<str
     {
         MaxDepth = 32,
         PropertyNameCaseInsensitive = false,
-        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
     };
 
     public static class Redactor

@@ -15,13 +15,14 @@ internal sealed class AssetRouter(AdapterRegistry adapters)
         global::System.Collections.Generic.IReadOnlyList<global::AlterCourse.AssetCtl.Domain.DomainModels.AssetCapability> required =
             RequiredCapabilities(request);
         List<PlannedTarget> targets = BuildTargets(configuration, request, required, tier);
+        PlannedTarget? reviewer = string.Equals(tier.SemanticReview, "disabled", StringComparison.Ordinal)
+            ? null
+            : FindReviewer(configuration, request.Lifecycle);
+        targets = KeepAffordablePrefixWhenFreeFallbackExists(configuration, targets, reviewer, tier);
 
         global::AlterCourse.AssetCtl.Domain.DomainModels.PlannedTarget? selected = targets.FirstOrDefault(target =>
             target.Eligible
         );
-        PlannedTarget? reviewer = string.Equals(tier.SemanticReview, "disabled", StringComparison.Ordinal)
-            ? null
-            : FindReviewer(configuration, request.Lifecycle);
 
         if (string.Equals(tier.SemanticReview, "required", StringComparison.Ordinal) && reviewer is null)
         {
@@ -38,7 +39,7 @@ internal sealed class AssetRouter(AdapterRegistry adapters)
             tier.Candidates,
             tier.AttemptsPerRoute,
             estimatedMaximumCost,
-            string.Equals(selected?.AdapterId, "local-placeholder", StringComparison.Ordinal)
+            selected is not null && adapters.Descriptors[selected.AdapterId].IsLocalFallback
         );
     }
 
@@ -50,15 +51,105 @@ internal sealed class AssetRouter(AdapterRegistry adapters)
     )
     {
         List<PlannedTarget> targets = [];
-        foreach (RouteDefinition route in configuration.Routes.Where(route => Matches(route, request)))
+        foreach (RouteDefinition route in configuration.Routes.Where(route => Matches(route, request, required)))
         {
             foreach (RouteTarget target in RouteTargets(configuration, route))
             {
-                targets.Add(Evaluate(configuration, route, target, required, tier.Candidates, request.Lifecycle));
+                targets.Add(
+                    Evaluate(configuration, route, target, required, tier.Candidates, request.Lifecycle, request.Output)
+                );
             }
         }
 
         return targets;
+    }
+
+    private List<PlannedTarget> KeepAffordablePrefixWhenFreeFallbackExists(
+        EffectiveConfiguration configuration,
+        List<PlannedTarget> targets,
+        PlannedTarget? reviewer,
+        QualityTier tier
+    )
+    {
+        bool freeFallback = targets.Any(target =>
+            target.Eligible
+            && target.EstimatedMaximumCost == 0
+            && adapters.Descriptors[target.AdapterId].IsLocalFallback
+        );
+        if (!freeFallback)
+        {
+            return targets.ToList();
+        }
+
+        decimal reserved = ReviewEstimate(configuration, reviewer, tier) ?? 0;
+        var result = new List<PlannedTarget>(targets.Count);
+        foreach (PlannedTarget target in targets)
+        {
+            decimal? attemptCost = AttemptCost(configuration, target, tier);
+            if (
+                target.Eligible
+                && attemptCost is > 0
+                && (
+                    reserved + attemptCost > configuration.Spending.PerAssetUsd
+                    || reserved + attemptCost > configuration.Spending.PerRunUsd
+                )
+            )
+            {
+                result.Add(
+                    target with
+                    {
+                        Eligible = false,
+                        RejectionReasons = target.RejectionReasons.Append("aggregate-over-budget").ToArray(),
+                    }
+                );
+                continue;
+            }
+
+            result.Add(target);
+            if (target.Eligible && attemptCost is not null)
+            {
+                reserved += attemptCost.Value;
+            }
+        }
+
+        return result;
+    }
+
+    private static decimal? AttemptCost(EffectiveConfiguration configuration, PlannedTarget target, QualityTier tier)
+    {
+        if (target.EstimatedMaximumCost is null)
+        {
+            return null;
+        }
+
+        RouteDefinition route = configuration.Routes.Single(route =>
+            string.Equals(route.Id, target.RouteId, StringComparison.Ordinal)
+        );
+        int attempts = route.RetryPolicy?.MaximumAttemptsPerTarget ?? tier.AttemptsPerRoute;
+        return target.EstimatedMaximumCost.Value * attempts;
+    }
+
+    private static decimal? ReviewEstimate(
+        EffectiveConfiguration configuration,
+        PlannedTarget? reviewer,
+        QualityTier tier
+    )
+    {
+        if (reviewer is null || tier.ReviewPolicy is SemanticReviewPolicy.Disabled)
+        {
+            return 0;
+        }
+
+        if (reviewer.EstimatedMaximumCost is null)
+        {
+            return null;
+        }
+
+        RouteDefinition route = configuration.ReviewRoutes.Single(value =>
+            string.Equals(value.Id, reviewer.RouteId, StringComparison.Ordinal)
+        );
+        int attempts = route.RetryPolicy?.MaximumAttemptsPerTarget ?? 1;
+        return reviewer.EstimatedMaximumCost.Value * tier.Candidates * attempts;
     }
 
     private static decimal? EstimateMaximumCost(
@@ -122,7 +213,8 @@ internal sealed class AssetRouter(AdapterRegistry adapters)
                     target,
                     [AssetCapability.ReviewSemantic],
                     1,
-                    lifecycle
+                    lifecycle,
+                    null
                 );
                 if (evaluated.Eligible)
                 {
@@ -173,7 +265,8 @@ internal sealed class AssetRouter(AdapterRegistry adapters)
         RouteTarget target,
         IReadOnlyList<AssetCapability> required,
         int candidates,
-        AssetLifecycle lifecycle
+        AssetLifecycle lifecycle,
+        OutputContract? output
     )
     {
         global::AlterCourse.AssetCtl.Domain.DomainModels.ProviderInstance provider = configuration.Providers[
@@ -183,9 +276,14 @@ internal sealed class AssetRouter(AdapterRegistry adapters)
         global::AlterCourse.AssetCtl.Configuration.ConfigurationTypes.IAdapterDescriptor descriptor =
             adapters.Descriptors[provider.AdapterId];
         List<string> reasons = [];
-        AddAvailabilityReasons(configuration, provider, reasons);
+        AddAvailabilityReasons(configuration, provider, descriptor, lifecycle, reasons);
         AddCapabilityReasons(required, model, descriptor, reasons);
         descriptor.ValidateOptions(model.Options);
+        string? outputRejection = descriptor.OutputContractRejection(model, output);
+        if (outputRejection is not null)
+        {
+            reasons.Add($"output-contract-unsupported:{outputRejection}");
+        }
         decimal? estimate = model.EstimatedCostPerOutput * candidates;
         AddPolicyReasons(configuration, lifecycle, estimate, reasons);
 
@@ -196,19 +294,32 @@ internal sealed class AssetRouter(AdapterRegistry adapters)
             provider.AdapterId,
             reasons.Count == 0,
             reasons,
-            estimate
+            estimate,
+            model.PricingBasis
         );
     }
 
     private static void AddAvailabilityReasons(
         EffectiveConfiguration configuration,
         ProviderInstance provider,
+        IAdapterDescriptor descriptor,
+        AssetLifecycle lifecycle,
         List<string> reasons
     )
     {
         if (!provider.Enabled)
         {
             reasons.Add("provider-disabled");
+        }
+
+        if (provider.AllowedLifecycles?.Contains(lifecycle) == false)
+        {
+            reasons.Add("lifecycle-not-allowed");
+        }
+
+        if (descriptor.IsLocalFallback && !configuration.Policy.LocalPlaceholderFallback)
+        {
+            reasons.Add("local-fallback-disabled");
         }
 
         if (provider.Endpoint is not null && !configuration.Policy.ExternalGenerationEnabled)
@@ -262,15 +373,19 @@ internal sealed class AssetRouter(AdapterRegistry adapters)
             reasons.Add("over-budget");
         }
 
-        if (lifecycle is AssetLifecycle.Approved or AssetLifecycle.Deprecated)
+        if (
+            lifecycle is AssetLifecycle.Deprecated
+            || (lifecycle is AssetLifecycle.Approved && configuration.Policy.ProtectApprovedAssets)
+        )
         {
             reasons.Add("protected-lifecycle");
         }
     }
 
-    private static bool Matches(RouteDefinition route, AssetRequest request) =>
+    private static bool Matches(RouteDefinition route, AssetRequest request, IReadOnlyList<AssetCapability> required) =>
         (route.Lifecycle is null || route.Lifecycle == request.Lifecycle)
-        && (route.Format is null || route.Format == request.Output.Format);
+        && (route.Format is null || route.Format == request.Output.Format)
+        && required.Contains(route.Capability);
 
     private static List<AssetCapability> RequiredCapabilities(AssetRequest request)
     {

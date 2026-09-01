@@ -219,7 +219,8 @@ internal static class DomainModels
         Uri? Endpoint,
         string? CredentialEnvironmentVariable,
         IReadOnlySet<string> AllowedDownloadHosts,
-        IReadOnlyDictionary<string, ModelProfile> Models
+        IReadOnlyDictionary<string, ModelProfile> Models,
+        IReadOnlySet<AssetLifecycle>? AllowedLifecycles = null
     );
 
     public sealed record RouteTarget(string ProviderId, string ModelProfileId);
@@ -288,7 +289,8 @@ internal static class DomainModels
         string AdapterId,
         bool Eligible,
         IReadOnlyList<string> RejectionReasons,
-        decimal? EstimatedMaximumCost
+        decimal? EstimatedMaximumCost,
+        string EstimateBasis = "fixed-output"
     );
 
     public sealed record GenerationPlan(

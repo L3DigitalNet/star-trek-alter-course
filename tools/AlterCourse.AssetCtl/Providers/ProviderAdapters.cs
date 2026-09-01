@@ -12,8 +12,6 @@ internal static class ProviderAdapters
         {
             AssetCapability.RasterGenerate,
             AssetCapability.VectorGenerate,
-            AssetCapability.ImageEdit,
-            AssetCapability.ImageReferenceInput,
             AssetCapability.ImageTransparentOutput,
             AssetCapability.ImageBackgroundRemove,
             AssetCapability.ImageVectorize,
@@ -33,7 +31,10 @@ internal static class ProviderAdapters
         public IReadOnlySet<string> AllowedEndpointHosts => EndpointHosts;
 
         public void ValidateOptions(IReadOnlyDictionary<string, string> options) =>
-            ValidateKnown(options, "style", "substyle", "response_format");
+            ValidateKnown(options, "style", "substyle", "response_format", "supported_sizes");
+
+        public string? OutputContractRejection(ModelProfile model, OutputContract? output) =>
+            ExactSizeRejection(model, output);
 
         public async Task<GenerationBatchResult> GenerateAsync(
             ProviderExecutionContext context,
@@ -42,6 +43,15 @@ internal static class ProviderAdapters
         )
         {
             ValidateOptions(context.Model.Options);
+            if (request.References.Count != 0)
+            {
+                throw new ProviderException(
+                    ProviderErrorCategory.UnsupportedOutput,
+                    "Recraft generation does not accept reference inputs."
+                );
+            }
+
+            RequireExactSize(context.Model, request.Request.Output);
             global::System.Uri endpoint = Endpoint(context.Provider.Endpoint!, "images/generations");
             using var message = new HttpRequestMessage(HttpMethod.Post, endpoint)
             {
@@ -51,6 +61,7 @@ internal static class ProviderAdapters
                         model = context.Model.VendorModel,
                         prompt = request.Prompt,
                         n = request.CandidateCount,
+                        size = ExactSize(request.Request.Output),
                         response_format = "b64_json",
                     }
                 ),
@@ -84,6 +95,42 @@ internal static class ProviderAdapters
         }
 
         internal static Uri Endpoint(Uri endpoint, string path) => new(endpoint.AbsoluteUri.TrimEnd('/') + "/" + path);
+
+        internal static string ExactSize(OutputContract output) => $"{output.Width}x{output.Height}";
+
+        internal static string? ExactSizeRejection(ModelProfile model, OutputContract? output)
+        {
+            if (output is null)
+            {
+                return null;
+            }
+
+            string requested = ExactSize(output);
+            if (
+                !model.Options.TryGetValue("supported_sizes", out string? configured)
+                || string.Equals(configured, "none", StringComparison.Ordinal)
+                || !configured
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Contains(requested, StringComparer.Ordinal)
+            )
+            {
+                return requested;
+            }
+
+            return null;
+        }
+
+        internal static void RequireExactSize(ModelProfile model, OutputContract output)
+        {
+            string? rejection = ExactSizeRejection(model, output);
+            if (rejection is not null)
+            {
+                throw new ProviderException(
+                    ProviderErrorCategory.UnsupportedOutput,
+                    $"Provider cannot guarantee exact output dimensions {rejection}."
+                );
+            }
+        }
     }
 
     public sealed class OpenAiImageAdapter(HttpClient client) : HttpProviderBase(client, EndpointHosts), IAssetGenerator
@@ -110,7 +157,16 @@ internal static class ProviderAdapters
         public IReadOnlySet<string> AllowedEndpointHosts => EndpointHosts;
 
         public void ValidateOptions(IReadOnlyDictionary<string, string> options) =>
-            RecraftImageAdapter.ValidateKnown(options, "quality", "background", "output_compression");
+            RecraftImageAdapter.ValidateKnown(
+                options,
+                "quality",
+                "background",
+                "output_compression",
+                "supported_sizes"
+            );
+
+        public string? OutputContractRejection(ModelProfile model, OutputContract? output) =>
+            RecraftImageAdapter.ExactSizeRejection(model, output);
 
         public async Task<GenerationBatchResult> GenerateAsync(
             ProviderExecutionContext context,
@@ -119,6 +175,7 @@ internal static class ProviderAdapters
         )
         {
             ValidateOptions(context.Model.Options);
+            RecraftImageAdapter.RequireExactSize(context.Model, request.Request.Output);
             bool editing = request.References.Count != 0;
             using var message = new HttpRequestMessage(
                 HttpMethod.Post,
@@ -138,6 +195,7 @@ internal static class ProviderAdapters
                     ),
                     "n"
                 );
+                multipart.Add(new StringContent(RecraftImageAdapter.ExactSize(request.Request.Output)), "size");
                 foreach ((string FileName, string MediaType, byte[] Bytes) reference in request.References)
                 {
                     var part = new ByteArrayContent(reference.Bytes);
@@ -155,6 +213,7 @@ internal static class ProviderAdapters
                         model = context.Model.VendorModel,
                         prompt = request.Prompt,
                         n = request.CandidateCount,
+                        size = RecraftImageAdapter.ExactSize(request.Request.Output),
                         output_format = "png",
                     }
                 );
@@ -197,7 +256,10 @@ internal static class ProviderAdapters
         public IReadOnlySet<string> AllowedEndpointHosts => EndpointHosts;
 
         public void ValidateOptions(IReadOnlyDictionary<string, string> options) =>
-            RecraftImageAdapter.ValidateKnown(options, "aspect_ratio", "resolution");
+            RecraftImageAdapter.ValidateKnown(options, "aspect_ratio", "resolution", "supported_sizes");
+
+        public string? OutputContractRejection(ModelProfile model, OutputContract? output) =>
+            RecraftImageAdapter.ExactSizeRejection(model, output);
 
         public async Task<GenerationBatchResult> GenerateAsync(
             ProviderExecutionContext context,
@@ -206,12 +268,14 @@ internal static class ProviderAdapters
         )
         {
             ValidateOptions(context.Model.Options);
+            RecraftImageAdapter.RequireExactSize(context.Model, request.Request.Output);
             Dictionary<string, object?> payload = new(4, StringComparer.Ordinal)
             {
                 ["model"] = context.Model.VendorModel,
                 ["prompt"] = request.Prompt,
                 ["n"] = request.CandidateCount,
                 ["response_format"] = "b64_json",
+                ["aspect_ratio"] = AspectRatio(request.Request.Output),
             };
             if (request.References.Count != 0)
             {
@@ -238,6 +302,22 @@ internal static class ProviderAdapters
                 ProviderRequestIdPolicy.Sanitize(response.Id, context.Credential),
                 null
             );
+        }
+
+        private static string AspectRatio(OutputContract output)
+        {
+            int divisor = GreatestCommonDivisor(output.Width, output.Height);
+            return $"{output.Width / divisor}:{output.Height / divisor}";
+        }
+
+        private static int GreatestCommonDivisor(int left, int right)
+        {
+            while (right != 0)
+            {
+                (left, right) = (right, left % right);
+            }
+
+            return left;
         }
     }
 }

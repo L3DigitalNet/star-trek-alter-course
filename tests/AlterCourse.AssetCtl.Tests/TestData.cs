@@ -41,14 +41,10 @@ internal static class TestData
             AssetCapability.ReviewSemantic,
             AssetCapability.ReviewReferenceComparison,
         };
-        var profile = new ModelProfile(
-            "profile",
-            model,
-            capabilities,
-            0.01m,
-            "fixed-output",
-            new Dictionary<string, string>(StringComparer.Ordinal)
-        );
+        IReadOnlyDictionary<string, string> options = adapter is "openai-vision-review" or "local-placeholder"
+            ? new Dictionary<string, string>(StringComparer.Ordinal)
+            : new Dictionary<string, string>(StringComparer.Ordinal) { ["supported_sizes"] = "64x64" };
+        var profile = new ModelProfile("profile", model, capabilities, 0.01m, "fixed-output", options);
         var provider = new ProviderInstance(
             "arbitrary-instance",
             adapter,

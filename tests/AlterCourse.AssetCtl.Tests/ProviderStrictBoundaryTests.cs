@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using AlterCourse.AssetCtl.Generation;
 using AlterCourse.AssetCtl.Review;
 using Microsoft.Extensions.Logging;
 
@@ -12,24 +13,27 @@ public sealed class ProviderStrictBoundaryTests
     private static readonly Action<Microsoft.Extensions.Logging.ILogger, int, Exception?> LogAttempt =
         LoggerMessage.Define<int>(LogLevel.Warning, new EventId(1, "ProviderAttempt"), "Provider attempt {Attempt}");
 
-    /// <summary>Rejects unknown provider success fields for every image adapter.</summary>
+    /// <summary>Accepts documented response metadata while keeping required image fields strict.</summary>
     [Theory]
     [InlineData("recraft")]
     [InlineData("openai")]
     [InlineData("xai")]
-    public async Task ImageAdaptersRejectUnknownSuccessShape(string kind)
+    public async Task ImageAdaptersAcceptAdditionalSuccessMetadata(string kind)
     {
-        IAssetGenerator adapter = CreateAdapter(kind, "{\"data\":[],\"unexpected\":true}");
-
-        ProviderException exception = await Assert.ThrowsAsync<ProviderException>(() =>
-            adapter.GenerateAsync(
-                TestData.Context(adapter.AdapterId),
-                new NormalizedGenerationRequest(TestData.Request(), "prompt", 1, []),
-                CancellationToken.None
-            )
+        AssetRequest request = TestData.Request();
+        string image = Convert.ToBase64String(LocalPlaceholderGenerator.RenderPng(request));
+        IAssetGenerator adapter = CreateAdapter(
+            kind,
+            $"{{\"created\":1,\"model\":\"resolved-model\",\"usage\":{{\"total_tokens\":10}},\"data\":[{{\"b64_json\":\"{image}\",\"revised_prompt\":\"safe\"}}]}}"
         );
 
-        Assert.Equal(ProviderErrorCategory.MalformedResponse, exception.Category);
+        GenerationBatchResult result = await adapter.GenerateAsync(
+            TestData.Context(adapter.AdapterId),
+            new NormalizedGenerationRequest(request, "prompt", 1, []),
+            CancellationToken.None
+        );
+
+        Assert.Single(result.Candidates);
     }
 
     /// <summary>Normalizes server errors for every external generation and review adapter.</summary>

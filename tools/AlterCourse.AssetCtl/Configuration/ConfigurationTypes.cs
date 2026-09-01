@@ -301,7 +301,16 @@ internal static class ConfigurationTypes
         private ProviderInstance ReadProvider(string id, YamlMappingNode node, AssetCtlPolicy policy)
         {
             string path = $"providers.{id}";
-            node.RequireOnly(path, "adapter", "enabled", "endpoint", "credentials", "downloads", "models");
+            node.RequireOnly(
+                path,
+                "adapter",
+                "enabled",
+                "endpoint",
+                "credentials",
+                "downloads",
+                "allowed_lifecycles",
+                "models"
+            );
             string adapterId = node.Scalar("adapter", path);
             if (!adapters.TryGetValue(adapterId, out IAdapterDescriptor? adapter))
             {
@@ -331,6 +340,7 @@ internal static class ConfigurationTypes
             string? credential = ReadCredential(node.OptionalMapping("credentials", path), path);
             HashSet<string> allowedHosts = ReadAllowedHosts(node.OptionalMapping("downloads", path), path);
             Dictionary<string, ModelProfile> models = ReadModels(node.Mapping("models", path), path, adapter);
+            IReadOnlySet<AssetLifecycle> allowedLifecycles = ReadAllowedLifecycles(node, path);
 
             return new ProviderInstance(
                 id,
@@ -339,8 +349,35 @@ internal static class ConfigurationTypes
                 endpoint,
                 credential,
                 allowedHosts,
-                models
+                models,
+                allowedLifecycles
             );
+        }
+
+        private static HashSet<AssetLifecycle> ReadAllowedLifecycles(YamlMappingNode node, string path)
+        {
+            YamlSequenceNode? values = node.OptionalSequence("allowed_lifecycles", path);
+            if (values is null)
+            {
+                return Enum.GetValues<AssetLifecycle>().ToHashSet();
+            }
+
+            var result = new HashSet<AssetLifecycle>();
+            foreach (string value in YamlValues.Strings(values, path))
+            {
+                AssetLifecycle lifecycle = ParseLifecycle(value, $"{path}.allowed_lifecycles")!.Value;
+                if (!result.Add(lifecycle))
+                {
+                    throw new AssetCtlException($"{path}.allowed_lifecycles: duplicate lifecycle '{value}'.", 2);
+                }
+            }
+
+            if (result.Count == 0)
+            {
+                throw new AssetCtlException($"{path}.allowed_lifecycles: at least one lifecycle is required.", 2);
+            }
+
+            return result;
         }
 
         private static string? ReadCredential(YamlMappingNode? credentials, string path)
@@ -416,6 +453,15 @@ internal static class ConfigurationTypes
                     );
                 }
 
+                try
+                {
+                    adapter.ValidateOptions(model.Options);
+                }
+                catch (ProviderException exception)
+                {
+                    throw new AssetCtlException($"{path}.models.{modelId}.options: {exception.Message}", 2);
+                }
+
                 result.Add(modelId, model);
             }
 
@@ -432,7 +478,13 @@ internal static class ConfigurationTypes
                 capabilities.Add(ParseCapability(value, $"{path}.capabilities"));
             }
 
-            global::YamlDotNet.RepresentationModel.YamlMappingNode economics = node.Mapping("economics", path);
+            (decimal? cost, string pricingBasis) = ReadEconomics(node.Mapping("economics", path), path);
+            Dictionary<string, string> options = ReadOptions(node.OptionalMapping("options", path));
+            return new ModelProfile(id, node.Scalar("model", path), capabilities, cost, pricingBasis, options);
+        }
+
+        private static (decimal? Cost, string PricingBasis) ReadEconomics(YamlMappingNode economics, string path)
+        {
             economics.RequireOnly(
                 $"{path}.economics",
                 "currency",
@@ -455,10 +507,30 @@ internal static class ConfigurationTypes
             if (costText is not null)
             {
                 cost = decimal.Parse(costText, CultureInfo.InvariantCulture);
+                if (cost < 0)
+                {
+                    throw new AssetCtlException($"{path}.economics.estimated_cost_per_output: cannot be negative.", 2);
+                }
             }
 
+            string pricingBasis = economics.OptionalScalar("pricing_basis", path) ?? "fixed-output";
+            if (
+                pricingBasis
+                is not ("fixed-output" or "provider-calculated" or "quality-and-resolution" or "token-usage")
+            )
+            {
+                throw new AssetCtlException(
+                    $"{path}.economics.pricing_basis: unknown pricing basis '{pricingBasis}'.",
+                    2
+                );
+            }
+
+            return (cost, pricingBasis);
+        }
+
+        private static Dictionary<string, string> ReadOptions(YamlMappingNode? optionNode)
+        {
             var options = new Dictionary<string, string>(StringComparer.Ordinal);
-            YamlMappingNode? optionNode = node.OptionalMapping("options", path);
             if (optionNode is not null)
             {
                 foreach (
@@ -472,14 +544,7 @@ internal static class ConfigurationTypes
                 }
             }
 
-            return new ModelProfile(
-                id,
-                node.Scalar("model", path),
-                capabilities,
-                cost,
-                economics.OptionalScalar("pricing_basis", path) ?? "fixed-output",
-                options
-            );
+            return options;
         }
 
         private static (IReadOnlyList<RouteDefinition>, IReadOnlyList<RouteDefinition>) ReadRoutes(
@@ -892,6 +957,10 @@ internal static class ConfigurationTypes
         public IReadOnlySet<AssetCapability> SupportedCapabilities { get; }
 
         public IReadOnlySet<string> AllowedEndpointHosts { get; }
+
+        public bool IsLocalFallback => false;
+
+        public string? OutputContractRejection(ModelProfile model, OutputContract? output) => null;
 
         public void ValidateOptions(IReadOnlyDictionary<string, string> options);
     }

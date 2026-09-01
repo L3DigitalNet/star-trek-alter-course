@@ -390,6 +390,106 @@ public sealed class ConfigurationContractTests
         }
     }
 
+    /// <summary>Validates adapter-owned model options during configuration loading with configuration exit semantics.</summary>
+    [Fact]
+    public void ConfigurationLoadRejectsUnknownProviderOptionWithExitTwo()
+    {
+        string root = CopyTrackedConfiguration();
+        try
+        {
+            string providers = Path.Combine(root, "config", "assets", "providers.yaml");
+            File.WriteAllText(
+                providers,
+                File.ReadAllText(providers)
+                    .Replace(
+                        "          estimated_cost_per_output: 0.00\n          effective_date: \"2026-09-01\"",
+                        "          estimated_cost_per_output: 0.00\n          effective_date: \"2026-09-01\"\n        options:\n          unexpected: \"value\"",
+                        StringComparison.Ordinal
+                    )
+            );
+
+            AssetCtlException exception = Assert.Throws<AssetCtlException>(() =>
+                Loader(rejectLocalOptions: true).Load(root)
+            );
+
+            Assert.Equal(2, exception.ExitCode);
+            Assert.Contains("unexpected", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    /// <summary>Rejects an unknown pricing basis instead of treating inert metadata as an estimate.</summary>
+    [Fact]
+    public void ConfigurationLoadRejectsUnknownPricingBasis()
+    {
+        string root = CopyTrackedConfiguration();
+        try
+        {
+            string providers = Path.Combine(root, "config", "assets", "providers.yaml");
+            File.WriteAllText(
+                providers,
+                File.ReadAllText(providers)
+                    .Replace(
+                        "          effective_date: \"2026-09-01\"",
+                        "          pricing_basis: \"wishful-thinking\"\n          effective_date: \"2026-09-01\"",
+                        StringComparison.Ordinal
+                    )
+            );
+
+            AssetCtlException exception = Assert.Throws<AssetCtlException>(() => Loader().Load(root));
+
+            Assert.Equal(2, exception.ExitCode);
+            Assert.Contains("pricing_basis", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    /// <summary>Keeps the seed semantic reviewer conservatively priceable under the fail-closed policy.</summary>
+    [Fact]
+    public void SeedReviewerHasConservativeCostEstimate()
+    {
+        string root = CopyTrackedConfiguration();
+        try
+        {
+            EffectiveConfiguration configuration = Loader().Load(root);
+
+            ModelProfile reviewer = configuration.Providers["openai-reviewer"].Models["economical"];
+            Assert.NotNull(reviewer.EstimatedCostPerOutput);
+            Assert.Equal("token-usage", reviewer.PricingBasis);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    /// <summary>Models the local fallback as placeholder-only configuration rather than a provider-name rule.</summary>
+    [Fact]
+    public void SeedLocalProviderIsRestrictedToPlaceholderLifecycle()
+    {
+        string root = CopyTrackedConfiguration();
+        try
+        {
+            EffectiveConfiguration configuration = Loader().Load(root);
+
+            Assert.Equal(
+                [AssetLifecycle.Placeholder],
+                configuration.Providers["local-placeholder"].AllowedLifecycles,
+                EqualityComparer<AssetLifecycle>.Default
+            );
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     /// <summary>Reports writable operational roots and route cross-references without leaving probe files.</summary>
     [Fact]
     public void DoctorDiagnosticsAreExplicitAndLeaveNoPersistentMutation()
@@ -417,11 +517,11 @@ public sealed class ConfigurationContractTests
         }
     }
 
-    private static ConfigurationLoader Loader()
+    private static ConfigurationLoader Loader(bool rejectLocalOptions = false)
     {
         ConfigurationTypes.IAdapterDescriptor[] descriptors =
         {
-            new FakeDescriptor("local-placeholder"),
+            new FakeDescriptor("local-placeholder", rejectLocalOptions),
             new FakeDescriptor("recraft-images"),
             new FakeDescriptor("openai-images"),
             new FakeDescriptor("xai-images"),
@@ -478,7 +578,8 @@ public sealed class ConfigurationContractTests
         }
     }
 
-    private sealed class FakeDescriptor(string adapterId) : ConfigurationTypes.IAdapterDescriptor
+    private sealed class FakeDescriptor(string adapterId, bool rejectOptions = false)
+        : ConfigurationTypes.IAdapterDescriptor
     {
         public string AdapterId { get; } = adapterId;
 
@@ -491,6 +592,15 @@ public sealed class ConfigurationContractTests
                 StringComparer.OrdinalIgnoreCase
             );
 
-        public void ValidateOptions(IReadOnlyDictionary<string, string> options) { }
+        public void ValidateOptions(IReadOnlyDictionary<string, string> options)
+        {
+            if (rejectOptions && options.Count != 0)
+            {
+                throw new ProviderException(
+                    ProviderErrorCategory.InvalidRequest,
+                    $"Unknown provider option '{options.Keys.Single()}'."
+                );
+            }
+        }
     }
 }

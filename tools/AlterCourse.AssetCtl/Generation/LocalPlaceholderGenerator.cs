@@ -17,6 +17,8 @@ internal sealed class LocalPlaceholderGenerator : IAssetGenerator
 
     public string AdapterId => "local-placeholder";
 
+    public bool IsLocalFallback => true;
+
     public IReadOnlySet<AssetCapability> SupportedCapabilities => Capabilities;
 
     public IReadOnlySet<string> AllowedEndpointHosts { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

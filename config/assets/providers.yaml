@@ -3,6 +3,8 @@ providers:
   local-placeholder:
     adapter: "local-placeholder"
     enabled: true
+    allowed_lifecycles:
+      - "placeholder"
     models:
       default:
         model: "local-placeholder-v1"
@@ -17,6 +19,9 @@ providers:
   recraft-primary:
     adapter: "recraft-images"
     enabled: true
+    allowed_lifecycles:
+      - "placeholder"
+      - "candidate"
     endpoint: "https://external.api.recraft.ai/v1"
     credentials:
       api_key:
@@ -34,6 +39,8 @@ providers:
           currency: "USD"
           estimated_cost_per_output: 0.08
           effective_date: "2026-09-01"
+        options:
+          supported_sizes: "none"
       raster:
         model: "recraftv4_1"
         capabilities:
@@ -43,9 +50,14 @@ providers:
           currency: "USD"
           estimated_cost_per_output: 0.04
           effective_date: "2026-09-01"
+        options:
+          supported_sizes: "1024x1024,1536x768,768x1536,1280x832,832x1280,1216x896,896x1216,1152x896,896x1152,832x1344,1280x896,896x1280,1344x768,768x1344"
   openai-primary:
     adapter: "openai-images"
     enabled: true
+    allowed_lifecycles:
+      - "placeholder"
+      - "candidate"
     endpoint: "https://api.openai.com/v1"
     credentials:
       api_key:
@@ -63,9 +75,14 @@ providers:
           currency: "USD"
           pricing_basis: "provider-calculated"
           effective_date: "2026-09-01"
+        options:
+          supported_sizes: "1024x1024,1536x1024,1024x1536"
   xai-primary:
     adapter: "xai-images"
     enabled: true
+    allowed_lifecycles:
+      - "placeholder"
+      - "candidate"
     endpoint: "https://api.x.ai/v1"
     credentials:
       api_key:
@@ -82,9 +99,14 @@ providers:
           currency: "USD"
           estimated_cost_per_output: 0.02
           effective_date: "2026-09-01"
+        options:
+          supported_sizes: "none"
   openai-reviewer:
     adapter: "openai-vision-review"
     enabled: true
+    allowed_lifecycles:
+      - "placeholder"
+      - "candidate"
     endpoint: "https://api.openai.com/v1"
     credentials:
       api_key:
@@ -98,5 +120,6 @@ providers:
           - "review.reference-comparison"
         economics:
           currency: "USD"
+          estimated_cost_per_output: 0.02
           pricing_basis: "token-usage"
           effective_date: "2026-09-01"

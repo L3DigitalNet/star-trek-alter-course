@@ -72,6 +72,116 @@ public sealed class ProviderContractTests
         Assert.Contains("\"model\":\"model\"", handler.Body, StringComparison.Ordinal);
     }
 
+    /// <summary>Transmits an exact supported output size instead of relying on a provider default.</summary>
+    [Theory]
+    [InlineData("recraft")]
+    [InlineData("openai")]
+    public async Task ExactSupportedDimensionsAreTransmitted(string kind)
+    {
+        AssetRequest request = TestData.Request() with
+        {
+            Output = TestData.Request().Output with { Width = 1024, Height = 1024 },
+        };
+        byte[] png = LocalPlaceholderGenerator.RenderPng(request);
+        var handler = new RecordingHandler(_ =>
+            Json(HttpStatusCode.OK, $"{{\"data\":[{{\"b64_json\":\"{Convert.ToBase64String(png)}\"}}]}}")
+        );
+        IAssetGenerator adapter = string.Equals(kind, "recraft", StringComparison.Ordinal)
+            ? new RecraftImageAdapter(new HttpClient(handler))
+            : new OpenAiImageAdapter(new HttpClient(handler));
+
+        _ = await adapter.GenerateAsync(
+            TestData.Context(adapter.AdapterId) with
+            {
+                Model = TestData.Context(adapter.AdapterId).Model with
+                {
+                    Options = new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        ["supported_sizes"] = "1024x1024",
+                    },
+                },
+            },
+            new NormalizedGenerationRequest(request, "prompt", 1, []),
+            CancellationToken.None
+        );
+
+        Assert.Contains("\"size\":\"1024x1024\"", handler.Body, StringComparison.Ordinal);
+    }
+
+    /// <summary>Refuses an exact output contract that the provider protocol cannot guarantee before sending.</summary>
+    [Theory]
+    [InlineData("recraft")]
+    [InlineData("openai")]
+    [InlineData("xai")]
+    public async Task UnsupportedExactDimensionsAreRefusedBeforeSending(string kind)
+    {
+        var handler = new RecordingHandler(_ => throw new Xunit.Sdk.XunitException("HTTP request was sent"));
+        IAssetGenerator adapter = kind switch
+        {
+            "recraft" => new RecraftImageAdapter(new HttpClient(handler)),
+            "openai" => new OpenAiImageAdapter(new HttpClient(handler)),
+            "xai" => new XaiImageAdapter(new HttpClient(handler)),
+            _ => throw new InvalidOperationException(),
+        };
+
+        ProviderException exception = await Assert.ThrowsAsync<ProviderException>(() =>
+            adapter.GenerateAsync(
+                TestData.Context(adapter.AdapterId) with
+                {
+                    Model = TestData.Context(adapter.AdapterId).Model with
+                    {
+                        Options = new Dictionary<string, string>(StringComparer.Ordinal)
+                        {
+                            ["supported_sizes"] = "1024x1024",
+                        },
+                    },
+                },
+                new NormalizedGenerationRequest(TestData.Request(), "prompt", 1, []),
+                CancellationToken.None
+            )
+        );
+
+        Assert.Equal(ProviderErrorCategory.UnsupportedOutput, exception.Category);
+        Assert.Null(handler.Request);
+    }
+
+    /// <summary>Refuses reference inputs on the generation-only Recraft endpoint instead of dropping them.</summary>
+    [Fact]
+    public async Task RecraftRejectsReferencesBeforeSending()
+    {
+        var handler = new RecordingHandler(_ => throw new Xunit.Sdk.XunitException("HTTP request was sent"));
+        var adapter = new RecraftImageAdapter(new HttpClient(handler));
+        byte[] reference = LocalPlaceholderGenerator.RenderPng(TestData.Request());
+
+        ProviderException exception = await Assert.ThrowsAsync<ProviderException>(() =>
+            adapter.GenerateAsync(
+                TestData.Context(adapter.AdapterId) with
+                {
+                    Model = TestData.Context(adapter.AdapterId).Model with
+                    {
+                        Options = new Dictionary<string, string>(StringComparer.Ordinal)
+                        {
+                            ["supported_sizes"] = "1024x1024",
+                        },
+                    },
+                },
+                new NormalizedGenerationRequest(
+                    TestData.Request() with
+                    {
+                        Output = TestData.Request().Output with { Width = 1024, Height = 1024 },
+                    },
+                    "prompt",
+                    1,
+                    [("reference.png", "image/png", reference)]
+                ),
+                CancellationToken.None
+            )
+        );
+
+        Assert.Equal(ProviderErrorCategory.UnsupportedOutput, exception.Category);
+        Assert.Null(handler.Request);
+    }
+
     /// <summary>Maps reference bytes into each provider's configured edit request shape.</summary>
     [Theory]
     [InlineData("openai")]

@@ -387,6 +387,211 @@ public sealed class RoutingAndSelectionTests
         Assert.Equal("profile", plan.Reviewer.ModelProfileId);
     }
 
+    /// <summary>Excludes a route whose declared operation is not required by the request.</summary>
+    [Fact]
+    public void RouteCapabilityParticipatesInRequestMatching()
+    {
+        var generator = new FakeGenerator("generator");
+        ProviderInstance provider = Provider("provider", generator.AdapterId, 0m, AssetCapability.RasterGenerate);
+        AssetRequest request = TestData.Request();
+        var unrelatedRoute = new RouteDefinition(
+            "unrelated",
+            100,
+            request.Lifecycle,
+            request.Output.Format,
+            AssetCapability.ImageVectorize,
+            [new RouteTarget(provider.Id, "profile")],
+            0
+        );
+
+        GenerationPlan plan = new AssetRouter(new AdapterRegistry([generator])).Plan(
+            Configuration(
+                new Dictionary<string, ProviderInstance>(StringComparer.Ordinal) { [provider.Id] = provider },
+                request,
+                unrelatedRoute,
+                new RouteDefinition("review", 1, null, null, AssetCapability.ReviewSemantic, [], 0)
+            ) with
+            {
+                QualityTiers = new Dictionary<string, QualityTier>(StringComparer.Ordinal)
+                {
+                    [request.QualityTier] = new(request.QualityTier, 1, 1, "disabled", true, 0),
+                },
+            },
+            request
+        );
+
+        Assert.Empty(plan.Targets);
+        Assert.Null(plan.SelectedTarget);
+    }
+
+    /// <summary>Honors the owner policy that disables the deterministic local fallback.</summary>
+    [Fact]
+    public void LocalFallbackPolicyDisablesLocalAdapter()
+    {
+        var generator = new LocalPlaceholderGenerator();
+        AssetRequest request = TestData.Request();
+        ProviderInstance provider = Provider(
+            "configured-local",
+            generator.AdapterId,
+            0m,
+            AssetCapability.RasterGenerate
+        );
+        EffectiveConfiguration configuration = Configuration(provider, request) with
+        {
+            Policy = new AssetCtlPolicy(false, true, false, true, false, "reject"),
+        };
+
+        GenerationPlan plan = new AssetRouter(new AdapterRegistry([generator])).Plan(configuration, request);
+
+        Assert.Null(plan.SelectedTarget);
+        Assert.Contains(
+            "local-fallback-disabled",
+            Assert.Single(plan.Targets).RejectionReasons,
+            StringComparer.Ordinal
+        );
+    }
+
+    /// <summary>Lets the protection switch, rather than a hard-coded lifecycle branch, control approved generation.</summary>
+    [Fact]
+    public void ApprovedProtectionPolicyCanBeExplicitlyDisabled()
+    {
+        var generator = new FakeGenerator("generator");
+        AssetRequest request = TestData.Request() with { Lifecycle = AssetLifecycle.Approved };
+        ProviderInstance provider = Provider("provider", generator.AdapterId, 0m, AssetCapability.RasterGenerate);
+        EffectiveConfiguration configuration = Configuration(provider, request) with
+        {
+            Policy = new AssetCtlPolicy(false, false, true, true, false, "reject"),
+        };
+
+        GenerationPlan plan = new AssetRouter(new AdapterRegistry([generator])).Plan(configuration, request);
+
+        Assert.NotNull(plan.SelectedTarget);
+        Assert.DoesNotContain(
+            "protected-lifecycle",
+            Assert.Single(plan.Targets).RejectionReasons,
+            StringComparer.Ordinal
+        );
+    }
+
+    /// <summary>Enforces configured lifecycle permissions for capability-discovered providers.</summary>
+    [Fact]
+    public void ProviderLifecyclePermissionsRejectCandidateFallback()
+    {
+        var generator = new LocalPlaceholderGenerator();
+        AssetRequest request = TestData.Request() with { Lifecycle = AssetLifecycle.Candidate };
+        ProviderInstance provider = Provider(
+            "configured-local",
+            generator.AdapterId,
+            0m,
+            AssetCapability.RasterGenerate
+        ) with
+        {
+            AllowedLifecycles = new HashSet<AssetLifecycle> { AssetLifecycle.Placeholder },
+        };
+
+        GenerationPlan plan = new AssetRouter(new AdapterRegistry([generator])).Plan(
+            Configuration(provider, request),
+            request
+        );
+
+        Assert.Null(plan.SelectedTarget);
+        Assert.Contains("lifecycle-not-allowed", Assert.Single(plan.Targets).RejectionReasons, StringComparer.Ordinal);
+    }
+
+    /// <summary>Retains an affordable paid prefix and a free fallback instead of rejecting the entire plan.</summary>
+    [Fact]
+    public void FreeFallbackKeepsConservativePlanWithinRunBudget()
+    {
+        AssetRequest request = TestData.Request();
+        (EffectiveConfiguration configuration, AdapterRegistry registry) = FreeFallbackConfiguration(request);
+
+        GenerationPlan plan = new AssetRouter(registry).Plan(configuration, request);
+
+        Assert.Equal("first-provider", plan.SelectedTarget!.ProviderId);
+        Assert.Equal(0.80m, plan.EstimatedMaximumCost);
+        Assert.Contains(
+            "aggregate-over-budget",
+            plan.Targets.Single(target =>
+                string.Equals(target.ProviderId, "second-provider", StringComparison.Ordinal)
+            ).RejectionReasons,
+            StringComparer.Ordinal
+        );
+        Assert.True(
+            plan.Targets.Single(target =>
+                string.Equals(target.ProviderId, "free-provider", StringComparison.Ordinal)
+            ).Eligible
+        );
+    }
+
+    private static (EffectiveConfiguration Configuration, AdapterRegistry Registry) FreeFallbackConfiguration(
+        AssetRequest request
+    )
+    {
+        IAssetGenerator[] generators =
+        [
+            new FakeGenerator("first"),
+            new FakeGenerator("second"),
+            new LocalPlaceholderGenerator(),
+        ];
+        ProviderInstance[] providers =
+        [
+            Provider("first-provider", generators[0].AdapterId, 0.40m, AssetCapability.RasterGenerate),
+            Provider("second-provider", generators[1].AdapterId, 0.40m, AssetCapability.RasterGenerate),
+            Provider("free-provider", generators[2].AdapterId, 0m, AssetCapability.RasterGenerate),
+        ];
+        var route = new RouteDefinition(
+            "generation",
+            100,
+            request.Lifecycle,
+            request.Output.Format,
+            AssetCapability.RasterGenerate,
+            [
+                new RouteTarget(providers[0].Id, "profile"),
+                new RouteTarget(providers[1].Id, "profile"),
+                new RouteTarget(providers[2].Id, "profile"),
+            ],
+            0,
+            new RouteFallbackPolicy(false, new HashSet<ProviderErrorCategory>()),
+            new RouteRetryPolicy(2, 0, 0, 0, new HashSet<ProviderErrorCategory>())
+        );
+        EffectiveConfiguration configuration = Configuration(
+            providers.ToDictionary(provider => provider.Id, StringComparer.Ordinal),
+            request,
+            route,
+            new RouteDefinition("review", 1, null, null, AssetCapability.ReviewSemantic, [], 0)
+        ) with
+        {
+            Spending = new SpendingLimits(1m, 1m, 1m),
+            QualityTiers = new Dictionary<string, QualityTier>(StringComparer.Ordinal)
+            {
+                [request.QualityTier] = new(request.QualityTier, 1, 1, "disabled", true, 0),
+            },
+        };
+
+        return (configuration, new AdapterRegistry(generators));
+    }
+
+    /// <summary>Carries the configured estimate basis into the routing record.</summary>
+    [Fact]
+    public void PlannedTargetRecordsPricingBasis()
+    {
+        var generator = new FakeGenerator("generator");
+        AssetRequest request = TestData.Request();
+        ProviderInstance provider = Provider("provider", generator.AdapterId, 0.10m, AssetCapability.RasterGenerate);
+        ModelProfile profile = provider.Models["profile"] with { PricingBasis = "quality-and-resolution" };
+        provider = provider with
+        {
+            Models = new Dictionary<string, ModelProfile>(StringComparer.Ordinal) { [profile.Id] = profile },
+        };
+
+        GenerationPlan plan = new AssetRouter(new AdapterRegistry([generator])).Plan(
+            Configuration(provider, request),
+            request
+        );
+
+        Assert.Equal("quality-and-resolution", Assert.Single(plan.Targets).EstimateBasis);
+    }
+
     private static EffectiveConfiguration Configuration(ProviderInstance provider, AssetRequest request)
     {
         var route = new RouteDefinition(
