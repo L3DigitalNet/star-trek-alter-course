@@ -158,11 +158,7 @@ Content and persistence models store normalized numeric values in the canonical 
 Examples of acceptable logical contracts include:
 
 ```json
-{
-	"effective_range_km": 125000,
-	"power_draw_mw": 18.5,
-	"cycle_time_s": 4
-}
+{ "effective_range_km": 125000, "power_draw_mw": 18.5, "cycle_time_s": 4 }
 ```
 
 or an explicitly typed schema definition with equivalent unambiguous meaning.
