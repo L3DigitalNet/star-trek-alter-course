@@ -11,6 +11,7 @@
 	},
 	"[yaml]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
 	"dotnet.defaultSolution": "AlterCourse.sln",
+	"godotTools.lsp.headless": true,
 	"yaml.schemas": {
 		"https://json.schemastore.org/github-workflow.json": ".github/workflows/*.{yml,yaml}"
 	}
