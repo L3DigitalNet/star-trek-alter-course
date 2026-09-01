@@ -136,12 +136,14 @@ internal static class PublishingTypes
                 string assetBackup = asset + $".assetctl-backup-{staged.TransactionId}";
                 string manifestBackup = manifest + $".assetctl-backup-{staged.TransactionId}";
 
-                bool assetExisted = File.Exists(asset);
-                bool manifestExisted = File.Exists(manifest);
-                if (assetExisted != manifestExisted)
-                {
-                    throw new AssetCtlException("Existing asset and manifest do not form a complete publish pair.", 7);
-                }
+                (bool assetExisted, bool manifestExisted) = ValidateExistingState(
+                    configuration,
+                    assetRelativePath,
+                    manifestRelativePath,
+                    asset,
+                    manifest,
+                    staged.ManifestStage
+                );
 
                 var journal = new PublicationJournal(
                     staged.TransactionId,
@@ -181,6 +183,60 @@ internal static class PublishingTypes
                 staged.Lease.Dispose();
                 DeleteTree(staged.TransactionRoot);
                 throw;
+            }
+        }
+
+        private static (bool AssetExisted, bool ManifestExisted) ValidateExistingState(
+            EffectiveConfiguration configuration,
+            string assetRelativePath,
+            string manifestRelativePath,
+            string asset,
+            string manifest,
+            string stagedManifestPath
+        )
+        {
+            bool assetExisted = File.Exists(asset);
+            bool manifestExisted = File.Exists(manifest);
+            if (assetExisted && !manifestExisted)
+            {
+                throw new AssetCtlException("Existing asset and manifest do not form a complete publish pair.", 7);
+            }
+
+            if (!assetExisted && manifestExisted)
+            {
+                ValidateManifestOnlyInitialState(
+                    configuration,
+                    assetRelativePath,
+                    manifestRelativePath,
+                    stagedManifestPath
+                );
+            }
+
+            return (assetExisted, manifestExisted);
+        }
+
+        private static void ValidateManifestOnlyInitialState(
+            EffectiveConfiguration configuration,
+            string assetRelativePath,
+            string manifestRelativePath,
+            string stagedManifestPath
+        )
+        {
+            AssetManifest existing = ManifestStore.Load(configuration, manifestRelativePath);
+            YamlMappingNode staged = StrictYaml.LoadMapping(stagedManifestPath);
+            string stagedId = staged.Scalar("id", "manifest");
+            string stagedOutput = staged.Mapping("output", "manifest").Scalar("path", "manifest.output");
+            if (
+                existing.Integrity is not null
+                || !string.Equals(existing.Request.Id, stagedId, StringComparison.Ordinal)
+                || !string.Equals(existing.Request.Output.Path, assetRelativePath, StringComparison.Ordinal)
+                || !string.Equals(stagedOutput, assetRelativePath, StringComparison.Ordinal)
+            )
+            {
+                throw new AssetCtlException(
+                    "Existing manifest is not an authoritative manifest-only request for this output.",
+                    7
+                );
             }
         }
 

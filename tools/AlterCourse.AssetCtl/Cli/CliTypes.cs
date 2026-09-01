@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using JsonSchemaDocumentValidator = AlterCourse.AssetCtl.Configuration.ConfigurationTypes.JsonSchemaDocumentValidator;
 using RouteIntegrityStatus = AlterCourse.AssetCtl.Domain.DomainModels.RouteIntegrityStatus;
 using SchemaDocumentStatus = AlterCourse.AssetCtl.Domain.DomainModels.SchemaDocumentStatus;
+using SemanticReviewPolicy = AlterCourse.AssetCtl.Domain.DomainModels.SemanticReviewPolicy;
 using WritableRootStatus = AlterCourse.AssetCtl.Domain.DomainModels.WritableRootStatus;
 
 namespace AlterCourse.AssetCtl.Cli;
@@ -339,12 +340,29 @@ internal static class CliTypes
             {
                 total = catalog.Count,
                 placeholders = catalog.Count(manifest => manifest.Request.Lifecycle == AssetLifecycle.Placeholder),
-                candidates = catalog.Count(manifest => manifest.Request.Lifecycle == AssetLifecycle.Candidate),
+                candidates = catalog.Count(manifest => CandidateAwaitsReview(configuration, manifest)),
                 approved = catalog.Count(manifest => manifest.Request.Lifecycle == AssetLifecycle.Approved),
                 deprecated = catalog.Count(manifest => manifest.Request.Lifecycle == AssetLifecycle.Deprecated),
                 missing_files = missing,
                 integrity_mismatches = mismatched,
             };
+        }
+
+        private static bool CandidateAwaitsReview(EffectiveConfiguration configuration, AssetManifest manifest)
+        {
+            if (manifest.Request.Lifecycle != AssetLifecycle.Candidate)
+            {
+                return false;
+            }
+
+            QualityTier tier = configuration.QualityTiers[manifest.Request.QualityTier];
+            if (tier.ReviewPolicy == SemanticReviewPolicy.Disabled)
+            {
+                return false;
+            }
+
+            SemanticReviewResult? review = manifest.SemanticReview;
+            return review is null || review.HasHardFailure || review.OverallScore < tier.MinimumSemanticScore;
         }
 
         private object Plan(EffectiveConfiguration configuration, AssetManifest manifest)
@@ -506,6 +524,11 @@ internal static class CliTypes
             );
             using var assetLock = AssetLock.Acquire(configuration, manifest.Request.Id);
             manifest = ManifestMutation.ReloadForMutation(configuration, manifest);
+            if (manifest.Request.Lifecycle == AssetLifecycle.Deprecated)
+            {
+                throw new AssetCtlException("Deprecated assets cannot be deprecated again.", 8);
+            }
+
             string actor = options.Required("actor");
             string reason = options.Required("reason");
             if (

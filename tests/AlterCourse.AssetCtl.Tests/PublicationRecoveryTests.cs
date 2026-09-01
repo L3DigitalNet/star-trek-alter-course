@@ -59,6 +59,157 @@ public sealed class PublicationRecoveryTests : IDisposable
         );
     }
 
+    /// <summary>Publishes the first generated output over its authoritative manifest-only request.</summary>
+    [Fact]
+    public void FirstGenerationPublishesOverManifestOnlyRequest()
+    {
+        EffectiveConfiguration configuration = Configuration();
+        AssetManifest request = ManifestWithoutOutput();
+        File.WriteAllText(Path.Combine(root, request.ManifestPath), ManifestStore.Serialize(request));
+        byte[] bytes = "first-generated-asset"u8.ToArray();
+        AssetManifest generated = Manifest(bytes, revision: request.Revision + 1);
+
+        AtomicPublisher.PublicationResult result = AtomicPublisher.Publish(
+            configuration,
+            generated.Request.Output.Path,
+            bytes,
+            generated.ManifestPath,
+            ManifestStore.Serialize(generated)
+        );
+
+        Assert.True(result.Published);
+        AssertPair(bytes, generated);
+    }
+
+    /// <summary>Restores the authoritative manifest-only request when a first-publication move fails.</summary>
+    [Theory]
+    [InlineData((int)AtomicPublisher.PublicationMove.BackupManifest)]
+    [InlineData((int)AtomicPublisher.PublicationMove.InstallAsset)]
+    [InlineData((int)AtomicPublisher.PublicationMove.InstallManifest)]
+    public void FirstGenerationMoveFailureRestoresManifestOnlyRequest(int failedMoveValue)
+    {
+        var failedMove = (AtomicPublisher.PublicationMove)failedMoveValue;
+        EffectiveConfiguration configuration = Configuration();
+        AssetManifest request = ManifestWithoutOutput();
+        string requestText = ManifestStore.Serialize(request);
+        File.WriteAllText(Path.Combine(root, request.ManifestPath), requestText);
+        byte[] bytes = "first-generated-asset"u8.ToArray();
+        AssetManifest generated = Manifest(bytes, revision: request.Revision + 1);
+
+        Assert.Throws<IOException>(() =>
+            AtomicPublisher.Publish(
+                configuration,
+                generated.Request.Output.Path,
+                bytes,
+                generated.ManifestPath,
+                ManifestStore.Serialize(generated),
+                new AtomicPublisher.PublicationTestHooks(BeforeMove: move =>
+                {
+                    if (move == failedMove)
+                    {
+                        throw new IOException("simulated first-publication move failure");
+                    }
+                })
+            )
+        );
+
+        Assert.False(File.Exists(Path.Combine(root, request.Request.Output.Path)));
+        Assert.Equal(requestText, File.ReadAllText(Path.Combine(root, request.ManifestPath)));
+    }
+
+    /// <summary>Recovers an interrupted first publication to its manifest-only request or complete new pair.</summary>
+    [Theory]
+    [InlineData((int)AtomicPublisher.PublicationMove.BackupManifest, false)]
+    [InlineData((int)AtomicPublisher.PublicationMove.InstallAsset, false)]
+    [InlineData((int)AtomicPublisher.PublicationMove.InstallManifest, true)]
+    public void FirstGenerationRecoveryPreservesAValidInitialOrCompleteState(
+        int interruptedAfterValue,
+        bool completesNewPair
+    )
+    {
+        var interruptedAfter = (AtomicPublisher.PublicationMove)interruptedAfterValue;
+        EffectiveConfiguration configuration = Configuration();
+        AssetManifest request = ManifestWithoutOutput();
+        string requestText = ManifestStore.Serialize(request);
+        File.WriteAllText(Path.Combine(root, request.ManifestPath), requestText);
+        byte[] bytes = "first-generated-asset"u8.ToArray();
+        AssetManifest generated = Manifest(bytes, revision: request.Revision + 1);
+
+        Assert.Throws<AtomicPublisher.SimulatedPublicationInterruptionException>(() =>
+            AtomicPublisher.Publish(
+                configuration,
+                generated.Request.Output.Path,
+                bytes,
+                generated.ManifestPath,
+                ManifestStore.Serialize(generated),
+                new AtomicPublisher.PublicationTestHooks(AfterMove: move =>
+                {
+                    if (move == interruptedAfter)
+                    {
+                        throw new AtomicPublisher.SimulatedPublicationInterruptionException();
+                    }
+                })
+            )
+        );
+
+        AtomicPublisher.PublicationRecoveryResult recovery = AtomicPublisher.RecoverPending(configuration);
+
+        Assert.Equal(1, recovery.RecoveredTransactions);
+        if (completesNewPair)
+        {
+            AssertPair(bytes, generated);
+        }
+        else
+        {
+            Assert.False(File.Exists(Path.Combine(root, request.Request.Output.Path)));
+            Assert.Equal(requestText, File.ReadAllText(Path.Combine(root, request.ManifestPath)));
+        }
+    }
+
+    /// <summary>Rejects an asset-only partial state because no authoritative request can identify it.</summary>
+    [Fact]
+    public void AssetOnlyInitialStateIsRejected()
+    {
+        EffectiveConfiguration configuration = Configuration();
+        byte[] oldBytes = "orphaned-asset"u8.ToArray();
+        AssetManifest generated = Manifest(oldBytes, revision: 2);
+        File.WriteAllBytes(Path.Combine(root, generated.Request.Output.Path), oldBytes);
+
+        AssetCtlException exception = Assert.Throws<AssetCtlException>(() =>
+            AtomicPublisher.Publish(
+                configuration,
+                generated.Request.Output.Path,
+                oldBytes,
+                generated.ManifestPath,
+                ManifestStore.Serialize(generated)
+            )
+        );
+
+        Assert.Contains("complete publish pair", exception.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>Rejects a manifest-only state whose identity does not authorize the requested output.</summary>
+    [Fact]
+    public void MismatchedManifestOnlyInitialStateIsRejected()
+    {
+        EffectiveConfiguration configuration = Configuration();
+        AssetManifest unrelated = ManifestWithoutOutput("other");
+        AssetManifest generated = Manifest("new"u8.ToArray(), revision: 2);
+        File.WriteAllText(Path.Combine(root, generated.ManifestPath), ManifestStore.Serialize(unrelated));
+
+        AssetCtlException exception = Assert.Throws<AssetCtlException>(() =>
+            AtomicPublisher.Publish(
+                configuration,
+                generated.Request.Output.Path,
+                "new"u8.ToArray(),
+                generated.ManifestPath,
+                ManifestStore.Serialize(generated)
+            )
+        );
+
+        Assert.Contains("authoritative manifest", exception.Message, StringComparison.Ordinal);
+    }
+
     /// <summary>Rolls back the old pair when any individual live-file move fails.</summary>
     [Theory]
     [InlineData((int)AtomicPublisher.PublicationMove.BackupAsset)]
@@ -300,6 +451,12 @@ public sealed class PublicationRecoveryTests : IDisposable
             null,
             $"catalog/test.{name}.asset.yaml"
         );
+
+    private static AssetManifest ManifestWithoutOutput(string name = "asset") =>
+        Manifest([], revision: 1, name) with
+        {
+            Integrity = null,
+        };
 
     private void AssertPair(byte[] expectedBytes, AssetManifest expectedManifest)
     {
