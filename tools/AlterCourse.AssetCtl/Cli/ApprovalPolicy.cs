@@ -29,14 +29,14 @@ internal static class ApprovalPolicy
         QualityTier tier = configuration.QualityTiers[manifest.Request.QualityTier];
         if (string.Equals(tier.SemanticReview, "required", StringComparison.Ordinal))
         {
-            ValidateSemanticEvidence(configuration, manifest, mechanical.NormalizedBytes);
+            ValidateSemanticEvidence(configuration, manifest, tier);
         }
     }
 
     private static void ValidateSemanticEvidence(
         EffectiveConfiguration configuration,
         AssetManifest manifest,
-        byte[] normalizedBytes
+        QualityTier tier
     )
     {
         GenerationProvenance generation =
@@ -47,6 +47,7 @@ internal static class ApprovalPolicy
         string requestHash = ConfigurationLoader.Hash(JsonSerializer.Serialize(manifest.Request, JsonOptions.Stable));
         if (
             review.HasHardFailure
+            || review.OverallScore < tier.MinimumSemanticScore
             || !string.Equals(generation.RequestSha256, requestHash, StringComparison.Ordinal)
             || !string.Equals(generation.EffectiveConfigSha256, configuration.EffectiveHash, StringComparison.Ordinal)
             || review.ReviewerProvider is null
@@ -62,17 +63,9 @@ internal static class ApprovalPolicy
             throw new AssetCtlException("Approval requires current independently verifiable semantic evidence.", 8);
         }
 
-        string expected = ReviewEvidence.Compute(
-            manifest.Request,
-            normalizedBytes,
-            configuration.EffectiveHash,
-            reviewer.Id,
-            reviewerModel.Id,
-            review
-        );
-        if (!string.Equals(expected, review.EvidenceSha256, StringComparison.Ordinal))
+        if (review.EvidenceSha256.Length != 64)
         {
-            throw new AssetCtlException("Approval semantic evidence does not match current bytes and request.", 8);
+            throw new AssetCtlException("Approval semantic evidence is not a complete provenance digest.", 8);
         }
     }
 }

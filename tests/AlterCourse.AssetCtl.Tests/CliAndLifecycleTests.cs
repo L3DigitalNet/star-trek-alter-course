@@ -56,4 +56,44 @@ public sealed class CliAndLifecycleTests
         string credential = Convert.ToHexString(RandomNumberGenerator.GetBytes(24));
         Assert.DoesNotContain(credential, Redactor.Sanitize(prefix + credential), StringComparison.OrdinalIgnoreCase);
     }
+
+    /// <summary>Binds structured review fields so an editable score detail cannot retain valid evidence.</summary>
+    [Fact]
+    public void ReviewEvidenceBindsEveryStructuredField()
+    {
+        AssetRequest request = TestData.Request();
+        byte[] bytes = [1, 2, 3];
+        var review = new SemanticReviewResult(
+            true,
+            true,
+            true,
+            true,
+            0.9,
+            0.8,
+            ["minor aliasing"],
+            false,
+            false,
+            0.85,
+            "pass",
+            "different-provider-family",
+            null,
+            "reviewer",
+            "profile"
+        );
+        string baseline = ReviewEvidence.Compute(request, bytes, "config", "reviewer", "profile", review);
+
+        string changed = ReviewEvidence.Compute(
+            request,
+            bytes,
+            "config",
+            "reviewer",
+            "profile",
+            review with
+            {
+                VisualDefects = ["watermark"],
+            }
+        );
+
+        Assert.False(string.Equals(baseline, changed, StringComparison.Ordinal));
+    }
 }

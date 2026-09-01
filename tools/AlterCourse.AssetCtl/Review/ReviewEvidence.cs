@@ -17,13 +17,25 @@ internal static class ReviewEvidence
     {
         string assetHash = Convert.ToHexStringLower(SHA256.HashData(normalizedBytes));
         string requestJson = JsonSerializer.Serialize(request, JsonOptions.Stable);
+        // Evidence deliberately excludes EvidenceSha256 itself while binding every reviewer-controlled field.
+        // Git history plus explicit owner approval is the trust boundary; this digest detects editable drift only.
         string reviewSummary = JsonSerializer.Serialize(
             new
             {
+                matches_subject = review.MatchesSubject,
+                required_constraints_satisfied = review.RequiredConstraintsSatisfied,
+                prohibited_content_absent = review.ProhibitedContentAbsent,
+                readable_at_target_sizes = review.ReadableAtTargetSizes,
+                style_adherence = review.StyleAdherence,
+                semantic_clarity = review.SemanticClarity,
+                visual_defects = review.VisualDefects,
+                unrequested_text_detected = review.UnrequestedTextDetected,
+                logo_or_watermark_detected = review.LogoOrWatermarkDetected,
                 decision = review.Decision,
-                hard_failure = review.HasHardFailure,
                 overall_score = review.OverallScore,
                 independence = review.Independence,
+                reviewer_provider = review.ReviewerProvider,
+                reviewer_model_profile = review.ReviewerModelProfile,
             },
             JsonOptions.Stable
         );

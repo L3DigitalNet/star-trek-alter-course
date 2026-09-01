@@ -1,5 +1,7 @@
 namespace AlterCourse.AssetCtl.Routing;
 
+using SemanticReviewPolicy = AlterCourse.AssetCtl.Domain.DomainModels.SemanticReviewPolicy;
+
 /// <summary>Evaluates declarative routes without interpreting provider identity or provider-specific options.</summary>
 internal sealed class AssetRouter(AdapterRegistry adapters)
 {
@@ -12,7 +14,7 @@ internal sealed class AssetRouter(AdapterRegistry adapters)
 
         global::System.Collections.Generic.IReadOnlyList<global::AlterCourse.AssetCtl.Domain.DomainModels.AssetCapability> required =
             RequiredCapabilities(request);
-        List<PlannedTarget> targets = BuildTargets(configuration, request, required, tier.Candidates);
+        List<PlannedTarget> targets = BuildTargets(configuration, request, required, tier);
 
         global::AlterCourse.AssetCtl.Domain.DomainModels.PlannedTarget? selected = targets.FirstOrDefault(target =>
             target.Eligible
@@ -26,6 +28,7 @@ internal sealed class AssetRouter(AdapterRegistry adapters)
             selected = null;
         }
 
+        decimal? estimatedMaximumCost = EstimateMaximumCost(configuration, targets, reviewer, tier);
         return new GenerationPlan(
             request,
             required,
@@ -34,7 +37,7 @@ internal sealed class AssetRouter(AdapterRegistry adapters)
             reviewer,
             tier.Candidates,
             tier.AttemptsPerRoute,
-            selected?.EstimatedMaximumCost,
+            estimatedMaximumCost,
             string.Equals(selected?.AdapterId, "local-placeholder", StringComparison.Ordinal)
         );
     }
@@ -43,7 +46,7 @@ internal sealed class AssetRouter(AdapterRegistry adapters)
         EffectiveConfiguration configuration,
         AssetRequest request,
         IReadOnlyList<AssetCapability> required,
-        int candidates
+        QualityTier tier
     )
     {
         List<PlannedTarget> targets = [];
@@ -51,11 +54,60 @@ internal sealed class AssetRouter(AdapterRegistry adapters)
         {
             foreach (RouteTarget target in route.Targets)
             {
-                targets.Add(Evaluate(configuration, route, target, required, candidates, request.Lifecycle));
+                targets.Add(Evaluate(configuration, route, target, required, tier.Candidates, request.Lifecycle));
             }
         }
 
         return targets;
+    }
+
+    private static decimal? EstimateMaximumCost(
+        EffectiveConfiguration configuration,
+        IReadOnlyList<PlannedTarget> targets,
+        PlannedTarget? reviewer,
+        QualityTier tier
+    )
+    {
+        int remainingAttempts = configuration.Limits.MaximumTotalAttempts;
+        decimal total = 0;
+        foreach (PlannedTarget target in targets.Where(target => target.Eligible))
+        {
+            RouteDefinition route = configuration.Routes.Single(route =>
+                string.Equals(route.Id, target.RouteId, StringComparison.Ordinal)
+            );
+            int attempts = Math.Min(
+                remainingAttempts,
+                route.RetryPolicy?.MaximumAttemptsPerTarget ?? tier.AttemptsPerRoute
+            );
+            if (attempts == 0)
+            {
+                break;
+            }
+
+            if (target.EstimatedMaximumCost is null)
+            {
+                return null;
+            }
+
+            total += target.EstimatedMaximumCost.Value * attempts;
+            remainingAttempts -= attempts;
+        }
+
+        if (tier.ReviewPolicy is not SemanticReviewPolicy.Disabled && reviewer is not null)
+        {
+            if (reviewer.EstimatedMaximumCost is null)
+            {
+                return null;
+            }
+
+            RouteDefinition reviewRoute = configuration.ReviewRoutes.Single(route =>
+                string.Equals(route.Id, reviewer.RouteId, StringComparison.Ordinal)
+            );
+            int reviewAttempts = reviewRoute.RetryPolicy?.MaximumAttemptsPerTarget ?? 1;
+            total += reviewer.EstimatedMaximumCost.Value * tier.Candidates * reviewAttempts;
+        }
+
+        return total;
     }
 
     private PlannedTarget? FindReviewer(EffectiveConfiguration configuration, AssetLifecycle lifecycle)

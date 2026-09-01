@@ -13,16 +13,16 @@ internal static class Program
     public static async Task<int> Main(string[] arguments)
     {
         string repository = TryFindRepository();
-        Directory.CreateDirectory(Path.Combine(repository, ".assetctl", "logs"));
         using ILoggerFactory loggerFactory = CreateLoggerFactory(repository);
         using var httpClient = new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false });
         return await RunAsync(arguments, loggerFactory, httpClient).ConfigureAwait(false);
     }
 
-    private static ILoggerFactory CreateLoggerFactory(string repository)
+    internal static ILoggerFactory CreateLoggerFactory(string repository)
     {
         try
         {
+            Directory.CreateDirectory(Path.Combine(repository, ".assetctl", "logs"));
             Log.Logger = new LoggerConfiguration()
                 .MinimumLevel.Information()
                 .WriteTo.Console(

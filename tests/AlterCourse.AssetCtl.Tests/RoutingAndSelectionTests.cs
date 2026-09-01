@@ -1,5 +1,8 @@
 using AlterCourse.AssetCtl.Generation;
 using AlterCourse.AssetCtl.Routing;
+using GenerationPlan = AlterCourse.AssetCtl.Domain.DomainModels.GenerationPlan;
+using RouteFallbackPolicy = AlterCourse.AssetCtl.Domain.DomainModels.RouteFallbackPolicy;
+using RouteRetryPolicy = AlterCourse.AssetCtl.Domain.DomainModels.RouteRetryPolicy;
 
 namespace AlterCourse.AssetCtl.Tests;
 
@@ -115,6 +118,93 @@ public sealed class RoutingAndSelectionTests
         Assert.Equal(1, selected.Candidate.CreationOrder);
     }
 
+    /// <summary>Rejects a semantically valid candidate whose score is below the tier threshold.</summary>
+    [Fact]
+    public void CandidateSelectionEnforcesMinimumSemanticScore()
+    {
+        byte[] bytes = [1];
+        var mechanical = new MechanicalValidationResult(
+            true,
+            "image/png",
+            1,
+            1,
+            true,
+            [],
+            bytes,
+            new Dictionary<int, byte[]>(0)
+        );
+        Assert.Throws<AssetCtlException>(() =>
+            CandidateSelector.Select(
+                [(new GeneratedCandidate(0, bytes, "image/png", null, 0), mechanical, Review(0.79))],
+                new QualityTier("test", 1, 1, "required", false, 0.80)
+            )
+        );
+    }
+
+    /// <summary>Includes every reachable retry, fallback target, candidate, and reviewer attempt in plan cost.</summary>
+    [Fact]
+    public void PlanCostConservativelyIncludesFallbacksRetriesAndReviews()
+    {
+        var first = new FakeGenerator("first");
+        var second = new FakeGenerator("second");
+        var reviewer = new FakeReviewer();
+        var registry = new AdapterRegistry([first, second, reviewer]);
+        AssetRequest request = TestData.Request();
+        ProviderInstance firstProvider = Provider(
+            "first-provider",
+            first.AdapterId,
+            0.10m,
+            AssetCapability.RasterGenerate
+        );
+        ProviderInstance secondProvider = Provider(
+            "second-provider",
+            second.AdapterId,
+            0.10m,
+            AssetCapability.RasterGenerate
+        );
+        ProviderInstance reviewProvider = Provider(
+            "review-provider",
+            reviewer.AdapterId,
+            0.05m,
+            AssetCapability.ReviewSemantic
+        );
+        var retry = new RouteRetryPolicy(2, 0, 0, 0, new HashSet<ProviderErrorCategory>());
+        var fallback = new RouteFallbackPolicy(true, new HashSet<ProviderErrorCategory>());
+        var route = new RouteDefinition(
+            "generation",
+            100,
+            request.Lifecycle,
+            request.Output.Format,
+            AssetCapability.RasterGenerate,
+            [new RouteTarget(firstProvider.Id, "profile"), new RouteTarget(secondProvider.Id, "profile")],
+            0,
+            fallback,
+            retry
+        );
+        var reviewRoute = new RouteDefinition(
+            "review",
+            100,
+            null,
+            null,
+            AssetCapability.ReviewSemantic,
+            [new RouteTarget(reviewProvider.Id, "profile")],
+            0,
+            fallback,
+            retry
+        );
+        var providers = new Dictionary<string, ProviderInstance>(StringComparer.Ordinal)
+        {
+            [firstProvider.Id] = firstProvider,
+            [secondProvider.Id] = secondProvider,
+            [reviewProvider.Id] = reviewProvider,
+        };
+        EffectiveConfiguration configuration = Configuration(providers, request, route, reviewRoute);
+
+        GenerationPlan plan = new AssetRouter(registry).Plan(configuration, request);
+
+        Assert.Equal(1.50m, plan.EstimatedMaximumCost);
+    }
+
     /// <summary>Keeps prompt ordering and its content hash deterministic.</summary>
     [Fact]
     public void PromptOrderAndHashAreStable()
@@ -163,6 +253,57 @@ public sealed class RoutingAndSelectionTests
         );
     }
 
+    private static EffectiveConfiguration Configuration(
+        IReadOnlyDictionary<string, ProviderInstance> providers,
+        AssetRequest request,
+        RouteDefinition route,
+        RouteDefinition reviewRoute
+    ) =>
+        new(
+            "/repo",
+            new AssetCtlPaths("assets", "catalog", "styles", "work", "runs", "state", "logs"),
+            new AssetCtlPolicy(false, true, true, true, false, "reject"),
+            new AssetCtlLimits(1_000_000, 1_000_000, 10, 10, 10, 30, 1_000_000),
+            new SpendingLimits(10, 10, 10),
+            providers,
+            [route],
+            [reviewRoute],
+            new Dictionary<string, QualityTier>(StringComparer.Ordinal)
+            {
+                [request.QualityTier] = new(request.QualityTier, 3, 2, "required", false, 0.8),
+            },
+            new Dictionary<string, StyleProfile>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            "hash"
+        );
+
+    private static ProviderInstance Provider(string id, string adapterId, decimal cost, AssetCapability capability)
+    {
+        var capabilities = new HashSet<AssetCapability> { capability };
+        if (capability is AssetCapability.RasterGenerate)
+        {
+            capabilities.Add(AssetCapability.ImageTransparentOutput);
+        }
+
+        var profile = new ModelProfile(
+            "profile",
+            "vendor",
+            capabilities,
+            cost,
+            "fixed-output",
+            new Dictionary<string, string>(StringComparer.Ordinal)
+        );
+        return new ProviderInstance(
+            id,
+            adapterId,
+            true,
+            null,
+            null,
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+            new Dictionary<string, ModelProfile>(StringComparer.Ordinal) { [profile.Id] = profile }
+        );
+    }
+
     private static SemanticReviewResult Review(double score) =>
         new(true, true, true, true, score, score, [], false, false, score, "pass", "different-provider-family");
 
@@ -180,6 +321,25 @@ public sealed class RoutingAndSelectionTests
         public Task<GenerationBatchResult> GenerateAsync(
             ProviderExecutionContext context,
             NormalizedGenerationRequest request,
+            CancellationToken cancellationToken
+        ) => throw new NotSupportedException();
+    }
+
+    private sealed class FakeReviewer : AlterCourse.AssetCtl.Providers.ProviderContracts.IAssetReviewer
+    {
+        public string AdapterId => "reviewer";
+
+        public IReadOnlySet<AssetCapability> SupportedCapabilities { get; } =
+            new HashSet<AssetCapability> { AssetCapability.ReviewSemantic };
+
+        public IReadOnlySet<string> AllowedEndpointHosts { get; } =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        public void ValidateOptions(IReadOnlyDictionary<string, string> options) { }
+
+        public Task<SemanticReviewResult> ReviewAsync(
+            ProviderExecutionContext context,
+            SemanticReviewRequest request,
             CancellationToken cancellationToken
         ) => throw new NotSupportedException();
     }
