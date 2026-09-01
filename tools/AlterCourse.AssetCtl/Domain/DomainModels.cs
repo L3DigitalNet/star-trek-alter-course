@@ -125,7 +125,10 @@ internal static class DomainModels
         bool LogoOrWatermarkDetected,
         double OverallScore,
         string Decision,
-        string Independence
+        string Independence,
+        string? EvidenceSha256 = null,
+        string? ReviewerProvider = null,
+        string? ReviewerModelProfile = null
     )
     {
         public bool HasHardFailure =>

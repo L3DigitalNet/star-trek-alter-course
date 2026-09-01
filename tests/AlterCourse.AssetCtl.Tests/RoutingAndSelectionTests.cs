@@ -172,6 +172,9 @@ public sealed class RoutingAndSelectionTests
         public IReadOnlySet<AssetCapability> SupportedCapabilities { get; } =
             new HashSet<AssetCapability> { AssetCapability.RasterGenerate, AssetCapability.ImageTransparentOutput };
 
+        public IReadOnlySet<string> AllowedEndpointHosts { get; } =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         public void ValidateOptions(IReadOnlyDictionary<string, string> options) { }
 
         public Task<GenerationBatchResult> GenerateAsync(

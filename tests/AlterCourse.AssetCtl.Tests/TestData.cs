@@ -52,7 +52,15 @@ internal static class TestData
             "arbitrary-instance",
             adapter,
             true,
-            new Uri("https://provider.example/v1"),
+            new Uri(
+                adapter switch
+                {
+                    "recraft-images" => "https://external.api.recraft.ai/v1",
+                    "openai-images" or "openai-vision-review" => "https://api.openai.com/v1",
+                    "xai-images" => "https://api.x.ai/v1",
+                    _ => "https://provider.example/v1",
+                }
+            ),
             "TEST_API_KEY",
             new HashSet<string>(StringComparer.OrdinalIgnoreCase),
             new Dictionary<string, ModelProfile>(StringComparer.Ordinal) { ["profile"] = profile }
@@ -62,6 +70,7 @@ internal static class TestData
             profile,
             credential ?? Convert.ToHexString(RandomNumberGenerator.GetBytes(24)),
             10,
+            1_000_000,
             1_000_000,
             "run"
         );

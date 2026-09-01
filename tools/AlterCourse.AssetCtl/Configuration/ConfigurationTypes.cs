@@ -315,6 +315,8 @@ internal static class ConfigurationTypes
                 {
                     throw new AssetCtlException($"{path}.endpoint: HTTPS is required.", 2);
                 }
+
+                ProviderEndpointPolicy.Validate(endpoint, adapter.AllowedEndpointHosts, $"{path}.endpoint");
             }
 
             string? credential = ReadCredential(node.OptionalMapping("credentials", path), path);
@@ -732,6 +734,8 @@ internal static class ConfigurationTypes
         public string AdapterId { get; }
 
         public IReadOnlySet<AssetCapability> SupportedCapabilities { get; }
+
+        public IReadOnlySet<string> AllowedEndpointHosts { get; }
 
         public void ValidateOptions(IReadOnlyDictionary<string, string> options);
     }

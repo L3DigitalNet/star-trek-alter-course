@@ -8,6 +8,7 @@ internal static class ProviderContracts
         string Credential,
         int TimeoutSeconds,
         long MaximumDownloadBytes,
+        long MaximumJsonResponseBytes,
         string RunId
     );
 

@@ -5,7 +5,9 @@ namespace AlterCourse.AssetCtl.Providers;
 
 internal static class ProviderAdapters
 {
-    public sealed class RecraftImageAdapter(HttpClient client) : HttpProviderBase(client), IAssetGenerator
+    public sealed class RecraftImageAdapter(HttpClient client)
+        : HttpProviderBase(client, EndpointHosts),
+            IAssetGenerator
     {
         private static readonly IReadOnlySet<AssetCapability> Capabilities = new HashSet<AssetCapability>
         {
@@ -21,6 +23,15 @@ internal static class ProviderAdapters
         public string AdapterId => "recraft-images";
 
         public IReadOnlySet<AssetCapability> SupportedCapabilities => Capabilities;
+
+        private static readonly IReadOnlySet<string> EndpointHosts = new HashSet<string>(
+            StringComparer.OrdinalIgnoreCase
+        )
+        {
+            "external.api.recraft.ai",
+        };
+
+        public IReadOnlySet<string> AllowedEndpointHosts => EndpointHosts;
 
         public void ValidateOptions(IReadOnlyDictionary<string, string> options) =>
             ValidateKnown(options, "style", "substyle", "response_format");
@@ -75,7 +86,7 @@ internal static class ProviderAdapters
         internal static Uri Endpoint(Uri endpoint, string path) => new(endpoint.AbsoluteUri.TrimEnd('/') + "/" + path);
     }
 
-    public sealed class OpenAiImageAdapter(HttpClient client) : HttpProviderBase(client), IAssetGenerator
+    public sealed class OpenAiImageAdapter(HttpClient client) : HttpProviderBase(client, EndpointHosts), IAssetGenerator
     {
         private static readonly IReadOnlySet<AssetCapability> Capabilities = new HashSet<AssetCapability>
         {
@@ -88,6 +99,15 @@ internal static class ProviderAdapters
         public string AdapterId => "openai-images";
 
         public IReadOnlySet<AssetCapability> SupportedCapabilities => Capabilities;
+
+        private static readonly IReadOnlySet<string> EndpointHosts = new HashSet<string>(
+            StringComparer.OrdinalIgnoreCase
+        )
+        {
+            "api.openai.com",
+        };
+
+        public IReadOnlySet<string> AllowedEndpointHosts => EndpointHosts;
 
         public void ValidateOptions(IReadOnlyDictionary<string, string> options) =>
             RecraftImageAdapter.ValidateKnown(options, "quality", "background", "output_compression");
@@ -154,7 +174,7 @@ internal static class ProviderAdapters
         }
     }
 
-    public sealed class XaiImageAdapter(HttpClient client) : HttpProviderBase(client), IAssetGenerator
+    public sealed class XaiImageAdapter(HttpClient client) : HttpProviderBase(client, EndpointHosts), IAssetGenerator
     {
         private static readonly IReadOnlySet<AssetCapability> Capabilities = new HashSet<AssetCapability>
         {
@@ -166,6 +186,15 @@ internal static class ProviderAdapters
         public string AdapterId => "xai-images";
 
         public IReadOnlySet<AssetCapability> SupportedCapabilities => Capabilities;
+
+        private static readonly IReadOnlySet<string> EndpointHosts = new HashSet<string>(
+            StringComparer.OrdinalIgnoreCase
+        )
+        {
+            "api.x.ai",
+        };
+
+        public IReadOnlySet<string> AllowedEndpointHosts => EndpointHosts;
 
         public void ValidateOptions(IReadOnlyDictionary<string, string> options) =>
             RecraftImageAdapter.ValidateKnown(options, "aspect_ratio", "resolution");

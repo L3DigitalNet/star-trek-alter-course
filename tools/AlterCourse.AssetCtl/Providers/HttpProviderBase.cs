@@ -1,10 +1,11 @@
+using System.Buffers.Text;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
 
 namespace AlterCourse.AssetCtl.Providers;
 
-internal abstract class HttpProviderBase(HttpClient httpClient)
+internal abstract class HttpProviderBase(HttpClient httpClient, IReadOnlySet<string> allowedEndpointHosts)
 {
     public static class Redactor
     {
@@ -40,17 +41,80 @@ internal abstract class HttpProviderBase(HttpClient httpClient)
         CancellationToken cancellationToken
     )
     {
+        ValidateRequestEndpoint(message);
         message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", context.Credential);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(context.TimeoutSeconds));
-        HttpResponseMessage response;
+        HttpResponseMessage response = await SendAsync(message, cancellationToken, timeout.Token).ConfigureAwait(false);
+
+        using (response)
+        {
+            if (!response.IsSuccessStatusCode)
+            {
+                throw Normalize(response.StatusCode, response.Headers.RetryAfter is not null);
+            }
+
+            if (response.Content.Headers.ContentLength > context.MaximumJsonResponseBytes)
+            {
+                throw new ProviderException(
+                    ProviderErrorCategory.MalformedResponse,
+                    "Provider JSON response exceeds byte limit."
+                );
+            }
+
+            byte[] json = await ReadBoundedAsync(
+                    response.Content,
+                    context.MaximumJsonResponseBytes,
+                    timeout.Token,
+                    ProviderErrorCategory.MalformedResponse,
+                    "Provider JSON response exceeded byte limit while streaming."
+                )
+                .ConfigureAwait(false);
+            try
+            {
+                return JsonDocument.Parse(json, new JsonDocumentOptions { MaxDepth = 32 });
+            }
+            catch (JsonException exception)
+            {
+                throw new ProviderException(
+                    ProviderErrorCategory.MalformedResponse,
+                    $"Malformed provider JSON: {exception.Message}"
+                );
+            }
+        }
+    }
+
+    private void ValidateRequestEndpoint(HttpRequestMessage message)
+    {
+        Uri endpoint =
+            message.RequestUri
+            ?? throw new ProviderException(
+                ProviderErrorCategory.InvalidRequest,
+                "Provider request omitted an endpoint."
+            );
         try
         {
-            response = await Client
-                .SendAsync(message, HttpCompletionOption.ResponseHeadersRead, timeout.Token)
+            ProviderEndpointPolicy.Validate(endpoint, allowedEndpointHosts, "provider request");
+        }
+        catch (AssetCtlException exception)
+        {
+            throw new ProviderException(ProviderErrorCategory.InvalidRequest, exception.Message);
+        }
+    }
+
+    private async Task<HttpResponseMessage> SendAsync(
+        HttpRequestMessage message,
+        CancellationToken callerToken,
+        CancellationToken timeoutToken
+    )
+    {
+        try
+        {
+            return await Client
+                .SendAsync(message, HttpCompletionOption.ResponseHeadersRead, timeoutToken)
                 .ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (!callerToken.IsCancellationRequested)
         {
             throw new ProviderException(ProviderErrorCategory.Timeout, "Provider request timed out.", retryable: true);
         }
@@ -61,33 +125,6 @@ internal abstract class HttpProviderBase(HttpClient httpClient)
                 Redactor.Sanitize(exception.Message),
                 retryable: true
             );
-        }
-
-        using (response)
-        {
-            if (!response.IsSuccessStatusCode)
-            {
-                throw Normalize(response.StatusCode, response.Headers.RetryAfter is not null);
-            }
-
-            global::System.IO.Stream stream = await response
-                .Content.ReadAsStreamAsync(timeout.Token)
-                .ConfigureAwait(false);
-            await using System.Runtime.CompilerServices.ConfiguredAsyncDisposable streamLifetime =
-                stream.ConfigureAwait(false);
-            try
-            {
-                return await JsonDocument
-                    .ParseAsync(stream, new JsonDocumentOptions { MaxDepth = 32 }, timeout.Token)
-                    .ConfigureAwait(false);
-            }
-            catch (JsonException exception)
-            {
-                throw new ProviderException(
-                    ProviderErrorCategory.MalformedResponse,
-                    $"Malformed provider JSON: {exception.Message}"
-                );
-            }
         }
     }
 
@@ -111,25 +148,7 @@ internal abstract class HttpProviderBase(HttpClient httpClient)
         {
             if (item.TryGetProperty("b64_json", out JsonElement encoded) && encoded.ValueKind == JsonValueKind.String)
             {
-                try
-                {
-                    candidates.Add(
-                        new GeneratedCandidate(
-                            index++,
-                            Convert.FromBase64String(encoded.GetString()!),
-                            "image/png",
-                            null,
-                            null
-                        )
-                    );
-                }
-                catch (FormatException)
-                {
-                    throw new ProviderException(
-                        ProviderErrorCategory.MalformedResponse,
-                        "Provider returned invalid base64 image data."
-                    );
-                }
+                candidates.Add(DecodeInlineCandidate(encoded, index++, context.MaximumDownloadBytes));
             }
             else if (item.TryGetProperty("url", out JsonElement urlNode) && urlNode.ValueKind == JsonValueKind.String)
             {
@@ -155,6 +174,30 @@ internal abstract class HttpProviderBase(HttpClient httpClient)
         return candidates.Count != 0
             ? candidates
             : throw new ProviderException(ProviderErrorCategory.MalformedResponse, "Provider returned no candidates.");
+    }
+
+    private static GeneratedCandidate DecodeInlineCandidate(JsonElement encoded, int index, long maximumBytes)
+    {
+        try
+        {
+            string value = encoded.GetString()!;
+            if (Base64.GetMaxDecodedFromUtf8Length(value.Length) > maximumBytes)
+            {
+                throw new ProviderException(
+                    ProviderErrorCategory.UnsafeDownload,
+                    "Provider inline image exceeds byte limit."
+                );
+            }
+
+            return new GeneratedCandidate(index, Convert.FromBase64String(value), "image/png", null, null);
+        }
+        catch (FormatException)
+        {
+            throw new ProviderException(
+                ProviderErrorCategory.MalformedResponse,
+                "Provider returned invalid base64 image data."
+            );
+        }
     }
 
     private async Task<byte[]> DownloadAsync(
@@ -235,7 +278,9 @@ internal abstract class HttpProviderBase(HttpClient httpClient)
     private static async Task<byte[]> ReadBoundedAsync(
         HttpContent content,
         long maximumBytes,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        ProviderErrorCategory category = ProviderErrorCategory.UnsafeDownload,
+        string message = "Provider download exceeded byte limit while streaming."
     )
     {
         Stream input = await content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
@@ -249,10 +294,7 @@ internal abstract class HttpProviderBase(HttpClient httpClient)
         {
             if (output.Length + read > maximumBytes)
             {
-                throw new ProviderException(
-                    ProviderErrorCategory.UnsafeDownload,
-                    "Provider download exceeded byte limit while streaming."
-                );
+                throw new ProviderException(category, message);
             }
 
             await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);

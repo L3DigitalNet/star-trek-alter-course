@@ -10,6 +10,37 @@ namespace AlterCourse.AssetCtl.Validation;
 internal static class MechanicalValidator
 {
     private static readonly XNamespace SvgNamespace = "http://www.w3.org/2000/svg";
+    private static readonly HashSet<string> AllowedSvgElements = new(StringComparer.Ordinal)
+    {
+        "svg",
+        "g",
+        "defs",
+        "path",
+        "rect",
+        "circle",
+        "ellipse",
+        "line",
+        "polyline",
+        "polygon",
+        "title",
+        "desc",
+        "metadata",
+        "use",
+        "clipPath",
+        "mask",
+        "linearGradient",
+        "radialGradient",
+        "stop",
+        "filter",
+        "feBlend",
+        "feColorMatrix",
+        "feComposite",
+        "feFlood",
+        "feGaussianBlur",
+        "feMerge",
+        "feMergeNode",
+        "feOffset",
+    };
 
     public static MechanicalValidationResult Validate(
         AssetRequest request,
@@ -18,6 +49,15 @@ internal static class MechanicalValidator
         long maximumPixels
     )
     {
+        try
+        {
+            OutputContractPolicy.Validate(request.Output, maximumPixels);
+        }
+        catch (AssetCtlException exception)
+        {
+            return Failure(exception.Message);
+        }
+
         if (bytes.Length == 0 || bytes.LongLength > maximumBytes)
         {
             return Failure("output byte length is outside policy");
@@ -42,7 +82,7 @@ internal static class MechanicalValidator
             }
 
             SKImageInfo info = codec.Info;
-            if (info.Width <= 0 || info.Height <= 0 || (long)info.Width * info.Height > maximumPixels)
+            if (!DimensionsMatch(request.Output, info.Width, info.Height, maximumPixels))
             {
                 return Failure("decoded dimensions exceed policy");
             }
@@ -120,7 +160,7 @@ internal static class MechanicalValidator
 
             int width = ParseDimension(root.Attribute("width")?.Value, "width");
             int height = ParseDimension(root.Attribute("height")?.Value, "height");
-            if (width <= 0 || height <= 0 || (long)width * height > maximumPixels)
+            if (!DimensionsMatch(request.Output, width, height, maximumPixels))
             {
                 return Failure("SVG dimensions exceed policy");
             }
@@ -169,13 +209,20 @@ internal static class MechanicalValidator
         return normalizedStream.ToArray();
     }
 
+    private static bool DimensionsMatch(OutputContract expected, int width, int height, long maximumPixels) =>
+        OutputContractPolicy.AllowsDimensions(width, height, maximumPixels)
+        && width == expected.Width
+        && height == expected.Height;
+
     private static string? ValidateSvgElements(XElement root, AssetRequest request)
     {
         foreach (XElement element in root.DescendantsAndSelf().ToArray())
         {
             string local = element.Name.LocalName;
             if (
-                local is "script" or "foreignObject" or "image" or "style"
+                element.Name.Namespace != SvgNamespace
+                || !AllowedSvgElements.Contains(local)
+                || local is "image" or "feImage"
                 || string.Equals(local, "text", StringComparison.Ordinal)
                     && request.Prohibited.Contains("text", StringComparer.OrdinalIgnoreCase)
             )
@@ -200,11 +247,8 @@ internal static class MechanicalValidator
                 string value = attribute.Value.Trim();
                 if (
                     name.StartsWith("on", StringComparison.OrdinalIgnoreCase)
-                    || value.Contains("url(", StringComparison.OrdinalIgnoreCase)
-                    || value.StartsWith("http:", StringComparison.OrdinalIgnoreCase)
-                    || value.StartsWith("https:", StringComparison.OrdinalIgnoreCase)
-                    || value.StartsWith("data:", StringComparison.OrdinalIgnoreCase)
-                    || value.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(name, "base", StringComparison.OrdinalIgnoreCase)
+                    || IsExternalResource(name, value)
                 )
                 {
                     return $"prohibited SVG attribute '{name}'";
@@ -213,6 +257,23 @@ internal static class MechanicalValidator
         }
 
         return null;
+    }
+
+    private static bool IsExternalResource(string name, string value)
+    {
+        if (name is "href" or "src")
+        {
+            return !value.StartsWith('#');
+        }
+
+        int urlStart = value.IndexOf("url(", StringComparison.OrdinalIgnoreCase);
+        if (urlStart >= 0)
+        {
+            string target = value[(urlStart + 4)..].TrimStart(' ', '\'', '"');
+            return !target.StartsWith('#');
+        }
+
+        return Uri.TryCreate(value, UriKind.Absolute, out _);
     }
 
     private static Dictionary<int, byte[]> RenderSvgPreviews(SKSvg svg, IReadOnlyList<int> sizes, int width, int height)

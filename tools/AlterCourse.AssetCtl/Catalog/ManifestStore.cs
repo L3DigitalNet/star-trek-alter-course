@@ -235,7 +235,7 @@ internal static class ManifestStore
             throw new AssetCtlException("manifest.output: extension does not match format.", 2);
         }
 
-        return new OutputContract(
+        var output = new OutputContract(
             outputPath,
             format,
             node.Integer("width", "manifest.output"),
@@ -249,6 +249,8 @@ internal static class ManifestStore
                 .Select(value => int.Parse(value, CultureInfo.InvariantCulture))
                 .ToArray()
         );
+        OutputContractPolicy.Validate(output, configuration.Limits.MaximumDecodedPixels);
+        return output;
     }
 
     public static string Serialize(AssetManifest manifest)
@@ -364,6 +366,9 @@ internal static class ManifestStore
         {
             builder.AppendLine(CultureInfo.InvariantCulture, $"  semantic_score: {semantic.OverallScore}");
             Line(builder, 2, "semantic_independence", semantic.Independence);
+            NullableLine(builder, 2, "semantic_evidence_sha256", semantic.EvidenceSha256);
+            NullableLine(builder, 2, "semantic_reviewer_provider", semantic.ReviewerProvider);
+            NullableLine(builder, 2, "semantic_reviewer_model_profile", semantic.ReviewerModelProfile);
         }
     }
 
@@ -549,7 +554,10 @@ internal static class ManifestStore
             "mechanical_findings",
             "semantic_status",
             "semantic_score",
-            "semantic_independence"
+            "semantic_independence",
+            "semantic_evidence_sha256",
+            "semantic_reviewer_provider",
+            "semantic_reviewer_model_profile"
         );
         bool passed = string.Equals(
             node.Scalar("mechanical_status", "manifest.validation"),
@@ -575,6 +583,11 @@ internal static class ManifestStore
             return (mechanical, null);
         }
 
+        return (mechanical, ReadSemantic(node, semanticStatus));
+    }
+
+    private static SemanticReviewResult ReadSemantic(YamlMappingNode node, string semanticStatus)
+    {
         double score = double.Parse(node.Scalar("semantic_score", "manifest.validation"), CultureInfo.InvariantCulture);
         bool semanticPassed = string.Equals(semanticStatus, "pass", StringComparison.Ordinal);
         SemanticReviewResult semantic = new(
@@ -589,9 +602,12 @@ internal static class ManifestStore
             false,
             score,
             semanticStatus,
-            node.Scalar("semantic_independence", "manifest.validation")
+            node.Scalar("semantic_independence", "manifest.validation"),
+            node.OptionalScalar("semantic_evidence_sha256", "manifest.validation"),
+            node.OptionalScalar("semantic_reviewer_provider", "manifest.validation"),
+            node.OptionalScalar("semantic_reviewer_model_profile", "manifest.validation")
         );
-        return (mechanical, semantic);
+        return semantic;
     }
 
     private static ApprovalRecord ReadApproval(YamlMappingNode? node)

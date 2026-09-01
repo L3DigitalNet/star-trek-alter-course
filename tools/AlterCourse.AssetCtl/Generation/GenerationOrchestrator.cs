@@ -1,6 +1,5 @@
 using System.Security.Cryptography;
 using System.Text.Json;
-using AlterCourse.AssetCtl.Catalog;
 using AlterCourse.AssetCtl.Routing;
 using AlterCourse.AssetCtl.Validation;
 
@@ -18,6 +17,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
     )
     {
         using var assetLock = AssetLock.Acquire(configuration, manifest.Request.Id);
+        manifest = ManifestMutation.ReloadForMutation(configuration, manifest);
         if (manifest.Request.Lifecycle is AssetLifecycle.Approved or AssetLifecycle.Deprecated)
         {
             throw new AssetCtlException("Approved and deprecated assets cannot be generated or overwritten.", 8);
@@ -37,6 +37,17 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
             return new { dry_run = true, plan };
         }
 
+        return await GenerateNewAsync(configuration, manifest, plan, offline, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<object> GenerateNewAsync(
+        EffectiveConfiguration configuration,
+        AssetManifest manifest,
+        GenerationPlan plan,
+        bool offline,
+        CancellationToken cancellationToken
+    )
+    {
         global::AlterCourse.AssetCtl.Domain.DomainModels.StyleProfile style = configuration.Styles[
             manifest.Request.StyleProfile
         ];
@@ -49,6 +60,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         global::AlterCourse.AssetCtl.Domain.DomainModels.QualityTier tier = configuration.QualityTiers[
             manifest.Request.QualityTier
         ];
+        var spend = new SpendGuard(configuration);
         (TargetOutcome? outcome, List<object> attempts) = await GenerateFromRoutesAsync(
                 configuration,
                 manifest,
@@ -58,6 +70,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
                 tier,
                 runId,
                 offline,
+                spend,
                 cancellationToken
             )
             .ConfigureAwait(false);
@@ -69,7 +82,19 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
             );
         }
 
-        return Publish(configuration, manifest, plan, tier, outcome, attempts, prompt, promptHash, requestHash, runId);
+        return Publish(
+            configuration,
+            manifest,
+            plan,
+            tier,
+            outcome,
+            attempts,
+            prompt,
+            promptHash,
+            requestHash,
+            runId,
+            spend.TotalReservedUsd
+        );
     }
 
     private GenerationPlan BuildPlan(EffectiveConfiguration configuration, AssetRequest request, bool offline)
@@ -148,6 +173,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         QualityTier tier,
         string runId,
         bool offline,
+        SpendGuard spend,
         CancellationToken cancellationToken
     )
     {
@@ -169,6 +195,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
                         runId,
                         offline,
                         target,
+                        spend,
                         cancellationToken
                     )
                     .ConfigureAwait(false);
@@ -215,6 +242,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         string runId,
         bool offline,
         PlannedTarget target,
+        SpendGuard spend,
         CancellationToken cancellationToken
     )
     {
@@ -229,6 +257,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
             credential,
             configuration.Limits.DefaultHttpTimeoutSeconds,
             configuration.Limits.MaximumDownloadBytes,
+            configuration.Limits.MaximumDownloadBytes,
             runId
         );
         GenerationBatchResult batch = await InvokeWithRetry(
@@ -236,6 +265,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
                 context,
                 new NormalizedGenerationRequest(manifest.Request, prompt, plan.CandidateCount, references),
                 plan.AttemptsPerRoute,
+                spend,
                 cancellationToken
             )
             .ConfigureAwait(false);
@@ -249,6 +279,8 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
                 plan,
                 batch,
                 offline,
+                provider.AdapterId,
+                spend,
                 cancellationToken
             )
             .ConfigureAwait(false);
@@ -277,6 +309,8 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         GenerationPlan plan,
         GenerationBatchResult batch,
         bool offline,
+        string generatorAdapterId,
+        SpendGuard spend,
         CancellationToken cancellationToken
     )
     {
@@ -295,7 +329,16 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
             );
             SemanticReviewResult? review =
                 mechanical.Passed && plan.Reviewer is not null && !offline
-                    ? await Review(adapters, configuration, plan.Reviewer, request, mechanical, cancellationToken)
+                    ? await Review(
+                            adapters,
+                            configuration,
+                            plan.Reviewer,
+                            generatorAdapterId,
+                            request,
+                            mechanical,
+                            spend,
+                            cancellationToken
+                        )
                         .ConfigureAwait(false)
                     : null;
             evaluated.Add((candidate, mechanical, review));
@@ -314,7 +357,8 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         string prompt,
         string promptHash,
         string requestHash,
-        string runId
+        string runId,
+        decimal estimatedCostUsd
     )
     {
         (GeneratedCandidate Candidate, MechanicalValidationResult Mechanical, SemanticReviewResult? Review) selected =
@@ -342,13 +386,14 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
                 requestHash,
                 configuration.EffectiveHash,
                 selected.Candidate.ProviderRequestId ?? outcome.Batch.ProviderRequestId,
-                outcome.Target.EstimatedMaximumCost ?? 0,
+                estimatedCostUsd,
                 selected.Candidate.ActualCostUsd ?? outcome.Batch.ActualCostUsd
             ),
             MechanicalValidation = selected.Mechanical,
             SemanticReview = selected.Review,
             Integrity = integrity,
         };
+        ManifestMutation.EnsureCurrent(configuration, manifest);
         AtomicPublisher.Publish(
             configuration,
             generated.Request.Output.Path,
@@ -379,6 +424,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         ProviderExecutionContext context,
         NormalizedGenerationRequest request,
         int maximumAttempts,
+        SpendGuard spend,
         CancellationToken cancellationToken
     )
     {
@@ -386,6 +432,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         {
             try
             {
+                spend.Reserve(context.Model.EstimatedCostPerOutput, request.CandidateCount, "generation attempt");
                 return await generator.GenerateAsync(context, request, cancellationToken).ConfigureAwait(false);
             }
             catch (ProviderException exception) when (exception.Retryable && attempt < maximumAttempts)
@@ -399,8 +446,10 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         AdapterRegistry adapters,
         EffectiveConfiguration configuration,
         PlannedTarget target,
+        string generatorAdapterId,
         AssetRequest request,
         MechanicalValidationResult mechanical,
+        SpendGuard spend,
         CancellationToken cancellationToken
     )
     {
@@ -420,9 +469,11 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
             credential,
             configuration.Limits.DefaultHttpTimeoutSeconds,
             configuration.Limits.MaximumDownloadBytes,
+            configuration.Limits.MaximumDownloadBytes,
             Guid.NewGuid().ToString()
         );
-        return await adapters
+        spend.Reserve(model.EstimatedCostPerOutput, 1, "semantic review");
+        SemanticReviewResult result = await adapters
             .Reviewer(provider.AdapterId)
             .ReviewAsync(
                 context,
@@ -436,6 +487,26 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
                 cancellationToken
             )
             .ConfigureAwait(false);
+        string independence = string.Equals(provider.AdapterId, generatorAdapterId, StringComparison.Ordinal)
+            ? "same-provider-family"
+            : "different-provider-family";
+        result = result with
+        {
+            Independence = independence,
+            ReviewerProvider = provider.Id,
+            ReviewerModelProfile = model.Id,
+        };
+        return result with
+        {
+            EvidenceSha256 = ReviewEvidence.Compute(
+                request,
+                mechanical.NormalizedBytes,
+                configuration.EffectiveHash,
+                provider.Id,
+                model.Id,
+                result
+            ),
+        };
     }
 
     private static (string FileName, string MediaType, byte[] Bytes) LoadReference(

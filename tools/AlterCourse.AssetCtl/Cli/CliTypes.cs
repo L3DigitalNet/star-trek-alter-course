@@ -1,6 +1,5 @@
 using System.Security.Cryptography;
 using System.Text.Json;
-using AlterCourse.AssetCtl.Catalog;
 using AlterCourse.AssetCtl.Generation;
 using AlterCourse.AssetCtl.Routing;
 using AlterCourse.AssetCtl.Validation;
@@ -308,6 +307,8 @@ internal static class CliTypes
                 configuration,
                 options
             );
+            using var assetLock = AssetLock.Acquire(configuration, manifest.Request.Id);
+            manifest = ManifestMutation.ReloadForMutation(configuration, manifest);
             if (manifest.Request.Lifecycle == AssetLifecycle.Approved)
             {
                 return new
@@ -324,6 +325,7 @@ internal static class CliTypes
             string beforeHash = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(assetPath)));
             global::AlterCourse.AssetCtl.Domain.DomainModels.AssetManifest approved = manifest with
             {
+                Revision = manifest.Revision + 1,
                 Request = manifest.Request with { Lifecycle = AssetLifecycle.Approved },
                 Approval = new ApprovalRecord(actor, DateTimeOffset.UtcNow, note),
             };
@@ -338,7 +340,7 @@ internal static class CliTypes
                 };
             }
 
-            WriteManifestAtomic(configuration, approved);
+            ManifestMutation.WriteCas(configuration, manifest, approved);
             string afterHash = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(assetPath)));
             if (!string.Equals(beforeHash, afterHash, StringComparison.Ordinal))
             {
@@ -377,15 +379,9 @@ internal static class CliTypes
                 throw new AssetCtlException("--confirm-approved-asset must exactly equal the asset ID.", 8);
             }
 
-            ManifestStore.VerifyIntegrity(configuration, manifest);
+            ApprovalPolicy.Validate(configuration, manifest);
             if (
-                manifest.MechanicalValidation?.Passed != true
-                || string.Equals(
-                    configuration.QualityTiers[manifest.Request.QualityTier].SemanticReview,
-                    "required",
-                    StringComparison.Ordinal
-                ) && (manifest.SemanticReview is null || manifest.SemanticReview.HasHardFailure)
-                || manifest.Rights.Classification is "unknown" or "unreviewed-generated-placeholder"
+                manifest.Rights.Classification is "unknown" or "unreviewed-generated-placeholder"
                 || string.IsNullOrWhiteSpace(manifest.Rights.License)
                     && string.IsNullOrWhiteSpace(manifest.Rights.Notes)
             )
@@ -405,6 +401,8 @@ internal static class CliTypes
                 configuration,
                 options
             );
+            using var assetLock = AssetLock.Acquire(configuration, manifest.Request.Id);
+            manifest = ManifestMutation.ReloadForMutation(configuration, manifest);
             string actor = options.Required("actor");
             string reason = options.Required("reason");
             if (
@@ -424,6 +422,7 @@ internal static class CliTypes
 
             global::AlterCourse.AssetCtl.Domain.DomainModels.AssetManifest deprecated = manifest with
             {
+                Revision = manifest.Revision + 1,
                 Request = manifest.Request with { Lifecycle = AssetLifecycle.Deprecated },
                 Approval = manifest.Approval with
                 {
@@ -442,7 +441,7 @@ internal static class CliTypes
                 };
             }
 
-            WriteManifestAtomic(configuration, deprecated);
+            ManifestMutation.WriteCas(configuration, manifest, deprecated);
             return new
             {
                 asset_id = deprecated.Request.Id,
@@ -450,19 +449,6 @@ internal static class CliTypes
                 actor,
                 reason,
             };
-        }
-
-        private static void WriteManifestAtomic(EffectiveConfiguration configuration, AssetManifest manifest)
-        {
-            string path = PathPolicy.ResolveUnder(
-                configuration.RepositoryRoot,
-                manifest.ManifestPath,
-                "manifest",
-                allowMissing: false
-            );
-            string stage = path + ".assetctl-stage-" + Guid.NewGuid().ToString("N");
-            File.WriteAllText(stage, ManifestStore.Serialize(manifest), new System.Text.UTF8Encoding(false));
-            File.Move(stage, path, overwrite: true);
         }
 
         private static AssetManifest ResolveManifest(EffectiveConfiguration configuration, CliOptions options)

@@ -4,8 +4,13 @@ using AlterCourse.AssetCtl.Providers;
 
 namespace AlterCourse.AssetCtl.Review;
 
-internal sealed class OpenAiVisionReviewer(HttpClient client) : HttpProviderBase(client), IAssetReviewer
+internal sealed class OpenAiVisionReviewer(HttpClient client) : HttpProviderBase(client, EndpointHosts), IAssetReviewer
 {
+    private static readonly IReadOnlySet<string> EndpointHosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "api.openai.com",
+    };
+
     public static class SemanticReviewSchema
     {
         public const string Json = """
@@ -39,6 +44,8 @@ internal sealed class OpenAiVisionReviewer(HttpClient client) : HttpProviderBase
     public string AdapterId => "openai-vision-review";
 
     public IReadOnlySet<AssetCapability> SupportedCapabilities => Capabilities;
+
+    public IReadOnlySet<string> AllowedEndpointHosts => EndpointHosts;
 
     public void ValidateOptions(IReadOnlyDictionary<string, string> options) =>
         RecraftImageAdapter.ValidateKnown(options, "reasoning_effort");
@@ -152,7 +159,7 @@ internal sealed class OpenAiVisionReviewer(HttpClient client) : HttpProviderBase
                 RequiredBoolean(root, "logo_or_watermark_detected"),
                 overall,
                 decision,
-                "different-provider-family"
+                "not-run"
             );
         }
         catch (Exception exception)

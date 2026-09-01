@@ -154,7 +154,7 @@ public sealed class ProviderContractTests
         byte[] png = LocalPlaceholderGenerator.RenderPng(TestData.Request());
         string signedQuery = Convert.ToHexString(RandomNumberGenerator.GetBytes(24));
         var handler = new RecordingHandler(request =>
-            string.Equals(request.RequestUri!.Host, "provider.example", StringComparison.Ordinal)
+            string.Equals(request.RequestUri!.Host, "external.api.recraft.ai", StringComparison.Ordinal)
                 ? Json(
                     HttpStatusCode.OK,
                     JsonSerializer.Serialize(

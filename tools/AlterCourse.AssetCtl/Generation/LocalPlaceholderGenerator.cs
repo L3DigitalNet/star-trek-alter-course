@@ -19,6 +19,8 @@ internal sealed class LocalPlaceholderGenerator : IAssetGenerator
 
     public IReadOnlySet<AssetCapability> SupportedCapabilities => Capabilities;
 
+    public IReadOnlySet<string> AllowedEndpointHosts { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
     public void ValidateOptions(IReadOnlyDictionary<string, string> options)
     {
         if (options.Count != 0)
@@ -35,6 +37,7 @@ internal sealed class LocalPlaceholderGenerator : IAssetGenerator
     {
         cancellationToken.ThrowIfCancellationRequested();
         ValidateOptions(context.Model.Options);
+        OutputContractPolicy.Validate(request.Request.Output, long.MaxValue);
         byte[] bytes = request.Request.Output.Format switch
         {
             AssetFormat.Svg => RenderSvg(request.Request),
