@@ -21,6 +21,7 @@ related:
   - 'docs/adr/0006-use-versioned-json-snapshot-saves.md'
   - 'docs/adr/0007-use-deterministic-simulation-time-scheduling-and-randomness.md'
   - 'docs/adr/0009-use-layered-testing-and-architecture-conformance.md'
+  - 'docs/adr/0010-use-explainable-domain-ai-and-demand-driven-state-machines.md'
 supersedes: []
 superseded_by: null
 source:
