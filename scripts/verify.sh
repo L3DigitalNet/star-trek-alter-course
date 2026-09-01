@@ -61,7 +61,7 @@ dotnet test tests/AlterCourse.AssetCtl.Tests/AlterCourse.AssetCtl.Tests.csproj -
 dotnet run --project tools/AlterCourse.AssetCtl/AlterCourse.AssetCtl.csproj \
   -c Release --no-build --no-restore -- validate-config --offline --output json
 
-"${godot_bin}" --headless --path "${godot_project}" --editor --quit-after 2
+"${godot_bin}" --headless --path "${godot_project}" --import
 "${godot_bin}" \
   --headless \
   --path "${godot_project}" \
