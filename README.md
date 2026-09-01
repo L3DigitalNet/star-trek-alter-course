@@ -22,6 +22,7 @@ These are design goals, not claims about currently playable features. The archit
 
 - Godot 4.7.2 .NET/C#
 - .NET SDK 10.0.111, targeting .NET 8 for Godot compatibility
+- A standalone .NET 10 `assetctl` development tool for validated visual placeholders and asset provenance
 - A pure `AlterCourse.Core` domain assembly with a one-way dependency from `AlterCourse.Godot`
 - xUnit for Core tests and GdUnit4 for Godot integration tests
 - One canonical `./scripts/verify.sh` quality gate shared by contributors and CI
@@ -38,6 +39,20 @@ cd star-trek-alter-course
 ```
 
 See [Development quality](docs/development-quality.md) for the complete setup, verification, and deep-validation workflow.
+
+## Asset pipeline
+
+`AlterCourse.AssetCtl` searches the tracked catalog, plans configuration-driven provider routes, creates deterministic local SVG or PNG placeholders, validates untrusted image bytes, and publishes selected assets with manifests. Committed defaults disable external generation and spend, so validation and local fallback need no provider credentials or network access.
+
+```bash
+dotnet run --project tools/AlterCourse.AssetCtl -- find --query marker --output json
+dotnet run --project tools/AlterCourse.AssetCtl -- plan --asset-id tooling.assetctl.fixture.generated-marker-svg --output json
+dotnet run --project tools/AlterCourse.AssetCtl -- generate --asset-id tooling.assetctl.fixture.generated-marker-svg --offline --output json
+```
+
+Configuration and catalog manifests live under [`config/assets/`](config/assets/). Runtime candidates, receipts, locks, logs, and local overrides stay under ignored `.assetctl/`. Approval and deprecation of approved assets require an explicit owner instruction and the high-friction confirmation flags documented by `assetctl --help`.
+
+Provider configuration stores environment-variable names only. The tracked launch or application boundary resolves OpenBao-backed credentials into those named variables before AssetCtl starts; credential values and `bao://` references never belong in tracked configuration, fixtures, tests, manifests, receipts, logs, or command output.
 
 ## Contributing
 

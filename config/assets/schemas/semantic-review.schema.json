@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AssetCtl semantic review rubric version 1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["matches_subject", "required_constraints_satisfied", "prohibited_content_absent", "readable_at_target_sizes", "style_adherence", "semantic_clarity", "visual_defects", "unrequested_text_detected", "logo_or_watermark_detected", "overall_score", "decision"],
+  "properties": {
+    "matches_subject": { "type": "boolean" },
+    "required_constraints_satisfied": { "type": "boolean" },
+    "prohibited_content_absent": { "type": "boolean" },
+    "readable_at_target_sizes": { "type": "boolean" },
+    "style_adherence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "semantic_clarity": { "type": "number", "minimum": 0, "maximum": 1 },
+    "visual_defects": { "type": "array", "items": { "type": "string" } },
+    "unrequested_text_detected": { "type": "boolean" },
+    "logo_or_watermark_detected": { "type": "boolean" },
+    "overall_score": { "type": "number", "minimum": 0, "maximum": 1 },
+    "decision": { "enum": ["pass", "fail"] }
+  }
+}

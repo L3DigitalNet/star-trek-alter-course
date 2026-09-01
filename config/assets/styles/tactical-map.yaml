@@ -1,0 +1,7 @@
+schema_version: '1'
+id: 'tactical-map'
+summary: 'High-contrast tactical symbols that remain distinct when desaturated.'
+required:
+  - 'simple vector geometry'
+prohibited:
+  - 'text'

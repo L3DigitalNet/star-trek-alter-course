@@ -1,0 +1,62 @@
+schema_version: '1'
+id: 'tooling.assetctl.fixture.generated-marker-svg'
+lifecycle: 'placeholder'
+kind: 'map-marker'
+revision: 1
+purpose: 'Prove that a sanitized generated-style SVG imports through the selected Godot runtime.'
+output:
+  path: 'src/AlterCourse.Godot/assets/assetctl-fixtures/generated-marker.svg'
+  format: 'svg'
+  width: 64
+  height: 64
+  transparency: 'required'
+  target_display_sizes:
+    - 16
+    - 24
+    - 64
+visual:
+  style_profile: 'tactical-map'
+  importance: 'secondary'
+  tags:
+    - 'fixture'
+    - 'assetctl'
+constraints:
+  required:
+    - 'simple vector geometry'
+  prohibited:
+    - 'text'
+    - 'watermark'
+references: []
+rights:
+  classification: 'unreviewed-generated-placeholder'
+  license: null
+  attribution: null
+  source: null
+  notes: 'Repository-created validation fixture; not approved for release.'
+generation:
+  source_type: 'generated'
+  generated_at: '2026-09-01T18:00:00Z'
+  run_id: 'fixture-svg-v1'
+  route: 'vector-placeholder'
+  provider: 'local-placeholder'
+  adapter: 'local-placeholder'
+  model_profile: 'default'
+  model: 'local-placeholder-v1'
+  quality_tier: 'development'
+  final_prompt: 'Deterministic generated marker import fixture.'
+  prompt_sha256: 'bf8293ed4d4fb066c67e1ec20f4953eb041fb54a78b5da1c464211556c23c2b9'
+  request_sha256: '63d6c5009c828790d7f7e02d4e66b8ec73d4580ff2851d375d62b5320572a2f4'
+  effective_config_sha256: '4421c27e174b421047747dff54b13e71cf41408cbb16f25e61eb60a9d6b2d752'
+  provider_request_id: null
+  estimated_cost_usd: 0
+  actual_cost_usd: 0
+validation: null
+integrity:
+  sha256: '780101b914ba62dc41a15377dd796124530547335f0606475e8bff2dc69e31bb'
+  byte_length: 310
+  media_type: 'image/svg+xml'
+approval:
+  approved_by: null
+  approved_at: null
+  approval_note: null
+supersedes: null

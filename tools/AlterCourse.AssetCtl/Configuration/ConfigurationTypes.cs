@@ -1,0 +1,581 @@
+using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
+using YamlDotNet.RepresentationModel;
+
+namespace AlterCourse.AssetCtl.Configuration;
+
+internal static class ConfigurationTypes
+{
+/// <summary>Loads and cross-validates tracked AssetCtl configuration without consulting environment values except for credential presence.</summary>
+public sealed class ConfigurationLoader(IReadOnlyDictionary<string, IAdapterDescriptor> adapters)
+{
+    public EffectiveConfiguration Load(string repositoryRoot)
+    {
+        repositoryRoot = Path.GetFullPath(repositoryRoot);
+        var hashes = new SortedDictionary<string, string>(StringComparer.Ordinal);
+        global::YamlDotNet.RepresentationModel.YamlMappingNode root = Load(repositoryRoot, "config/assets/assetctl.yaml", hashes);
+        root.RequireOnly("assetctl", "schema_version", "paths", "policy", "limits", "spending");
+        RequireVersion(root, "assetctl");
+
+        global::AlterCourse.AssetCtl.Domain.DomainModels.AssetCtlPaths paths = ReadPaths(root.Mapping("paths", "assetctl"));
+        global::AlterCourse.AssetCtl.Domain.DomainModels.AssetCtlPolicy policy = ReadPolicy(root.Mapping("policy", "assetctl"));
+        global::AlterCourse.AssetCtl.Domain.DomainModels.AssetCtlLimits limits = ReadLimits(root.Mapping("limits", "assetctl"));
+        global::AlterCourse.AssetCtl.Domain.DomainModels.SpendingLimits spending = ReadSpending(root.Mapping("spending", "assetctl"));
+        ApplyLocalOverride(repositoryRoot, hashes, ref policy, ref spending);
+        ValidatePaths(repositoryRoot, paths);
+
+        global::System.Collections.Generic.Dictionary<string, global::AlterCourse.AssetCtl.Domain.DomainModels.ProviderInstance> providers = ReadProviders(repositoryRoot, hashes, policy);
+        (IReadOnlyList<RouteDefinition> routes, IReadOnlyList<RouteDefinition> reviewRoutes) = ReadRoutes(repositoryRoot, hashes, providers);
+        global::System.Collections.Generic.Dictionary<string, global::AlterCourse.AssetCtl.Domain.DomainModels.QualityTier> tiers = ReadQualityTiers(repositoryRoot, hashes, limits);
+        global::System.Collections.Generic.Dictionary<string, global::AlterCourse.AssetCtl.Domain.DomainModels.StyleProfile> styles = ReadStyles(repositoryRoot, hashes, paths);
+        string effectiveHash = Hash(
+            string.Join('\n', hashes.Select(pair => $"{pair.Key}:{pair.Value}"))
+        );
+        return new EffectiveConfiguration(
+            repositoryRoot,
+            paths,
+            policy,
+            limits,
+            spending,
+            EffectiveConfiguration.ReadOnly(providers),
+            routes,
+            reviewRoutes,
+            EffectiveConfiguration.ReadOnly(tiers),
+            EffectiveConfiguration.ReadOnly(styles),
+            EffectiveConfiguration.ReadOnly(hashes),
+            effectiveHash
+        );
+    }
+
+    private static AssetCtlPaths ReadPaths(YamlMappingNode node)
+    {
+        node.RequireOnly(
+            "paths",
+            "godot_asset_root",
+            "catalog_root",
+            "style_root",
+            "work_root",
+            "receipt_root",
+            "state_root",
+            "log_root"
+        );
+        return new AssetCtlPaths(
+            node.Scalar("godot_asset_root", "paths"),
+            node.Scalar("catalog_root", "paths"),
+            node.Scalar("style_root", "paths"),
+            node.Scalar("work_root", "paths"),
+            node.Scalar("receipt_root", "paths"),
+            node.Scalar("state_root", "paths"),
+            node.Scalar("log_root", "paths")
+        );
+    }
+
+    private static AssetCtlPolicy ReadPolicy(YamlMappingNode node)
+    {
+        node.RequireOnly(
+            "policy",
+            "external_generation_enabled",
+            "unknown_price",
+            "protect_approved_assets",
+            "local_placeholder_fallback",
+            "require_https_endpoints",
+            "allow_remote_reference_urls",
+            "retain_unselected_candidates"
+        );
+        string unknownPrice = node.Scalar("unknown_price", "policy");
+        if (unknownPrice is not ("reject" or "allow"))
+        {
+            throw new AssetCtlException("policy.unknown_price: expected reject or allow.", 2);
+        }
+
+        return new AssetCtlPolicy(
+            node.Boolean("external_generation_enabled", "policy"),
+            node.Boolean("protect_approved_assets", "policy"),
+            node.Boolean("local_placeholder_fallback", "policy"),
+            node.Boolean("require_https_endpoints", "policy"),
+            node.Boolean("allow_remote_reference_urls", "policy"),
+            unknownPrice
+        );
+    }
+
+    private static AssetCtlLimits ReadLimits(YamlMappingNode node)
+    {
+        node.RequireOnly(
+            "limits",
+            "maximum_download_bytes",
+            "maximum_reference_bytes",
+            "maximum_candidates_per_request",
+            "maximum_total_attempts",
+            "default_http_timeout_seconds",
+            "maximum_http_timeout_seconds",
+            "maximum_decoded_pixels"
+        );
+        var result = new AssetCtlLimits(
+            node.Long("maximum_download_bytes", "limits"),
+            node.Long("maximum_reference_bytes", "limits"),
+            node.Integer("maximum_candidates_per_request", "limits"),
+            node.Integer("maximum_total_attempts", "limits"),
+            node.Integer("default_http_timeout_seconds", "limits"),
+            node.Integer("maximum_http_timeout_seconds", "limits"),
+            node.Long("maximum_decoded_pixels", "limits")
+        );
+        if (
+            result.MaximumDownloadBytes <= 0
+            || result.MaximumReferenceBytes <= 0
+            || result.MaximumCandidatesPerRequest is < 1 or > 100
+            || result.MaximumTotalAttempts is < 1 or > 100
+            || result.DefaultHttpTimeoutSeconds <= 0
+            || result.DefaultHttpTimeoutSeconds > result.MaximumHttpTimeoutSeconds
+            || result.MaximumDecodedPixels <= 0
+        )
+        {
+            throw new AssetCtlException("limits: values are outside safety bounds.", 2);
+        }
+
+        return result;
+    }
+
+    private static SpendingLimits ReadSpending(YamlMappingNode node)
+    {
+        node.RequireOnly(
+            "spending",
+            "maximum_estimated_cost_per_asset_usd",
+            "maximum_estimated_cost_per_run_usd",
+            "maximum_estimated_cost_per_day_usd"
+        );
+        var result = new SpendingLimits(
+            node.Decimal("maximum_estimated_cost_per_asset_usd", "spending"),
+            node.Decimal("maximum_estimated_cost_per_run_usd", "spending"),
+            node.Decimal("maximum_estimated_cost_per_day_usd", "spending")
+        );
+        if (result.PerAssetUsd < 0 || result.PerRunUsd < 0 || result.PerDayUsd < 0)
+        {
+            throw new AssetCtlException("spending: limits cannot be negative.", 2);
+        }
+
+        return result;
+    }
+
+    private static void ApplyLocalOverride(
+        string root,
+        IDictionary<string, string> hashes,
+        ref AssetCtlPolicy policy,
+        ref SpendingLimits spending
+    )
+    {
+        const string relative = ".assetctl/config.local.yaml";
+        string path = PathPolicy.ResolveUnder(root, relative, relative, allowMissing: true);
+        if (!File.Exists(path))
+        {
+            return;
+        }
+
+        global::YamlDotNet.RepresentationModel.YamlMappingNode document = Load(root, relative, hashes);
+        document.RequireOnly("local override", "schema_version", "policy", "spending");
+        RequireVersion(document, "local override");
+        YamlMappingNode? policyNode = document.OptionalMapping("policy", "local override");
+        if (policyNode is not null)
+        {
+            policyNode.RequireOnly("local override.policy", "external_generation_enabled", "local_placeholder_fallback");
+            policy = policy with
+            {
+                ExternalGenerationEnabled = policyNode.OptionalScalar("external_generation_enabled", "local override.policy") is { } enabled
+                    ? bool.Parse(enabled)
+                    : policy.ExternalGenerationEnabled,
+                LocalPlaceholderFallback = policyNode.OptionalScalar("local_placeholder_fallback", "local override.policy") is { } fallback
+                    ? bool.Parse(fallback)
+                    : policy.LocalPlaceholderFallback,
+            };
+        }
+
+        YamlMappingNode? spendingNode = document.OptionalMapping("spending", "local override");
+        if (spendingNode is not null)
+        {
+            spendingNode.RequireOnly("local override.spending", "maximum_estimated_cost_per_asset_usd", "maximum_estimated_cost_per_run_usd", "maximum_estimated_cost_per_day_usd");
+            spending = spending with
+            {
+                PerAssetUsd = OptionalDecimal(spendingNode, "maximum_estimated_cost_per_asset_usd", spending.PerAssetUsd),
+                PerRunUsd = OptionalDecimal(spendingNode, "maximum_estimated_cost_per_run_usd", spending.PerRunUsd),
+                PerDayUsd = OptionalDecimal(spendingNode, "maximum_estimated_cost_per_day_usd", spending.PerDayUsd),
+            };
+            if (spending.PerAssetUsd < 0 || spending.PerRunUsd < 0 || spending.PerDayUsd < 0)
+            {
+                throw new AssetCtlException("local override spending limits cannot be negative.", 2);
+            }
+        }
+    }
+
+    private static decimal OptionalDecimal(YamlMappingNode node, string key, decimal fallback)
+    {
+        string? value = node.OptionalScalar(key, "local override.spending");
+        return value is null ? fallback : decimal.Parse(value, CultureInfo.InvariantCulture);
+    }
+
+    private Dictionary<string, ProviderInstance> ReadProviders(
+        string root,
+        IDictionary<string, string> hashes,
+        AssetCtlPolicy policy
+    )
+    {
+        global::YamlDotNet.RepresentationModel.YamlMappingNode document = Load(root, "config/assets/providers.yaml", hashes);
+        document.RequireOnly("providers", "schema_version", "providers");
+        RequireVersion(document, "providers");
+        global::YamlDotNet.RepresentationModel.YamlMappingNode providersNode = document.Mapping("providers", "providers");
+        var providers = new Dictionary<string, ProviderInstance>(StringComparer.Ordinal);
+        foreach (global::System.Collections.Generic.KeyValuePair<global::YamlDotNet.RepresentationModel.YamlNode, global::YamlDotNet.RepresentationModel.YamlNode> pair in providersNode.Children)
+        {
+            string id = ((YamlScalarNode)pair.Key).Value!;
+            if (!providers.TryAdd(id, ReadProvider(id, (YamlMappingNode)pair.Value, policy)))
+            {
+                throw new AssetCtlException($"providers.{id}: duplicate provider.", 2);
+            }
+        }
+
+        return providers;
+    }
+
+    private ProviderInstance ReadProvider(string id, YamlMappingNode node, AssetCtlPolicy policy)
+    {
+        string path = $"providers.{id}";
+        node.RequireOnly(path, "adapter", "enabled", "endpoint", "credentials", "downloads", "models");
+        string adapterId = node.Scalar("adapter", path);
+        if (!adapters.TryGetValue(adapterId, out IAdapterDescriptor? adapter))
+        {
+            throw new AssetCtlException($"{path}.adapter: unregistered adapter '{adapterId}'.", 2);
+        }
+
+        Uri? endpoint = null;
+        string? endpointText = node.OptionalScalar("endpoint", path);
+        if (endpointText is not null)
+        {
+            if (!Uri.TryCreate(endpointText, UriKind.Absolute, out endpoint))
+            {
+                throw new AssetCtlException($"{path}.endpoint: invalid absolute URI.", 2);
+            }
+
+            if (policy.RequireHttpsEndpoints && !string.Equals(endpoint.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal))
+            {
+                throw new AssetCtlException($"{path}.endpoint: HTTPS is required.", 2);
+            }
+        }
+
+        string? credential = ReadCredential(node.OptionalMapping("credentials", path), path);
+        HashSet<string> allowedHosts = ReadAllowedHosts(node.OptionalMapping("downloads", path), path);
+        Dictionary<string, ModelProfile> models = ReadModels(node.Mapping("models", path), path, adapter);
+
+        return new ProviderInstance(id, adapterId, node.Boolean("enabled", path), endpoint, credential, allowedHosts, models);
+    }
+
+    private static string? ReadCredential(YamlMappingNode? credentials, string path)
+    {
+        if (credentials is null)
+        {
+            return null;
+        }
+
+        credentials.RequireOnly($"{path}.credentials", "api_key");
+        YamlMappingNode apiKey = credentials.Mapping("api_key", $"{path}.credentials");
+        apiKey.RequireOnly($"{path}.credentials.api_key", "source", "name");
+        if (!string.Equals(apiKey.Scalar("source", $"{path}.credentials.api_key"), "environment", StringComparison.Ordinal))
+        {
+            throw new AssetCtlException($"{path}.credentials.api_key: only environment references are supported.", 2);
+        }
+
+        string credential = apiKey.Scalar("name", $"{path}.credentials.api_key");
+        if (!System.Text.RegularExpressions.Regex.IsMatch(credential, "^[A-Z][A-Z0-9_]{1,127}$", System.Text.RegularExpressions.RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100)))
+        {
+            throw new AssetCtlException($"{path}.credentials.api_key.name: invalid environment variable name.", 2);
+        }
+
+        return credential;
+    }
+
+    private static HashSet<string> ReadAllowedHosts(YamlMappingNode? downloads, string path)
+    {
+        HashSet<string> result = new(StringComparer.OrdinalIgnoreCase);
+        if (downloads is null)
+        {
+            return result;
+        }
+
+        downloads.RequireOnly($"{path}.downloads", "allowed_hosts");
+        result.UnionWith(YamlValues.Strings(downloads.Sequence("allowed_hosts", path), path));
+        return result;
+    }
+
+    private static Dictionary<string, ModelProfile> ReadModels(YamlMappingNode nodes, string path, IAdapterDescriptor adapter)
+    {
+        Dictionary<string, ModelProfile> result = new(StringComparer.Ordinal);
+        foreach (KeyValuePair<YamlNode, YamlNode> pair in nodes.Children)
+        {
+            string modelId = ((YamlScalarNode)pair.Key).Value!;
+            ModelProfile model = ReadModel(path, modelId, (YamlMappingNode)pair.Value);
+            AssetCapability[] unsupported = model.Capabilities.Except(adapter.SupportedCapabilities).ToArray();
+            if (unsupported.Length != 0)
+            {
+                throw new AssetCtlException($"{path}.models.{modelId}: adapter does not support {string.Join(", ", unsupported)}.", 2);
+            }
+
+            result.Add(modelId, model);
+        }
+
+        return result;
+    }
+
+    private static ModelProfile ReadModel(string providerPath, string id, YamlMappingNode node)
+    {
+        string path = $"{providerPath}.models.{id}";
+        node.RequireOnly(path, "model", "capabilities", "economics", "options");
+        var capabilities = new HashSet<AssetCapability>();
+        foreach (string value in YamlValues.Strings(node.Sequence("capabilities", path), path))
+        {
+            capabilities.Add(ParseCapability(value, $"{path}.capabilities"));
+        }
+
+        global::YamlDotNet.RepresentationModel.YamlMappingNode economics = node.Mapping("economics", path);
+        economics.RequireOnly($"{path}.economics", "currency", "estimated_cost_per_output", "pricing_basis", "effective_date");
+        if (!string.Equals(economics.Scalar("currency", $"{path}.economics"), "USD", StringComparison.Ordinal))
+        {
+            throw new AssetCtlException($"{path}.economics.currency: only USD is supported.", 2);
+        }
+
+        _ = DateOnly.ParseExact(economics.Scalar("effective_date", path), "yyyy-MM-dd", CultureInfo.InvariantCulture);
+        decimal? cost = null;
+        string? costText = economics.OptionalScalar("estimated_cost_per_output", path);
+        if (costText is not null)
+        {
+            cost = decimal.Parse(costText, CultureInfo.InvariantCulture);
+        }
+
+        var options = new Dictionary<string, string>(StringComparer.Ordinal);
+        YamlMappingNode? optionNode = node.OptionalMapping("options", path);
+        if (optionNode is not null)
+        {
+            foreach (global::System.Collections.Generic.KeyValuePair<global::YamlDotNet.RepresentationModel.YamlNode, global::YamlDotNet.RepresentationModel.YamlNode> pair in optionNode.Children)
+            {
+                options.Add(((YamlScalarNode)pair.Key).Value!, ((YamlScalarNode)pair.Value).Value!);
+            }
+        }
+
+        return new ModelProfile(id, node.Scalar("model", path), capabilities, cost, economics.OptionalScalar("pricing_basis", path) ?? "fixed-output", options);
+    }
+
+    private static (IReadOnlyList<RouteDefinition>, IReadOnlyList<RouteDefinition>) ReadRoutes(
+        string root,
+        IDictionary<string, string> hashes,
+        IReadOnlyDictionary<string, ProviderInstance> providers
+    )
+    {
+        global::YamlDotNet.RepresentationModel.YamlMappingNode document = Load(root, "config/assets/routing.yaml", hashes);
+        document.RequireOnly("routing", "schema_version", "routes", "review_routes");
+        RequireVersion(document, "routing");
+        return (
+            ReadRouteList(document.Sequence("routes", "routing"), false, providers),
+            ReadRouteList(document.Sequence("review_routes", "routing"), true, providers)
+        );
+    }
+
+    private static List<RouteDefinition> ReadRouteList(
+        YamlSequenceNode sequence,
+        bool review,
+        IReadOnlyDictionary<string, ProviderInstance> providers
+    )
+    {
+        var result = new List<RouteDefinition>();
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        for (int index = 0; index < sequence.Children.Count; index++)
+        {
+            var node = (YamlMappingNode)sequence.Children[index];
+            string path = review ? $"review_routes[{index}]" : $"routes[{index}]";
+            node.RequireOnly(path, "id", "priority", "lifecycle", "format", "capability", "targets");
+            string id = node.Scalar("id", path);
+            if (!ids.Add(id))
+            {
+                throw new AssetCtlException($"{path}.id: duplicate route '{id}'.", 2);
+            }
+
+            global::AlterCourse.AssetCtl.Domain.DomainModels.RouteTarget[] targets = YamlValues.Strings(node.Sequence("targets", path), path).Select(value => ParseTarget(value, path, providers)).ToArray();
+            result.Add(new RouteDefinition(id, node.Integer("priority", path), ParseLifecycle(node.OptionalScalar("lifecycle", path), path), ParseFormat(node.OptionalScalar("format", path), path), ParseCapability(node.Scalar("capability", path), path), targets, index));
+        }
+
+        return result.OrderByDescending(route => route.Priority).ThenBy(route => route.ConfigurationOrder).ToList();
+    }
+
+    private static RouteTarget ParseTarget(string value, string path, IReadOnlyDictionary<string, ProviderInstance> providers)
+    {
+        string[] parts = value.Split('/', 2);
+        if (parts.Length != 2 || !providers.TryGetValue(parts[0], out ProviderInstance? provider) || !provider.Models.ContainsKey(parts[1]))
+        {
+            throw new AssetCtlException($"{path}.targets: unknown target '{value}'.", 2);
+        }
+
+        return new RouteTarget(parts[0], parts[1]);
+    }
+
+    private static Dictionary<string, QualityTier> ReadQualityTiers(string root, IDictionary<string, string> hashes, AssetCtlLimits limits)
+    {
+        global::YamlDotNet.RepresentationModel.YamlMappingNode document = Load(root, "config/assets/quality-tiers.yaml", hashes);
+        document.RequireOnly("quality-tiers", "schema_version", "quality_tiers");
+        RequireVersion(document, "quality-tiers");
+        var result = new Dictionary<string, QualityTier>(StringComparer.Ordinal);
+        foreach (global::System.Collections.Generic.KeyValuePair<global::YamlDotNet.RepresentationModel.YamlNode, global::YamlDotNet.RepresentationModel.YamlNode> pair in document.Mapping("quality_tiers", "quality-tiers").Children)
+        {
+            string id = ((YamlScalarNode)pair.Key).Value!;
+            var node = (YamlMappingNode)pair.Value;
+            string path = $"quality_tiers.{id}";
+            node.RequireOnly(path, "candidates", "attempts_per_route", "semantic_review", "allow_unreviewed_placeholder", "minimum_semantic_score");
+            int candidates = node.Integer("candidates", path);
+            int attempts = node.Integer("attempts_per_route", path);
+            if (candidates < 1 || candidates > limits.MaximumCandidatesPerRequest || attempts < 1 || attempts > limits.MaximumTotalAttempts)
+            {
+                throw new AssetCtlException($"{path}: candidate or attempt count exceeds root limits.", 2);
+            }
+
+            string? scoreText = node.OptionalScalar("minimum_semantic_score", path);
+            double score = scoreText is null ? 0 : double.Parse(scoreText, CultureInfo.InvariantCulture);
+            if (score is < 0 or > 1)
+            {
+                throw new AssetCtlException($"{path}.minimum_semantic_score: expected 0..1.", 2);
+            }
+
+            result.Add(id, new QualityTier(id, candidates, attempts, node.Scalar("semantic_review", path), node.Boolean("allow_unreviewed_placeholder", path), score));
+        }
+
+        return result;
+    }
+
+    private static Dictionary<string, StyleProfile> ReadStyles(string root, IDictionary<string, string> hashes, AssetCtlPaths paths)
+    {
+        string styleRoot = PathPolicy.ResolveUnder(root, paths.StyleRoot, "style root", allowMissing: false);
+        var result = new Dictionary<string, StyleProfile>(StringComparer.Ordinal);
+        foreach (string path in Directory.EnumerateFiles(styleRoot, "*.yaml", SearchOption.TopDirectoryOnly).Order(StringComparer.Ordinal))
+        {
+            string relative = Path.GetRelativePath(root, path);
+            global::YamlDotNet.RepresentationModel.YamlMappingNode document = Load(root, relative, hashes);
+            document.RequireOnly(relative, "schema_version", "id", "summary", "required", "prohibited");
+            RequireVersion(document, relative);
+            string id = document.Scalar("id", relative);
+            if (!result.TryAdd(id, new StyleProfile(id, document.Scalar("summary", relative), YamlValues.Strings(document.OptionalSequence("required", relative), relative), YamlValues.Strings(document.OptionalSequence("prohibited", relative), relative))))
+            {
+                throw new AssetCtlException($"{relative}: duplicate style id '{id}'.", 2);
+            }
+        }
+
+        return result;
+    }
+
+    private static void ValidatePaths(string root, AssetCtlPaths paths)
+    {
+        foreach ((string, string) pair in new[] { (paths.GodotAssetRoot, "godot_asset_root"), (paths.CatalogRoot, "catalog_root"), (paths.StyleRoot, "style_root"), (paths.WorkRoot, "work_root"), (paths.ReceiptRoot, "receipt_root"), (paths.StateRoot, "state_root"), (paths.LogRoot, "log_root") })
+        {
+            _ = PathPolicy.ResolveUnder(root, pair.Item1, pair.Item2, allowMissing: true);
+        }
+    }
+
+    private static YamlMappingNode Load(string root, string relativePath, IDictionary<string, string> hashes)
+    {
+        string path = PathPolicy.ResolveUnder(root, relativePath, relativePath, allowMissing: false);
+        byte[] bytes = File.ReadAllBytes(path);
+        hashes.Add(relativePath, Convert.ToHexStringLower(SHA256.HashData(bytes)));
+        return StrictYaml.LoadMapping(path);
+    }
+
+    private static void RequireVersion(YamlMappingNode node, string path)
+    {
+        if (!string.Equals(node.Scalar("schema_version", path), "1", StringComparison.Ordinal))
+        {
+            throw new AssetCtlException($"{path}.schema_version: unsupported version; expected '1'.", 2);
+        }
+    }
+
+    public static string Hash(string text) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
+
+    public static AssetCapability ParseCapability(string value, string path) => value switch
+    {
+        "raster.generate" => AssetCapability.RasterGenerate,
+        "vector.generate" => AssetCapability.VectorGenerate,
+        "image.edit" => AssetCapability.ImageEdit,
+        "image.reference-input" => AssetCapability.ImageReferenceInput,
+        "image.transparent-output" => AssetCapability.ImageTransparentOutput,
+        "image.background-remove" => AssetCapability.ImageBackgroundRemove,
+        "image.vectorize" => AssetCapability.ImageVectorize,
+        "review.semantic" => AssetCapability.ReviewSemantic,
+        "review.reference-comparison" => AssetCapability.ReviewReferenceComparison,
+        _ => throw new AssetCtlException($"{path}: unknown capability '{value}'.", 2),
+    };
+
+    private static AssetLifecycle? ParseLifecycle(string? value, string path) => value switch
+    {
+        null => null,
+        "placeholder" => AssetLifecycle.Placeholder,
+        "candidate" => AssetLifecycle.Candidate,
+        "approved" => AssetLifecycle.Approved,
+        "deprecated" => AssetLifecycle.Deprecated,
+        _ => throw new AssetCtlException($"{path}.lifecycle: unknown lifecycle '{value}'.", 2),
+    };
+
+    private static AssetFormat? ParseFormat(string? value, string path) => value switch
+    {
+        null => null,
+        "svg" => AssetFormat.Svg,
+        "png" => AssetFormat.Png,
+        _ => throw new AssetCtlException($"{path}.format: unknown format '{value}'.", 2),
+    };
+}
+
+public interface IAdapterDescriptor
+{
+    public string AdapterId { get; }
+
+    public IReadOnlySet<AssetCapability> SupportedCapabilities { get; }
+
+    public void ValidateOptions(IReadOnlyDictionary<string, string> options);
+}
+
+public static class PathPolicy
+{
+    /// <summary>Resolve a repository-relative path while rejecting absolute paths, traversal, and an existing symlink escape.</summary>
+    public static string ResolveUnder(string root, string relativePath, string field, bool allowMissing)
+    {
+        if (Path.IsPathRooted(relativePath) || relativePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Contains("..", StringComparer.Ordinal))
+        {
+            throw new AssetCtlException($"{field}: absolute paths and parent traversal are prohibited.", 2);
+        }
+
+        root = Path.GetFullPath(root);
+        string candidate = Path.GetFullPath(relativePath, root);
+        if (!candidate.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+        {
+            throw new AssetCtlException($"{field}: path escapes the repository.", 2);
+        }
+
+        string current = root;
+        foreach (string segment in Path.GetRelativePath(root, candidate).Split(Path.DirectorySeparatorChar))
+        {
+            current = Path.Combine(current, segment);
+            if (!File.Exists(current) && !Directory.Exists(current))
+            {
+                if (allowMissing)
+                {
+                    break;
+                }
+
+                throw new AssetCtlException($"{field}: path does not exist.", 2);
+            }
+
+            global::System.IO.FileAttributes attributes = File.GetAttributes(current);
+            if ((attributes & FileAttributes.ReparsePoint) == FileAttributes.ReparsePoint)
+            {
+                string? resolved = File.ResolveLinkTarget(current, returnFinalTarget: true)?.FullName;
+                if (resolved is null || !Path.GetFullPath(resolved).StartsWith(root + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+                {
+                    throw new AssetCtlException($"{field}: symlink escapes the repository.", 2);
+                }
+            }
+        }
+
+        return candidate;
+    }
+}
+}
