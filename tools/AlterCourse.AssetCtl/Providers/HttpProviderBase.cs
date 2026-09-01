@@ -159,17 +159,24 @@ internal abstract class HttpProviderBase(HttpClient httpClient, IReadOnlySet<str
     protected async Task<IReadOnlyList<GeneratedCandidate>> ParseImageDataAsync(
         ProviderContracts.ImageResponse response,
         ProviderExecutionContext context,
-        int requestedCandidateCount,
+        NormalizedGenerationRequest request,
         CancellationToken cancellationToken
     )
     {
-        ValidateCandidateCount(response.Data, requestedCandidateCount);
+        ProviderContracts.ImageResponseItem?[] data = ValidateCandidateCount(response.Data, request.CandidateCount);
+        string expectedMediaType = request.Request.Output.Format == AssetFormat.Svg ? "image/svg+xml" : "image/png";
 
-        var candidates = new List<GeneratedCandidate>(response.Data.Length);
+        var candidates = new List<GeneratedCandidate>(data.Length);
         long retainedBytes = 0;
         int index = 0;
-        foreach (ProviderContracts.ImageResponseItem item in response.Data)
+        foreach (ProviderContracts.ImageResponseItem? nullableItem in data)
         {
+            ProviderContracts.ImageResponseItem item =
+                nullableItem
+                ?? throw new ProviderException(
+                    ProviderErrorCategory.MalformedResponse,
+                    "Provider response contained a null candidate."
+                );
             long remainingBytes = context.MaximumDownloadBytes - retainedBytes;
             if (remainingBytes <= 0)
             {
@@ -182,17 +189,13 @@ internal abstract class HttpProviderBase(HttpClient httpClient, IReadOnlySet<str
             GeneratedCandidate candidate;
             if (item.Base64Json is not null && item.Url is null)
             {
-                candidate = DecodeInlineCandidate(item.Base64Json, index++, remainingBytes);
+                candidate = DecodeInlineCandidate(item.Base64Json, index++, remainingBytes, expectedMediaType);
             }
             else if (item.Url is not null && item.Base64Json is null)
             {
-                candidate = new GeneratedCandidate(
-                    index++,
-                    await DownloadAsync(item.Url, context, remainingBytes, cancellationToken).ConfigureAwait(false),
-                    "image/png",
-                    null,
-                    null
-                );
+                byte[] downloaded = await DownloadAsync(item.Url, context, remainingBytes, cancellationToken)
+                    .ConfigureAwait(false);
+                candidate = new GeneratedCandidate(index++, downloaded, expectedMediaType, null, null);
             }
             else
             {
@@ -206,13 +209,29 @@ internal abstract class HttpProviderBase(HttpClient httpClient, IReadOnlySet<str
             candidates.Add(candidate);
         }
 
-        return candidates.Count != 0
-            ? candidates
-            : throw new ProviderException(ProviderErrorCategory.MalformedResponse, "Provider returned no candidates.");
+        if (candidates.Count == 0)
+        {
+            throw new ProviderException(ProviderErrorCategory.MalformedResponse, "Provider returned no candidates.");
+        }
+
+        foreach (GeneratedCandidate value in candidates)
+        {
+            ValidateCandidateMedia(value.Bytes, expectedMediaType);
+        }
+
+        return candidates;
     }
 
-    private static void ValidateCandidateCount(ProviderContracts.ImageResponseItem[] data, int requestedCandidateCount)
+    private static ProviderContracts.ImageResponseItem?[] ValidateCandidateCount(
+        ProviderContracts.ImageResponseItem?[]? data,
+        int requestedCandidateCount
+    )
     {
+        if (data is null)
+        {
+            throw new ProviderException(ProviderErrorCategory.MalformedResponse, "Provider response data was null.");
+        }
+
         if (requestedCandidateCount <= 0 || data.Length > requestedCandidateCount)
         {
             throw new ProviderException(
@@ -220,9 +239,16 @@ internal abstract class HttpProviderBase(HttpClient httpClient, IReadOnlySet<str
                 "Provider returned more candidates than requested."
             );
         }
+
+        return data;
     }
 
-    private static GeneratedCandidate DecodeInlineCandidate(string value, int index, long maximumBytes)
+    private static GeneratedCandidate DecodeInlineCandidate(
+        string value,
+        int index,
+        long maximumBytes,
+        string expectedMediaType
+    )
     {
         try
         {
@@ -247,7 +273,7 @@ internal abstract class HttpProviderBase(HttpClient httpClient, IReadOnlySet<str
                 );
             }
 
-            return new GeneratedCandidate(index, bytes, "image/png", null, null);
+            return new GeneratedCandidate(index, bytes, expectedMediaType, null, null);
         }
         catch (FormatException)
         {
@@ -256,6 +282,27 @@ internal abstract class HttpProviderBase(HttpClient httpClient, IReadOnlySet<str
                 "Provider returned invalid base64 image data."
             );
         }
+    }
+
+    private static void ValidateCandidateMedia(byte[] bytes, string expectedMediaType)
+    {
+        string? actualMediaType =
+            bytes.AsSpan().StartsWith(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }) ? "image/png"
+            : LooksLikeSvg(bytes) ? "image/svg+xml"
+            : null;
+        if (!string.Equals(actualMediaType, expectedMediaType, StringComparison.Ordinal))
+        {
+            throw new ProviderException(
+                ProviderErrorCategory.MalformedResponse,
+                "Provider candidate media does not match the requested output format."
+            );
+        }
+    }
+
+    private static bool LooksLikeSvg(byte[] bytes)
+    {
+        string prefix = System.Text.Encoding.UTF8.GetString(bytes, 0, Math.Min(bytes.Length, 512));
+        return prefix.Contains("<svg", StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task<byte[]> DownloadAsync(

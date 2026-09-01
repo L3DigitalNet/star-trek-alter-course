@@ -62,9 +62,12 @@ internal static class ProviderAdapters
                 )
                 .ConfigureAwait(false);
             global::System.Collections.Generic.IReadOnlyList<global::AlterCourse.AssetCtl.Domain.DomainModels.GeneratedCandidate> candidates =
-                await ParseImageDataAsync(response, context, request.CandidateCount, cancellationToken)
-                    .ConfigureAwait(false);
-            return new GenerationBatchResult(candidates, ProviderRequestIdPolicy.Sanitize(response.Id), null);
+                await ParseImageDataAsync(response, context, request, cancellationToken).ConfigureAwait(false);
+            return new GenerationBatchResult(
+                candidates,
+                ProviderRequestIdPolicy.Sanitize(response.Id, context.Credential),
+                null
+            );
         }
 
         internal static void ValidateKnown(IReadOnlyDictionary<string, string> options, params string[] known)
@@ -164,9 +167,8 @@ internal static class ProviderAdapters
                 )
                 .ConfigureAwait(false);
             return new GenerationBatchResult(
-                await ParseImageDataAsync(response, context, request.CandidateCount, cancellationToken)
-                    .ConfigureAwait(false),
-                ProviderRequestIdPolicy.Sanitize(response.Id),
+                await ParseImageDataAsync(response, context, request, cancellationToken).ConfigureAwait(false),
+                ProviderRequestIdPolicy.Sanitize(response.Id, context.Credential),
                 null
             );
         }
@@ -232,9 +234,8 @@ internal static class ProviderAdapters
                 )
                 .ConfigureAwait(false);
             return new GenerationBatchResult(
-                await ParseImageDataAsync(response, context, request.CandidateCount, cancellationToken)
-                    .ConfigureAwait(false),
-                ProviderRequestIdPolicy.Sanitize(response.Id),
+                await ParseImageDataAsync(response, context, request, cancellationToken).ConfigureAwait(false),
+                ProviderRequestIdPolicy.Sanitize(response.Id, context.Credential),
                 null
             );
         }

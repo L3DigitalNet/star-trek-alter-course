@@ -90,12 +90,16 @@ internal sealed class OpenAiVisionReviewer(HttpClient client) : HttpProviderBase
             return null;
         }
 
-        return choices.Length == 1
-            ? choices[0].Message.Content
-            : throw new ProviderException(
+        string? content = choices.Length == 1 ? choices[0]?.Message?.Content : null;
+        if (content is null)
+        {
+            throw new ProviderException(
                 ProviderErrorCategory.MalformedResponse,
                 "Reviewer response must contain exactly one structured choice."
             );
+        }
+
+        return content;
     }
 
     private static HttpRequestMessage CreateRequest(
@@ -158,6 +162,11 @@ internal sealed class OpenAiVisionReviewer(HttpClient client) : HttpProviderBase
                 throw new JsonException("decision must be pass or fail");
             }
 
+            if (payload.VisualDefects is null)
+            {
+                throw new JsonException("visual_defects is required");
+            }
+
             if (payload.VisualDefects.Length > 20)
             {
                 throw new JsonException("visual_defects must contain at most 20 items");
@@ -175,7 +184,7 @@ internal sealed class OpenAiVisionReviewer(HttpClient client) : HttpProviderBase
                 payload.ReadableAtTargetSizes,
                 Score(payload.StyleAdherence, "style_adherence"),
                 Score(payload.SemanticClarity, "semantic_clarity"),
-                payload.VisualDefects,
+                payload.VisualDefects.Select(static value => value!).ToArray(),
                 payload.UnrequestedTextDetected,
                 payload.LogoOrWatermarkDetected,
                 Score(payload.OverallScore, "overall_score"),
@@ -211,14 +220,14 @@ internal sealed class OpenAiVisionReviewer(HttpClient client) : HttpProviderBase
     {
         [JsonPropertyName("message")]
         [JsonRequired]
-        public required ReviewerMessage Message { get; init; }
+        public ReviewerMessage? Message { get; init; }
     }
 
     private sealed class ReviewerMessage
     {
         [JsonPropertyName("content")]
         [JsonRequired]
-        public required string Content { get; init; }
+        public string? Content { get; init; }
     }
 
     private sealed class SemanticReviewPayload
@@ -242,7 +251,7 @@ internal sealed class OpenAiVisionReviewer(HttpClient client) : HttpProviderBase
         public double SemanticClarity { get; init; }
 
         [JsonPropertyName("visual_defects"), JsonRequired]
-        public required string[] VisualDefects { get; init; }
+        public string?[]? VisualDefects { get; init; }
 
         [JsonPropertyName("unrequested_text_detected"), JsonRequired]
         public bool UnrequestedTextDetected { get; init; }

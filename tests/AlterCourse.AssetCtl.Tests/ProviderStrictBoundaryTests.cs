@@ -148,6 +148,61 @@ public sealed class ProviderStrictBoundaryTests
         Assert.Null(result.ProviderRequestId);
     }
 
+    /// <summary>Drops provider identifiers that echo credentials or resemble standalone access tokens.</summary>
+    [Theory]
+    [InlineData("recraft")]
+    [InlineData("openai")]
+    [InlineData("xai")]
+    public async Task ImageAdaptersDropCredentialEchoRequestIdentifiers(string kind)
+    {
+        string credential = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
+        byte[] png = AlterCourse.AssetCtl.Generation.LocalPlaceholderGenerator.RenderPng(TestData.Request());
+        string response = JsonSerializer.Serialize(
+            new { id = $"job-{credential}", data = new[] { new { b64_json = Convert.ToBase64String(png) } } }
+        );
+        IAssetGenerator adapter = CreateAdapter(kind, response);
+
+        GenerationBatchResult result = await adapter.GenerateAsync(
+            TestData.Context(adapter.AdapterId, credential: credential),
+            new NormalizedGenerationRequest(TestData.Request(), "prompt", 1, []),
+            CancellationToken.None
+        );
+
+        Assert.Null(result.ProviderRequestId);
+    }
+
+    /// <summary>Normalizes nullable provider collection and item shapes as malformed responses.</summary>
+    [Theory]
+    [InlineData("{\"data\":null}")]
+    [InlineData("{\"data\":[null]}")]
+    public async Task ImageAdaptersRejectNullSuccessShapes(string response)
+    {
+        IAssetGenerator adapter = CreateAdapter("recraft", response);
+        ProviderException exception = await Assert.ThrowsAsync<ProviderException>(() =>
+            adapter.GenerateAsync(
+                TestData.Context(adapter.AdapterId),
+                new NormalizedGenerationRequest(TestData.Request(), "prompt", 1, []),
+                CancellationToken.None
+            )
+        );
+        Assert.Equal(ProviderErrorCategory.MalformedResponse, exception.Category);
+    }
+
+    /// <summary>Normalizes null nested reviewer objects and arrays as malformed responses.</summary>
+    [Theory]
+    [InlineData("{\"choices\":[{\"message\":null}]}")]
+    [InlineData(
+        "{\"output_text\":\"{\\\"matches_subject\\\":true,\\\"required_constraints_satisfied\\\":true,\\\"prohibited_content_absent\\\":true,\\\"readable_at_target_sizes\\\":true,\\\"style_adherence\\\":0.5,\\\"semantic_clarity\\\":0.5,\\\"visual_defects\\\":null,\\\"unrequested_text_detected\\\":false,\\\"logo_or_watermark_detected\\\":false,\\\"overall_score\\\":0.5,\\\"decision\\\":\\\"pass\\\"}\"}"
+    )]
+    public async Task ReviewerRejectsNullNestedShapes(string response)
+    {
+        var handler = new StaticHandler(response);
+        ProviderException exception = await Assert.ThrowsAsync<ProviderException>(() =>
+            InvokeAdapterAsync("reviewer", handler)
+        );
+        Assert.Equal(ProviderErrorCategory.MalformedResponse, exception.Category);
+    }
+
     /// <summary>Requires the semantic-review schema to contain exactly the declared fields and constraints.</summary>
     [Theory]
     [MemberData(nameof(InvalidSemanticReviews))]

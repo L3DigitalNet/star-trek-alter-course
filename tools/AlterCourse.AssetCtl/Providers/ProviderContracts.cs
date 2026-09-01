@@ -12,7 +12,7 @@ internal static class ProviderContracts
 
         [System.Text.Json.Serialization.JsonPropertyName("data")]
         [System.Text.Json.Serialization.JsonRequired]
-        public required ImageResponseItem[] Data { get; init; }
+        public ImageResponseItem?[]? Data { get; init; }
     }
 
     internal sealed class ImageResponseItem

@@ -115,6 +115,22 @@ public sealed class LocalAndValidationTests
         Assert.False(result.Passed);
     }
 
+    /// <summary>Rejects document-level processing instructions before SVG rendering or normalization.</summary>
+    [Fact]
+    public void SvgRejectsExternalStylesheetProcessingInstruction()
+    {
+        const string svg =
+            "<?xml-stylesheet type='text/css' href='https://untrusted.example/style.css'?><svg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'><path d='M0 0h64v64z'/></svg>";
+        MechanicalValidationResult result = MechanicalValidator.Validate(
+            TestData.Request(AssetFormat.Svg),
+            Encoding.UTF8.GetBytes(svg),
+            1_000_000,
+            1_000_000
+        );
+        Assert.False(result.Passed);
+        Assert.Contains("processing", string.Join("; ", result.Findings), StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>Fails closed for corrupt PNG data and encoded data beyond policy limits.</summary>
     [Fact]
     public void CorruptAndOversizedPngsFailClosed()

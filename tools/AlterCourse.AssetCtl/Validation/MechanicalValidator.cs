@@ -181,6 +181,8 @@ internal static class MechanicalValidator
             using var source = new MemoryStream(bytes, writable: false);
             using var reader = XmlReader.Create(source, settings);
             var document = XDocument.Load(reader, LoadOptions.None);
+            if (document.Nodes().OfType<XProcessingInstruction>().Any())
+                return Failure("SVG processing instructions are prohibited");
             global::System.Xml.Linq.XElement? root = document.Root;
             if (root?.Name != SvgNamespace + "svg")
             {
@@ -200,7 +202,6 @@ internal static class MechanicalValidator
                 return Failure("SVG dimensions exceed policy");
             }
 
-            string[]? viewBox = root.Attribute("viewBox")?.Value?.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             if (!TryGetViewBox(root, out double viewWidth, out double viewHeight))
             {
                 return Failure("SVG requires a finite four-number viewBox with positive dimensions");

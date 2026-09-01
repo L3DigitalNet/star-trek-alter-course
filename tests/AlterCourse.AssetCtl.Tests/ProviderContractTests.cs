@@ -10,6 +10,28 @@ namespace AlterCourse.AssetCtl.Tests;
 /// <summary>Verifies provider REST contracts exclusively through deterministic HTTP fixtures.</summary>
 public sealed class ProviderContractTests
 {
+    /// <summary>Preserves SVG media semantics for Recraft vector generation.</summary>
+    [Fact]
+    public async Task RecraftVectorResponseProducesSvgCandidate()
+    {
+        byte[] svg = AlterCourse.AssetCtl.Generation.LocalPlaceholderGenerator.RenderSvg(
+            TestData.Request(AssetFormat.Svg)
+        );
+        var handler = new RecordingHandler(_ =>
+            Json(
+                HttpStatusCode.OK,
+                JsonSerializer.Serialize(new { data = new[] { new { b64_json = Convert.ToBase64String(svg) } } })
+            )
+        );
+        var adapter = new RecraftImageAdapter(new HttpClient(handler));
+        GenerationBatchResult result = await adapter.GenerateAsync(
+            TestData.Context(adapter.AdapterId),
+            new NormalizedGenerationRequest(TestData.Request(AssetFormat.Svg), "vector", 1, []),
+            CancellationToken.None
+        );
+        Assert.Equal("image/svg+xml", Assert.Single(result.Candidates).MediaType);
+    }
+
     /// <summary>Uses configured endpoints, models, candidate counts, and bearer authentication.</summary>
     [Theory]
     [InlineData("recraft", "recraft-images", "/v1/images/generations")]
