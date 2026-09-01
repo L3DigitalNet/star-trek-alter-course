@@ -5,3 +5,23 @@ type = "command"
 command = "\"$(git rev-parse --show-toplevel)/.agents/hooks/agent-handoff/session-start\""
 timeout = 10
 statusMessage = "Loading agent handoff state..."
+
+[[skills.config]]
+path = ".codex/skills/godot-csharp/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = ".codex/skills/godot-nodes-scenes/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = ".codex/skills/godot-ui-control/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = ".codex/skills/godot-signals-groups/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = ".codex/skills/stac-architecture/SKILL.md"
+enabled = true

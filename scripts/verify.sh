@@ -28,6 +28,8 @@ readonly godot_project='src/AlterCourse.Godot'
 
 export PATH="${dotnet_dir}:${tool_bin}:${PATH}"
 
+./scripts/check-agent-skill-parity.sh
+
 mapfile -d '' structured_files < <(
   git ls-files -z -- \
     '*.md' '*.json' '*.jsonc' '*.yml' '*.yaml' \
