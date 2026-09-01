@@ -1,0 +1,3 @@
+[*.cs]
+# Godot gameplay continuations normally need to resume on the engine main thread.
+dotnet_diagnostic.MA0004.severity = none

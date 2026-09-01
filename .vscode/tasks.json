@@ -1,0 +1,40 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Verify",
+			"type": "shell",
+			"command": "./scripts/verify.sh",
+			"group": { "kind": "test", "isDefault": true },
+			"problemMatcher": "$msCompile"
+		},
+		{
+			"label": "Fix",
+			"type": "shell",
+			"command": "./scripts/fix.sh",
+			"problemMatcher": []
+		},
+		{
+			"label": "Build",
+			"type": "process",
+			"command": "dotnet",
+			"args": ["build", "AlterCourse.sln", "-c", "Release", "--warnaserror"],
+			"group": "build",
+			"problemMatcher": "$msCompile"
+		},
+		{
+			"label": "Test",
+			"type": "process",
+			"command": "dotnet",
+			"args": ["test", "tests/AlterCourse.Core.Tests/AlterCourse.Core.Tests.csproj"],
+			"group": "test",
+			"problemMatcher": "$msCompile"
+		},
+		{
+			"label": "Mutation Test",
+			"type": "shell",
+			"command": "./scripts/test-mutation.sh",
+			"problemMatcher": "$msCompile"
+		}
+	]
+}

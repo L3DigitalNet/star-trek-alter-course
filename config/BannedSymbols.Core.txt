@@ -1,0 +1,9 @@
+# Ambient time and randomness make simulation results depend on process state.
+P:System.DateTime.Now; Inject deterministic simulation time instead.
+P:System.DateTime.UtcNow; Inject deterministic simulation time instead.
+P:System.Random.Shared; Supply randomness explicitly at the simulation boundary.
+T:System.Random; Supply randomness explicitly at the simulation boundary.
+M:System.Threading.Thread.Sleep(System.Int32); Simulation code must not block wall-clock time.
+P:System.Environment.TickCount; Inject deterministic simulation time instead.
+P:System.Environment.TickCount64; Inject deterministic simulation time instead.
+M:System.Guid.NewGuid; Supply identifiers explicitly at the simulation boundary.

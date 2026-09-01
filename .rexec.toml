@@ -160,7 +160,7 @@ git_context = true
 # [tools], in [provision.debian] packages, or in the worker baseline, and declare it here
 # so its absence is caught early. Each entry is one bare name — no path separator, no
 # leading "-", no whitespace, no duplicates.
-executables = ["git", "npx", "uv"]
+executables = ["bash", "curl", "git", "npx", "sha256sum", "tar", "unzip", "uv"]
 
 [project.requirements]
 
