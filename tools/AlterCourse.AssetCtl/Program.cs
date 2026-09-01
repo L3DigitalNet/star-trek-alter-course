@@ -5,6 +5,7 @@ using AlterCourse.AssetCtl.Routing;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using Serilog.Events;
+using Serilog.Formatting.Json;
 
 namespace AlterCourse.AssetCtl;
 
@@ -14,9 +15,12 @@ internal static class Program
     {
         string repository = TryFindRepository();
         using ILoggerFactory loggerFactory = CreateLoggerFactory(repository);
-        using var httpClient = new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false });
+        using var httpClient = new HttpClient(CreateProviderHandler());
         return await RunAsync(arguments, loggerFactory, httpClient).ConfigureAwait(false);
     }
+
+    internal static SocketsHttpHandler CreateProviderHandler() =>
+        new() { AllowAutoRedirect = false, ConnectTimeout = TimeSpan.FromSeconds(15) };
 
     internal static ILoggerFactory CreateLoggerFactory(string repository)
     {
@@ -31,8 +35,8 @@ internal static class Program
                     standardErrorFromLevel: LogEventLevel.Verbose
                 )
                 .WriteTo.File(
+                    new JsonFormatter(renderMessage: true, formatProvider: CultureInfo.InvariantCulture),
                     Path.Combine(repository, ".assetctl", "logs", "assetctl-.json"),
-                    formatProvider: CultureInfo.InvariantCulture,
                     rollingInterval: RollingInterval.Day,
                     retainedFileCountLimit: 7,
                     fileSizeLimitBytes: 4 * 1024 * 1024,

@@ -78,9 +78,10 @@ internal static class MechanicalValidator
         try
         {
             using var codec = SKCodec.Create(new SKMemoryStream(bytes));
-            if (codec is null || codec.EncodedFormat != SKEncodedImageFormat.Png)
+            string? codecFinding = ValidatePngCodec(codec, bytes);
+            if (codecFinding is not null)
             {
-                return Failure("file is not a decodable PNG");
+                return Failure(codecFinding);
             }
 
             SKImageInfo info = codec.Info;
@@ -134,6 +135,38 @@ internal static class MechanicalValidator
         }
     }
 
+    private static string? ValidatePngCodec(SKCodec? codec, byte[] bytes)
+    {
+        if (codec is null || codec.EncodedFormat != SKEncodedImageFormat.Png)
+        {
+            return "file is not a decodable PNG";
+        }
+
+        return codec.FrameCount > 1 || ContainsPngAnimationControl(bytes) ? "animated PNG output is prohibited" : null;
+    }
+
+    private static bool ContainsPngAnimationControl(byte[] bytes)
+    {
+        int offset = 8;
+        while (offset <= bytes.Length - 12)
+        {
+            int length = System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(offset, 4));
+            if (length < 0 || length > bytes.Length - offset - 12)
+            {
+                return false;
+            }
+
+            if (bytes.AsSpan(offset + 4, 4).SequenceEqual("acTL"u8))
+            {
+                return true;
+            }
+
+            offset += length + 12;
+        }
+
+        return false;
+    }
+
     private static MechanicalValidationResult ValidateSvg(AssetRequest request, byte[] bytes, long maximumPixels)
     {
         try
@@ -168,12 +201,9 @@ internal static class MechanicalValidator
             }
 
             string[]? viewBox = root.Attribute("viewBox")?.Value?.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            if (
-                viewBox is not { Length: 4 }
-                || !viewBox.All(part => double.TryParse(part, NumberStyles.Float, CultureInfo.InvariantCulture, out _))
-            )
+            if (!TryGetViewBox(root, out double viewWidth, out double viewHeight))
             {
-                return Failure("SVG requires a finite four-number viewBox");
+                return Failure("SVG requires a finite four-number viewBox with positive dimensions");
             }
 
             byte[] normalized = NormalizeSvg(document);
@@ -184,7 +214,12 @@ internal static class MechanicalValidator
                 return Failure("sanitized SVG did not render");
             }
 
-            Dictionary<int, byte[]> previews = RenderSvgPreviews(svg, request.Output.TargetDisplaySizes, width, height);
+            Dictionary<int, byte[]> previews = RenderSvgPreviews(
+                svg,
+                request.Output.TargetDisplaySizes,
+                viewWidth,
+                viewHeight
+            );
 
             return new MechanicalValidationResult(true, "image/svg+xml", width, height, true, [], normalized, previews);
         }
@@ -192,6 +227,40 @@ internal static class MechanicalValidator
         {
             return Failure($"SVG parse or render failed: {exception.Message}");
         }
+    }
+
+    private static bool TryGetViewBox(XElement root, out double width, out double height)
+    {
+        string[]? parts = root.Attribute("viewBox")?.Value?.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts is { Length: 4 })
+        {
+            return TryParseValidViewBox(parts, out width, out height);
+        }
+
+        width = 0;
+        height = 0;
+        return false;
+    }
+
+    private static bool TryParseValidViewBox(string[] parts, out double width, out double height)
+    {
+        width = 0;
+        height = 0;
+        double[] values = new double[4];
+        for (int index = 0; index < parts.Length; index++)
+        {
+            if (
+                !double.TryParse(parts[index], NumberStyles.Float, CultureInfo.InvariantCulture, out values[index])
+                || !double.IsFinite(values[index])
+            )
+            {
+                return false;
+            }
+        }
+
+        width = values[2];
+        height = values[3];
+        return width > 0 && height > 0;
     }
 
     private static byte[] NormalizeSvg(XDocument document)
@@ -298,17 +367,29 @@ internal static class MechanicalValidator
     private static bool IsLocalFragment(string value) =>
         value.Length > 1 && value[0] == '#' && value.AsSpan(1).IndexOfAny(InvalidLocalFragmentCharacters) < 0;
 
-    private static Dictionary<int, byte[]> RenderSvgPreviews(SKSvg svg, IReadOnlyList<int> sizes, int width, int height)
+    private static Dictionary<int, byte[]> RenderSvgPreviews(
+        SKSvg svg,
+        IReadOnlyList<int> sizes,
+        double width,
+        double height
+    )
     {
         Dictionary<int, byte[]> previews = [];
         foreach (int size in sizes)
         {
             using var surface = SKSurface.Create(new SKImageInfo(size, size, SKColorType.Rgba8888, SKAlphaType.Premul));
             surface.Canvas.Clear(SKColors.Transparent);
+            if (surface is null || svg.Picture is null)
+            {
+                throw new InvalidOperationException("target-size SVG render surface was unavailable");
+            }
+
             surface.Canvas.Scale(Math.Min(size / (float)width, size / (float)height));
             surface.Canvas.DrawPicture(svg.Picture);
             using SKImage image = surface.Snapshot();
-            using SKData data = image.Encode(SKEncodedImageFormat.Png, 100);
+            using SKData data =
+                image.Encode(SKEncodedImageFormat.Png, 100)
+                ?? throw new InvalidOperationException("target-size SVG preview encoding failed");
             previews.Add(size, data.ToArray());
         }
 

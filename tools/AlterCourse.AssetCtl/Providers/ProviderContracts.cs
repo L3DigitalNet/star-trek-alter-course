@@ -2,6 +2,28 @@ namespace AlterCourse.AssetCtl.Providers;
 
 internal static class ProviderContracts
 {
+    internal sealed class ImageResponse
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("id")]
+        public string? Id { get; init; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("created")]
+        public long? Created { get; init; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("data")]
+        [System.Text.Json.Serialization.JsonRequired]
+        public required ImageResponseItem[] Data { get; init; }
+    }
+
+    internal sealed class ImageResponseItem
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("b64_json")]
+        public string? Base64Json { get; init; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("url")]
+        public string? Url { get; init; }
+    }
+
     public sealed record ProviderExecutionContext(
         ProviderInstance Provider,
         ModelProfile Model,

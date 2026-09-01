@@ -2,11 +2,19 @@ using System.Buffers.Text;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace AlterCourse.AssetCtl.Providers;
 
 internal abstract class HttpProviderBase(HttpClient httpClient, IReadOnlySet<string> allowedEndpointHosts)
 {
+    private static readonly JsonSerializerOptions StrictJson = new()
+    {
+        MaxDepth = 32,
+        PropertyNameCaseInsensitive = false,
+        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
+    };
+
     public static class Redactor
     {
         public static string Sanitize(string value)
@@ -35,7 +43,7 @@ internal abstract class HttpProviderBase(HttpClient httpClient, IReadOnlySet<str
 
     protected HttpClient Client { get; } = httpClient;
 
-    protected async Task<JsonDocument> SendJsonAsync(
+    protected async Task<T> SendJsonAsync<T>(
         HttpRequestMessage message,
         ProviderExecutionContext context,
         CancellationToken cancellationToken
@@ -88,7 +96,7 @@ internal abstract class HttpProviderBase(HttpClient httpClient, IReadOnlySet<str
             }
             try
             {
-                return JsonDocument.Parse(json, new JsonDocumentOptions { MaxDepth = 32 });
+                return Deserialize<T>(json);
             }
             catch (JsonException exception)
             {
@@ -99,6 +107,10 @@ internal abstract class HttpProviderBase(HttpClient httpClient, IReadOnlySet<str
             }
         }
     }
+
+    private static T Deserialize<T>(byte[] json) =>
+        JsonSerializer.Deserialize<T>(json, StrictJson)
+        ?? throw new ProviderException(ProviderErrorCategory.MalformedResponse, "Provider JSON response was null.");
 
     private void ValidateRequestEndpoint(HttpRequestMessage message)
     {
@@ -145,26 +157,18 @@ internal abstract class HttpProviderBase(HttpClient httpClient, IReadOnlySet<str
     }
 
     protected async Task<IReadOnlyList<GeneratedCandidate>> ParseImageDataAsync(
-        JsonElement root,
+        ProviderContracts.ImageResponse response,
         ProviderExecutionContext context,
         int requestedCandidateCount,
         CancellationToken cancellationToken
     )
     {
-        if (!root.TryGetProperty("data", out JsonElement data) || data.ValueKind != JsonValueKind.Array)
-        {
-            throw new ProviderException(
-                ProviderErrorCategory.MalformedResponse,
-                "Provider response is missing data array."
-            );
-        }
+        ValidateCandidateCount(response.Data, requestedCandidateCount);
 
-        ValidateCandidateCount(data, requestedCandidateCount);
-
-        var candidates = new List<GeneratedCandidate>(data.GetArrayLength());
+        var candidates = new List<GeneratedCandidate>(response.Data.Length);
         long retainedBytes = 0;
         int index = 0;
-        foreach (global::System.Text.Json.JsonElement item in data.EnumerateArray())
+        foreach (ProviderContracts.ImageResponseItem item in response.Data)
         {
             long remainingBytes = context.MaximumDownloadBytes - retainedBytes;
             if (remainingBytes <= 0)
@@ -176,16 +180,15 @@ internal abstract class HttpProviderBase(HttpClient httpClient, IReadOnlySet<str
             }
 
             GeneratedCandidate candidate;
-            if (item.TryGetProperty("b64_json", out JsonElement encoded) && encoded.ValueKind == JsonValueKind.String)
+            if (item.Base64Json is not null && item.Url is null)
             {
-                candidate = DecodeInlineCandidate(encoded, index++, remainingBytes);
+                candidate = DecodeInlineCandidate(item.Base64Json, index++, remainingBytes);
             }
-            else if (item.TryGetProperty("url", out JsonElement urlNode) && urlNode.ValueKind == JsonValueKind.String)
+            else if (item.Url is not null && item.Base64Json is null)
             {
                 candidate = new GeneratedCandidate(
                     index++,
-                    await DownloadAsync(urlNode.GetString()!, context, remainingBytes, cancellationToken)
-                        .ConfigureAwait(false),
+                    await DownloadAsync(item.Url, context, remainingBytes, cancellationToken).ConfigureAwait(false),
                     "image/png",
                     null,
                     null
@@ -208,9 +211,9 @@ internal abstract class HttpProviderBase(HttpClient httpClient, IReadOnlySet<str
             : throw new ProviderException(ProviderErrorCategory.MalformedResponse, "Provider returned no candidates.");
     }
 
-    private static void ValidateCandidateCount(JsonElement data, int requestedCandidateCount)
+    private static void ValidateCandidateCount(ProviderContracts.ImageResponseItem[] data, int requestedCandidateCount)
     {
-        if (requestedCandidateCount <= 0 || data.GetArrayLength() > requestedCandidateCount)
+        if (requestedCandidateCount <= 0 || data.Length > requestedCandidateCount)
         {
             throw new ProviderException(
                 ProviderErrorCategory.MalformedResponse,
@@ -219,11 +222,10 @@ internal abstract class HttpProviderBase(HttpClient httpClient, IReadOnlySet<str
         }
     }
 
-    private static GeneratedCandidate DecodeInlineCandidate(JsonElement encoded, int index, long maximumBytes)
+    private static GeneratedCandidate DecodeInlineCandidate(string value, int index, long maximumBytes)
     {
         try
         {
-            string value = encoded.GetString()!;
             int maximumDecodedLength = Base64.GetMaxDecodedFromUtf8Length(value.Length);
             if (
                 maximumDecodedLength > maximumBytes

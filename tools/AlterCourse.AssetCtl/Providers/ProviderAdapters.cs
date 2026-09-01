@@ -1,5 +1,4 @@
 using System.Net.Http.Json;
-using System.Text.Json;
 
 namespace AlterCourse.AssetCtl.Providers;
 
@@ -56,16 +55,16 @@ internal static class ProviderAdapters
                     }
                 ),
             };
-            using global::System.Text.Json.JsonDocument response = await SendJsonAsync(
+            ProviderContracts.ImageResponse response = await SendJsonAsync<ProviderContracts.ImageResponse>(
                     message,
                     context,
                     cancellationToken
                 )
                 .ConfigureAwait(false);
             global::System.Collections.Generic.IReadOnlyList<global::AlterCourse.AssetCtl.Domain.DomainModels.GeneratedCandidate> candidates =
-                await ParseImageDataAsync(response.RootElement, context, request.CandidateCount, cancellationToken)
+                await ParseImageDataAsync(response, context, request.CandidateCount, cancellationToken)
                     .ConfigureAwait(false);
-            return new GenerationBatchResult(candidates, RequestId(response.RootElement), null);
+            return new GenerationBatchResult(candidates, ProviderRequestIdPolicy.Sanitize(response.Id), null);
         }
 
         internal static void ValidateKnown(IReadOnlyDictionary<string, string> options, params string[] known)
@@ -80,9 +79,6 @@ internal static class ProviderAdapters
                 );
             }
         }
-
-        internal static string? RequestId(JsonElement root) =>
-            root.TryGetProperty("id", out JsonElement id) ? id.GetString() : null;
 
         internal static Uri Endpoint(Uri endpoint, string path) => new(endpoint.AbsoluteUri.TrimEnd('/') + "/" + path);
     }
@@ -161,16 +157,16 @@ internal static class ProviderAdapters
                 );
             }
 
-            using global::System.Text.Json.JsonDocument response = await SendJsonAsync(
+            ProviderContracts.ImageResponse response = await SendJsonAsync<ProviderContracts.ImageResponse>(
                     message,
                     context,
                     cancellationToken
                 )
                 .ConfigureAwait(false);
             return new GenerationBatchResult(
-                await ParseImageDataAsync(response.RootElement, context, request.CandidateCount, cancellationToken)
+                await ParseImageDataAsync(response, context, request.CandidateCount, cancellationToken)
                     .ConfigureAwait(false),
-                RecraftImageAdapter.RequestId(response.RootElement),
+                ProviderRequestIdPolicy.Sanitize(response.Id),
                 null
             );
         }
@@ -229,16 +225,16 @@ internal static class ProviderAdapters
             {
                 Content = JsonContent.Create(payload),
             };
-            using global::System.Text.Json.JsonDocument response = await SendJsonAsync(
+            ProviderContracts.ImageResponse response = await SendJsonAsync<ProviderContracts.ImageResponse>(
                     message,
                     context,
                     cancellationToken
                 )
                 .ConfigureAwait(false);
             return new GenerationBatchResult(
-                await ParseImageDataAsync(response.RootElement, context, request.CandidateCount, cancellationToken)
+                await ParseImageDataAsync(response, context, request.CandidateCount, cancellationToken)
                     .ConfigureAwait(false),
-                RecraftImageAdapter.RequestId(response.RootElement),
+                ProviderRequestIdPolicy.Sanitize(response.Id),
                 null
             );
         }

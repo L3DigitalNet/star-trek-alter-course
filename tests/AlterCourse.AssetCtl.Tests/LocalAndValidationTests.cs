@@ -126,4 +126,74 @@ public sealed class LocalAndValidationTests
                 .Passed
         );
     }
+
+    /// <summary>Rejects a fully opaque PNG when the output contract requires transparency.</summary>
+    [Fact]
+    public void OpaquePngFailsTransparencyContract()
+    {
+        using var bitmap = new SkiaSharp.SKBitmap(64, 64, isOpaque: true);
+        bitmap.Erase(SkiaSharp.SKColors.Black);
+        using var image = SkiaSharp.SKImage.FromBitmap(bitmap);
+        using SkiaSharp.SKData encoded = image.Encode(SkiaSharp.SKEncodedImageFormat.Png, 100);
+
+        MechanicalValidationResult result = MechanicalValidator.Validate(
+            TestData.Request(),
+            encoded.ToArray(),
+            1_000_000,
+            1_000_000
+        );
+
+        Assert.False(result.Passed);
+        Assert.Contains("transparent", string.Join("; ", result.Findings), StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Rejects bytes whose decoded media type disagrees with the requested output format.</summary>
+    [Fact]
+    public void OutputFormatMismatchFailsClosed()
+    {
+        byte[] png = LocalPlaceholderGenerator.RenderPng(TestData.Request());
+        MechanicalValidationResult result = MechanicalValidator.Validate(
+            TestData.Request(AssetFormat.Svg),
+            png,
+            1_000_000,
+            1_000_000
+        );
+        Assert.False(result.Passed);
+    }
+
+    /// <summary>Rejects non-finite, zero-area, and malformed SVG view boxes.</summary>
+    [Theory]
+    [InlineData("0 0 0 64")]
+    [InlineData("0 0 NaN 64")]
+    [InlineData("0 0 64")]
+    public void SvgRejectsMalformedViewBox(string viewBox)
+    {
+        string svg =
+            $"<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='{viewBox}'><path d='M0 0h64v64z'/></svg>";
+        MechanicalValidationResult result = MechanicalValidator.Validate(
+            TestData.Request(AssetFormat.Svg),
+            Encoding.UTF8.GetBytes(svg),
+            1_000_000,
+            1_000_000
+        );
+        Assert.False(result.Passed);
+    }
+
+    /// <summary>Rejects an APNG after the decoder confirms that it contains multiple frames.</summary>
+    [Fact]
+    public void AnimatedPngFailsClosed()
+    {
+        byte[] png = LocalPlaceholderGenerator.RenderPng(TestData.Request());
+        byte[] animated = AnimatedPngFixture.Create(png);
+
+        MechanicalValidationResult result = MechanicalValidator.Validate(
+            TestData.Request(),
+            animated,
+            1_000_000,
+            1_000_000
+        );
+
+        Assert.False(result.Passed);
+        Assert.Contains("animated", string.Join("; ", result.Findings), StringComparison.OrdinalIgnoreCase);
+    }
 }

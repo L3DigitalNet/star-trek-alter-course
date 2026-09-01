@@ -1,11 +1,19 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using AlterCourse.AssetCtl.Providers;
 
 namespace AlterCourse.AssetCtl.Review;
 
 internal sealed class OpenAiVisionReviewer(HttpClient client) : HttpProviderBase(client, EndpointHosts), IAssetReviewer
 {
+    private static readonly JsonSerializerOptions StrictJson = new()
+    {
+        MaxDepth = 8,
+        PropertyNameCaseInsensitive = false,
+        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
+    };
+
     private static readonly IReadOnlySet<string> EndpointHosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         "api.openai.com",
@@ -62,20 +70,9 @@ internal sealed class OpenAiVisionReviewer(HttpClient client) : HttpProviderBase
         string prompt =
             $"Review asset '{request.Request.Id}'. Purpose: {request.Request.Purpose}. Resolved style: {request.StyleSummary}. Required: {string.Join("; ", required)}. Prohibited: {string.Join("; ", prohibited)}. Return only the required structured rubric.";
         using HttpRequestMessage message = CreateRequest(context, request, prompt);
-        using global::System.Text.Json.JsonDocument response = await SendJsonAsync(message, context, cancellationToken)
+        ReviewerResponse response = await SendJsonAsync<ReviewerResponse>(message, context, cancellationToken)
             .ConfigureAwait(false);
-        string? json = null;
-        if (response.RootElement.TryGetProperty("output_text", out JsonElement outputText))
-        {
-            json = outputText.GetString();
-        }
-        else if (
-            response.RootElement.TryGetProperty("choices", out JsonElement choices)
-            && choices.GetArrayLength() > 0
-        )
-        {
-            json = choices[0].GetProperty("message").GetProperty("content").GetString();
-        }
+        string? json = response.OutputText ?? StructuredChoice(response.Choices);
 
         return Parse(
             json
@@ -84,6 +81,21 @@ internal sealed class OpenAiVisionReviewer(HttpClient client) : HttpProviderBase
                     "Reviewer response omitted structured output."
                 )
         );
+    }
+
+    private static string? StructuredChoice(ReviewerChoice[]? choices)
+    {
+        if (choices is null)
+        {
+            return null;
+        }
+
+        return choices.Length == 1
+            ? choices[0].Message.Content
+            : throw new ProviderException(
+                ProviderErrorCategory.MalformedResponse,
+                "Reviewer response must contain exactly one structured choice."
+            );
     }
 
     private static HttpRequestMessage CreateRequest(
@@ -138,32 +150,36 @@ internal sealed class OpenAiVisionReviewer(HttpClient client) : HttpProviderBase
     {
         try
         {
-            using var document = JsonDocument.Parse(json, new JsonDocumentOptions { MaxDepth = 8 });
-            global::System.Text.Json.JsonElement root = document.RootElement;
-            double style = Score(root, "style_adherence");
-            double clarity = Score(root, "semantic_clarity");
-            double overall = Score(root, "overall_score");
-            string decision = RequiredString(root, "decision");
-            if (decision is not ("pass" or "fail"))
+            SemanticReviewPayload payload =
+                JsonSerializer.Deserialize<SemanticReviewPayload>(json, StrictJson)
+                ?? throw new JsonException("semantic review was null");
+            if (payload.Decision is not ("pass" or "fail"))
             {
                 throw new JsonException("decision must be pass or fail");
             }
 
+            if (payload.VisualDefects.Length > 20)
+            {
+                throw new JsonException("visual_defects must contain at most 20 items");
+            }
+
+            if (payload.VisualDefects.Any(static value => value is null))
+            {
+                throw new JsonException("visual_defects entries must be strings");
+            }
+
             return new SemanticReviewResult(
-                RequiredBoolean(root, "matches_subject"),
-                RequiredBoolean(root, "required_constraints_satisfied"),
-                RequiredBoolean(root, "prohibited_content_absent"),
-                RequiredBoolean(root, "readable_at_target_sizes"),
-                style,
-                clarity,
-                root.GetProperty("visual_defects")
-                    .EnumerateArray()
-                    .Select(value => value.GetString() ?? throw new JsonException("visual defect must be string"))
-                    .ToArray(),
-                RequiredBoolean(root, "unrequested_text_detected"),
-                RequiredBoolean(root, "logo_or_watermark_detected"),
-                overall,
-                decision,
+                payload.MatchesSubject,
+                payload.RequiredConstraintsSatisfied,
+                payload.ProhibitedContentAbsent,
+                payload.ReadableAtTargetSizes,
+                Score(payload.StyleAdherence, "style_adherence"),
+                Score(payload.SemanticClarity, "semantic_clarity"),
+                payload.VisualDefects,
+                payload.UnrequestedTextDetected,
+                payload.LogoOrWatermarkDetected,
+                Score(payload.OverallScore, "overall_score"),
+                payload.Decision,
                 "not-run"
             );
         }
@@ -177,14 +193,67 @@ internal sealed class OpenAiVisionReviewer(HttpClient client) : HttpProviderBase
         }
     }
 
-    private static double Score(JsonElement root, string property)
+    private static double Score(double value, string property) =>
+        double.IsFinite(value) && value is >= 0 and <= 1
+            ? value
+            : throw new JsonException($"{property} must be within 0..1");
+
+    private sealed class ReviewerResponse
     {
-        double result = root.GetProperty(property).GetDouble();
-        return result is >= 0 and <= 1 ? result : throw new JsonException($"{property} must be within 0..1");
+        [JsonPropertyName("output_text")]
+        public string? OutputText { get; init; }
+
+        [JsonPropertyName("choices")]
+        public ReviewerChoice[]? Choices { get; init; }
     }
 
-    private static bool RequiredBoolean(JsonElement root, string property) => root.GetProperty(property).GetBoolean();
+    private sealed class ReviewerChoice
+    {
+        [JsonPropertyName("message")]
+        [JsonRequired]
+        public required ReviewerMessage Message { get; init; }
+    }
 
-    private static string RequiredString(JsonElement root, string property) =>
-        root.GetProperty(property).GetString() ?? throw new JsonException($"{property} is required");
+    private sealed class ReviewerMessage
+    {
+        [JsonPropertyName("content")]
+        [JsonRequired]
+        public required string Content { get; init; }
+    }
+
+    private sealed class SemanticReviewPayload
+    {
+        [JsonPropertyName("matches_subject"), JsonRequired]
+        public bool MatchesSubject { get; init; }
+
+        [JsonPropertyName("required_constraints_satisfied"), JsonRequired]
+        public bool RequiredConstraintsSatisfied { get; init; }
+
+        [JsonPropertyName("prohibited_content_absent"), JsonRequired]
+        public bool ProhibitedContentAbsent { get; init; }
+
+        [JsonPropertyName("readable_at_target_sizes"), JsonRequired]
+        public bool ReadableAtTargetSizes { get; init; }
+
+        [JsonPropertyName("style_adherence"), JsonRequired]
+        public double StyleAdherence { get; init; }
+
+        [JsonPropertyName("semantic_clarity"), JsonRequired]
+        public double SemanticClarity { get; init; }
+
+        [JsonPropertyName("visual_defects"), JsonRequired]
+        public required string[] VisualDefects { get; init; }
+
+        [JsonPropertyName("unrequested_text_detected"), JsonRequired]
+        public bool UnrequestedTextDetected { get; init; }
+
+        [JsonPropertyName("logo_or_watermark_detected"), JsonRequired]
+        public bool LogoOrWatermarkDetected { get; init; }
+
+        [JsonPropertyName("overall_score"), JsonRequired]
+        public double OverallScore { get; init; }
+
+        [JsonPropertyName("decision"), JsonRequired]
+        public required string Decision { get; init; }
+    }
 }
