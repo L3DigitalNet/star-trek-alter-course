@@ -1,0 +1,89 @@
+[project_standards]
+schema_version = "1.0"
+catalog = "5"
+
+[standards.markdown-frontmatter]
+enabled = true
+version = "1.15"
+
+[standards.markdown-frontmatter.config]
+contract_version = "1.1"
+workflow_mode = "caller"
+schema = "markdown-frontmatter"
+required = true
+include = ["README.md", "docs/**/*.md"]
+exclude = [
+  "README.md",
+  "**/*.template.md",
+  "AGENTS.md",
+  "CLAUDE.md",
+  ".agents/**",
+  ".claude/**",
+  ".codex/**",
+  ".github/**",
+  "docs/STATUS.md",
+  "docs/TODO.md",
+  "docs/handoff/**",
+  "node_modules/**",
+]
+harnesses = ["claude-code", "codex"]
+
+[standards.markdown-frontmatter.config.references]
+enabled = false
+
+[standards.adr]
+enabled = true
+version = "1.6"
+
+[standards.adr.config]
+contract_version = "1.0"
+require_sections = false
+validate_amendments = false
+
+[standards.markdown-tooling]
+enabled = true
+version = "1.15"
+
+[standards.markdown-tooling.config]
+contract_version = "1.1"
+workflow_mode = "caller"
+lint = true
+format = true
+lint_generated_exclusions = true
+lint_workflow_ownership = "managed"
+format_workflow_ownership = "managed"
+markdownlint_config_ownership = "managed"
+markdown_globs = ["**/*.md"]
+config_globs = ["**/*.json", "**/*.jsonc", "**/*.yml", "**/*.yaml"]
+runner_labels = []
+
+[standards.markdown-tooling.config.ci]
+lint_caller = true
+format_caller = true
+
+[[standards.markdown-tooling.config.exclusions]]
+glob = ".agents/skills/agent-handoff/**"
+applies_to = "both"
+reason = "Centrally locked Agent Handoff skill tree; editing it to satisfy a formatter creates drift."
+
+[[standards.markdown-tooling.config.exclusions]]
+glob = ".claude/skills/agent-handoff/**"
+applies_to = "both"
+reason = "Centrally locked Agent Handoff skill tree for Claude Code; editing it to satisfy a formatter creates drift."
+
+[standards.agent-handoff]
+enabled = true
+version = "1.16"
+
+[standards.agent-handoff.config]
+contract_version = "1.1"
+startup = "automatic"
+harnesses = ["claude-code", "codex"]
+
+[standards.github-workflow]
+enabled = true
+version = "1.8"
+
+[standards.github-workflow.config]
+organization = "L3DigitalNet"
+harnesses = ["claude-code", "codex"]

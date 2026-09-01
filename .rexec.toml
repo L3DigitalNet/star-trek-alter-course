@@ -1,0 +1,176 @@
+# rexec repository configuration (.rexec.toml), committed with the repository.
+#
+# This is the only configuration rexec reads. It must be a regular file at the
+# repository's Git root; there is no user-level file, no parent-directory lookup and
+# no .rexecignore. Every command runs on the worker: rexec has no local execution path.
+#
+# Run "rexec config show" to see the effective values, or "rexec help config" for this
+# reference without a file.
+
+# schema: the configuration generation. Exactly 1 is accepted; a different value is
+# rejected rather than interpreted.
+schema = 1
+
+[remote]
+
+# host: the ssh alias of the worker, exactly as it appears in ~/.ssh/config. rexec
+# passes it to ssh verbatim and never duplicates hostname, user, port or key settings.
+# Worker directories are reported by the worker itself and cannot be declared here.
+# "rexec" is also the compiled default; the line is written out so the destination is
+# greppable, and a different alias is declared exactly here.
+host = "rexec"
+
+[ssh]
+
+# batch_mode must stay true: a worker that would prompt for a password has to fail fast
+# instead of hanging an unattended invocation.
+#batch_mode = true
+
+# connect_timeout_seconds (1-600), server_alive_interval_seconds (1-3600) and
+# server_alive_count_max (1-255) bound the connection. Zero and negative values mean
+# "disabled" to OpenSSH and are rejected.
+#connect_timeout_seconds = 5
+#server_alive_interval_seconds = 15
+#server_alive_count_max = 3
+
+[routing]
+
+# rexec matches nothing against these entries and enforces no rule from them: the table
+# is descriptive only, printed verbatim by "rexec routing" so a reader can see which
+# commands the repository intends for the worker and which must stay local, and why.
+#[[routing.remote]]
+#command = "make go-check"
+#reason = "40-CPU battery; runs 6 min locally"
+#
+#[[routing.local]]
+#command = "git ..."
+#reason = "mutates authoritative Git state"
+
+[tools]
+
+# The exact tool environment every invocation converges before the command starts.
+# Versions are exact: a floating version, a range or a missing version is rejected.
+#
+# The pinned mise core names are used unqualified:
+#go = "1.26.5"
+#python = "3.13.1"
+#node = "24.4.0"
+#
+# Everything else needs an explicit backend-qualified identity; registry shorthand is
+# not accepted. Each backend states the integrity it can actually prove: aqua declares
+# the native mechanism it expects, github takes that or a checksum, and http always
+# needs a checksum. These sub-tables must come after the unqualified keys above.
+#[tools."aqua:cli/cli"]
+#version = "2.62.0"
+#verify = "cosign"
+#
+#[tools."github:BurntSushi/ripgrep"]
+#version = "14.1.1"
+#checksum = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+#
+#[tools."http:mytool"]
+#version = "1.2.3"
+#url = "https://example.invalid/mytool-1.2.3.tar.gz"
+#checksum = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
+[env]
+
+# Environment for the remote command only; nothing from your local environment is
+# forwarded implicitly. {remote_state} and {remote_cache} expand to this workspace's
+# worker directory and the worker's shared cache.
+#
+# .venv is already excluded from every transfer and excluded paths survive sync, so no
+# redirect is needed for that. Putting the environment in {remote_state} keeps it beside
+# the mirror, where it survives a plain "rexec clean"; "clean --cache" and "--all" still
+# remove it. Caution: with UV_PROJECT_ENVIRONMENT set, "uv sync" never creates .venv in
+# the mirror, so scripts that run .venv/bin/<tool> by path fail remotely — repositories
+# that invoke tools that way should leave this key unset.
+#UV_CACHE_DIR = "{remote_cache}/uv"
+#UV_PROJECT_ENVIRONMENT = "{remote_state}/python-env"
+#
+# Never put a secret here: this file is committed.
+
+[sync]
+
+# exclude: extra rsync exclude patterns, applied after the mandatory .git and .rexec/
+# rules and the built-in defaults. This is the only configured exclusion authority.
+#exclude = [".env", ".env.*", "scratch/"]
+
+# max_passes: how many convergence passes may run while waiting for the source tree to
+# stop changing. Exceeding it fails without starting the command.
+#max_passes = 3
+
+# lock_wait: wait for another rexec invocation on the same workspace to finish. false
+# fails immediately instead; --no-wait forces false for one invocation.
+#lock_wait = true
+
+# git_context: materialize a sanitized, disposable Git context inside the mirror so remote commands
+# can read history, refs and the index — what a whole-repository verification gate needs.
+# Off by default: it costs a one-time transfer of the object store. Nothing that carries
+# credentials is sent, and a replacement write (commit, reset, gc) is discarded on the next
+# sync. This repository's workspaces share that context's object store by hardlink, never
+# another repository's context and never your local checkout, so an in-place modification of
+# a shared object is repaired, per workspace, only by re-materializing that workspace with a
+# current client (rexec clean --all for a released pre-v0.6.0 client); a modification-time-
+# only or ownership-only difference is repaired by no materialization and clears only once
+# every entry naming the drifted inode, including the context reference via rexec reclaim,
+# is removed. See rexec help git-context.
+git_context = true
+
+[execution]
+
+# auto_parallel: rewrite recognized commands (make, ninja, cmake --build, pytest) to use
+# the worker's CPU count. A concurrency option you pass yourself always wins.
+#auto_parallel = true
+
+# jobs: fixed job count exported as REXEC_JOBS. Omit it to use the worker's effective
+# CPU count. --jobs N overrides this for one invocation.
+#jobs = 24
+
+[logging]
+
+# enabled: write the repository-local execution record under <repo>/.rexec:
+# history.jsonl, one JSON record per invocation, and diagnostics.log, appended
+# correlated diagnostics. The directory ignores itself and is never synchronized.
+# Records hold no environment values, argument values, command output or file contents.
+#enabled = true
+
+# history_max_bytes: rotate history.jsonl once it grows past this size. Exactly one
+# previous generation is kept. Diagnostics are append-only and are not rotated.
+#history_max_bytes = 5242880
+
+[provision.debian]
+
+# packages: Debian packages that "rexec setup" may install on the worker. They are the
+# only packages any rexec mode will ever install, they are installed with typed
+# non-interactive apt, and no other command touches them. Upgrading mise, the baseline
+# commands or the container itself is an operator procedure, never a rexec one.
+#
+# Omitted, this is the compiled worker baseline. A declared list REPLACES that baseline
+# rather than extending it, so declaring one package converges exactly that package —
+# which is how a repository deliberately narrows its worker.
+#packages = ["cmake", "ninja-build"]
+
+[project]
+
+# executables: bare command names this repository expects to find on the worker's PATH.
+# "rexec doctor" resolves each one under the same PATH a command runs with, and a run
+# refuses to start when one is missing, so a missing tool is a readiness verdict instead
+# of an exit 127 partway through a build. rexec never installs them: name each entry in
+# [tools], in [provision.debian] packages, or in the worker baseline, and declare it here
+# so its absence is caught early. Each entry is one bare name — no path separator, no
+# leading "-", no whitespace, no duplicates.
+executables = ["git", "npx", "uv"]
+
+[project.requirements]
+
+# Paths whose absence "rexec doctor" and "rexec setup --check" report, each with a
+# remedy. A path is relative to the mirror, or begins with {remote_state}/ or
+# {remote_cache}/ — the same placeholders [env] expands — to name a dependency root
+# beside the mirror or in the worker's shared cache, so an environment redirected
+# with UV_PROJECT_ENVIRONMENT above can be declared here too. A placeholder anywhere
+# else in the path is rejected. The remedy is display text: rexec prints it and never
+# parses, expands or executes it, and cleanup that removes one of these paths says so
+# before removing anything ("{remote_cache}" paths are shared state no clean removes).
+#".venv" = "rexec -- uv sync"
+#"{remote_state}/python-env" = "rexec -- uv sync"

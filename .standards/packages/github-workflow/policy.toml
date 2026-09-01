@@ -1,0 +1,8 @@
+# Rendered by the project-standards control plane from consumer configuration.
+# Reconcile owns this file: change `.standards/config.toml` instead of editing here.
+#
+# The packaged `gh-workflow` tool parses this with a bounded reader that accepts
+# only comments and double-quoted `key = "value"` assignments, so every future
+# value must keep that shape.
+organization = "L3DigitalNet"
+package_version = "1.8"
