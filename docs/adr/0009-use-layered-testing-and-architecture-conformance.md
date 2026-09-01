@@ -18,6 +18,7 @@ aliases: []
 related:
   - 'docs/adr/0001-separate-simulation-from-godot.md'
   - 'docs/adr/0002-use-one-canonical-quality-gate.md'
+  - 'docs/adr/0003-prefer-native-capabilities-and-demand-driven-dependencies.md'
   - 'docs/adr/0005-use-json-and-schema-validation-for-domain-content.md'
   - 'docs/adr/0006-use-versioned-json-snapshot-saves.md'
   - 'docs/adr/0007-use-deterministic-simulation-time-scheduling-and-randomness.md'

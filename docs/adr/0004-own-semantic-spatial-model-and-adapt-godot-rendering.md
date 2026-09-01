@@ -19,6 +19,7 @@ related:
   - 'docs/adr/0001-separate-simulation-from-godot.md'
   - 'docs/adr/0003-prefer-native-capabilities-and-demand-driven-dependencies.md'
   - 'docs/adr/0007-use-deterministic-simulation-time-scheduling-and-randomness.md'
+  - 'docs/adr/0010-use-explainable-domain-ai-and-demand-driven-state-machines.md'
   - 'docs/adr/0011-represent-physical-quantities-with-explicit-units.md'
 supersedes: []
 superseded_by: null
