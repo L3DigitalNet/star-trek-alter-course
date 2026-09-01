@@ -21,6 +21,7 @@ related:
   - 'docs/adr/0004-own-semantic-spatial-model-and-adapt-godot-rendering.md'
   - 'docs/adr/0005-use-json-and-schema-validation-for-domain-content.md'
   - 'docs/adr/0006-use-versioned-json-snapshot-saves.md'
+  - 'docs/adr/0007-use-deterministic-simulation-time-scheduling-and-randomness.md'
 supersedes: []
 superseded_by: null
 source:
