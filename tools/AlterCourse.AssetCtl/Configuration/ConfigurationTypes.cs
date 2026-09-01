@@ -200,54 +200,52 @@ internal static class ConfigurationTypes
             YamlMappingNode? policyNode = document.OptionalMapping("policy", "local override");
             if (policyNode is not null)
             {
-                policyNode.RequireOnly(
-                    "local override.policy",
-                    "external_generation_enabled",
-                    "local_placeholder_fallback"
-                );
-                policy = policy with
-                {
-                    ExternalGenerationEnabled = policyNode.OptionalScalar(
-                        "external_generation_enabled",
-                        "local override.policy"
-                    )
-                        is { } enabled
-                        ? bool.Parse(enabled)
-                        : policy.ExternalGenerationEnabled,
-                    LocalPlaceholderFallback = policyNode.OptionalScalar(
-                        "local_placeholder_fallback",
-                        "local override.policy"
-                    )
-                        is { } fallback
-                        ? bool.Parse(fallback)
-                        : policy.LocalPlaceholderFallback,
-                };
+                policy = ApplyPolicyOverride(policy, policyNode);
             }
 
             YamlMappingNode? spendingNode = document.OptionalMapping("spending", "local override");
             if (spendingNode is not null)
             {
-                spendingNode.RequireOnly(
-                    "local override.spending",
-                    "maximum_estimated_cost_per_asset_usd",
-                    "maximum_estimated_cost_per_run_usd",
-                    "maximum_estimated_cost_per_day_usd"
-                );
-                spending = spending with
-                {
-                    PerAssetUsd = OptionalDecimal(
-                        spendingNode,
-                        "maximum_estimated_cost_per_asset_usd",
-                        spending.PerAssetUsd
-                    ),
-                    PerRunUsd = OptionalDecimal(spendingNode, "maximum_estimated_cost_per_run_usd", spending.PerRunUsd),
-                    PerDayUsd = OptionalDecimal(spendingNode, "maximum_estimated_cost_per_day_usd", spending.PerDayUsd),
-                };
-                if (spending.PerAssetUsd < 0 || spending.PerRunUsd < 0 || spending.PerDayUsd < 0)
-                {
-                    throw new AssetCtlException("local override spending limits cannot be negative.", 2);
-                }
+                spending = ApplySpendingOverride(spending, spendingNode);
             }
+        }
+
+        private static AssetCtlPolicy ApplyPolicyOverride(AssetCtlPolicy policy, YamlMappingNode node)
+        {
+            node.RequireOnly("local override.policy", "external_generation_enabled", "local_placeholder_fallback");
+            return policy with
+            {
+                ExternalGenerationEnabled = node.OptionalScalar("external_generation_enabled", "local override.policy")
+                    is { } enabled
+                    ? bool.Parse(enabled)
+                    : policy.ExternalGenerationEnabled,
+                LocalPlaceholderFallback = node.OptionalScalar("local_placeholder_fallback", "local override.policy")
+                    is { } fallback
+                    ? bool.Parse(fallback)
+                    : policy.LocalPlaceholderFallback,
+            };
+        }
+
+        private static SpendingLimits ApplySpendingOverride(SpendingLimits spending, YamlMappingNode node)
+        {
+            node.RequireOnly(
+                "local override.spending",
+                "maximum_estimated_cost_per_asset_usd",
+                "maximum_estimated_cost_per_run_usd",
+                "maximum_estimated_cost_per_day_usd"
+            );
+            SpendingLimits result = spending with
+            {
+                PerAssetUsd = OptionalDecimal(node, "maximum_estimated_cost_per_asset_usd", spending.PerAssetUsd),
+                PerRunUsd = OptionalDecimal(node, "maximum_estimated_cost_per_run_usd", spending.PerRunUsd),
+                PerDayUsd = OptionalDecimal(node, "maximum_estimated_cost_per_day_usd", spending.PerDayUsd),
+            };
+            if (result.PerAssetUsd < 0 || result.PerRunUsd < 0 || result.PerDayUsd < 0)
+            {
+                throw new AssetCtlException("local override spending limits cannot be negative.", 2);
+            }
+
+            return result;
         }
 
         private static decimal OptionalDecimal(YamlMappingNode node, string key, decimal fallback)

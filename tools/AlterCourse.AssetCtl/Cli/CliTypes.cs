@@ -318,6 +318,47 @@ internal static class CliTypes
                 };
             }
 
+            (string actor, string note) = ValidateApprovalEligibility(configuration, manifest, options);
+
+            string assetPath = Path.Combine(configuration.RepositoryRoot, manifest.Request.Output.Path);
+            string beforeHash = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(assetPath)));
+            global::AlterCourse.AssetCtl.Domain.DomainModels.AssetManifest approved = manifest with
+            {
+                Request = manifest.Request with { Lifecycle = AssetLifecycle.Approved },
+                Approval = new ApprovalRecord(actor, DateTimeOffset.UtcNow, note),
+            };
+            if (options.Flag("dry-run"))
+            {
+                return new
+                {
+                    dry_run = true,
+                    asset_id = approved.Request.Id,
+                    lifecycle = "approved",
+                    sha256 = beforeHash,
+                };
+            }
+
+            WriteManifestAtomic(configuration, approved);
+            string afterHash = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(assetPath)));
+            if (!string.Equals(beforeHash, afterHash, StringComparison.Ordinal))
+            {
+                throw new AssetCtlException("Approval changed asset bytes; manifest update was refused.", 7);
+            }
+
+            return new
+            {
+                asset_id = approved.Request.Id,
+                lifecycle = "approved",
+                sha256 = afterHash,
+            };
+        }
+
+        private static (string Actor, string Note) ValidateApprovalEligibility(
+            EffectiveConfiguration configuration,
+            AssetManifest manifest,
+            CliOptions options
+        )
+        {
             if (manifest.Request.Lifecycle != AssetLifecycle.Candidate)
             {
                 throw new AssetCtlException("Only a candidate can be approved.", 8);
@@ -355,37 +396,7 @@ internal static class CliTypes
                 );
             }
 
-            string assetPath = Path.Combine(configuration.RepositoryRoot, manifest.Request.Output.Path);
-            string beforeHash = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(assetPath)));
-            global::AlterCourse.AssetCtl.Domain.DomainModels.AssetManifest approved = manifest with
-            {
-                Request = manifest.Request with { Lifecycle = AssetLifecycle.Approved },
-                Approval = new ApprovalRecord(actor, DateTimeOffset.UtcNow, note),
-            };
-            if (options.Flag("dry-run"))
-            {
-                return new
-                {
-                    dry_run = true,
-                    asset_id = approved.Request.Id,
-                    lifecycle = "approved",
-                    sha256 = beforeHash,
-                };
-            }
-
-            WriteManifestAtomic(configuration, approved);
-            string afterHash = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(assetPath)));
-            if (!string.Equals(beforeHash, afterHash, StringComparison.Ordinal))
-            {
-                throw new AssetCtlException("Approval changed asset bytes; manifest update was refused.", 7);
-            }
-
-            return new
-            {
-                asset_id = approved.Request.Id,
-                lifecycle = "approved",
-                sha256 = afterHash,
-            };
+            return (actor, note);
         }
 
         private static object Deprecate(EffectiveConfiguration configuration, CliOptions options)

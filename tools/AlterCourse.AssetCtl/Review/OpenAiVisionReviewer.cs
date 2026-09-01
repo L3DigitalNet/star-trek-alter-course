@@ -52,6 +52,37 @@ internal sealed class OpenAiVisionReviewer(HttpClient client) : HttpProviderBase
         ValidateOptions(context.Model.Options);
         string prompt =
             $"Review asset '{request.Request.Id}'. Purpose: {request.Request.Purpose}. Required: {string.Join("; ", request.Request.Required)}. Prohibited: {string.Join("; ", request.Request.Prohibited)}. Return only the required structured rubric.";
+        using HttpRequestMessage message = CreateRequest(context, request, prompt);
+        using global::System.Text.Json.JsonDocument response = await SendJsonAsync(message, context, cancellationToken)
+            .ConfigureAwait(false);
+        string? json = null;
+        if (response.RootElement.TryGetProperty("output_text", out JsonElement outputText))
+        {
+            json = outputText.GetString();
+        }
+        else if (
+            response.RootElement.TryGetProperty("choices", out JsonElement choices)
+            && choices.GetArrayLength() > 0
+        )
+        {
+            json = choices[0].GetProperty("message").GetProperty("content").GetString();
+        }
+
+        return Parse(
+            json
+                ?? throw new ProviderException(
+                    ProviderErrorCategory.MalformedResponse,
+                    "Reviewer response omitted structured output."
+                )
+        );
+    }
+
+    private static HttpRequestMessage CreateRequest(
+        ProviderExecutionContext context,
+        SemanticReviewRequest request,
+        string prompt
+    )
+    {
         var payload = new
         {
             model = context.Model.VendorModel,
@@ -82,35 +113,13 @@ internal sealed class OpenAiVisionReviewer(HttpClient client) : HttpProviderBase
                 },
             },
         };
-        using var message = new HttpRequestMessage(
+        return new HttpRequestMessage(
             HttpMethod.Post,
             RecraftImageAdapter.Endpoint(context.Provider.Endpoint!, "responses")
         )
         {
             Content = JsonContent.Create(payload),
         };
-        using global::System.Text.Json.JsonDocument response = await SendJsonAsync(message, context, cancellationToken)
-            .ConfigureAwait(false);
-        string? json = null;
-        if (response.RootElement.TryGetProperty("output_text", out JsonElement outputText))
-        {
-            json = outputText.GetString();
-        }
-        else if (
-            response.RootElement.TryGetProperty("choices", out JsonElement choices)
-            && choices.GetArrayLength() > 0
-        )
-        {
-            json = choices[0].GetProperty("message").GetProperty("content").GetString();
-        }
-
-        return Parse(
-            json
-                ?? throw new ProviderException(
-                    ProviderErrorCategory.MalformedResponse,
-                    "Reviewer response omitted structured output."
-                )
-        );
     }
 
     public static SemanticReviewResult Parse(string json)

@@ -81,6 +81,29 @@ internal static class PublishingTypes
 
             bool assetExisted = File.Exists(asset);
             bool manifestExisted = File.Exists(manifest);
+            PublishStaged(
+                asset,
+                manifest,
+                assetStage,
+                manifestStage,
+                assetBackup,
+                manifestBackup,
+                assetExisted,
+                manifestExisted
+            );
+        }
+
+        private static void PublishStaged(
+            string asset,
+            string manifest,
+            string assetStage,
+            string manifestStage,
+            string assetBackup,
+            string manifestBackup,
+            bool assetExisted,
+            bool manifestExisted
+        )
+        {
             try
             {
                 // Both replacements are fully staged before either live file moves; rollback can therefore restore the prior matching pair.

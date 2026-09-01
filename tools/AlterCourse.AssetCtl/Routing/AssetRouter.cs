@@ -12,52 +12,14 @@ internal sealed class AssetRouter(AdapterRegistry adapters)
 
         global::System.Collections.Generic.IReadOnlyList<global::AlterCourse.AssetCtl.Domain.DomainModels.AssetCapability> required =
             RequiredCapabilities(request);
-        List<PlannedTarget> targets = [];
-        foreach (
-            global::AlterCourse.AssetCtl.Domain.DomainModels.RouteDefinition route in configuration.Routes.Where(
-                route => Matches(route, request)
-            )
-        )
-        {
-            foreach (global::AlterCourse.AssetCtl.Domain.DomainModels.RouteTarget target in route.Targets)
-            {
-                targets.Add(Evaluate(configuration, route, target, required, tier.Candidates, request.Lifecycle));
-            }
-        }
+        List<PlannedTarget> targets = BuildTargets(configuration, request, required, tier.Candidates);
 
         global::AlterCourse.AssetCtl.Domain.DomainModels.PlannedTarget? selected = targets.FirstOrDefault(target =>
             target.Eligible
         );
-        PlannedTarget? reviewer = null;
-        if (!string.Equals(tier.SemanticReview, "disabled", StringComparison.Ordinal))
-        {
-            foreach (
-                global::AlterCourse.AssetCtl.Domain.DomainModels.RouteDefinition route in configuration.ReviewRoutes
-            )
-            {
-                foreach (global::AlterCourse.AssetCtl.Domain.DomainModels.RouteTarget target in route.Targets)
-                {
-                    global::AlterCourse.AssetCtl.Domain.DomainModels.PlannedTarget evaluated = Evaluate(
-                        configuration,
-                        route,
-                        target,
-                        [AssetCapability.ReviewSemantic],
-                        1,
-                        request.Lifecycle
-                    );
-                    if (evaluated.Eligible)
-                    {
-                        reviewer = evaluated;
-                        break;
-                    }
-                }
-
-                if (reviewer is not null)
-                {
-                    break;
-                }
-            }
-        }
+        PlannedTarget? reviewer = string.Equals(tier.SemanticReview, "disabled", StringComparison.Ordinal)
+            ? null
+            : FindReviewer(configuration, request.Lifecycle);
 
         if (string.Equals(tier.SemanticReview, "required", StringComparison.Ordinal) && reviewer is null)
         {
@@ -77,6 +39,49 @@ internal sealed class AssetRouter(AdapterRegistry adapters)
         );
     }
 
+    private List<PlannedTarget> BuildTargets(
+        EffectiveConfiguration configuration,
+        AssetRequest request,
+        IReadOnlyList<AssetCapability> required,
+        int candidates
+    )
+    {
+        List<PlannedTarget> targets = [];
+        foreach (RouteDefinition route in configuration.Routes.Where(route => Matches(route, request)))
+        {
+            foreach (RouteTarget target in route.Targets)
+            {
+                targets.Add(Evaluate(configuration, route, target, required, candidates, request.Lifecycle));
+            }
+        }
+
+        return targets;
+    }
+
+    private PlannedTarget? FindReviewer(EffectiveConfiguration configuration, AssetLifecycle lifecycle)
+    {
+        foreach (RouteDefinition route in configuration.ReviewRoutes)
+        {
+            foreach (RouteTarget target in route.Targets)
+            {
+                PlannedTarget evaluated = Evaluate(
+                    configuration,
+                    route,
+                    target,
+                    [AssetCapability.ReviewSemantic],
+                    1,
+                    lifecycle
+                );
+                if (evaluated.Eligible)
+                {
+                    return evaluated;
+                }
+            }
+        }
+
+        return null;
+    }
+
     private PlannedTarget Evaluate(
         EffectiveConfiguration configuration,
         RouteDefinition route,
@@ -93,6 +98,29 @@ internal sealed class AssetRouter(AdapterRegistry adapters)
         global::AlterCourse.AssetCtl.Configuration.ConfigurationTypes.IAdapterDescriptor descriptor =
             adapters.Descriptors[provider.AdapterId];
         List<string> reasons = [];
+        AddAvailabilityReasons(configuration, provider, reasons);
+        AddCapabilityReasons(required, model, descriptor, reasons);
+        descriptor.ValidateOptions(model.Options);
+        decimal? estimate = model.EstimatedCostPerOutput * candidates;
+        AddPolicyReasons(configuration, lifecycle, estimate, reasons);
+
+        return new PlannedTarget(
+            route.Id,
+            provider.Id,
+            model.Id,
+            provider.AdapterId,
+            reasons.Count == 0,
+            reasons,
+            estimate
+        );
+    }
+
+    private static void AddAvailabilityReasons(
+        EffectiveConfiguration configuration,
+        ProviderInstance provider,
+        List<string> reasons
+    )
+    {
         if (!provider.Enabled)
         {
             reasons.Add("provider-disabled");
@@ -110,7 +138,15 @@ internal sealed class AssetRouter(AdapterRegistry adapters)
         {
             reasons.Add($"credential-missing:{provider.CredentialEnvironmentVariable}");
         }
+    }
 
+    private static void AddCapabilityReasons(
+        IReadOnlyList<AssetCapability> required,
+        ModelProfile model,
+        IAdapterDescriptor descriptor,
+        List<string> reasons
+    )
+    {
         if (!required.All(model.Capabilities.Contains))
         {
             reasons.Add("model-capability-mismatch");
@@ -120,9 +156,15 @@ internal sealed class AssetRouter(AdapterRegistry adapters)
         {
             reasons.Add("adapter-capability-mismatch");
         }
+    }
 
-        descriptor.ValidateOptions(model.Options);
-        decimal? estimate = model.EstimatedCostPerOutput * candidates;
+    private static void AddPolicyReasons(
+        EffectiveConfiguration configuration,
+        AssetLifecycle lifecycle,
+        decimal? estimate,
+        List<string> reasons
+    )
+    {
         if (
             estimate is null
             && string.Equals(configuration.Policy.UnknownPricePolicy, "reject", StringComparison.Ordinal)
@@ -139,16 +181,6 @@ internal sealed class AssetRouter(AdapterRegistry adapters)
         {
             reasons.Add("protected-lifecycle");
         }
-
-        return new PlannedTarget(
-            route.Id,
-            provider.Id,
-            model.Id,
-            provider.AdapterId,
-            reasons.Count == 0,
-            reasons,
-            estimate
-        );
     }
 
     private static bool Matches(RouteDefinition route, AssetRequest request) =>

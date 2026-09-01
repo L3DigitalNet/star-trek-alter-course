@@ -23,62 +23,14 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
             throw new AssetCtlException("Approved and deprecated assets cannot be generated or overwritten.", 8);
         }
 
-        if (manifest.Generation is not null && manifest.Integrity is not null && !force)
+        object? existingResult = await TryExistingAsync(configuration, manifest, force, cancellationToken)
+            .ConfigureAwait(false);
+        if (existingResult is not null)
         {
-            try
-            {
-                ManifestStore.VerifyIntegrity(configuration, manifest);
-                byte[] existing = await File.ReadAllBytesAsync(
-                        Path.Combine(configuration.RepositoryRoot, manifest.Request.Output.Path),
-                        cancellationToken
-                    )
-                    .ConfigureAwait(false);
-                global::AlterCourse.AssetCtl.Domain.DomainModels.MechanicalValidationResult existingValidation =
-                    MechanicalValidator.Validate(
-                        manifest.Request,
-                        existing,
-                        configuration.Limits.MaximumDownloadBytes,
-                        configuration.Limits.MaximumDecodedPixels
-                    );
-                if (
-                    existingValidation.Passed
-                    && string.Equals(
-                        manifest.Generation.EffectiveConfigSha256,
-                        configuration.EffectiveHash,
-                        StringComparison.Ordinal
-                    )
-                )
-                {
-                    return Result(manifest, null, existing: true);
-                }
-            }
-            catch (AssetCtlException)
-            {
-                // Integrity drift is not an idempotent hit; generation may repair a mutable placeholder or candidate.
-            }
+            return existingResult;
         }
 
-        global::AlterCourse.AssetCtl.Domain.DomainModels.GenerationPlan plan = router.Plan(
-            configuration,
-            manifest.Request
-        );
-        if (offline)
-        {
-            plan = plan with
-            {
-                SelectedTarget = plan.Targets.FirstOrDefault(target =>
-                    target.Eligible && configuration.Providers[target.ProviderId].Endpoint is null
-                ),
-            };
-        }
-
-        if (plan.SelectedTarget is null)
-        {
-            throw new AssetCtlException(
-                "No eligible generation target. Inspect assetctl plan for rejection reasons.",
-                5
-            );
-        }
+        GenerationPlan plan = BuildPlan(configuration, manifest.Request, offline);
 
         if (dryRun)
         {
@@ -120,6 +72,73 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         return Publish(configuration, manifest, plan, tier, outcome, attempts, prompt, promptHash, requestHash, runId);
     }
 
+    private GenerationPlan BuildPlan(EffectiveConfiguration configuration, AssetRequest request, bool offline)
+    {
+        GenerationPlan plan = router.Plan(configuration, request);
+        if (offline)
+        {
+            plan = plan with
+            {
+                SelectedTarget = plan.Targets.FirstOrDefault(target =>
+                    target.Eligible && configuration.Providers[target.ProviderId].Endpoint is null
+                ),
+            };
+        }
+
+        if (plan.SelectedTarget is null)
+        {
+            throw new AssetCtlException(
+                "No eligible generation target. Inspect assetctl plan for rejection reasons.",
+                5
+            );
+        }
+
+        return plan;
+    }
+
+    private static async Task<object?> TryExistingAsync(
+        EffectiveConfiguration configuration,
+        AssetManifest manifest,
+        bool force,
+        CancellationToken cancellationToken
+    )
+    {
+        if (manifest.Generation is null || manifest.Integrity is null || force)
+        {
+            return null;
+        }
+
+        try
+        {
+            ManifestStore.VerifyIntegrity(configuration, manifest);
+            byte[] existing = await File.ReadAllBytesAsync(
+                    Path.Combine(configuration.RepositoryRoot, manifest.Request.Output.Path),
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+            MechanicalValidationResult validation = MechanicalValidator.Validate(
+                manifest.Request,
+                existing,
+                configuration.Limits.MaximumDownloadBytes,
+                configuration.Limits.MaximumDecodedPixels
+            );
+            return
+                validation.Passed
+                && string.Equals(
+                    manifest.Generation.EffectiveConfigSha256,
+                    configuration.EffectiveHash,
+                    StringComparison.Ordinal
+                )
+                ? Result(manifest, null, existing: true)
+                : null;
+        }
+        catch (AssetCtlException)
+        {
+            // Integrity drift is not an idempotent hit; generation may repair a mutable placeholder or candidate.
+            return null;
+        }
+    }
+
     private async Task<(TargetOutcome? Outcome, List<object> Attempts)> GenerateFromRoutesAsync(
         EffectiveConfiguration configuration,
         AssetManifest manifest,
@@ -138,62 +157,23 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         );
         foreach (PlannedTarget target in eligibleTargets)
         {
-            ProviderInstance provider = configuration.Providers[target.ProviderId];
-            ModelProfile model = provider.Models[target.ModelProfileId];
-            string credential = provider.CredentialEnvironmentVariable is null
-                ? string.Empty
-                : Environment.GetEnvironmentVariable(provider.CredentialEnvironmentVariable) ?? string.Empty;
-            ProviderExecutionContext context = new(
-                provider,
-                model,
-                credential,
-                configuration.Limits.DefaultHttpTimeoutSeconds,
-                configuration.Limits.MaximumDownloadBytes,
-                runId
-            );
             try
             {
-                GenerationBatchResult batch = await InvokeWithRetry(
-                        adapters.Generator(provider.AdapterId),
-                        context,
-                        new NormalizedGenerationRequest(manifest.Request, prompt, plan.CandidateCount, references),
-                        plan.AttemptsPerRoute,
-                        cancellationToken
-                    )
-                    .ConfigureAwait(false);
-                List<(
-                    GeneratedCandidate Candidate,
-                    MechanicalValidationResult Mechanical,
-                    SemanticReviewResult? Review
-                )> evaluated = await EvaluateCandidatesAsync(
+                (TargetOutcome outcome, object attempt) = await GenerateTargetAsync(
                         configuration,
-                        manifest.Request,
+                        manifest,
                         plan,
-                        batch,
+                        prompt,
+                        references,
+                        tier,
+                        runId,
                         offline,
+                        target,
                         cancellationToken
                     )
                     .ConfigureAwait(false);
-                (
-                    GeneratedCandidate Candidate,
-                    MechanicalValidationResult Mechanical,
-                    SemanticReviewResult? Review
-                ) selected = CandidateSelector.Select(evaluated, tier);
-                attempts.Add(
-                    new
-                    {
-                        target.ProviderId,
-                        target.ModelProfileId,
-                        status = "selected",
-                        candidates = evaluated.Select(item => new
-                        {
-                            item.Candidate.CreationOrder,
-                            mechanical = item.Mechanical.Passed,
-                            semantic = item.Review?.Decision,
-                        }),
-                    }
-                );
-                return (new TargetOutcome(target, provider, model, batch, selected), attempts);
+                attempts.Add(attempt);
+                return (outcome, attempts);
             }
             catch (ProviderException exception)
             {
@@ -223,6 +203,70 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         }
 
         return (null, attempts);
+    }
+
+    private async Task<(TargetOutcome Outcome, object Attempt)> GenerateTargetAsync(
+        EffectiveConfiguration configuration,
+        AssetManifest manifest,
+        GenerationPlan plan,
+        string prompt,
+        IReadOnlyList<(string FileName, string MediaType, byte[] Bytes)> references,
+        QualityTier tier,
+        string runId,
+        bool offline,
+        PlannedTarget target,
+        CancellationToken cancellationToken
+    )
+    {
+        ProviderInstance provider = configuration.Providers[target.ProviderId];
+        ModelProfile model = provider.Models[target.ModelProfileId];
+        string credential = provider.CredentialEnvironmentVariable is null
+            ? string.Empty
+            : Environment.GetEnvironmentVariable(provider.CredentialEnvironmentVariable) ?? string.Empty;
+        ProviderExecutionContext context = new(
+            provider,
+            model,
+            credential,
+            configuration.Limits.DefaultHttpTimeoutSeconds,
+            configuration.Limits.MaximumDownloadBytes,
+            runId
+        );
+        GenerationBatchResult batch = await InvokeWithRetry(
+                adapters.Generator(provider.AdapterId),
+                context,
+                new NormalizedGenerationRequest(manifest.Request, prompt, plan.CandidateCount, references),
+                plan.AttemptsPerRoute,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        List<(
+            GeneratedCandidate Candidate,
+            MechanicalValidationResult Mechanical,
+            SemanticReviewResult? Review
+        )> evaluated = await EvaluateCandidatesAsync(
+                configuration,
+                manifest.Request,
+                plan,
+                batch,
+                offline,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        (GeneratedCandidate Candidate, MechanicalValidationResult Mechanical, SemanticReviewResult? Review) selected =
+            CandidateSelector.Select(evaluated, tier);
+        object attempt = new
+        {
+            target.ProviderId,
+            target.ModelProfileId,
+            status = "selected",
+            candidates = evaluated.Select(item => new
+            {
+                item.Candidate.CreationOrder,
+                mechanical = item.Mechanical.Passed,
+                semantic = item.Review?.Decision,
+            }),
+        };
+        return (new TargetOutcome(target, provider, model, batch, selected), attempt);
     }
 
     private async Task<

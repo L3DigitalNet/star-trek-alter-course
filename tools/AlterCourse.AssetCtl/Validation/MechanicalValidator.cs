@@ -134,19 +134,7 @@ internal static class MechanicalValidator
                 return Failure("SVG requires a finite four-number viewBox");
             }
 
-            using var normalizedStream = new MemoryStream();
-            var writerSettings = new XmlWriterSettings
-            {
-                Encoding = new System.Text.UTF8Encoding(false),
-                Indent = false,
-                OmitXmlDeclaration = true,
-            };
-            using (var writer = XmlWriter.Create(normalizedStream, writerSettings))
-            {
-                document.Save(writer);
-            }
-
-            byte[] normalized = normalizedStream.ToArray();
+            byte[] normalized = NormalizeSvg(document);
             using var svg = new SKSvg();
             using var renderStream = new MemoryStream(normalized, writable: false);
             if (svg.Load(renderStream) is null)
@@ -162,6 +150,23 @@ internal static class MechanicalValidator
         {
             return Failure($"SVG parse or render failed: {exception.Message}");
         }
+    }
+
+    private static byte[] NormalizeSvg(XDocument document)
+    {
+        using var normalizedStream = new MemoryStream();
+        var writerSettings = new XmlWriterSettings
+        {
+            Encoding = new System.Text.UTF8Encoding(false),
+            Indent = false,
+            OmitXmlDeclaration = true,
+        };
+        using (var writer = XmlWriter.Create(normalizedStream, writerSettings))
+        {
+            document.Save(writer);
+        }
+
+        return normalizedStream.ToArray();
     }
 
     private static string? ValidateSvgElements(XElement root, AssetRequest request)

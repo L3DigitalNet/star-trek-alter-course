@@ -82,52 +82,12 @@ internal static class ManifestStore
         );
         global::YamlDotNet.RepresentationModel.YamlMappingNode outputNode = root.Mapping("output", "manifest");
         global::AlterCourse.AssetCtl.Domain.DomainModels.OutputContract output = ReadOutput(configuration, outputNode);
-
-        global::YamlDotNet.RepresentationModel.YamlMappingNode visual = root.Mapping("visual", "manifest");
-        visual.RequireOnly("manifest.visual", "style_profile", "importance", "tags");
-        string style = visual.Scalar("style_profile", "manifest.visual");
-        if (!configuration.Styles.ContainsKey(style))
-        {
-            throw new AssetCtlException($"manifest.visual.style_profile: unknown style '{style}'.", 2);
-        }
-
-        global::YamlDotNet.RepresentationModel.YamlMappingNode constraints = root.Mapping("constraints", "manifest");
-        constraints.RequireOnly("manifest.constraints", "required", "prohibited");
-        global::System.Collections.Generic.IReadOnlyList<global::AlterCourse.AssetCtl.Domain.DomainModels.AssetReference> references =
-            ReadReferences(root.OptionalSequence("references", "manifest"));
-        global::AlterCourse.AssetCtl.Domain.DomainModels.RightsRecord rights = ReadRights(
-            root.Mapping("rights", "manifest"),
-            lifecycle,
-            references
-        );
-        string qualityTier = lifecycle == AssetLifecycle.Placeholder ? "development" : "production-candidate";
-        global::AlterCourse.AssetCtl.Domain.DomainModels.GenerationProvenance? generation = ReadGeneration(
-            root.OptionalMapping("generation", "manifest"),
-            qualityTier
-        );
-        if (generation is not null)
-        {
-            qualityTier = generation.QualityTier;
-        }
-
-        var request = new AssetRequest(
+        (AssetRequest request, RightsRecord rights, GenerationProvenance? generation) = ReadManifestBody(
+            configuration,
+            root,
             id,
             lifecycle,
-            root.Scalar("kind", "manifest"),
-            root.Scalar("purpose", "manifest"),
-            output,
-            style,
-            YamlValues.Strings(
-                constraints.OptionalSequence("required", "manifest.constraints"),
-                "manifest.constraints.required"
-            ),
-            YamlValues.Strings(
-                constraints.OptionalSequence("prohibited", "manifest.constraints"),
-                "manifest.constraints.prohibited"
-            ),
-            YamlValues.Strings(visual.OptionalSequence("tags", "manifest.visual"), "manifest.visual.tags"),
-            references,
-            qualityTier
+            output
         );
         (MechanicalValidationResult? mechanical, SemanticReviewResult? semantic) = ReadValidation(
             root.OptionalMapping("validation", "manifest")
@@ -152,6 +112,55 @@ internal static class ManifestStore
             root.OptionalScalar("supersedes", "manifest"),
             Path.GetRelativePath(configuration.RepositoryRoot, absolute)
         );
+    }
+
+    private static (AssetRequest Request, RightsRecord Rights, GenerationProvenance? Generation) ReadManifestBody(
+        EffectiveConfiguration configuration,
+        YamlMappingNode root,
+        string id,
+        AssetLifecycle lifecycle,
+        OutputContract output
+    )
+    {
+        YamlMappingNode visual = root.Mapping("visual", "manifest");
+        visual.RequireOnly("manifest.visual", "style_profile", "importance", "tags");
+        string style = visual.Scalar("style_profile", "manifest.visual");
+        if (!configuration.Styles.ContainsKey(style))
+        {
+            throw new AssetCtlException($"manifest.visual.style_profile: unknown style '{style}'.", 2);
+        }
+
+        YamlMappingNode constraints = root.Mapping("constraints", "manifest");
+        constraints.RequireOnly("manifest.constraints", "required", "prohibited");
+        IReadOnlyList<AssetReference> references = ReadReferences(root.OptionalSequence("references", "manifest"));
+        RightsRecord rights = ReadRights(root.Mapping("rights", "manifest"), lifecycle, references);
+        string qualityTier = lifecycle == AssetLifecycle.Placeholder ? "development" : "production-candidate";
+        GenerationProvenance? generation = ReadGeneration(root.OptionalMapping("generation", "manifest"), qualityTier);
+        if (generation is not null)
+        {
+            qualityTier = generation.QualityTier;
+        }
+
+        var request = new AssetRequest(
+            id,
+            lifecycle,
+            root.Scalar("kind", "manifest"),
+            root.Scalar("purpose", "manifest"),
+            output,
+            style,
+            YamlValues.Strings(
+                constraints.OptionalSequence("required", "manifest.constraints"),
+                "manifest.constraints.required"
+            ),
+            YamlValues.Strings(
+                constraints.OptionalSequence("prohibited", "manifest.constraints"),
+                "manifest.constraints.prohibited"
+            ),
+            YamlValues.Strings(visual.OptionalSequence("tags", "manifest.visual"), "manifest.visual.tags"),
+            references,
+            qualityTier
+        );
+        return (request, rights, generation);
     }
 
     private static string ValidateHeader(YamlMappingNode root)
