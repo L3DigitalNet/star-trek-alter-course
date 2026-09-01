@@ -46,12 +46,13 @@ dotnet restore AlterCourse.sln --locked-mode
 dotnet csharpier check .
 npx --yes prettier@3.9.6 --check -- "${structured_files[@]}"
 npx --yes markdownlint-cli2@0.23.1 "${markdown_files[@]}"
-shfmt -d -i 2 -ci -sr scripts/*.sh
-shellcheck scripts/*.sh
+shfmt -d -i 2 -ci -sr .githooks/* scripts/*.sh
+shellcheck .githooks/* scripts/*.sh
 actionlint
 gitleaks git --config .gitleaks.toml --redact --no-banner
 gitleaks dir . --config .gitleaks.toml --redact --no-banner
 ./scripts/check-policy.sh
+./scripts/test-branch-policy.sh
 dotnet build AlterCourse.sln -c Release --no-restore --warnaserror
 dotnet test tests/AlterCourse.Core.Tests/AlterCourse.Core.Tests.csproj -c Release --no-build --no-restore
 

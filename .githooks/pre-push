@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Delegate protected-ref and admission validation to the repository policy.
+# Requirements: Bash, Git, and scripts/branch-policy.sh in this checkout.
+
+set -euo pipefail
+
+root="$(git rev-parse --show-toplevel)"
+readonly root
+exec "${root}/scripts/branch-policy.sh" pre-push
