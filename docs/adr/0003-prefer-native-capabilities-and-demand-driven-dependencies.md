@@ -20,6 +20,11 @@ related:
   - 'docs/adr/0002-use-one-canonical-quality-gate.md'
   - 'docs/adr/0004-own-semantic-spatial-model-and-adapt-godot-rendering.md'
   - 'docs/adr/0005-use-json-and-schema-validation-for-domain-content.md'
+  - 'docs/adr/0007-use-deterministic-simulation-time-scheduling-and-randomness.md'
+  - 'docs/adr/0009-use-layered-testing-and-architecture-conformance.md'
+  - 'docs/adr/0010-use-explainable-domain-ai-and-demand-driven-state-machines.md'
+  - 'docs/adr/0011-represent-physical-quantities-with-explicit-units.md'
+  - 'docs/adr/0012-keep-branching-narrative-subordinate-to-simulation.md'
 supersedes: []
 superseded_by: null
 source:
@@ -114,8 +119,10 @@ The project will use Godot's native presentation stack for:
 - input actions and device mapping;
 - localization and bidirectional layout support;
 - `TileMapLayer`, `AStar2D`, and `AStarGrid2D` where their engine-facing use cases apply;
-- `FastNoiseLite` for ordinary noise generation;
+- `FastNoiseLite` for presentation-only or otherwise non-authoritative noise generation;
 - asset import and Godot `Resource` objects for presentation-specific data.
+
+Godot procedural-noise facilities must not determine authoritative world generation, hazards, resources, movement constraints, sensor truth, combat outcomes, AI state, or other simulation-affecting state. Procedural generation that affects simulation truth belongs in `AlterCourse.Core`, must run headlessly, and must use deterministic, versioned randomness under ADR 0007.
 
 A third-party UI framework, map renderer, localization framework, or general procedural-generation framework is not part of the baseline.
 
