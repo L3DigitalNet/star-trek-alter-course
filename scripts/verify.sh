@@ -28,9 +28,24 @@ readonly godot_project='src/AlterCourse.Godot'
 
 export PATH="${dotnet_dir}:${tool_bin}:${PATH}"
 
+mapfile -d '' structured_files < <(
+  git ls-files -z -- \
+    '*.md' '*.json' '*.jsonc' '*.yml' '*.yaml' \
+    ':(exclude).agents/skills/agent-handoff/**' \
+    ':(exclude).claude/skills/agent-handoff/**'
+)
+mapfile -d '' markdown_files < <(
+  git ls-files -z -- \
+    '*.md' \
+    ':(exclude).agents/skills/agent-handoff/**' \
+    ':(exclude).claude/skills/agent-handoff/**'
+)
+
 dotnet tool restore
 dotnet restore AlterCourse.sln --locked-mode
 dotnet csharpier check .
+npx --yes prettier@3.9.6 --check -- "${structured_files[@]}"
+npx --yes markdownlint-cli2@0.23.1 "${markdown_files[@]}"
 shfmt -d -i 2 -ci -sr scripts/*.sh
 shellcheck scripts/*.sh
 actionlint

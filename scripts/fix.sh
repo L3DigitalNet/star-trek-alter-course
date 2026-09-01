@@ -15,5 +15,13 @@ export PATH="${dotnet_dir}:${PATH}"
 dotnet tool restore
 tool_bin="$(./scripts/restore-native-tools.sh)"
 
+mapfile -d '' structured_files < <(
+  git ls-files -z -- \
+    '*.md' '*.json' '*.jsonc' '*.yml' '*.yaml' \
+    ':(exclude).agents/skills/agent-handoff/**' \
+    ':(exclude).claude/skills/agent-handoff/**'
+)
+
 dotnet csharpier format .
+npx --yes prettier@3.9.6 --write -- "${structured_files[@]}"
 "${tool_bin}/shfmt" -w -i 2 -ci -sr scripts/*.sh
