@@ -40,12 +40,18 @@ internal sealed class OpenAiVisionReviewer(HttpClient client) : HttpProviderBase
 
     public IReadOnlySet<AssetCapability> SupportedCapabilities => Capabilities;
 
-    public void ValidateOptions(IReadOnlyDictionary<string, string> options) => RecraftImageAdapter.ValidateKnown(options, "reasoning_effort");
+    public void ValidateOptions(IReadOnlyDictionary<string, string> options) =>
+        RecraftImageAdapter.ValidateKnown(options, "reasoning_effort");
 
-    public async Task<SemanticReviewResult> ReviewAsync(ProviderExecutionContext context, SemanticReviewRequest request, CancellationToken cancellationToken)
+    public async Task<SemanticReviewResult> ReviewAsync(
+        ProviderExecutionContext context,
+        SemanticReviewRequest request,
+        CancellationToken cancellationToken
+    )
     {
         ValidateOptions(context.Model.Options);
-        string prompt = $"Review asset '{request.Request.Id}'. Purpose: {request.Request.Purpose}. Required: {string.Join("; ", request.Request.Required)}. Prohibited: {string.Join("; ", request.Request.Prohibited)}. Return only the required structured rubric.";
+        string prompt =
+            $"Review asset '{request.Request.Id}'. Purpose: {request.Request.Purpose}. Required: {string.Join("; ", request.Request.Required)}. Prohibited: {string.Join("; ", request.Request.Prohibited)}. Return only the required structured rubric.";
         var payload = new
         {
             model = context.Model.VendorModel,
@@ -57,25 +63,54 @@ internal sealed class OpenAiVisionReviewer(HttpClient client) : HttpProviderBase
                     content = new object[]
                     {
                         new { type = "input_text", text = prompt },
-                        new { type = "input_image", image_url = $"data:{request.MediaType};base64,{Convert.ToBase64String(request.Original)}" },
+                        new
+                        {
+                            type = "input_image",
+                            image_url = $"data:{request.MediaType};base64,{Convert.ToBase64String(request.Original)}",
+                        },
                     },
                 },
             },
-            text = new { format = new { type = "json_schema", name = "asset_review", strict = true, schema = JsonDocument.Parse(request.RubricJsonSchema).RootElement } },
+            text = new
+            {
+                format = new
+                {
+                    type = "json_schema",
+                    name = "asset_review",
+                    strict = true,
+                    schema = JsonDocument.Parse(request.RubricJsonSchema).RootElement,
+                },
+            },
         };
-        using var message = new HttpRequestMessage(HttpMethod.Post, RecraftImageAdapter.Endpoint(context.Provider.Endpoint!, "responses")) { Content = JsonContent.Create(payload) };
-        using global::System.Text.Json.JsonDocument response = await SendJsonAsync(message, context, cancellationToken).ConfigureAwait(false);
+        using var message = new HttpRequestMessage(
+            HttpMethod.Post,
+            RecraftImageAdapter.Endpoint(context.Provider.Endpoint!, "responses")
+        )
+        {
+            Content = JsonContent.Create(payload),
+        };
+        using global::System.Text.Json.JsonDocument response = await SendJsonAsync(message, context, cancellationToken)
+            .ConfigureAwait(false);
         string? json = null;
         if (response.RootElement.TryGetProperty("output_text", out JsonElement outputText))
         {
             json = outputText.GetString();
         }
-        else if (response.RootElement.TryGetProperty("choices", out JsonElement choices) && choices.GetArrayLength() > 0)
+        else if (
+            response.RootElement.TryGetProperty("choices", out JsonElement choices)
+            && choices.GetArrayLength() > 0
+        )
         {
             json = choices[0].GetProperty("message").GetProperty("content").GetString();
         }
 
-        return Parse(json ?? throw new ProviderException(ProviderErrorCategory.MalformedResponse, "Reviewer response omitted structured output."));
+        return Parse(
+            json
+                ?? throw new ProviderException(
+                    ProviderErrorCategory.MalformedResponse,
+                    "Reviewer response omitted structured output."
+                )
+        );
     }
 
     public static SemanticReviewResult Parse(string json)
@@ -100,7 +135,10 @@ internal sealed class OpenAiVisionReviewer(HttpClient client) : HttpProviderBase
                 RequiredBoolean(root, "readable_at_target_sizes"),
                 style,
                 clarity,
-                root.GetProperty("visual_defects").EnumerateArray().Select(value => value.GetString() ?? throw new JsonException("visual defect must be string")).ToArray(),
+                root.GetProperty("visual_defects")
+                    .EnumerateArray()
+                    .Select(value => value.GetString() ?? throw new JsonException("visual defect must be string"))
+                    .ToArray(),
                 RequiredBoolean(root, "unrequested_text_detected"),
                 RequiredBoolean(root, "logo_or_watermark_detected"),
                 overall,
@@ -108,9 +146,13 @@ internal sealed class OpenAiVisionReviewer(HttpClient client) : HttpProviderBase
                 "different-provider-family"
             );
         }
-        catch (Exception exception) when (exception is JsonException or KeyNotFoundException or InvalidOperationException)
+        catch (Exception exception)
+            when (exception is JsonException or KeyNotFoundException or InvalidOperationException)
         {
-            throw new ProviderException(ProviderErrorCategory.MalformedResponse, $"Invalid semantic review: {exception.Message}");
+            throw new ProviderException(
+                ProviderErrorCategory.MalformedResponse,
+                $"Invalid semantic review: {exception.Message}"
+            );
         }
     }
 
@@ -122,5 +164,6 @@ internal sealed class OpenAiVisionReviewer(HttpClient client) : HttpProviderBase
 
     private static bool RequiredBoolean(JsonElement root, string property) => root.GetProperty(property).GetBoolean();
 
-    private static string RequiredString(JsonElement root, string property) => root.GetProperty(property).GetString() ?? throw new JsonException($"{property} is required");
+    private static string RequiredString(JsonElement root, string property) =>
+        root.GetProperty(property).GetString() ?? throw new JsonException($"{property} is required");
 }

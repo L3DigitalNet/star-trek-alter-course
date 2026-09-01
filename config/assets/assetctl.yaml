@@ -1,15 +1,15 @@
-schema_version: '1'
+schema_version: "1"
 paths:
-  godot_asset_root: 'src/AlterCourse.Godot/assets'
-  catalog_root: 'config/assets/catalog'
-  style_root: 'config/assets/styles'
-  work_root: '.assetctl/work'
-  receipt_root: '.assetctl/runs'
-  state_root: '.assetctl/state'
-  log_root: '.assetctl/logs'
+  godot_asset_root: "src/AlterCourse.Godot/assets"
+  catalog_root: "config/assets/catalog"
+  style_root: "config/assets/styles"
+  work_root: ".assetctl/work"
+  receipt_root: ".assetctl/runs"
+  state_root: ".assetctl/state"
+  log_root: ".assetctl/logs"
 policy:
   external_generation_enabled: false
-  unknown_price: 'reject'
+  unknown_price: "reject"
   protect_approved_assets: true
   local_placeholder_fallback: true
   require_https_endpoints: true

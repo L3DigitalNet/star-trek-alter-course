@@ -15,7 +15,8 @@ public sealed class LocalAndValidationTests
         byte[] first = LocalPlaceholderGenerator.RenderPng(request);
         byte[] second = LocalPlaceholderGenerator.RenderPng(request);
         Assert.Equal(first, second);
-        global::AlterCourse.AssetCtl.Domain.DomainModels.MechanicalValidationResult result = MechanicalValidator.Validate(request, first, 1_000_000, 1_000_000);
+        global::AlterCourse.AssetCtl.Domain.DomainModels.MechanicalValidationResult result =
+            MechanicalValidator.Validate(request, first, 1_000_000, 1_000_000);
         Assert.True(result.Passed, string.Join("; ", result.Findings));
         Assert.Equal(3, result.TargetPreviews.Count);
         Assert.True(result.HasAlpha);
@@ -28,9 +29,14 @@ public sealed class LocalAndValidationTests
         global::AlterCourse.AssetCtl.Domain.DomainModels.AssetRequest request = TestData.Request(AssetFormat.Svg);
         byte[] first = LocalPlaceholderGenerator.RenderSvg(request);
         Assert.Equal(first, LocalPlaceholderGenerator.RenderSvg(request));
-        global::AlterCourse.AssetCtl.Domain.DomainModels.MechanicalValidationResult result = MechanicalValidator.Validate(request, first, 1_000_000, 1_000_000);
+        global::AlterCourse.AssetCtl.Domain.DomainModels.MechanicalValidationResult result =
+            MechanicalValidator.Validate(request, first, 1_000_000, 1_000_000);
         Assert.True(result.Passed, string.Join("; ", result.Findings));
-        Assert.DoesNotContain("metadata", Encoding.UTF8.GetString(result.NormalizedBytes), StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(
+            "metadata",
+            Encoding.UTF8.GetString(result.NormalizedBytes),
+            StringComparison.OrdinalIgnoreCase
+        );
         Assert.Equal(3, result.TargetPreviews.Count);
     }
 
@@ -45,7 +51,13 @@ public sealed class LocalAndValidationTests
     public void SvgRejectsActiveExternalEmbeddedAndProhibitedContent(string body, string expected)
     {
         string svg = $"<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'>{body}</svg>";
-        global::AlterCourse.AssetCtl.Domain.DomainModels.MechanicalValidationResult result = MechanicalValidator.Validate(TestData.Request(AssetFormat.Svg), Encoding.UTF8.GetBytes(svg), 1_000_000, 1_000_000);
+        global::AlterCourse.AssetCtl.Domain.DomainModels.MechanicalValidationResult result =
+            MechanicalValidator.Validate(
+                TestData.Request(AssetFormat.Svg),
+                Encoding.UTF8.GetBytes(svg),
+                1_000_000,
+                1_000_000
+            );
         Assert.False(result.Passed);
         Assert.Contains(expected, string.Join("; ", result.Findings), StringComparison.OrdinalIgnoreCase);
     }
@@ -54,8 +66,15 @@ public sealed class LocalAndValidationTests
     [Fact]
     public void SvgRejectsDtdBeforeEntityExpansion()
     {
-        const string svg = "<!DOCTYPE svg [<!ENTITY x SYSTEM 'file:///etc/passwd'>]><svg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'><title>&x;</title></svg>";
-        global::AlterCourse.AssetCtl.Domain.DomainModels.MechanicalValidationResult result = MechanicalValidator.Validate(TestData.Request(AssetFormat.Svg), Encoding.UTF8.GetBytes(svg), 1_000_000, 1_000_000);
+        const string svg =
+            "<!DOCTYPE svg [<!ENTITY x SYSTEM 'file:///etc/passwd'>]><svg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'><title>&x;</title></svg>";
+        global::AlterCourse.AssetCtl.Domain.DomainModels.MechanicalValidationResult result =
+            MechanicalValidator.Validate(
+                TestData.Request(AssetFormat.Svg),
+                Encoding.UTF8.GetBytes(svg),
+                1_000_000,
+                1_000_000
+            );
         Assert.False(result.Passed);
     }
 
@@ -64,6 +83,10 @@ public sealed class LocalAndValidationTests
     public void CorruptAndOversizedPngsFailClosed()
     {
         Assert.False(MechanicalValidator.Validate(TestData.Request(), [1, 2, 3], 1_000_000, 1_000_000).Passed);
-        Assert.False(MechanicalValidator.Validate(TestData.Request(), LocalPlaceholderGenerator.RenderPng(TestData.Request()), 10, 1_000_000).Passed);
+        Assert.False(
+            MechanicalValidator
+                .Validate(TestData.Request(), LocalPlaceholderGenerator.RenderPng(TestData.Request()), 10, 1_000_000)
+                .Passed
+        );
     }
 }

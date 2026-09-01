@@ -1,35 +1,35 @@
-schema_version: '1'
+schema_version: "1"
 routes:
-  - id: 'vector-placeholder'
+  - id: "vector-placeholder"
     priority: 100
-    lifecycle: 'placeholder'
-    format: 'svg'
-    capability: 'vector.generate'
+    lifecycle: "placeholder"
+    format: "svg"
+    capability: "vector.generate"
     targets:
-      - 'recraft-primary/vector'
-      - 'local-placeholder/default'
-  - id: 'raster-placeholder'
+      - "recraft-primary/vector"
+      - "local-placeholder/default"
+  - id: "raster-placeholder"
     priority: 90
-    lifecycle: 'placeholder'
-    format: 'png'
-    capability: 'raster.generate'
+    lifecycle: "placeholder"
+    format: "png"
+    capability: "raster.generate"
     targets:
-      - 'xai-primary/image'
-      - 'openai-primary/image'
-      - 'recraft-primary/raster'
-      - 'local-placeholder/default'
-  - id: 'raster-candidate'
+      - "xai-primary/image"
+      - "openai-primary/image"
+      - "recraft-primary/raster"
+      - "local-placeholder/default"
+  - id: "raster-candidate"
     priority: 110
-    lifecycle: 'candidate'
-    format: 'png'
-    capability: 'raster.generate'
+    lifecycle: "candidate"
+    format: "png"
+    capability: "raster.generate"
     targets:
-      - 'openai-primary/image'
-      - 'recraft-primary/raster'
-      - 'xai-primary/image'
+      - "openai-primary/image"
+      - "recraft-primary/raster"
+      - "xai-primary/image"
 review_routes:
-  - id: 'default-semantic-review'
+  - id: "default-semantic-review"
     priority: 100
-    capability: 'review.semantic'
+    capability: "review.semantic"
     targets:
-      - 'openai-reviewer/economical'
+      - "openai-reviewer/economical"

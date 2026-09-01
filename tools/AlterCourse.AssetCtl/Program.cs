@@ -1,7 +1,7 @@
+using System.Globalization;
 using AlterCourse.AssetCtl.Generation;
 using AlterCourse.AssetCtl.Review;
 using AlterCourse.AssetCtl.Routing;
-using System.Globalization;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using Serilog.Events;
@@ -39,25 +39,24 @@ internal static class Program
                     rollOnFileSizeLimit: true
                 )
                 .CreateLogger();
-            return new Serilog.Extensions.Logging.SerilogLoggerFactory(
-                Log.Logger,
-                dispose: true
-            );
+            return new Serilog.Extensions.Logging.SerilogLoggerFactory(Log.Logger, dispose: true);
         }
         catch (Exception exception)
         {
             // Diagnostics must never control routing or publication; a broken sink degrades to the safe stderr fallback.
-            Console.Error.WriteLine(string.Create(CultureInfo.InvariantCulture, $"assetctl: logging degraded: {Redactor.Sanitize(exception.Message)}"));
-            return LoggerFactory.Create(builder =>
-                builder.AddProvider(new StderrLoggerProvider())
+            Console.Error.WriteLine(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"assetctl: logging degraded: {Redactor.Sanitize(exception.Message)}"
+                )
             );
+            return LoggerFactory.Create(builder => builder.AddProvider(new StderrLoggerProvider()));
         }
     }
 
     private static async Task<int> RunAsync(string[] arguments, ILoggerFactory loggerFactory, HttpClient httpClient)
     {
-        AdapterRegistry registry = new(
-        [
+        AdapterRegistry registry = new([
             new LocalPlaceholderGenerator(),
             new RecraftImageAdapter(httpClient),
             new OpenAiImageAdapter(httpClient),
@@ -70,7 +69,11 @@ internal static class Program
         CommandApp app = new(loader, router, orchestrator, loggerFactory.CreateLogger<CommandApp>());
         try
         {
-            return await app.RunAsync(arguments, Console.IsInputRedirected ? CancellationToken.None : ConsoleCancelToken()).ConfigureAwait(false);
+            return await app.RunAsync(
+                    arguments,
+                    Console.IsInputRedirected ? CancellationToken.None : ConsoleCancelToken()
+                )
+                .ConfigureAwait(false);
         }
         catch (AssetCtlException exception)
         {
@@ -80,7 +83,9 @@ internal static class Program
         catch (ProviderException exception)
         {
             Console.Error.WriteLine($"assetctl: provider {exception.Category}: {Redactor.Sanitize(exception.Message)}");
-            return exception.Category is ProviderErrorCategory.Authentication or ProviderErrorCategory.Authorization ? 3 : 4;
+            return exception.Category is ProviderErrorCategory.Authentication or ProviderErrorCategory.Authorization
+                ? 3
+                : 4;
         }
     }
 
@@ -109,8 +114,7 @@ internal static class Program
 
     private sealed class StderrLoggerProvider : ILoggerProvider
     {
-        public Microsoft.Extensions.Logging.ILogger CreateLogger(string categoryName) =>
-            new StderrLogger(categoryName);
+        public Microsoft.Extensions.Logging.ILogger CreateLogger(string categoryName) => new StderrLogger(categoryName);
 
         public void Dispose() { }
     }
@@ -132,9 +136,7 @@ internal static class Program
         {
             if (IsEnabled(logLevel))
             {
-                Console.Error.WriteLine(
-                    $"{category}: {Redactor.Sanitize(formatter(state, exception))}"
-                );
+                Console.Error.WriteLine($"{category}: {Redactor.Sanitize(formatter(state, exception))}");
             }
         }
     }

@@ -19,7 +19,20 @@ public sealed class CliAndLifecycleTests
     [Fact]
     public void SemanticHardFailuresCannotBeHiddenByHighScore()
     {
-        var result = new SemanticReviewResult(false, true, true, true, 1, 1, [], false, false, 1, "pass", "different-provider-family");
+        var result = new SemanticReviewResult(
+            false,
+            true,
+            true,
+            true,
+            1,
+            1,
+            [],
+            false,
+            false,
+            1,
+            "pass",
+            "different-provider-family"
+        );
         Assert.True(result.HasHardFailure);
     }
 
@@ -27,7 +40,9 @@ public sealed class CliAndLifecycleTests
     [Fact]
     public void ReviewerRejectsOutOfRangeMetricsAndMissingFields()
     {
-        ProviderException exception = Assert.Throws<ProviderException>(() => OpenAiVisionReviewer.Parse("{\"overall_score\":2}"));
+        ProviderException exception = Assert.Throws<ProviderException>(() =>
+            OpenAiVisionReviewer.Parse("{\"overall_score\":2}")
+        );
         Assert.Equal(ProviderErrorCategory.MalformedResponse, exception.Category);
     }
 

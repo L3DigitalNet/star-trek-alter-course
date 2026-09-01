@@ -1,102 +1,102 @@
-schema_version: '1'
+schema_version: "1"
 providers:
   local-placeholder:
-    adapter: 'local-placeholder'
+    adapter: "local-placeholder"
     enabled: true
     models:
       default:
-        model: 'local-placeholder-v1'
+        model: "local-placeholder-v1"
         capabilities:
-          - 'raster.generate'
-          - 'vector.generate'
-          - 'image.transparent-output'
+          - "raster.generate"
+          - "vector.generate"
+          - "image.transparent-output"
         economics:
-          currency: 'USD'
+          currency: "USD"
           estimated_cost_per_output: 0.00
-          effective_date: '2026-09-01'
+          effective_date: "2026-09-01"
   recraft-primary:
-    adapter: 'recraft-images'
+    adapter: "recraft-images"
     enabled: true
-    endpoint: 'https://external.api.recraft.ai/v1'
+    endpoint: "https://external.api.recraft.ai/v1"
     credentials:
       api_key:
-        source: 'environment'
-        name: 'RECRAFT_API_TOKEN'
+        source: "environment"
+        name: "RECRAFT_API_TOKEN"
     downloads:
       allowed_hosts: []
     models:
       vector:
-        model: 'recraftv4_1_vector'
+        model: "recraftv4_1_vector"
         capabilities:
-          - 'vector.generate'
-          - 'image.transparent-output'
+          - "vector.generate"
+          - "image.transparent-output"
         economics:
-          currency: 'USD'
+          currency: "USD"
           estimated_cost_per_output: 0.08
-          effective_date: '2026-09-01'
+          effective_date: "2026-09-01"
       raster:
-        model: 'recraftv4_1'
+        model: "recraftv4_1"
         capabilities:
-          - 'raster.generate'
-          - 'image.transparent-output'
+          - "raster.generate"
+          - "image.transparent-output"
         economics:
-          currency: 'USD'
+          currency: "USD"
           estimated_cost_per_output: 0.04
-          effective_date: '2026-09-01'
+          effective_date: "2026-09-01"
   openai-primary:
-    adapter: 'openai-images'
+    adapter: "openai-images"
     enabled: true
-    endpoint: 'https://api.openai.com/v1'
+    endpoint: "https://api.openai.com/v1"
     credentials:
       api_key:
-        source: 'environment'
-        name: 'OPENAI_API_KEY'
+        source: "environment"
+        name: "OPENAI_API_KEY"
     models:
       image:
-        model: 'gpt-image-2'
+        model: "gpt-image-2"
         capabilities:
-          - 'raster.generate'
-          - 'image.edit'
-          - 'image.reference-input'
-          - 'image.transparent-output'
+          - "raster.generate"
+          - "image.edit"
+          - "image.reference-input"
+          - "image.transparent-output"
         economics:
-          currency: 'USD'
-          pricing_basis: 'provider-calculated'
-          effective_date: '2026-09-01'
+          currency: "USD"
+          pricing_basis: "provider-calculated"
+          effective_date: "2026-09-01"
   xai-primary:
-    adapter: 'xai-images'
+    adapter: "xai-images"
     enabled: true
-    endpoint: 'https://api.x.ai/v1'
+    endpoint: "https://api.x.ai/v1"
     credentials:
       api_key:
-        source: 'environment'
-        name: 'XAI_API_KEY'
+        source: "environment"
+        name: "XAI_API_KEY"
     models:
       image:
-        model: 'grok-imagine-image-2.0'
+        model: "grok-imagine-image-2.0"
         capabilities:
-          - 'raster.generate'
-          - 'image.edit'
-          - 'image.reference-input'
+          - "raster.generate"
+          - "image.edit"
+          - "image.reference-input"
         economics:
-          currency: 'USD'
+          currency: "USD"
           estimated_cost_per_output: 0.02
-          effective_date: '2026-09-01'
+          effective_date: "2026-09-01"
   openai-reviewer:
-    adapter: 'openai-vision-review'
+    adapter: "openai-vision-review"
     enabled: true
-    endpoint: 'https://api.openai.com/v1'
+    endpoint: "https://api.openai.com/v1"
     credentials:
       api_key:
-        source: 'environment'
-        name: 'OPENAI_API_KEY'
+        source: "environment"
+        name: "OPENAI_API_KEY"
     models:
       economical:
-        model: 'gpt-5-mini'
+        model: "gpt-5-mini"
         capabilities:
-          - 'review.semantic'
-          - 'review.reference-comparison'
+          - "review.semantic"
+          - "review.reference-comparison"
         economics:
-          currency: 'USD'
-          pricing_basis: 'token-usage'
-          effective_date: '2026-09-01'
+          currency: "USD"
+          pricing_basis: "token-usage"
+          effective_date: "2026-09-01"

@@ -11,7 +11,12 @@ internal static class MechanicalValidator
 {
     private static readonly XNamespace SvgNamespace = "http://www.w3.org/2000/svg";
 
-    public static MechanicalValidationResult Validate(AssetRequest request, byte[] bytes, long maximumBytes, long maximumPixels)
+    public static MechanicalValidationResult Validate(
+        AssetRequest request,
+        byte[] bytes,
+        long maximumBytes,
+        long maximumPixels
+    )
     {
         if (bytes.Length == 0 || bytes.LongLength > maximumBytes)
         {
@@ -70,7 +75,16 @@ internal static class MechanicalValidator
             using var normalizedImage = SKImage.FromBitmap(bitmap);
             using SKData normalizedData = normalizedImage.Encode(SKEncodedImageFormat.Png, 100);
             byte[] normalized = normalizedData.ToArray();
-            return new MechanicalValidationResult(true, "image/png", info.Width, info.Height, hasTransparentPixel, [], normalized, BuildPreviews(bitmap, request.Output.TargetDisplaySizes));
+            return new MechanicalValidationResult(
+                true,
+                "image/png",
+                info.Width,
+                info.Height,
+                hasTransparentPixel,
+                [],
+                normalized,
+                BuildPreviews(bitmap, request.Output.TargetDisplaySizes)
+            );
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
         {
@@ -82,7 +96,13 @@ internal static class MechanicalValidator
     {
         try
         {
-            var settings = new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null, MaxCharactersInDocument = 1_048_576, MaxCharactersFromEntities = 0 };
+            var settings = new XmlReaderSettings
+            {
+                DtdProcessing = DtdProcessing.Prohibit,
+                XmlResolver = null,
+                MaxCharactersInDocument = 1_048_576,
+                MaxCharactersFromEntities = 0,
+            };
             using var source = new MemoryStream(bytes, writable: false);
             using var reader = XmlReader.Create(source, settings);
             var document = XDocument.Load(reader, LoadOptions.None);
@@ -106,13 +126,21 @@ internal static class MechanicalValidator
             }
 
             string[]? viewBox = root.Attribute("viewBox")?.Value?.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            if (viewBox is not { Length: 4 } || !viewBox.All(part => double.TryParse(part, NumberStyles.Float, CultureInfo.InvariantCulture, out _)))
+            if (
+                viewBox is not { Length: 4 }
+                || !viewBox.All(part => double.TryParse(part, NumberStyles.Float, CultureInfo.InvariantCulture, out _))
+            )
             {
                 return Failure("SVG requires a finite four-number viewBox");
             }
 
             using var normalizedStream = new MemoryStream();
-            var writerSettings = new XmlWriterSettings { Encoding = new System.Text.UTF8Encoding(false), Indent = false, OmitXmlDeclaration = true };
+            var writerSettings = new XmlWriterSettings
+            {
+                Encoding = new System.Text.UTF8Encoding(false),
+                Indent = false,
+                OmitXmlDeclaration = true,
+            };
             using (var writer = XmlWriter.Create(normalizedStream, writerSettings))
             {
                 document.Save(writer);
@@ -141,7 +169,11 @@ internal static class MechanicalValidator
         foreach (XElement element in root.DescendantsAndSelf().ToArray())
         {
             string local = element.Name.LocalName;
-            if (local is "script" or "foreignObject" or "image" or "style" || string.Equals(local, "text", StringComparison.Ordinal) && request.Prohibited.Contains("text", StringComparer.OrdinalIgnoreCase))
+            if (
+                local is "script" or "foreignObject" or "image" or "style"
+                || string.Equals(local, "text", StringComparison.Ordinal)
+                    && request.Prohibited.Contains("text", StringComparer.OrdinalIgnoreCase)
+            )
             {
                 return $"prohibited SVG element '{local}'";
             }
@@ -161,7 +193,14 @@ internal static class MechanicalValidator
 
                 string name = attribute.Name.LocalName;
                 string value = attribute.Value.Trim();
-                if (name.StartsWith("on", StringComparison.OrdinalIgnoreCase) || value.Contains("url(", StringComparison.OrdinalIgnoreCase) || value.StartsWith("http:", StringComparison.OrdinalIgnoreCase) || value.StartsWith("https:", StringComparison.OrdinalIgnoreCase) || value.StartsWith("data:", StringComparison.OrdinalIgnoreCase) || value.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase))
+                if (
+                    name.StartsWith("on", StringComparison.OrdinalIgnoreCase)
+                    || value.Contains("url(", StringComparison.OrdinalIgnoreCase)
+                    || value.StartsWith("http:", StringComparison.OrdinalIgnoreCase)
+                    || value.StartsWith("https:", StringComparison.OrdinalIgnoreCase)
+                    || value.StartsWith("data:", StringComparison.OrdinalIgnoreCase)
+                    || value.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase)
+                )
                 {
                     return $"prohibited SVG attribute '{name}'";
                 }
@@ -190,7 +229,11 @@ internal static class MechanicalValidator
 
     private static int ParseDimension(string? value, string name)
     {
-        if (value is null || value.EndsWith('%') || !int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out int result))
+        if (
+            value is null
+            || value.EndsWith('%')
+            || !int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out int result)
+        )
         {
             throw new FormatException($"SVG {name} must be an integer pixel dimension.");
         }
@@ -208,7 +251,10 @@ internal static class MechanicalValidator
                 throw new ArgumentException("Target display size is outside safety bounds.", nameof(sizes));
             }
 
-            using SKBitmap resized = bitmap.Resize(new SKImageInfo(size, size), new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.None));
+            using SKBitmap resized = bitmap.Resize(
+                new SKImageInfo(size, size),
+                new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.None)
+            );
             using var image = SKImage.FromBitmap(resized);
             using SKData data = image.Encode(SKEncodedImageFormat.Png, 100);
             result.Add(size, data.ToArray());
@@ -217,5 +263,6 @@ internal static class MechanicalValidator
         return result;
     }
 
-    private static MechanicalValidationResult Failure(string finding) => new(false, "application/octet-stream", 0, 0, false, [finding], [], new Dictionary<int, byte[]>());
+    private static MechanicalValidationResult Failure(string finding) =>
+        new(false, "application/octet-stream", 0, 0, false, [finding], [], new Dictionary<int, byte[]>());
 }

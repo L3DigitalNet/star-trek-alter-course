@@ -14,7 +14,15 @@ public sealed class PublishingAndBoundaryTests
         global::AlterCourse.AssetCtl.Domain.DomainModels.EffectiveConfiguration configuration = Configuration(root);
         try
         {
-            Assert.ThrowsAny<IOException>(() => AtomicPublisher.Publish(configuration, "assets/asset.png", "new-asset"u8.ToArray(), "catalog/blocked.asset.yaml", "new-manifest"));
+            Assert.ThrowsAny<IOException>(() =>
+                AtomicPublisher.Publish(
+                    configuration,
+                    "assets/asset.png",
+                    "new-asset"u8.ToArray(),
+                    "catalog/blocked.asset.yaml",
+                    "new-manifest"
+                )
+            );
             Assert.Equal("old-asset", File.ReadAllText(Path.Combine(root, "assets", "asset.png")));
             Assert.True(Directory.Exists(Path.Combine(root, "catalog", "blocked.asset.yaml")));
         }
@@ -28,7 +36,10 @@ public sealed class PublishingAndBoundaryTests
     [Fact]
     public void ApplicationAssemblyDoesNotReferenceGameOrGodotAssemblies()
     {
-        string?[] references = typeof(AtomicPublisher).Assembly.GetReferencedAssemblies().Select(name => name.Name).ToArray();
+        string?[] references = typeof(AtomicPublisher)
+            .Assembly.GetReferencedAssemblies()
+            .Select(name => name.Name)
+            .ToArray();
         Assert.DoesNotContain("AlterCourse.Core", references, StringComparer.Ordinal);
         Assert.DoesNotContain("AlterCourse.Godot", references, StringComparer.Ordinal);
         Assert.DoesNotContain(references, name => name?.StartsWith("Godot", StringComparison.Ordinal) == true);
@@ -52,5 +63,19 @@ public sealed class PublishingAndBoundaryTests
         }
     }
 
-    private static EffectiveConfiguration Configuration(string root) => new(root, new AssetCtlPaths("assets", "catalog", "styles", "work", "runs", "state", "logs"), new AssetCtlPolicy(false, true, true, true, false, "reject"), new AssetCtlLimits(1_000_000, 1_000_000, 10, 10, 10, 30, 1_000_000), new SpendingLimits(0, 0, 0), new Dictionary<string, ProviderInstance>(StringComparer.Ordinal), [], [], new Dictionary<string, QualityTier>(StringComparer.Ordinal), new Dictionary<string, StyleProfile>(StringComparer.Ordinal), new Dictionary<string, string>(StringComparer.Ordinal), "hash");
+    private static EffectiveConfiguration Configuration(string root) =>
+        new(
+            root,
+            new AssetCtlPaths("assets", "catalog", "styles", "work", "runs", "state", "logs"),
+            new AssetCtlPolicy(false, true, true, true, false, "reject"),
+            new AssetCtlLimits(1_000_000, 1_000_000, 10, 10, 10, 30, 1_000_000),
+            new SpendingLimits(0, 0, 0),
+            new Dictionary<string, ProviderInstance>(StringComparer.Ordinal),
+            [],
+            [],
+            new Dictionary<string, QualityTier>(StringComparer.Ordinal),
+            new Dictionary<string, StyleProfile>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            "hash"
+        );
 }

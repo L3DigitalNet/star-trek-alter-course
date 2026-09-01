@@ -1,11 +1,22 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "AssetCtl quality tiers version 1",
-  "type": "object",
-  "additionalProperties": false,
-  "required": ["schema_version", "quality_tiers"],
-  "properties": {
-    "schema_version": { "const": "1" },
-    "quality_tiers": { "type": "object", "additionalProperties": { "type": "object", "required": ["candidates", "attempts_per_route", "semantic_review", "allow_unreviewed_placeholder"] } }
-  }
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"title": "AssetCtl quality tiers version 1",
+	"type": "object",
+	"additionalProperties": false,
+	"required": ["schema_version", "quality_tiers"],
+	"properties": {
+		"schema_version": { "const": "1" },
+		"quality_tiers": {
+			"type": "object",
+			"additionalProperties": {
+				"type": "object",
+				"required": [
+					"candidates",
+					"attempts_per_route",
+					"semantic_review",
+					"allow_unreviewed_placeholder"
+				]
+			}
+		}
+	}
 }

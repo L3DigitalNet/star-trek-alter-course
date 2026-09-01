@@ -1,7 +1,7 @@
-schema_version: '1'
-id: 'engineering-icons'
-summary: 'Compact engineering-system glyphs with transparent backgrounds.'
+schema_version: "1"
+id: "engineering-icons"
+summary: "Compact engineering-system glyphs with transparent backgrounds."
 required:
-  - 'recognizable at 16 pixels'
+  - "recognizable at 16 pixels"
 prohibited:
-  - 'text'
+  - "text"

@@ -59,10 +59,7 @@ internal static class YamlValues
                 || content.Contains('!', StringComparison.Ordinal)
             )
             {
-                throw new AssetCtlException(
-                    $"{path}:{lineNumber}: YAML tags, anchors, and aliases are prohibited.",
-                    2
-                );
+                throw new AssetCtlException($"{path}:{lineNumber}: YAML tags, anchors, and aliases are prohibited.", 2);
             }
         }
     }
@@ -114,7 +111,12 @@ internal static class YamlValues
         {
             case YamlMappingNode mapping:
                 var keys = new HashSet<string>(StringComparer.Ordinal);
-                foreach (global::System.Collections.Generic.KeyValuePair<global::YamlDotNet.RepresentationModel.YamlNode, global::YamlDotNet.RepresentationModel.YamlNode> pair in mapping.Children)
+                foreach (
+                    global::System.Collections.Generic.KeyValuePair<
+                        global::YamlDotNet.RepresentationModel.YamlNode,
+                        global::YamlDotNet.RepresentationModel.YamlNode
+                    > pair in mapping.Children
+                )
                 {
                     if (pair.Key is not YamlScalarNode { Value: not null } key)
                     {
@@ -143,10 +145,16 @@ internal static class YamlValues
                 throw new AssetCtlException($"{path}: aliases and custom YAML nodes are prohibited.", 2);
         }
     }
+
     public static void RequireOnly(this YamlMappingNode mapping, string path, params string[] keys)
     {
         var allowed = new HashSet<string>(keys, StringComparer.Ordinal);
-        foreach (global::System.Collections.Generic.KeyValuePair<global::YamlDotNet.RepresentationModel.YamlNode, global::YamlDotNet.RepresentationModel.YamlNode> pair in mapping.Children)
+        foreach (
+            global::System.Collections.Generic.KeyValuePair<
+                global::YamlDotNet.RepresentationModel.YamlNode,
+                global::YamlDotNet.RepresentationModel.YamlNode
+            > pair in mapping.Children
+        )
         {
             string key = ((YamlScalarNode)pair.Key).Value!;
             if (!allowed.Contains(key))
@@ -185,7 +193,9 @@ internal static class YamlValues
             throw new AssetCtlException($"{path}.{key}: expected scalar.", 2);
         }
 
-        return scalar.Value is null || string.Equals(scalar.Value, "null", StringComparison.Ordinal) ? null : scalar.Value;
+        return scalar.Value is null || string.Equals(scalar.Value, "null", StringComparison.Ordinal)
+            ? null
+            : scalar.Value;
     }
 
     public static YamlMappingNode Mapping(this YamlMappingNode mapping, string key, string path)
@@ -201,11 +211,7 @@ internal static class YamlValues
         return result;
     }
 
-    public static YamlMappingNode? OptionalMapping(
-        this YamlMappingNode mapping,
-        string key,
-        string path
-    )
+    public static YamlMappingNode? OptionalMapping(this YamlMappingNode mapping, string key, string path)
     {
         if (!mapping.Children.TryGetValue(new YamlScalarNode(key), out YamlNode? node))
         {
@@ -217,8 +223,7 @@ internal static class YamlValues
             return null;
         }
 
-        return node as YamlMappingNode
-            ?? throw new AssetCtlException($"{path}.{key}: expected mapping.", 2);
+        return node as YamlMappingNode ?? throw new AssetCtlException($"{path}.{key}: expected mapping.", 2);
     }
 
     public static YamlSequenceNode Sequence(this YamlMappingNode mapping, string key, string path)
@@ -234,19 +239,14 @@ internal static class YamlValues
         return result;
     }
 
-    public static YamlSequenceNode? OptionalSequence(
-        this YamlMappingNode mapping,
-        string key,
-        string path
-    )
+    public static YamlSequenceNode? OptionalSequence(this YamlMappingNode mapping, string key, string path)
     {
         if (!mapping.Children.TryGetValue(new YamlScalarNode(key), out YamlNode? node))
         {
             return null;
         }
 
-        return node as YamlSequenceNode
-            ?? throw new AssetCtlException($"{path}.{key}: expected sequence.", 2);
+        return node as YamlSequenceNode ?? throw new AssetCtlException($"{path}.{key}: expected sequence.", 2);
     }
 
     public static bool Boolean(this YamlMappingNode mapping, string key, string path) =>
@@ -282,10 +282,11 @@ internal static class YamlValues
         }
 
         return sequence
-            .Children.Select((node, index) =>
-                node is YamlScalarNode { Value: not null } scalar
-                    ? scalar.Value
-                    : throw new AssetCtlException($"{path}[{index}]: expected scalar.", 2)
+            .Children.Select(
+                (node, index) =>
+                    node is YamlScalarNode { Value: not null } scalar
+                        ? scalar.Value
+                        : throw new AssetCtlException($"{path}[{index}]: expected scalar.", 2)
             )
             .ToArray();
     }

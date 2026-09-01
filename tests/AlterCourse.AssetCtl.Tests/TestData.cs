@@ -40,8 +40,30 @@ internal static class TestData
             AssetCapability.ReviewSemantic,
             AssetCapability.ReviewReferenceComparison,
         };
-        var profile = new ModelProfile("profile", model, capabilities, 0.01m, "fixed-output", new Dictionary<string, string>(StringComparer.Ordinal));
-        var provider = new ProviderInstance("arbitrary-instance", adapter, true, new Uri("https://provider.example/v1"), "TEST_API_KEY", new HashSet<string>(StringComparer.OrdinalIgnoreCase), new Dictionary<string, ModelProfile>(StringComparer.Ordinal) { ["profile"] = profile });
-        return new ProviderExecutionContext(provider, profile, credential ?? Convert.ToHexString(RandomNumberGenerator.GetBytes(24)), 10, 1_000_000, "run");
+        var profile = new ModelProfile(
+            "profile",
+            model,
+            capabilities,
+            0.01m,
+            "fixed-output",
+            new Dictionary<string, string>(StringComparer.Ordinal)
+        );
+        var provider = new ProviderInstance(
+            "arbitrary-instance",
+            adapter,
+            true,
+            new Uri("https://provider.example/v1"),
+            "TEST_API_KEY",
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+            new Dictionary<string, ModelProfile>(StringComparer.Ordinal) { ["profile"] = profile }
+        );
+        return new ProviderExecutionContext(
+            provider,
+            profile,
+            credential ?? Convert.ToHexString(RandomNumberGenerator.GetBytes(24)),
+            10,
+            1_000_000,
+            "run"
+        );
     }
 }

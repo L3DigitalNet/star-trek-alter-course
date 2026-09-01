@@ -1,15 +1,18 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "AssetCtl routing version 1",
-  "type": "object",
-  "additionalProperties": false,
-  "required": ["schema_version", "routes", "review_routes"],
-  "properties": {
-    "schema_version": { "const": "1" },
-    "routes": { "type": "array", "items": { "$ref": "#/$defs/route" } },
-    "review_routes": { "type": "array", "items": { "$ref": "#/$defs/route" } }
-  },
-  "$defs": {
-    "route": { "type": "object", "required": ["id", "priority", "capability", "targets"] }
-  }
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"title": "AssetCtl routing version 1",
+	"type": "object",
+	"additionalProperties": false,
+	"required": ["schema_version", "routes", "review_routes"],
+	"properties": {
+		"schema_version": { "const": "1" },
+		"routes": { "type": "array", "items": { "$ref": "#/$defs/route" } },
+		"review_routes": { "type": "array", "items": { "$ref": "#/$defs/route" } }
+	},
+	"$defs": {
+		"route": {
+			"type": "object",
+			"required": ["id", "priority", "capability", "targets"]
+		}
+	}
 }

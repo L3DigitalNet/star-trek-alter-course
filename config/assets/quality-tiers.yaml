@@ -1,25 +1,25 @@
-schema_version: '1'
+schema_version: "1"
 quality_tiers:
   disposable:
     candidates: 1
     attempts_per_route: 1
-    semantic_review: 'disabled'
+    semantic_review: "disabled"
     allow_unreviewed_placeholder: true
   development:
     candidates: 3
     attempts_per_route: 2
-    semantic_review: 'when-available'
+    semantic_review: "when-available"
     allow_unreviewed_placeholder: true
     minimum_semantic_score: 0.70
   production-candidate:
     candidates: 6
     attempts_per_route: 2
-    semantic_review: 'required'
+    semantic_review: "required"
     allow_unreviewed_placeholder: false
     minimum_semantic_score: 0.82
   final-candidate:
     candidates: 8
     attempts_per_route: 2
-    semantic_review: 'required'
+    semantic_review: "required"
     allow_unreviewed_placeholder: false
     minimum_semantic_score: 0.88

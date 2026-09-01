@@ -1,14 +1,14 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "AssetCtl style profile version 1",
-  "type": "object",
-  "additionalProperties": false,
-  "required": ["schema_version", "id", "summary", "required", "prohibited"],
-  "properties": {
-    "schema_version": { "const": "1" },
-    "id": { "type": "string" },
-    "summary": { "type": "string" },
-    "required": { "type": "array", "items": { "type": "string" } },
-    "prohibited": { "type": "array", "items": { "type": "string" } }
-  }
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"title": "AssetCtl style profile version 1",
+	"type": "object",
+	"additionalProperties": false,
+	"required": ["schema_version", "id", "summary", "required", "prohibited"],
+	"properties": {
+		"schema_version": { "const": "1" },
+		"id": { "type": "string" },
+		"summary": { "type": "string" },
+		"required": { "type": "array", "items": { "type": "string" } },
+		"prohibited": { "type": "array", "items": { "type": "string" } }
+	}
 }
