@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Delegate commit-message validation to the repository policy so local commits
+# and pull-request titles use the same Conventional Commit grammar.
+# Requirements: Bash, Git, and scripts/branch-policy.sh in this checkout.
+
+set -euo pipefail
+
+root="$(git rev-parse --show-toplevel)"
+readonly root
+exec "${root}/scripts/branch-policy.sh" commit-message "$1"

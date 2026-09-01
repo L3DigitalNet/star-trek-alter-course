@@ -24,4 +24,4 @@ mapfile -d '' structured_files < <(
 
 dotnet csharpier format .
 npx --yes prettier@3.9.6 --write -- "${structured_files[@]}"
-"${tool_bin}/shfmt" -w -i 2 -ci -sr scripts/*.sh
+"${tool_bin}/shfmt" -w -i 2 -ci -sr .githooks/* scripts/*.sh

@@ -9,6 +9,8 @@ root="$(git rev-parse --show-toplevel)"
 readonly root
 cd "${root}"
 
+./scripts/branch-policy.sh repository
+
 require_property() {
   local property=$1
   local value=$2

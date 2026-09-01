@@ -1,0 +1,46 @@
+name: Branch policy
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - edited
+      - ready_for_review
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  branch-policy:
+    name: Branch policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Validate pull request
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BASE: ${{ github.base_ref }}
+          PR_BASE_REPO: ${{ github.event.pull_request.base.repo.full_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.head_ref }}
+          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          git fetch --no-tags origin "$PR_BASE_SHA" '+refs/heads/dev:refs/remotes/origin/dev'
+          PR_DEV_SHA="$(git rev-parse refs/remotes/origin/dev)"
+          ./scripts/branch-policy.sh pull-request "$PR_BASE" "$PR_HEAD" "$PR_TITLE" "$PR_BASE_SHA" "$PR_HEAD_SHA" "$PR_BASE_REPO" "$PR_HEAD_REPO" "$PR_DEV_SHA"
+
+      - name: Validate repository policy
+        if: github.event_name == 'workflow_dispatch'
+        run: ./scripts/branch-policy.sh repository
