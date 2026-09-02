@@ -551,7 +551,7 @@ public sealed class GamePersistenceTests
     [Fact]
     public void SerializeEmitsOnlyV2()
     {
-        GameSimulation game = FirstGameSetup.Create(CreateDefinition());
+        GameSimulation game = FirstGameSetup.Create(CreateCatalog());
         JsonObject root = Parse(GamePersistence.Serialize(game, CreateMetadata()));
 
         Assert.Equal(2, root["schemaVersion"]!.GetValue<int>());

@@ -3,7 +3,6 @@ using AlterCourse.Core.Gameplay;
 using AlterCourse.Core.Persistence;
 using AlterCourse.Core.Player;
 using AlterCourse.Core.Quantities;
-using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
 using Godot;
@@ -297,8 +296,7 @@ public partial class GameScreen : Control
         string definitionJson = ReadRequiredText(ShipPath);
         var loader = new ShipDefinitionCatalogLoader(schema);
         ShipDefinitionCatalog catalog = loader.LoadCatalog([ShipDefinitionContent.FromText(ShipPath, definitionJson)]);
-        ShipDefinition definition = catalog.Definitions.Single();
-        return (catalog, FirstGameSetup.Create(definition));
+        return (catalog, FirstGameSetup.Create(catalog));
     }
 
     private static string ReadRequiredText(string path)

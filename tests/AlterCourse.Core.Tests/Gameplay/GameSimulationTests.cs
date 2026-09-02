@@ -1,7 +1,7 @@
+using AlterCourse.Core.Content;
 using AlterCourse.Core.Gameplay;
 using AlterCourse.Core.Player;
 using AlterCourse.Core.Quantities;
-using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
 
@@ -220,13 +220,20 @@ public sealed class GameSimulationTests
 
         Assert.Equal(AdvanceUntilOutcome.ScheduledEventResolved, repair.Outcome);
         Assert.Equal(8000, repair.StoppedAt.Milliseconds);
-        Assert.Equal([ScheduledWorkKind.SensorRepairCompletion], repair.ResolvedKinds);
+        Assert.Equal(
+            [ScheduledWorkKind.SensorRepairCompletion, ScheduledWorkKind.SensorRepairCompletion],
+            repair.ResolvedKinds
+        );
         Assert.NotNull(repair.Projection.Strategic.Travel);
         Assert.Equal(12000, arrival.StoppedAt.Milliseconds);
         Assert.Equal([ScheduledWorkKind.TravelArrival], arrival.ResolvedKinds);
         Assert.Equal(12000, ordinaryAdvance.FinalTime.Milliseconds);
         Assert.Equal(
-            [ScheduledWorkKind.SensorRepairCompletion, ScheduledWorkKind.TravelArrival],
+            [
+                ScheduledWorkKind.SensorRepairCompletion,
+                ScheduledWorkKind.SensorRepairCompletion,
+                ScheduledWorkKind.TravelArrival,
+            ],
             ordinaryAdvance.ResolvedKinds
         );
         Assert.Equal(ordinary.GetPlayerProjection(), ordinaryAdvance.Projection);
@@ -239,7 +246,7 @@ public sealed class GameSimulationTests
     {
         GameSimulation game = CreateGame();
         game.RequestTravel(new TravelIntent(ConnectedDestination(game)));
-        game.AdvanceFixedSteps(120);
+        game.AdvanceFixedSteps(140);
         PlayerProjection before = game.GetPlayerProjection();
 
         AdvanceUntilResult result = game.AdvanceUntilNextScheduledEvent();
@@ -301,15 +308,42 @@ public sealed class GameSimulationTests
         Assert.Equal(initial, game.GetPlayerProjection());
     }
 
-    private static GameSimulation CreateGame() =>
-        FirstGameSetup.Create(
-            new ShipDefinition(
-                new ShipDefinitionId("pathfinder"),
-                "Pathfinder class",
-                new SpeedKilometersPerSecond(10),
-                new SimulationDuration(8000)
-            )
+    private static GameSimulation CreateGame()
+    {
+        const string definition = """
+            {
+              "schemaVersion": 2,
+              "id": "pathfinder",
+              "designDisplayName": "Pathfinder class",
+              "maximumTacticalSpeedKilometersPerSecond": 10,
+              "sensorRepairDurationMilliseconds": 8000
+            }
+            """;
+        string schema = File.ReadAllText(
+            Path.Combine(FindRepositoryRoot(), "src/AlterCourse.Godot/content/schemas/ship-definition-v2.schema.json")
         );
+        ShipDefinitionCatalog catalog = new ShipDefinitionCatalogLoader(schema).LoadCatalog([
+            ShipDefinitionContent.FromText("pathfinder.json", definition),
+        ]);
+        return FirstGameSetup.Create(catalog);
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        for (
+            var directory = new DirectoryInfo(AppContext.BaseDirectory);
+            directory is not null;
+            directory = directory.Parent
+        )
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "AlterCourse.sln")))
+            {
+                return directory.FullName;
+            }
+        }
+
+        throw new DirectoryNotFoundException("Could not locate the repository root from the test output directory.");
+    }
 
     private static LocationId ConnectedDestination(GameSimulation game)
     {
