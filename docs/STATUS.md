@@ -37,6 +37,7 @@
 - AssetCtl accepts bounded JPEG/WebP provider rasters and normalizes them to canonical PNG before Godot import.
 - Provider profiles use current low settings for OpenAI gpt-image-2 and xAI grok-imagine-image-2.0 1K.
 - Live Recraft, xAI, and OpenAI tests created four disposable placeholders that passed mechanical checks and Godot import.
+- Task #34 and Issue #32 are Done; PRs #35 (`9a537c9`) and #33 (`6258fb6`) merged into `dev`, leaving no open `dev` PRs.
 - Tooling now uses C# 12, exact SDK 10.0.111, Node 24, Release-mapped Godot builds, and idempotent owned-source formatting.
 - CSharpier owns C# whitespace; analyzers enforce semantic policy, including `_camelCase` private instance fields.
 - Issue #21 tooling convergence was delivered through merged Final PR #22.
