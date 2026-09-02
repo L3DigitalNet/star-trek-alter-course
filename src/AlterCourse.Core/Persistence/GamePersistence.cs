@@ -227,8 +227,16 @@ public static class GamePersistence
         }
     }
 
-    private static SaveEnvelopeV1 CaptureV1(SimulationState state, GameSaveMetadata metadata) =>
-        new()
+    private static SaveEnvelopeV1 CaptureV1(SimulationState state, GameSaveMetadata metadata)
+    {
+        if (state.Ships.Length != 1)
+        {
+            // V1 has no plural ship collection, so serializing one selected ship would silently lose state.
+            throw new InvalidOperationException("V1 persistence supports only a singleton simulation state.");
+        }
+
+        ShipState ship = state.Ships[0];
+        return new SaveEnvelopeV1
         {
             SchemaVersion = CurrentSchemaVersion,
             SimulationRulesVersion = CurrentSimulationRulesVersion,
@@ -245,10 +253,11 @@ public static class GamePersistence
                 ShipAllocatorNextId = state.ShipIdAllocator.NextId,
                 Scheduler = CaptureScheduler(state.Scheduler),
                 StrategicMap = CaptureStrategicMap(state.StrategicMap),
-                StrategicState = CaptureStrategicState(state.StrategicState),
-                PlayerShip = CapturePlayerShip(state.PlayerShip),
+                StrategicState = CaptureStrategicState(ship.StrategicState),
+                PlayerShip = CapturePlayerShip(ship),
             },
         };
+    }
 
     private static SchedulerSnapshotV1 CaptureScheduler(SimulationScheduler scheduler) =>
         new()
@@ -299,7 +308,7 @@ public static class GamePersistence
             ],
         };
 
-    private static StrategicStateSnapshotV1 CaptureStrategicState(PlayerStrategicState state) =>
+    private static StrategicStateSnapshotV1 CaptureStrategicState(ShipStrategicState state) =>
         state switch
         {
             AtLocationState atLocation => new StrategicStateSnapshotV1
@@ -324,7 +333,7 @@ public static class GamePersistence
             _ => throw new InvalidOperationException("Cannot persist an unknown strategic state kind."),
         };
 
-    private static PlayerShipSnapshotV1 CapturePlayerShip(PlayerShipState ship) =>
+    private static PlayerShipSnapshotV1 CapturePlayerShip(ShipState ship) =>
         new()
         {
             InstanceId = ship.InstanceId.Value,
@@ -437,10 +446,15 @@ public static class GamePersistence
         EnsureFixedStep(time.Milliseconds, "Current simulation time");
         var allocator = ShipInstanceIdAllocator.Restore(snapshot.ShipAllocatorNextId);
         StrategicMap map = RestoreMap(snapshot.StrategicMap);
-        PlayerStrategicState strategicState = RestoreStrategicState(snapshot.StrategicState, map, time);
-        PlayerShipState playerShip = RestorePlayerShip(snapshot.PlayerShip, time);
+        ShipStrategicState strategicState = RestoreStrategicState(snapshot.StrategicState, map, time);
+        ShipDefinition definition = catalog.GetRequired(new ShipDefinitionId(snapshot.PlayerShip.DefinitionId));
+        ShipState playerShip = RestorePlayerShip(
+            snapshot.PlayerShip,
+            definition.DesignDisplayName,
+            strategicState,
+            time
+        );
         SimulationScheduler scheduler = RestoreScheduler(snapshot.Scheduler, playerShip.InstanceId);
-        ShipDefinition definition = catalog.GetRequired(playerShip.DefinitionId);
         if (playerShip.TacticalMotion.Speed.Value > definition.MaximumTacticalSpeed.Value)
         {
             throw new InvalidOperationException("Player tactical speed exceeds its authored definition maximum.");
@@ -453,8 +467,8 @@ public static class GamePersistence
 
         ValidateOutstandingTravel(scheduler, strategicState, playerShip.InstanceId);
         ValidateOutstandingRepair(scheduler, playerShip.SensorRepair, playerShip.InstanceId);
-        var state = new SimulationState(time, scheduler, allocator, map, strategicState, definition, playerShip);
-        return GameSimulation.RestoreState(state);
+        var state = new SimulationState(time, scheduler, allocator, map, playerShip.InstanceId, [playerShip]);
+        return GameSimulation.RestoreState(state, catalog);
     }
 
     private static SimulationScheduler RestoreScheduler(SchedulerSnapshotV1 snapshot, ShipInstanceId playerShipId)
@@ -594,7 +608,7 @@ public static class GamePersistence
         return new StrategicMap(locations, routes);
     }
 
-    private static PlayerStrategicState RestoreStrategicState(
+    private static ShipStrategicState RestoreStrategicState(
         StrategicStateSnapshotV1 snapshot,
         StrategicMap map,
         SimulationTime currentTime
@@ -657,7 +671,12 @@ public static class GamePersistence
         );
     }
 
-    private static PlayerShipState RestorePlayerShip(PlayerShipSnapshotV1 snapshot, SimulationTime currentTime)
+    private static ShipState RestorePlayerShip(
+        PlayerShipSnapshotV1 snapshot,
+        string vesselDisplayName,
+        ShipStrategicState strategicState,
+        SimulationTime currentTime
+    )
     {
         if (snapshot.TacticalPosition is null || snapshot.TacticalMotion is null)
         {
@@ -674,16 +693,18 @@ public static class GamePersistence
             );
         }
 
-        return new PlayerShipState(
+        return new ShipState(
             new ShipInstanceId(snapshot.InstanceId),
             new ShipDefinitionId(snapshot.DefinitionId),
+            vesselDisplayName,
             new TacticalPosition(snapshot.TacticalPosition.XKilometers, snapshot.TacticalPosition.YKilometers),
             new TacticalMotion(
                 new HeadingDegrees(snapshot.TacticalMotion.HeadingDegrees),
                 new SpeedKilometersPerSecond(snapshot.TacticalMotion.SpeedKilometersPerSecond)
             ),
             integrity,
-            repair
+            repair,
+            strategicState
         );
     }
 
@@ -714,7 +735,7 @@ public static class GamePersistence
 
     private static void ValidateOutstandingTravel(
         SimulationScheduler scheduler,
-        PlayerStrategicState strategicState,
+        ShipStrategicState strategicState,
         ShipInstanceId playerShipId
     )
     {

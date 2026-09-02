@@ -20,7 +20,7 @@ public sealed class GameSimulationTests
         PlayerProjection projection = first.GetPlayerProjection();
 
         Assert.Equal(1, projection.Ship.InstanceId.Value);
-        Assert.Equal("Pathfinder class", projection.Ship.DisplayName);
+        Assert.Equal("USS Pathfinder", projection.Ship.DisplayName);
         Assert.Equal(projection, second.GetPlayerProjection());
         Assert.Equal(3, projection.Strategic.Locations.Count);
         Assert.Equal(2, projection.Strategic.Routes.Count);

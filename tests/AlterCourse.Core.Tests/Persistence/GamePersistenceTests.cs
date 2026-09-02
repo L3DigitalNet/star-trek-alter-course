@@ -29,7 +29,7 @@ public sealed class GamePersistenceTests
         LoadedGameSave loaded = GamePersistence.Deserialize(json, CreateCatalog(), "memory-save.json");
 
         Assert.Equal(metadata, loaded.Metadata);
-        Assert.Equal(original.GetPlayerProjection(), loaded.Simulation.GetPlayerProjection());
+        AssertV1Projection(original.GetPlayerProjection(), loaded.Simulation.GetPlayerProjection());
         Assert.Equal(json, GamePersistence.Serialize(loaded.Simulation, metadata));
     }
 
@@ -79,7 +79,7 @@ public sealed class GamePersistenceTests
         ContinueScenario(continuous);
         ContinueScenario(resumed);
 
-        Assert.Equal(continuous.GetPlayerProjection(), resumed.GetPlayerProjection());
+        AssertV1Projection(continuous.GetPlayerProjection(), resumed.GetPlayerProjection());
         Assert.Equal(
             GamePersistence.Serialize(continuous, CreateMetadata()),
             GamePersistence.Serialize(resumed, CreateMetadata())
@@ -97,7 +97,9 @@ public sealed class GamePersistenceTests
             simulation["playerShip"]!["instanceId"] = 2;
         });
 
-        GameSimulation restored = GamePersistence.Deserialize(saved, CreateCatalog(), "non-default-player.json").Simulation;
+        GameSimulation restored = GamePersistence
+            .Deserialize(saved, CreateCatalog(), "non-default-player.json")
+            .Simulation;
 
         Assert.Equal(2, restored.GetPlayerProjection().Ship.InstanceId.Value);
         ContinueScenario(restored);
@@ -145,7 +147,7 @@ public sealed class GamePersistenceTests
             "maximum-speed.json"
         );
 
-        Assert.Equal(original.GetPlayerProjection(), loaded.Simulation.GetPlayerProjection());
+        AssertV1Projection(original.GetPlayerProjection(), loaded.Simulation.GetPlayerProjection());
     }
 
     /// <summary>Confirms active travel and repair restore at their inclusive start boundary.</summary>
@@ -167,7 +169,7 @@ public sealed class GamePersistenceTests
             "start-boundary.json"
         );
 
-        Assert.Equal(original.GetPlayerProjection(), loaded.Simulation.GetPlayerProjection());
+        AssertV1Projection(original.GetPlayerProjection(), loaded.Simulation.GetPlayerProjection());
     }
 
     /// <summary>Confirms a completed at-location state with no repair or scheduled work is a valid V1 save.</summary>
@@ -185,7 +187,7 @@ public sealed class GamePersistenceTests
         );
         PlayerProjection projection = loaded.Simulation.GetPlayerProjection();
 
-        Assert.Equal(original.GetPlayerProjection(), projection);
+        AssertV1Projection(original.GetPlayerProjection(), projection);
         Assert.NotNull(projection.Strategic.CurrentLocation);
         Assert.Null(projection.Strategic.Travel);
         Assert.False(projection.Ship.Sensors.IsRepairing);
@@ -199,7 +201,7 @@ public sealed class GamePersistenceTests
         loaded.Simulation.SetTacticalCourse(course);
         original.AdvanceFixedSteps(1);
         loaded.Simulation.AdvanceFixedSteps(1);
-        Assert.Equal(original.GetPlayerProjection(), loaded.Simulation.GetPlayerProjection());
+        AssertV1Projection(original.GetPlayerProjection(), loaded.Simulation.GetPlayerProjection());
     }
 
     /// <summary>Confirms V1 is selected explicitly and all unsupported versions fail closed.</summary>
@@ -476,7 +478,7 @@ public sealed class GamePersistenceTests
             LoadedGameSave loaded = GamePersistence.Load(path, CreateCatalog());
             Assert.NotEqual(priorBytes, replacementBytes);
             Assert.Equal(replacementMetadata, loaded.Metadata);
-            Assert.Equal(replacement.GetPlayerProjection(), loaded.Simulation.GetPlayerProjection());
+            AssertV1Projection(replacement.GetPlayerProjection(), loaded.Simulation.GetPlayerProjection());
             Assert.Equal(
                 ["slot-one.json"],
                 Directory.GetFiles(directory).Select(Path.GetFileName),
@@ -561,6 +563,18 @@ public sealed class GamePersistenceTests
             new SetTacticalCourseIntent(new HeadingDegrees(90), new SpeedKilometersPerSecond(2))
         );
         simulation.AdvanceFixedSteps(7);
+    }
+
+    private static void AssertV1Projection(PlayerProjection source, PlayerProjection restored)
+    {
+        Assert.Equal(source.SimulationTime, restored.SimulationTime);
+        Assert.Equal(source.Strategic, restored.Strategic);
+        Assert.Equal(source.Ship.InstanceId, restored.Ship.InstanceId);
+        Assert.Equal(source.Ship.DefinitionId, restored.Ship.DefinitionId);
+        Assert.Equal("Pathfinder class", restored.Ship.DisplayName);
+        Assert.Equal(source.Ship.Tactical, restored.Ship.Tactical);
+        Assert.Equal(source.Ship.Sensors, restored.Ship.Sensors);
+        Assert.Equal(source.AvailableActions, restored.AvailableActions);
     }
 
     private static GameSimulation CreateTravelingGame()

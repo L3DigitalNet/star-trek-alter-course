@@ -1,3 +1,4 @@
+using AlterCourse.Core.Content;
 using AlterCourse.Core.Identity;
 using AlterCourse.Core.Quantities;
 using AlterCourse.Core.Ships;
@@ -10,7 +11,7 @@ namespace AlterCourse.Core.Gameplay;
 /// <summary>Builds the deterministic first playable simulation aggregate.</summary>
 public static class FirstGameSetup
 {
-    /// <summary>Creates a three-location game with one damaged player ship under active repair.</summary>
+    /// <summary>Creates a three-location game with one damaged ship under active repair.</summary>
     public static GameSimulation Create(ShipDefinition playerShipDefinition)
     {
         ArgumentNullException.ThrowIfNull(playerShipDefinition);
@@ -32,24 +33,21 @@ public static class FirstGameSetup
             repairCompletion,
             repairWork.Id
         );
-        var playerShip = new PlayerShipState(
+        var playerShip = new ShipState(
             playerId,
             playerShipDefinition.Id,
+            "USS Pathfinder",
             new TacticalPosition(3.25, -7.5),
             new TacticalMotion(new HeadingDegrees(0), new SpeedKilometersPerSecond(0)),
             initialSensorIntegrity,
-            repair
+            repair,
+            new AtLocationState(startingLocation)
         );
-        var state = new SimulationState(
-            initialTime,
-            scheduler,
-            followingAllocator,
-            map,
-            new AtLocationState(startingLocation),
-            playerShipDefinition,
-            playerShip
+        var state = new SimulationState(initialTime, scheduler, followingAllocator, map, playerId, [playerShip]);
+        var catalog = new ShipDefinitionCatalog(
+            new Dictionary<ShipDefinitionId, ShipDefinition> { [playerShipDefinition.Id] = playerShipDefinition }
         );
-        return GameSimulation.RestoreState(state);
+        return GameSimulation.RestoreState(state, catalog);
     }
 
     private static (StrategicMap Map, LocationId StartingLocation) CreateMap(SimulationDuration repairDuration)
