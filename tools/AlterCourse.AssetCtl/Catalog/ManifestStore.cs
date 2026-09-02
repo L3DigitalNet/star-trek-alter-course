@@ -10,6 +10,18 @@ namespace AlterCourse.AssetCtl.Catalog;
 /// <summary>Owns the tracked manifest contract; runtime receipts and provider DTOs never become catalog authority.</summary>
 internal static class ManifestStore
 {
+    private static readonly HashSet<string> AssetKinds = new(StringComparer.Ordinal)
+    {
+        "icon",
+        "map-marker",
+        "ship-sprite",
+        "emblem",
+        "illustration",
+        "background",
+        "texture",
+        "other",
+    };
+
     private static readonly System.Text.RegularExpressions.Regex AssetIdPattern = new(
         "^[a-z0-9]+(?:[.-][a-z0-9]+)+$",
         System.Text.RegularExpressions.RegexOptions.CultureInvariant,
@@ -93,7 +105,8 @@ internal static class ManifestStore
         global::AlterCourse.AssetCtl.Domain.DomainModels.ApprovalRecord approval = ReadApproval(
             root.OptionalMapping("approval", "manifest")
         );
-        ValidateLifecycle(lifecycle, rights, approval, integrity);
+        DeprecationRecord? deprecation = ReadDeprecation(root.OptionalMapping("deprecation", "manifest"));
+        ValidateLifecycle(lifecycle, rights, approval, integrity, deprecation);
         return new AssetManifest(
             "1",
             request,
@@ -105,8 +118,31 @@ internal static class ManifestStore
             integrity,
             approval,
             root.OptionalScalar("supersedes", "manifest"),
-            Path.GetRelativePath(configuration.RepositoryRoot, absolute)
+            Path.GetRelativePath(configuration.RepositoryRoot, absolute),
+            deprecation
         );
+    }
+
+    public static AssetManifest LoadCatalogEntry(EffectiveConfiguration configuration, string path)
+    {
+        string absolute = PathPolicy.ResolveManifestPath(configuration, path, allowMissing: false);
+        string relative = Path.GetRelativePath(configuration.RepositoryRoot, absolute);
+        return LoadAll(configuration)
+                .SingleOrDefault(manifest => string.Equals(manifest.ManifestPath, relative, StringComparison.Ordinal))
+            ?? throw new AssetCtlException("Manifest is not an authoritative entry in the configured catalog.", 2);
+    }
+
+    public static void ValidatePublicationOwnership(
+        EffectiveConfiguration configuration,
+        string manifestPath,
+        string outputPath
+    )
+    {
+        AssetManifest owner = LoadCatalogEntry(configuration, manifestPath);
+        if (!string.Equals(owner.Request.Output.Path, outputPath, StringComparison.Ordinal))
+        {
+            throw new AssetCtlException("Publication output is not owned by the selected catalog manifest.", 2);
+        }
     }
 
     private static void EnsurePhysicalCatalogContainment(EffectiveConfiguration configuration, string manifestPath)
@@ -159,12 +195,21 @@ internal static class ManifestStore
         IReadOnlyList<AssetReference> references = ReadReferences(root.OptionalSequence("references", "manifest"));
         RightsRecord rights = ReadRights(root.Mapping("rights", "manifest"), lifecycle, references);
         string qualityTier = root.Scalar("quality_tier", "manifest");
+        if (!configuration.QualityTiers.ContainsKey(qualityTier))
+        {
+            throw new AssetCtlException($"manifest.quality_tier: unknown quality tier '{qualityTier}'.", 2);
+        }
+        string kind = root.Scalar("kind", "manifest");
+        if (!AssetKinds.Contains(kind))
+        {
+            throw new AssetCtlException($"manifest.kind: unsupported '{kind}'.", 2);
+        }
         GenerationProvenance? generation = ReadGeneration(root.OptionalMapping("generation", "manifest"), qualityTier);
 
         var request = new AssetRequest(
             id,
             lifecycle,
-            root.Scalar("kind", "manifest"),
+            kind,
             root.Scalar("purpose", "manifest"),
             output,
             style,
@@ -204,6 +249,7 @@ internal static class ManifestStore
             "validation",
             "integrity",
             "approval",
+            "deprecation",
             "supersedes"
         );
         if (!string.Equals(root.Scalar("schema_version", "manifest"), "1", StringComparison.Ordinal))
@@ -273,7 +319,7 @@ internal static class ManifestStore
                     node.Sequence("target_display_sizes", "manifest.output"),
                     "manifest.output.target_display_sizes"
                 )
-                .Select(value => int.Parse(value, CultureInfo.InvariantCulture))
+                .Select(value => ParseInteger(value, "manifest.output.target_display_sizes"))
                 .ToArray()
         );
         OutputContractPolicy.Validate(output, configuration.Limits.MaximumDecodedPixels);
@@ -329,8 +375,28 @@ internal static class ManifestStore
             manifest.Approval.ApprovedAt?.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture)
         );
         NullableLine(builder, 2, "approval_note", manifest.Approval.ApprovalNote);
+        WriteDeprecation(builder, manifest.Deprecation);
         NullableLine(builder, 0, "supersedes", manifest.Supersedes);
         return builder.ToString();
+    }
+
+    private static void WriteDeprecation(StringBuilder builder, DeprecationRecord? deprecation)
+    {
+        if (deprecation is null)
+        {
+            builder.AppendLine("deprecation: null");
+            return;
+        }
+
+        builder.AppendLine("deprecation:");
+        Line(builder, 2, "actor", deprecation.Actor);
+        Line(
+            builder,
+            2,
+            "deprecated_at",
+            deprecation.DeprecatedAt.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture)
+        );
+        Line(builder, 2, "reason", deprecation.Reason);
     }
 
     private static void WriteGeneration(StringBuilder builder, GenerationProvenance? generation)
@@ -379,10 +445,8 @@ internal static class ManifestStore
         builder.AppendLine("references:");
         foreach (AssetReference reference in references)
         {
-            builder
-                .Append("  - path: '")
-                .Append(reference.Path.Replace("'", "''", StringComparison.Ordinal))
-                .AppendLine("'");
+            builder.AppendLine("  -");
+            Line(builder, 4, "path", reference.Path);
             Line(builder, 4, "sha256", reference.Sha256);
             Line(builder, 4, "rights_basis", reference.RightsBasis);
         }
@@ -587,6 +651,45 @@ internal static class ManifestStore
             return null;
         }
 
+        ValidateGenerationKeys(node);
+        string adapterVersion = node.Scalar("adapter_version", "generation");
+        string provenanceVersion = node.Scalar("provenance_schema_version", "generation");
+        RequireContractVersion(adapterVersion, AssetContractVersions.Adapter, "generation.adapter_version");
+        RequireContractVersion(
+            provenanceVersion,
+            AssetContractVersions.Provenance,
+            "generation.provenance_schema_version"
+        );
+        if (!string.Equals(node.Scalar("source_type", "generation"), "generated", StringComparison.Ordinal))
+        {
+            throw new AssetCtlException("generation.source_type: unsupported source type.", 2);
+        }
+
+        return new GenerationProvenance(
+            ParseTimestamp(node.Scalar("generated_at", "generation"), "manifest.generation.generated_at"),
+            node.Scalar("run_id", "generation"),
+            node.Scalar("route", "generation"),
+            node.Scalar("provider", "generation"),
+            node.Scalar("adapter", "generation"),
+            node.Scalar("model_profile", "generation"),
+            node.Scalar("model", "generation"),
+            node.OptionalScalar("quality_tier", "generation") ?? defaultTier,
+            node.Scalar("final_prompt", "generation"),
+            node.Scalar("prompt_sha256", "generation"),
+            node.Scalar("request_sha256", "generation"),
+            node.Scalar("effective_config_sha256", "generation"),
+            node.OptionalScalar("provider_request_id", "generation"),
+            ParseDecimal(node.Scalar("estimated_cost_usd", "generation"), "manifest.generation.estimated_cost_usd"),
+            ParseNullableDecimal(
+                node.OptionalScalar("actual_cost_usd", "generation"),
+                "manifest.generation.actual_cost_usd"
+            ),
+            adapterVersion,
+            provenanceVersion
+        );
+    }
+
+    private static void ValidateGenerationKeys(YamlMappingNode node) =>
         node.RequireOnly(
             "manifest.generation",
             "source_type",
@@ -608,39 +711,6 @@ internal static class ManifestStore
             "estimated_cost_usd",
             "actual_cost_usd"
         );
-        string adapterVersion = node.Scalar("adapter_version", "generation");
-        string provenanceVersion = node.Scalar("provenance_schema_version", "generation");
-        RequireContractVersion(adapterVersion, AssetContractVersions.Adapter, "generation.adapter_version");
-        RequireContractVersion(
-            provenanceVersion,
-            AssetContractVersions.Provenance,
-            "generation.provenance_schema_version"
-        );
-        if (!string.Equals(node.Scalar("source_type", "generation"), "generated", StringComparison.Ordinal))
-        {
-            throw new AssetCtlException("generation.source_type: unsupported source type.", 2);
-        }
-
-        return new GenerationProvenance(
-            DateTimeOffset.Parse(node.Scalar("generated_at", "generation"), CultureInfo.InvariantCulture),
-            node.Scalar("run_id", "generation"),
-            node.Scalar("route", "generation"),
-            node.Scalar("provider", "generation"),
-            node.Scalar("adapter", "generation"),
-            node.Scalar("model_profile", "generation"),
-            node.Scalar("model", "generation"),
-            node.OptionalScalar("quality_tier", "generation") ?? defaultTier,
-            node.Scalar("final_prompt", "generation"),
-            node.Scalar("prompt_sha256", "generation"),
-            node.Scalar("request_sha256", "generation"),
-            node.Scalar("effective_config_sha256", "generation"),
-            node.OptionalScalar("provider_request_id", "generation"),
-            decimal.Parse(node.Scalar("estimated_cost_usd", "generation"), CultureInfo.InvariantCulture),
-            ParseNullableDecimal(node.OptionalScalar("actual_cost_usd", "generation")),
-            adapterVersion,
-            provenanceVersion
-        );
-    }
 
     private static IntegrityRecord? ReadIntegrity(YamlMappingNode? node)
     {
@@ -817,8 +887,30 @@ internal static class ManifestStore
         string? date = node.OptionalScalar("approved_at", "approval");
         return new ApprovalRecord(
             node.OptionalScalar("approved_by", "approval"),
-            date is null ? null : DateTimeOffset.Parse(date, CultureInfo.InvariantCulture),
+            date is null ? null : ParseTimestamp(date, "manifest.approval.approved_at"),
             node.OptionalScalar("approval_note", "approval")
+        );
+    }
+
+    private static DeprecationRecord? ReadDeprecation(YamlMappingNode? node)
+    {
+        if (node is null)
+        {
+            return null;
+        }
+
+        node.RequireOnly("manifest.deprecation", "actor", "deprecated_at", "reason");
+        string actor = node.Scalar("actor", "manifest.deprecation");
+        string reason = node.Scalar("reason", "manifest.deprecation");
+        if (string.IsNullOrWhiteSpace(actor) || string.IsNullOrWhiteSpace(reason))
+        {
+            throw new AssetCtlException("manifest.deprecation: actor and reason cannot be blank.", 2);
+        }
+
+        return new DeprecationRecord(
+            actor,
+            ParseTimestamp(node.Scalar("deprecated_at", "manifest.deprecation"), "manifest.deprecation.deprecated_at"),
+            reason
         );
     }
 
@@ -826,7 +918,8 @@ internal static class ManifestStore
         AssetLifecycle lifecycle,
         RightsRecord rights,
         ApprovalRecord approval,
-        IntegrityRecord? integrity
+        IntegrityRecord? integrity,
+        DeprecationRecord? deprecation
     )
     {
         if (lifecycle == AssetLifecycle.Approved)
@@ -843,6 +936,15 @@ internal static class ManifestStore
                 throw new AssetCtlException("approved asset lacks rights, approval, or integrity evidence.", 1);
             }
         }
+
+        if (lifecycle == AssetLifecycle.Deprecated && deprecation is null)
+        {
+            throw new AssetCtlException("deprecated asset lacks structured deprecation evidence.", 1);
+        }
+        if (lifecycle != AssetLifecycle.Deprecated && deprecation is not null)
+        {
+            throw new AssetCtlException("manifest.deprecation is only valid for deprecated assets.", 2);
+        }
     }
 
     private static AssetLifecycle ParseLifecycle(string value) =>
@@ -857,18 +959,50 @@ internal static class ManifestStore
 
     private static string Lifecycle(AssetLifecycle value) => value.ToString().ToLowerInvariant();
 
-    private static decimal? ParseNullableDecimal(string? value) =>
-        value is null ? null : decimal.Parse(value, CultureInfo.InvariantCulture);
+    private static int ParseInteger(string value, string path) =>
+        int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed)
+            ? parsed
+            : throw new AssetCtlException($"{path}: expected an integer.", 2);
+
+    private static decimal ParseDecimal(string value, string path) =>
+        decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out decimal parsed)
+            ? parsed
+            : throw new AssetCtlException($"{path}: expected a decimal number.", 2);
+
+    private static decimal? ParseNullableDecimal(string? value, string path) =>
+        value is null ? null : ParseDecimal(value, path);
+
+    private static DateTimeOffset ParseTimestamp(string value, string path) =>
+        DateTimeOffset.TryParse(
+            value,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.AllowWhiteSpaces | DateTimeStyles.AssumeUniversal,
+            out DateTimeOffset parsed
+        )
+            ? parsed
+            : throw new AssetCtlException($"{path}: expected an ISO 8601 timestamp.", 2);
 
     private static string BooleanValue(bool value) => value ? "true" : "false";
 
-    private static void Line(StringBuilder builder, int indentation, string key, string value) =>
+    private static void Line(StringBuilder builder, int indentation, string key, string value)
+    {
+        if (value.Contains('\r', StringComparison.Ordinal))
+        {
+            throw new AssetCtlException($"{key}: expected canonical LF line endings.", 2);
+        }
+        if (value.Contains('\n', StringComparison.Ordinal))
+        {
+            BlockScalar(builder, indentation, key, value);
+            return;
+        }
+
         builder
             .Append(' ', indentation)
             .Append(key)
             .Append(": '")
             .Append(value.Replace("'", "''", StringComparison.Ordinal))
             .AppendLine("'");
+    }
 
     private static void NullableLine(StringBuilder builder, int indentation, string key, string? value)
     {
@@ -888,10 +1022,45 @@ internal static class ManifestStore
         }
         builder.Append(' ', indentation).Append(key).AppendLine(":");
         foreach (string value in array)
-            builder
-                .Append(' ', indentation + 2)
-                .Append("- '")
-                .Append(value.Replace("'", "''", StringComparison.Ordinal))
-                .AppendLine("'");
+        {
+            if (value.Contains('\n', StringComparison.Ordinal))
+            {
+                BlockSequenceScalar(builder, indentation + 2, value);
+            }
+            else
+            {
+                builder
+                    .Append(' ', indentation + 2)
+                    .Append("- '")
+                    .Append(value.Replace("'", "''", StringComparison.Ordinal))
+                    .AppendLine("'");
+            }
+        }
+    }
+
+    private static void BlockSequenceScalar(StringBuilder builder, int indentation, string value)
+    {
+        if (value.Contains('\r', StringComparison.Ordinal))
+        {
+            throw new AssetCtlException("sequence item: expected canonical LF line endings.", 2);
+        }
+
+        int trailingLineFeeds = value.Length - value.TrimEnd('\n').Length;
+        string chomping = trailingLineFeeds switch
+        {
+            0 => "|-",
+            1 => "|",
+            _ => "|+",
+        };
+        builder.Append(' ', indentation).Append("- ").AppendLine(chomping);
+        string content = trailingLineFeeds == 0 ? value : value[..^trailingLineFeeds];
+        foreach (string line in content.Split('\n'))
+        {
+            builder.Append(' ', indentation + 2).AppendLine(line);
+        }
+        for (int index = 1; index < trailingLineFeeds; index++)
+        {
+            builder.AppendLine();
+        }
     }
 }

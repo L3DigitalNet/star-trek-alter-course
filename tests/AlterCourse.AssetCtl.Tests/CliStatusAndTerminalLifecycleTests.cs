@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Reflection;
 using System.Text.Json;
 
@@ -57,6 +58,30 @@ public sealed class CliStatusAndTerminalLifecycleTests : IDisposable
         Assert.Equal(deprecated.Revision, ManifestStore.Load(configuration, deprecated.ManifestPath).Revision);
     }
 
+    /// <summary>Records deprecation provenance without rewriting pre-existing approval evidence.</summary>
+    [Fact]
+    public void DeprecatePreservesApprovalEvidenceAndWritesSeparateProvenance()
+    {
+        EffectiveConfiguration configuration = Configuration();
+        var approval = new ApprovalRecord(null, null, "review note retained");
+        AssetManifest candidate = Manifest("candidate", AssetLifecycle.Candidate, "development", null) with
+        {
+            Approval = approval,
+        };
+        WriteManifest(candidate);
+
+        _ = Invoke(
+            "Deprecate",
+            configuration,
+            CliOptions.Parse(["--asset-id", candidate.Request.Id, "--actor", "operator", "--reason", "superseded"])
+        );
+
+        AssetManifest deprecated = ManifestStore.Load(configuration, candidate.ManifestPath);
+        Assert.Equal(approval, deprecated.Approval);
+        Assert.Equal("operator", deprecated.Deprecation!.Actor);
+        Assert.Equal("superseded", deprecated.Deprecation.Reason);
+    }
+
     /// <summary>Keeps the complete nine-command CLI contract in deterministic help order.</summary>
     [Fact]
     public void UsageListsAllNineCommandsInStableOrder()
@@ -93,6 +118,7 @@ public sealed class CliStatusAndTerminalLifecycleTests : IDisposable
             new Dictionary<string, QualityTier>(StringComparer.Ordinal)
             {
                 ["development"] = new QualityTier("development", 1, 1, "disabled", true, 0),
+                ["disabled"] = new QualityTier("disabled", 1, 1, "disabled", true, 0),
                 ["production-candidate"] = new QualityTier("production-candidate", 1, 1, "required", false, 0.8),
                 ["required"] = new QualityTier("required", 1, 1, "required", false, 0.8),
             },
@@ -139,7 +165,14 @@ public sealed class CliStatusAndTerminalLifecycleTests : IDisposable
             null,
             new ApprovalRecord(null, null, null),
             null,
-            $"catalog/ui.test.{name}.asset.yaml"
+            $"catalog/ui.test.{name}.asset.yaml",
+            lifecycle == AssetLifecycle.Deprecated
+                ? new DeprecationRecord(
+                    "operator",
+                    DateTimeOffset.Parse("2026-09-01T00:00:00Z", CultureInfo.InvariantCulture),
+                    "retired"
+                )
+                : null
         );
 
     private static SemanticReviewResult PassingReview() =>

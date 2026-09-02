@@ -52,6 +52,35 @@ public sealed class ConfigurationContractTests
         }
     }
 
+    /// <summary>Rejects unknown manifest quality tiers and kinds with path-specific usage errors.</summary>
+    [Theory]
+    [InlineData("quality_tier", "quality_tier: 'development'", "quality_tier: 'typo-tier'")]
+    [InlineData("kind", "kind: 'icon'", "kind: 'free-form-kind'")]
+    public void ManifestRejectsUnknownClosedVocabulary(string field, string current, string invalid)
+    {
+        EffectiveConfiguration configuration = ManifestOnlyConfiguration();
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(configuration.RepositoryRoot, "catalog"));
+            AssetManifest manifest = ManifestOnlyManifest();
+            File.WriteAllText(
+                Path.Combine(configuration.RepositoryRoot, manifest.ManifestPath),
+                ManifestStore.Serialize(manifest).Replace(current, invalid, StringComparison.Ordinal)
+            );
+
+            AssetCtlException exception = Assert.Throws<AssetCtlException>(() =>
+                ManifestStore.Load(configuration, manifest.ManifestPath)
+            );
+
+            Assert.Equal(2, exception.ExitCode);
+            Assert.Contains($"manifest.{field}", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(configuration.RepositoryRoot, recursive: true);
+        }
+    }
+
     private static EffectiveConfiguration ManifestOnlyConfiguration()
     {
         string root = Path.Combine(Path.GetTempPath(), $"assetctl-manifest-only-{Guid.NewGuid():N}");
@@ -65,8 +94,14 @@ public sealed class ConfigurationContractTests
             new Dictionary<string, ProviderInstance>(StringComparer.Ordinal),
             [],
             [],
-            new Dictionary<string, QualityTier>(StringComparer.Ordinal),
-            new Dictionary<string, StyleProfile>(StringComparer.Ordinal),
+            new Dictionary<string, QualityTier>(StringComparer.Ordinal)
+            {
+                ["development"] = new QualityTier("development", 1, 1, "disabled", true, 0),
+            },
+            new Dictionary<string, StyleProfile>(StringComparer.Ordinal)
+            {
+                ["engineering-icons"] = new StyleProfile("engineering-icons", "test", [], []),
+            },
             new Dictionary<string, string>(StringComparer.Ordinal),
             "hash"
         );

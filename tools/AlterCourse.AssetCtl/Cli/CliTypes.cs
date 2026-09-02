@@ -590,10 +590,7 @@ internal static class CliTypes
             {
                 Revision = manifest.Revision + 1,
                 Request = manifest.Request with { Lifecycle = AssetLifecycle.Deprecated },
-                Approval = manifest.Approval with
-                {
-                    ApprovalNote = $"{manifest.Approval.ApprovalNote} Deprecated by {actor}: {reason}".Trim(),
-                },
+                Deprecation = new DeprecationRecord(actor, DateTimeOffset.UtcNow, reason),
             };
             if (options.Flag("dry-run"))
             {
@@ -622,7 +619,7 @@ internal static class CliTypes
             string? manifestPath = options.Value("manifest");
             if (manifestPath is not null)
             {
-                return ManifestStore.Load(configuration, manifestPath);
+                return ManifestStore.LoadCatalogEntry(configuration, manifestPath);
             }
 
             string id = options.Required("asset-id");

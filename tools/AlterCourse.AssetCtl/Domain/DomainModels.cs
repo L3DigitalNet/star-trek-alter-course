@@ -98,6 +98,8 @@ internal static class DomainModels
 
     public sealed record ApprovalRecord(string? ApprovedBy, DateTimeOffset? ApprovedAt, string? ApprovalNote);
 
+    public sealed record DeprecationRecord(string Actor, DateTimeOffset DeprecatedAt, string Reason);
+
     public sealed record AssetRequest(
         string Id,
         AssetLifecycle Lifecycle,
@@ -186,7 +188,8 @@ internal static class DomainModels
         IntegrityRecord? Integrity,
         ApprovalRecord Approval,
         string? Supersedes,
-        string ManifestPath
+        string ManifestPath,
+        DeprecationRecord? Deprecation = null
     );
 
     public sealed record GeneratedCandidate(

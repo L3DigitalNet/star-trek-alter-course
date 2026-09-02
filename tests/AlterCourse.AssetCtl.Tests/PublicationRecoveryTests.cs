@@ -42,6 +42,8 @@ public sealed class PublicationRecoveryTests : IDisposable
         EffectiveConfiguration configuration = Configuration();
         byte[] bytes = "first-asset"u8.ToArray();
         AssetManifest manifest = Manifest(bytes, revision: 1);
+        AssetManifest request = manifest with { Integrity = null };
+        File.WriteAllText(Path.Combine(root, request.ManifestPath), ManifestStore.Serialize(request));
 
         AtomicPublisher.PublicationResult result = AtomicPublisher.Publish(
             configuration,
@@ -79,6 +81,62 @@ public sealed class PublicationRecoveryTests : IDisposable
 
         Assert.True(result.Published);
         AssertPair(bytes, generated);
+    }
+
+    /// <summary>Repairs a deleted output only when the surviving manifest still owns the output.</summary>
+    [Fact]
+    public void DeletedPublishedOutputCanBeRegeneratedFromItsOwningManifest()
+    {
+        EffectiveConfiguration configuration = Configuration();
+        byte[] oldBytes = "old-asset"u8.ToArray();
+        AssetManifest oldManifest = Manifest(oldBytes, revision: 1);
+        File.WriteAllText(Path.Combine(root, oldManifest.ManifestPath), ManifestStore.Serialize(oldManifest));
+        byte[] newBytes = "regenerated-asset"u8.ToArray();
+        AssetManifest replacement = Manifest(newBytes, revision: 2);
+
+        AtomicPublisher.Publish(
+            configuration,
+            replacement.Request.Output.Path,
+            newBytes,
+            replacement.ManifestPath,
+            ManifestStore.Serialize(replacement)
+        );
+
+        AssertPair(newBytes, replacement);
+    }
+
+    /// <summary>Refuses output ownership collisions before changing approved victim bytes.</summary>
+    [Fact]
+    public void PublicationRejectsCatalogCollisionWithoutChangingApprovedVictim()
+    {
+        EffectiveConfiguration configuration = Configuration();
+        byte[] victimBytes = "approved-victim"u8.ToArray();
+        AssetManifest victim = Manifest(victimBytes, 1, "victim") with
+        {
+            Request = Manifest(victimBytes, 1, "victim").Request with { Lifecycle = AssetLifecycle.Approved },
+            Approval = new ApprovalRecord("owner", DateTimeOffset.UtcNow, "approved"),
+        };
+        File.WriteAllBytes(Path.Combine(root, victim.Request.Output.Path), victimBytes);
+        File.WriteAllText(Path.Combine(root, victim.ManifestPath), ManifestStore.Serialize(victim));
+        byte[] attackerBytes = "attacker"u8.ToArray();
+        AssetManifest attacker = Manifest(attackerBytes, 1, "attacker") with
+        {
+            Request = Manifest(attackerBytes, 1, "attacker").Request with { Output = victim.Request.Output },
+        };
+        File.WriteAllText(Path.Combine(root, attacker.ManifestPath), ManifestStore.Serialize(attacker));
+
+        AssetCtlException exception = Assert.Throws<AssetCtlException>(() =>
+            AtomicPublisher.Publish(
+                configuration,
+                attacker.Request.Output.Path,
+                attackerBytes,
+                attacker.ManifestPath,
+                ManifestStore.Serialize(attacker)
+            )
+        );
+
+        Assert.Equal(2, exception.ExitCode);
+        Assert.Equal(victimBytes, File.ReadAllBytes(Path.Combine(root, victim.Request.Output.Path)));
     }
 
     /// <summary>Restores the authoritative manifest-only request when a first-publication move fails.</summary>
@@ -185,7 +243,7 @@ public sealed class PublicationRecoveryTests : IDisposable
             )
         );
 
-        Assert.Contains("complete publish pair", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("manifest path", exception.Message, StringComparison.Ordinal);
     }
 
     /// <summary>Rejects a manifest-only state whose identity does not authorize the requested output.</summary>
@@ -207,7 +265,7 @@ public sealed class PublicationRecoveryTests : IDisposable
             )
         );
 
-        Assert.Contains("authoritative manifest", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("not owned", exception.Message, StringComparison.Ordinal);
     }
 
     /// <summary>Rolls back the old pair when any individual live-file move fails.</summary>
@@ -303,6 +361,14 @@ public sealed class PublicationRecoveryTests : IDisposable
         byte[] secondBytes = "second-new"u8.ToArray();
         AssetManifest first = Manifest(firstBytes, 1, "first");
         AssetManifest second = Manifest(secondBytes, 1, "second");
+        await File.WriteAllTextAsync(
+            Path.Combine(root, first.ManifestPath),
+            ManifestStore.Serialize(first with { Integrity = null })
+        );
+        await File.WriteAllTextAsync(
+            Path.Combine(root, second.ManifestPath),
+            ManifestStore.Serialize(second with { Integrity = null })
+        );
 
         Task firstPublish = Task.Run(() =>
             AtomicPublisher.Publish(
@@ -414,7 +480,10 @@ public sealed class PublicationRecoveryTests : IDisposable
             new Dictionary<string, ProviderInstance>(StringComparer.Ordinal),
             [],
             [],
-            new Dictionary<string, QualityTier>(StringComparer.Ordinal),
+            new Dictionary<string, QualityTier>(StringComparer.Ordinal)
+            {
+                ["development"] = new QualityTier("development", 1, 1, "disabled", true, 0),
+            },
             new Dictionary<string, StyleProfile>(StringComparer.Ordinal)
             {
                 ["engineering-icons"] = new StyleProfile("engineering-icons", "test", [], []),

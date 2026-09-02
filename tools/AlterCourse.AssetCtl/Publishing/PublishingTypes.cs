@@ -24,10 +24,7 @@ internal static class PublishingTypes
             );
             string lockRoot = Path.Combine(stateRoot, "locks");
             Directory.CreateDirectory(lockRoot);
-            string safeId = string.Concat(
-                assetId.Select(character => char.IsAsciiLetterOrDigit(character) ? character : '_')
-            );
-            string path = Path.Combine(lockRoot, safeId + ".lock");
+            string path = Path.Combine(lockRoot, "catalog.lock");
             FileStream lockStream;
             try
             {
@@ -35,7 +32,7 @@ internal static class PublishingTypes
             }
             catch (IOException)
             {
-                throw new AssetCtlException($"Asset '{assetId}' is locked by another process.", 7);
+                throw new AssetCtlException($"Asset catalog is locked while '{assetId}' waits to mutate.", 7);
             }
 
             lockStream.SetLength(0);
@@ -44,6 +41,15 @@ internal static class PublishingTypes
                 new { process_id = Environment.ProcessId, acquired_at = DateTimeOffset.UtcNow }
             );
             lockStream.Flush(flushToDisk: true);
+            try
+            {
+                ManifestStore.LoadAll(configuration);
+            }
+            catch
+            {
+                lockStream.Dispose();
+                throw;
+            }
             return new AssetLock(lockStream);
         }
 
@@ -98,6 +104,7 @@ internal static class PublishingTypes
             PublicationTestHooks? testHooks
         )
         {
+            ManifestStore.ValidatePublicationOwnership(configuration, manifestRelativePath, assetRelativePath);
             PublicationRecoveryResult recovery = RecoverPending(configuration);
             using PreparedPublication publication = PreparePublication(
                 configuration,
@@ -204,7 +211,7 @@ internal static class PublishingTypes
 
             if (!assetExisted && manifestExisted)
             {
-                ValidateManifestOnlyInitialState(
+                ValidateManifestOnlyOrRepairState(
                     configuration,
                     assetRelativePath,
                     manifestRelativePath,
@@ -215,7 +222,7 @@ internal static class PublishingTypes
             return (assetExisted, manifestExisted);
         }
 
-        private static void ValidateManifestOnlyInitialState(
+        private static void ValidateManifestOnlyOrRepairState(
             EffectiveConfiguration configuration,
             string assetRelativePath,
             string manifestRelativePath,
@@ -227,14 +234,13 @@ internal static class PublishingTypes
             string stagedId = staged.Scalar("id", "manifest");
             string stagedOutput = staged.Mapping("output", "manifest").Scalar("path", "manifest.output");
             if (
-                existing.Integrity is not null
-                || !string.Equals(existing.Request.Id, stagedId, StringComparison.Ordinal)
+                !string.Equals(existing.Request.Id, stagedId, StringComparison.Ordinal)
                 || !string.Equals(existing.Request.Output.Path, assetRelativePath, StringComparison.Ordinal)
                 || !string.Equals(stagedOutput, assetRelativePath, StringComparison.Ordinal)
             )
             {
                 throw new AssetCtlException(
-                    "Existing manifest is not an authoritative manifest-only request for this output.",
+                    "Existing manifest does not authorize publication or repair of this output.",
                     7
                 );
             }

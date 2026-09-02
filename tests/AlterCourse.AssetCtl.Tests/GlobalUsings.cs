@@ -16,6 +16,7 @@ global using AtomicPublisher = AlterCourse.AssetCtl.Publishing.PublishingTypes.A
 global using CandidateSelector = AlterCourse.AssetCtl.Generation.PromptCompiler.CandidateSelector;
 global using CliOptions = AlterCourse.AssetCtl.Cli.CliTypes.CliOptions;
 global using ConfigurationLoader = AlterCourse.AssetCtl.Configuration.ConfigurationTypes.ConfigurationLoader;
+global using DeprecationRecord = AlterCourse.AssetCtl.Domain.DomainModels.DeprecationRecord;
 global using EffectiveConfiguration = AlterCourse.AssetCtl.Domain.DomainModels.EffectiveConfiguration;
 global using GeneratedCandidate = AlterCourse.AssetCtl.Domain.DomainModels.GeneratedCandidate;
 global using GenerationBatchResult = AlterCourse.AssetCtl.Domain.DomainModels.GenerationBatchResult;

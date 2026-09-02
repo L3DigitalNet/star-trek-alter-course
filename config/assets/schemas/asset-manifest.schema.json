@@ -64,6 +64,21 @@
 		"validation": { "type": ["object", "null"] },
 		"integrity": { "type": ["object", "null"] },
 		"approval": { "type": "object" },
+		"deprecation": {
+			"oneOf": [
+				{ "type": "null" },
+				{
+					"type": "object",
+					"additionalProperties": false,
+					"required": ["actor", "deprecated_at", "reason"],
+					"properties": {
+						"actor": { "type": "string", "minLength": 1 },
+						"deprecated_at": { "type": "string", "format": "date-time" },
+						"reason": { "type": "string", "minLength": 1 }
+					}
+				}
+			]
+		},
 		"supersedes": { "type": ["string", "null"] }
 	},
 	"$defs": {

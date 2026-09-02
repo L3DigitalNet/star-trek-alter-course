@@ -88,7 +88,10 @@ public sealed class PublishingAndBoundaryTests
             new Dictionary<string, ProviderInstance>(StringComparer.Ordinal),
             [],
             [],
-            new Dictionary<string, QualityTier>(StringComparer.Ordinal),
+            new Dictionary<string, QualityTier>(StringComparer.Ordinal)
+            {
+                ["development"] = new QualityTier("development", 1, 1, "disabled", true, 0),
+            },
             new Dictionary<string, StyleProfile>(StringComparer.Ordinal)
             {
                 ["engineering-icons"] = new StyleProfile("engineering-icons", "test", [], []),

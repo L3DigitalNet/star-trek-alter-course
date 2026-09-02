@@ -132,6 +132,109 @@ public sealed class ManifestRoundTripTests : IDisposable
         Assert.Equal(ConfigurationLoader.Hash(actual.Generation.FinalPrompt), actual.Generation.PromptSha256);
     }
 
+    /// <summary>Preserves authored multiline request and rights fields without YAML folding or injection.</summary>
+    [Fact]
+    public void SerializationRoundTripsAllAuthoredMultilineScalars()
+    {
+        EffectiveConfiguration configuration = Configuration();
+        AssetManifest expected = Manifest() with
+        {
+            Request = Manifest().Request with
+            {
+                Purpose = "First line\nsecond: line # literal",
+                Required = ["alpha\nbeta: literal"],
+                Prohibited = ["gamma\ndelta # literal"],
+            },
+            Rights = Manifest().Rights with { Notes = "rights line one\nrights: line two" },
+        };
+        WriteManifest(expected);
+
+        AssetManifest actual = ManifestStore.Load(configuration, expected.ManifestPath);
+
+        Assert.Equal(expected.Request.Purpose, actual.Request.Purpose);
+        Assert.Equal(expected.Request.Required, actual.Request.Required);
+        Assert.Equal(expected.Request.Prohibited, actual.Request.Prohibited);
+        Assert.Equal(expected.Rights.Notes, actual.Rights.Notes);
+    }
+
+    /// <summary>Keeps deprecation evidence separate from immutable approval evidence.</summary>
+    [Fact]
+    public void SerializationRoundTripsStructuredDeprecationWithoutChangingApproval()
+    {
+        EffectiveConfiguration configuration = Configuration();
+        var approval = new ApprovalRecord(
+            "owner",
+            DateTimeOffset.Parse("2026-08-01T10:00:00Z", CultureInfo.InvariantCulture),
+            "approved"
+        );
+        var deprecation = new DeprecationRecord(
+            "maintainer",
+            DateTimeOffset.Parse("2026-09-01T10:00:00Z", CultureInfo.InvariantCulture),
+            "superseded"
+        );
+        AssetManifest expected = Manifest() with
+        {
+            Request = Manifest().Request with { Lifecycle = AssetLifecycle.Deprecated },
+            Approval = approval,
+            Deprecation = deprecation,
+        };
+        WriteManifest(expected);
+
+        AssetManifest actual = ManifestStore.Load(configuration, expected.ManifestPath);
+
+        Assert.Equal(approval, actual.Approval);
+        Assert.Equal(deprecation, actual.Deprecation);
+    }
+
+    /// <summary>Normalizes malformed numeric and timestamp scalars to path-specific usage failures.</summary>
+    [Theory]
+    [InlineData("- '16'", "- 'not-an-integer'", "manifest.output.target_display_sizes")]
+    [InlineData(
+        "generated_at: '2026-09-01T12:34:56.0000000+00:00'",
+        "generated_at: 'invalid'",
+        "manifest.generation.generated_at"
+    )]
+    [InlineData("estimated_cost_usd: 0.42", "estimated_cost_usd: invalid", "manifest.generation.estimated_cost_usd")]
+    [InlineData("actual_cost_usd: 0.39", "actual_cost_usd: invalid", "manifest.generation.actual_cost_usd")]
+    [InlineData(
+        "approved_at: '2026-08-01T10:00:00.0000000+00:00'",
+        "approved_at: 'invalid'",
+        "manifest.approval.approved_at"
+    )]
+    [InlineData(
+        "deprecated_at: '2026-09-01T10:00:00.0000000+00:00'",
+        "deprecated_at: 'invalid'",
+        "manifest.deprecation.deprecated_at"
+    )]
+    public void MalformedManifestScalarsReturnUsageErrors(string current, string invalid, string path)
+    {
+        EffectiveConfiguration configuration = Configuration();
+        AssetManifest manifest = ManifestWithProvenance() with
+        {
+            Request = ManifestWithProvenance().Request with { Lifecycle = AssetLifecycle.Deprecated },
+            Approval = new ApprovalRecord(
+                "owner",
+                DateTimeOffset.Parse("2026-08-01T10:00:00Z", CultureInfo.InvariantCulture),
+                "approved"
+            ),
+            Deprecation = new DeprecationRecord(
+                "maintainer",
+                DateTimeOffset.Parse("2026-09-01T10:00:00Z", CultureInfo.InvariantCulture),
+                "superseded"
+            ),
+        };
+        string serialized = ManifestStore.Serialize(manifest).Replace(current, invalid, StringComparison.Ordinal);
+        Assert.DoesNotContain(current, serialized, StringComparison.Ordinal);
+        File.WriteAllText(Path.Combine(root, manifest.ManifestPath), serialized);
+
+        AssetCtlException exception = Assert.Throws<AssetCtlException>(() =>
+            ManifestStore.Load(configuration, manifest.ManifestPath)
+        );
+
+        Assert.Equal(2, exception.ExitCode);
+        Assert.Contains(path, exception.Message, StringComparison.Ordinal);
+    }
+
     /// <summary>Rejects noncanonical prompt line endings instead of changing hash-bearing provenance bytes.</summary>
     [Fact]
     public void SerializationRejectsCarriageReturnsInFinalPrompt()
@@ -257,7 +360,11 @@ public sealed class ManifestRoundTripTests : IDisposable
             new Dictionary<string, ProviderInstance>(StringComparer.Ordinal),
             [],
             [],
-            new Dictionary<string, QualityTier>(StringComparer.Ordinal),
+            new Dictionary<string, QualityTier>(StringComparer.Ordinal)
+            {
+                ["development"] = new QualityTier("development", 1, 1, "disabled", true, 0),
+                ["bespoke-preview"] = new QualityTier("bespoke-preview", 1, 1, "disabled", true, 0),
+            },
             new Dictionary<string, StyleProfile>(StringComparer.Ordinal)
             {
                 ["engineering-icons"] = new StyleProfile("engineering-icons", "test", [], []),
