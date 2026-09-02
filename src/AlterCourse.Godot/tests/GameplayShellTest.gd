@@ -437,6 +437,30 @@ func test_connected_destination_submits_travel_and_refreshes_visible_state() -> 
 	assert_str(screen.get_node("%TravelStatus").text).contains("Dawn Anchor → Vesper Reach")
 
 
+func test_destination_selection_projects_one_authoritative_pressed_state() -> void:
+	var screen := _create_screen()
+	_assert_destination_button_state(screen, "")
+
+	var vesper := _find_destination_button(screen, "Vesper Reach")
+	vesper.button_pressed = true
+	vesper.emit_signal("pressed")
+	_assert_destination_button_state(screen, "Vesper Reach")
+
+	var meridian := _find_destination_button(screen, "Meridian Drift")
+	meridian.button_pressed = true
+	meridian.emit_signal("pressed")
+	_assert_destination_button_state(screen, "Meridian Drift")
+
+	screen.call("SelectDestination", "vesper-reach")
+	_assert_destination_button_state(screen, "Vesper Reach")
+	screen.call("RequestSelectedTravel")
+	_assert_destination_button_state(screen, "Vesper Reach")
+
+	screen.call("AdvanceUntilNextPlayerRelevantEvent")
+	screen.call("AdvanceUntilNextPlayerRelevantEvent")
+	_assert_destination_button_state(screen, "")
+
+
 func test_time_driven_arrival_refreshes_connected_destination_buttons() -> void:
 	var screen := _create_screen()
 	screen.call("SelectDestination", "vesper-reach")
@@ -571,6 +595,17 @@ func _find_destination_button(screen: Node, display_name: String) -> Button:
 		if child is Button and child.text == display_name:
 			return child
 	return null
+
+
+func _assert_destination_button_state(screen: Node, expected_pressed: String) -> void:
+	var pressed: Array[String] = []
+	for child in screen.get_node("%DestinationButtons").get_children():
+		if child is Button and child.button_pressed:
+			pressed.append(child.text)
+	if expected_pressed.is_empty():
+		assert_array(pressed).is_empty()
+	else:
+		assert_array(pressed).contains_exactly([expected_pressed])
 
 
 func _copy_file(source_user_path: String, destination_user_path: String) -> void:

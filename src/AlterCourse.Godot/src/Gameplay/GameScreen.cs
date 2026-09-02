@@ -31,6 +31,7 @@ public partial class GameScreen : Control
     private static readonly double[] RunningRates = [0.5, 1, 2, 4];
 
     private readonly SimulationRateController _rateController = new();
+    private readonly Dictionary<LocationId, Button> _destinationButtonByLocation = [];
     private GameSimulation? _simulation;
     private ShipDefinitionCatalog? _shipCatalog;
     private PlayerProjection? _projection;
@@ -588,6 +589,7 @@ public partial class GameScreen : Control
 
         _selectedDestination = destination;
         SetMeta("selected_destination", destination.Value);
+        UpdateDestinationButtonStates();
         _strategicMap.Present(_projection.Strategic, destination);
         bool available =
             IsConnectedDestination(destination) && _projection.AvailableActions.Contains(PlayerAction.Travel);
@@ -677,6 +679,7 @@ public partial class GameScreen : Control
 
     private void BuildDestinationButtons()
     {
+        _destinationButtonByLocation.Clear();
         foreach (Node child in _destinationButtons.GetChildren())
         {
             _destinationButtons.RemoveChild(child);
@@ -702,9 +705,18 @@ public partial class GameScreen : Control
             LocationId destination = location.Id;
             button.Pressed += () => OnDestinationSelected(destination);
             _destinationButtons.AddChild(button);
+            _destinationButtonByLocation.Add(destination, button);
         }
 
         UpdateFocusTraversal();
+    }
+
+    private void UpdateDestinationButtonStates()
+    {
+        foreach ((LocationId location, Button button) in _destinationButtonByLocation)
+        {
+            button.ButtonPressed = location == _selectedDestination;
+        }
     }
 
     private void SetGameplayEnabled(bool enabled)
