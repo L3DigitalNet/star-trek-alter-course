@@ -24,6 +24,18 @@ require_property Nullable enable
 require_property TreatWarningsAsErrors true
 require_property EnforceCodeStyleInBuild true
 require_property AnalysisLevel latest-recommended
+require_property LangVersion 12.0
+
+godot_project_guid="$(sed -n 's/^Project(.*) = "AlterCourse.Godot", ".*", "\({[^\"]*}\)"$/\1/p' AlterCourse.sln)"
+readonly godot_project_guid
+if [[ -z "${godot_project_guid}" ]]; then
+  printf 'AlterCourse.Godot is missing from AlterCourse.sln.\n' >&2
+  exit 1
+fi
+if grep -F "${godot_project_guid}.Release|" AlterCourse.sln | grep -Fq '= Debug|'; then
+  printf 'AlterCourse.Godot Release solution configurations must map to Release.\n' >&2
+  exit 1
+fi
 
 mapfile -d '' owned_files < <(
   git ls-files --cached --others --exclude-standard -z -- \

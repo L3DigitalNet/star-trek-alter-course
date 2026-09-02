@@ -2,10 +2,10 @@ namespace AlterCourse.AssetCtl.Generation;
 
 internal sealed class SpendGuard
 {
-    private readonly SpendingLimits limits;
-    private readonly string unknownPricePolicy;
-    private readonly ISpendLedger ledger;
-    private readonly Func<DateOnly> today;
+    private readonly SpendingLimits _limits;
+    private readonly string _unknownPricePolicy;
+    private readonly ISpendLedger _ledger;
+    private readonly Func<DateOnly> _today;
 
     public SpendGuard(EffectiveConfiguration configuration)
         : this(
@@ -17,10 +17,10 @@ internal sealed class SpendGuard
 
     internal SpendGuard(SpendingLimits limits, string unknownPricePolicy, ISpendLedger ledger, Func<DateOnly> today)
     {
-        this.limits = limits;
-        this.unknownPricePolicy = unknownPricePolicy;
-        this.ledger = ledger;
-        this.today = today;
+        _limits = limits;
+        _unknownPricePolicy = unknownPricePolicy;
+        _ledger = ledger;
+        _today = today;
     }
 
     public decimal TotalReservedUsd { get; private set; }
@@ -29,7 +29,7 @@ internal sealed class SpendGuard
     {
         if (estimatedCostPerOutput is null)
         {
-            if (string.Equals(unknownPricePolicy, "reject", StringComparison.Ordinal))
+            if (string.Equals(_unknownPricePolicy, "reject", StringComparison.Ordinal))
             {
                 throw new AssetCtlException($"{operation}: cost is unknown and policy rejects unbounded spend.", 6);
             }
@@ -44,13 +44,13 @@ internal sealed class SpendGuard
 
         decimal amount = estimatedCostPerOutput.Value * outputs;
         decimal next = TotalReservedUsd + amount;
-        if (amount > limits.PerAssetUsd || next > limits.PerAssetUsd || next > limits.PerRunUsd)
+        if (amount > _limits.PerAssetUsd || next > _limits.PerAssetUsd || next > _limits.PerRunUsd)
         {
             throw new AssetCtlException($"{operation}: per-asset or per-run spending limit would be exceeded.", 6);
         }
 
         // Reserve before the request: a timeout or malformed response can still represent a provider-side billable event.
-        ledger.Reserve(today(), amount, limits.PerDayUsd);
+        _ledger.Reserve(_today(), amount, _limits.PerDayUsd);
         TotalReservedUsd = next;
     }
 }

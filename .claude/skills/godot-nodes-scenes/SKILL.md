@@ -19,11 +19,15 @@ Use scenes for engine composition and presentation. `AlterCourse.Core`, not the 
 6. Prefer direct bounded ownership. Add an autoload only for a demonstrated engine-wide presentation/service lifetime, never as a speculative manager, global bus, or world-state repository.
 
 ```csharp
+namespace AlterCourse.Godot.Views;
+
+/// <summary>Instances contact projections as presentation-only scene children.</summary>
 public partial class TacticalView : Node2D
 {
     private readonly PackedScene _contactMarker =
         GD.Load<PackedScene>("res://views/ContactMarker.tscn");
 
+    /// <summary>Adds and presents one contact marker for the supplied Core projection.</summary>
     public ContactMarker AddProjectedContact(ContactProjection projection)
     {
         var marker = _contactMarker.Instantiate<ContactMarker>();
@@ -39,15 +43,20 @@ The `ContactProjection` comes from Core/application code. The marker does not be
 ## Lifecycle and access
 
 ```csharp
+namespace AlterCourse.Godot.Views;
+
+/// <summary>Owns scene-lifetime access to the bridge status presentation.</summary>
 public partial class BridgeView : Control
 {
     private Label _status = null!;
 
+    /// <inheritdoc />
     public override void _Ready()
     {
         _status = GetNode<Label>("%Status");
     }
 
+    /// <inheritdoc />
     public override void _ExitTree()
     {
         // Detach only subscriptions whose publisher outlives this view.

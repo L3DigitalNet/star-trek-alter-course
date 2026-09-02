@@ -347,11 +347,11 @@ public sealed class SecurityRegressionTests
 
     private sealed class TemporaryRepository : IDisposable
     {
-        private readonly byte[] bytes;
+        private readonly byte[] _bytes;
 
         public TemporaryRepository(byte[] bytes, bool semanticRequired = false)
         {
-            this.bytes = bytes;
+            _bytes = bytes;
             Root = Path.Combine(Path.GetTempPath(), "assetctl-security-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(Path.Combine(Root, "assets"));
             Directory.CreateDirectory(Path.Combine(Root, "catalog"));
@@ -435,11 +435,11 @@ public sealed class SecurityRegressionTests
                     64,
                     true,
                     [],
-                    bytes,
+                    _bytes,
                     new Dictionary<int, byte[]>()
                 ),
                 null,
-                new IntegrityRecord(Convert.ToHexStringLower(SHA256.HashData(bytes)), bytes.LongLength, "image/png"),
+                new IntegrityRecord(Convert.ToHexStringLower(SHA256.HashData(_bytes)), _bytes.LongLength, "image/png"),
                 new ApprovalRecord(null, null, null),
                 null,
                 "catalog/test.asset.yaml"

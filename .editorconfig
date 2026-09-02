@@ -17,6 +17,14 @@ trim_trailing_whitespace = false
 indent_size = 2
 indent_style = space
 
+[*.sh]
+indent_size = 2
+indent_style = space
+
+[.githooks/*]
+indent_size = 2
+indent_style = space
+
 [*.{cs,csx}]
 indent_size = 4
 indent_style = space
@@ -55,12 +63,34 @@ dotnet_naming_rule.interfaces_begin_with_i.style = begins_with_i
 dotnet_naming_rule.public_members_pascal_case.severity = error
 dotnet_naming_rule.public_members_pascal_case.symbols = public_members
 dotnet_naming_rule.public_members_pascal_case.style = pascal_case
+dotnet_naming_rule.private_instance_fields_underscore_camel_case.severity = error
+dotnet_naming_rule.private_instance_fields_underscore_camel_case.symbols = private_instance_fields
+dotnet_naming_rule.private_instance_fields_underscore_camel_case.style = underscore_camel_case
+dotnet_naming_rule.private_instance_fields_underscore_camel_case.priority = 1
+dotnet_naming_rule.private_constants_pascal_case.severity = error
+dotnet_naming_rule.private_constants_pascal_case.symbols = private_constants
+dotnet_naming_rule.private_constants_pascal_case.style = pascal_case
+dotnet_naming_rule.private_constants_pascal_case.priority = 0
+dotnet_naming_rule.private_static_readonly_fields_pascal_case.severity = error
+dotnet_naming_rule.private_static_readonly_fields_pascal_case.symbols = private_static_readonly_fields
+dotnet_naming_rule.private_static_readonly_fields_pascal_case.style = pascal_case
+dotnet_naming_rule.private_static_readonly_fields_pascal_case.priority = 0
 
 dotnet_naming_symbols.interfaces.applicable_kinds = interface
 dotnet_naming_symbols.interfaces.applicable_accessibilities = public, internal, private, protected, protected_internal, private_protected
 dotnet_naming_symbols.public_members.applicable_kinds = property, method, field, event
 dotnet_naming_symbols.public_members.applicable_accessibilities = public, protected, protected_internal
+dotnet_naming_symbols.private_instance_fields.applicable_kinds = field
+dotnet_naming_symbols.private_instance_fields.applicable_accessibilities = private
+dotnet_naming_symbols.private_constants.applicable_kinds = field
+dotnet_naming_symbols.private_constants.applicable_accessibilities = private
+dotnet_naming_symbols.private_constants.required_modifiers = const
+dotnet_naming_symbols.private_static_readonly_fields.applicable_kinds = field
+dotnet_naming_symbols.private_static_readonly_fields.applicable_accessibilities = private
+dotnet_naming_symbols.private_static_readonly_fields.required_modifiers = static, readonly
 
 dotnet_naming_style.begins_with_i.capitalization = pascal_case
 dotnet_naming_style.begins_with_i.required_prefix = I
 dotnet_naming_style.pascal_case.capitalization = pascal_case
+dotnet_naming_style.underscore_camel_case.capitalization = camel_case
+dotnet_naming_style.underscore_camel_case.required_prefix = _

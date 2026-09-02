@@ -14,21 +14,29 @@ Signals and groups must not replace Core commands, typed domain operations/event
 ## C# signals
 
 ```csharp
+namespace AlterCourse.Godot.Contacts;
+
+/// <summary>Presents one contact and emits scene-local selection intent.</summary>
 public partial class ContactMarker : Area2D
 {
+    /// <summary>Notifies listeners that this marker was selected.</summary>
     [Signal]
     public delegate void SelectedEventHandler(string contactId);
 
+    /// <summary>Gets the stable Core contact identifier represented by this marker.</summary>
     public string ContactId { get; private set; } = string.Empty;
 
+    /// <summary>Emits selection intent for this marker's contact.</summary>
     public void Select()
     {
         EmitSignal(SignalName.Selected, ContactId);
     }
 }
 
+/// <summary>Coordinates contact presentation and forwards typed application intent.</summary>
 public partial class TacticalView : Node2D
 {
+    /// <summary>Connects one owned marker to this view's selection handler.</summary>
     public void Attach(ContactMarker marker)
     {
         marker.Selected += OnMarkerSelected;

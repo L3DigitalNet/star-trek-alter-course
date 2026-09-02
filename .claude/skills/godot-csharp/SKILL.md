@@ -33,27 +33,35 @@ Before writing a Node, decide whether the behavior is simulation truth or engine
 using AlterCourse.Core.Navigation;
 using Godot;
 
+namespace AlterCourse.Godot.Navigation;
+
+/// <summary>Projects a Core route into the Godot scene and emits destination intent.</summary>
 public partial class CourseMarker : Node2D
 {
+    /// <summary>Gets or sets the scene path of the label that presents the route.</summary>
     [Export]
     public NodePath LabelPath { get; set; } = new("Label");
 
+    /// <summary>Notifies listeners that the player requested a destination.</summary>
     [Signal]
     public delegate void DestinationRequestedEventHandler(string destinationId);
 
     private Label _label = null!;
 
+    /// <inheritdoc />
     public override void _Ready()
     {
         _label = GetNode<Label>(LabelPath);
     }
 
+    /// <summary>Displays the supplied read-only route projection.</summary>
     public void Present(RouteProjection route)
     {
         _label.Text = route.DisplayName;
         Position = new Vector2(route.ScreenX, route.ScreenY);
     }
 
+    /// <summary>Emits destination intent without mutating authoritative route state.</summary>
     public void RequestDestination(string destinationId)
     {
         EmitSignal(SignalName.DestinationRequested, destinationId);
@@ -66,11 +74,15 @@ The node displays a projection and raises UI intent. It does not calculate route
 ## Signals, loading, and values
 
 ```csharp
+namespace AlterCourse.Godot.Contacts;
+
+/// <summary>Instances presentation-only contact markers beneath this overlay.</summary>
 public partial class Overlay : Control
 {
     private readonly PackedScene _contactScene =
         GD.Load<PackedScene>("res://ui/ContactMarker.tscn");
 
+    /// <summary>Adds a contact marker at the supplied screen position.</summary>
     public void AddContact(Vector2 screenPosition)
     {
         var marker = _contactScene.Instantiate<Node2D>();

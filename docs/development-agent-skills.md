@@ -69,10 +69,12 @@ Every adapted file carries a modified-from-upstream notice and links to the reta
 
 - makes C# the normal example language and retains dynamic GDScript only where addon or mixed-language interop requires it;
 - targets the repository-controlled Godot 4.7.2, `net8.0`, SDK 10.0.111, and GdUnit4 6.2.0 environment;
+- presents complete C# examples with file-scoped namespaces, documented public APIs, and the mechanically enforced `_camelCase` private-field convention;
+- distinguishes the installed xUnit and GdUnit4 test baseline from the CsCheck, GdUnit4Net, and ArchUnitNET tools selected by ADR 0009 for admission when qualifying needs appear;
 - routes authoritative simulation, domain state, space, time, scheduling, randomness, content, saves, AI, narrative consequences, and units to `AlterCourse.Core`;
 - constrains Nodes, scenes, transforms, Resources, signals, groups, UI, and lifecycle to engine/presentation roles;
 - removes generic advice for global game-state autoloads, global event buses, scene-tree persistence, ambient randomness, and GDScript-first implementation;
-- omits links to upstream skills that are not installed locally and avoids duplicating style rules already enforced by repository tooling.
+- omits links to upstream skills that are not installed locally and points agents at mechanically enforced conventions instead of creating competing style guidance.
 
 Practical material retained includes partial Godot object classes, lifecycle signatures, exports, signals/events, typed node lookup, Variant and collection boundaries, build behavior, PackedScene instancing, ownership, layout, containers, size flags, themes, focus, mouse filtering, signal flags, groups, and necessary interop.
 

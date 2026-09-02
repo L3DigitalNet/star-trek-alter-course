@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Run the canonical, read-only quality gate used by developers, agents, and CI.
-# Requirements: Git, .NET SDK 10.0.111, and the Linux x86_64 bootstrap tools
-# named by restore-native-tools.sh and resolve-godot.sh.
+# Requirements: Git, the repository Node major, and the Linux x86_64 bootstrap
+# tools named by restore-native-tools.sh, resolve-dotnet.sh, and resolve-godot.sh.
 
 set -euo pipefail
 
@@ -18,6 +18,7 @@ tracked_state() {
 
 before_state="$(tracked_state)"
 readonly before_state
+./scripts/check-node.sh
 dotnet_dir="$(./scripts/resolve-dotnet.sh)"
 readonly dotnet_dir
 tool_bin="$(./scripts/restore-native-tools.sh)"
@@ -47,7 +48,7 @@ dotnet tool restore
 dotnet restore AlterCourse.sln --locked-mode
 dotnet csharpier check .
 npx --yes prettier@3.9.6 --check -- "${structured_files[@]}"
-npx --yes markdownlint-cli2@0.23.1 "${markdown_files[@]}"
+npx --yes markdownlint-cli2@0.23.2 "${markdown_files[@]}"
 shfmt -d -i 2 -ci -sr .githooks/* scripts/*.sh
 shellcheck .githooks/* scripts/*.sh
 actionlint
@@ -61,6 +62,10 @@ dotnet test tests/AlterCourse.AssetCtl.Tests/AlterCourse.AssetCtl.Tests.csproj -
 dotnet run --project tools/AlterCourse.AssetCtl/AlterCourse.AssetCtl.csproj \
   -c Release --no-build --no-restore -- validate-config --offline --output json
 
+# Godot's editor runtime loads its Debug managed assembly. This explicit build
+# follows the solution-wide Release proof so the two configuration contracts
+# cannot be confused or silently remapped in AlterCourse.sln.
+dotnet build src/AlterCourse.Godot/AlterCourse.Godot.csproj -c Debug --no-restore --warnaserror
 "${godot_bin}" --headless --path "${godot_project}" --import
 "${godot_bin}" \
   --headless \

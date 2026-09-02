@@ -5,7 +5,7 @@ namespace AlterCourse.AssetCtl.Tests;
 /// <summary>Verifies publication staging, rollback, and interruption recovery as one paired-file transaction.</summary>
 public sealed class PublicationRecoveryTests : IDisposable
 {
-    private readonly string root = Path.Combine(
+    private readonly string _root = Path.Combine(
         Path.GetTempPath(),
         "assetctl-publication-recovery-" + Guid.NewGuid().ToString("N")
     );
@@ -43,7 +43,7 @@ public sealed class PublicationRecoveryTests : IDisposable
         byte[] bytes = "first-asset"u8.ToArray();
         AssetManifest manifest = Manifest(bytes, revision: 1);
         AssetManifest request = manifest with { Integrity = null };
-        File.WriteAllText(Path.Combine(root, request.ManifestPath), ManifestStore.Serialize(request));
+        File.WriteAllText(Path.Combine(_root, request.ManifestPath), ManifestStore.Serialize(request));
 
         AtomicPublisher.PublicationResult result = AtomicPublisher.Publish(
             configuration,
@@ -57,7 +57,7 @@ public sealed class PublicationRecoveryTests : IDisposable
         Assert.Equal("not-required", result.Rollback);
         AssertPair(bytes, manifest);
         Assert.Empty(
-            Directory.EnumerateFiles(Path.Combine(root, ".assetctl", "state"), "*.json", SearchOption.AllDirectories)
+            Directory.EnumerateFiles(Path.Combine(_root, ".assetctl", "state"), "*.json", SearchOption.AllDirectories)
         );
     }
 
@@ -67,13 +67,13 @@ public sealed class PublicationRecoveryTests : IDisposable
     {
         EffectiveConfiguration configuration = Configuration();
         string external = Path.Combine(Path.GetTempPath(), "assetctl-journal-external-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(Path.Combine(root, ".assetctl", "state"));
+        Directory.CreateDirectory(Path.Combine(_root, ".assetctl", "state"));
         Directory.CreateDirectory(external);
-        Directory.CreateSymbolicLink(Path.Combine(root, ".assetctl", "state", "publish-transactions"), external);
+        Directory.CreateSymbolicLink(Path.Combine(_root, ".assetctl", "state", "publish-transactions"), external);
         byte[] bytes = "first-asset"u8.ToArray();
         AssetManifest manifest = Manifest(bytes, revision: 1);
         File.WriteAllText(
-            Path.Combine(root, manifest.ManifestPath),
+            Path.Combine(_root, manifest.ManifestPath),
             ManifestStore.Serialize(manifest with { Integrity = null })
         );
         try
@@ -101,13 +101,13 @@ public sealed class PublicationRecoveryTests : IDisposable
     {
         EffectiveConfiguration configuration = Configuration();
         string external = Path.Combine(Path.GetTempPath(), "assetctl-publish-external-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(Path.Combine(root, ".assetctl", "work"));
+        Directory.CreateDirectory(Path.Combine(_root, ".assetctl", "work"));
         Directory.CreateDirectory(external);
-        Directory.CreateSymbolicLink(Path.Combine(root, ".assetctl", "work", "publish"), external);
+        Directory.CreateSymbolicLink(Path.Combine(_root, ".assetctl", "work", "publish"), external);
         byte[] bytes = "first-asset"u8.ToArray();
         AssetManifest manifest = Manifest(bytes, revision: 1);
         File.WriteAllText(
-            Path.Combine(root, manifest.ManifestPath),
+            Path.Combine(_root, manifest.ManifestPath),
             ManifestStore.Serialize(manifest with { Integrity = null })
         );
         try
@@ -142,7 +142,7 @@ public sealed class PublicationRecoveryTests : IDisposable
         byte[] bytes = "first-asset"u8.ToArray();
         AssetManifest manifest = Manifest(bytes, revision: 1);
         File.WriteAllText(
-            Path.Combine(root, manifest.ManifestPath),
+            Path.Combine(_root, manifest.ManifestPath),
             ManifestStore.Serialize(manifest with { Integrity = null })
         );
         string? displaced = null;
@@ -180,7 +180,7 @@ public sealed class PublicationRecoveryTests : IDisposable
     {
         EffectiveConfiguration configuration = Configuration();
         AssetManifest request = ManifestWithoutOutput();
-        File.WriteAllText(Path.Combine(root, request.ManifestPath), ManifestStore.Serialize(request));
+        File.WriteAllText(Path.Combine(_root, request.ManifestPath), ManifestStore.Serialize(request));
         byte[] bytes = "first-generated-asset"u8.ToArray();
         AssetManifest generated = Manifest(bytes, revision: request.Revision + 1);
 
@@ -203,7 +203,7 @@ public sealed class PublicationRecoveryTests : IDisposable
         EffectiveConfiguration configuration = Configuration();
         byte[] oldBytes = "old-asset"u8.ToArray();
         AssetManifest oldManifest = Manifest(oldBytes, revision: 1);
-        File.WriteAllText(Path.Combine(root, oldManifest.ManifestPath), ManifestStore.Serialize(oldManifest));
+        File.WriteAllText(Path.Combine(_root, oldManifest.ManifestPath), ManifestStore.Serialize(oldManifest));
         byte[] newBytes = "regenerated-asset"u8.ToArray();
         AssetManifest replacement = Manifest(newBytes, revision: 2);
 
@@ -229,14 +229,14 @@ public sealed class PublicationRecoveryTests : IDisposable
             Request = Manifest(victimBytes, 1, "victim").Request with { Lifecycle = AssetLifecycle.Approved },
             Approval = new ApprovalRecord("owner", DateTimeOffset.UtcNow, "approved"),
         };
-        File.WriteAllBytes(Path.Combine(root, victim.Request.Output.Path), victimBytes);
-        File.WriteAllText(Path.Combine(root, victim.ManifestPath), ManifestStore.Serialize(victim));
+        File.WriteAllBytes(Path.Combine(_root, victim.Request.Output.Path), victimBytes);
+        File.WriteAllText(Path.Combine(_root, victim.ManifestPath), ManifestStore.Serialize(victim));
         byte[] attackerBytes = "attacker"u8.ToArray();
         AssetManifest attacker = Manifest(attackerBytes, 1, "attacker") with
         {
             Request = Manifest(attackerBytes, 1, "attacker").Request with { Output = victim.Request.Output },
         };
-        File.WriteAllText(Path.Combine(root, attacker.ManifestPath), ManifestStore.Serialize(attacker));
+        File.WriteAllText(Path.Combine(_root, attacker.ManifestPath), ManifestStore.Serialize(attacker));
 
         AssetCtlException exception = Assert.Throws<AssetCtlException>(() =>
             AtomicPublisher.Publish(
@@ -249,7 +249,7 @@ public sealed class PublicationRecoveryTests : IDisposable
         );
 
         Assert.Equal(2, exception.ExitCode);
-        Assert.Equal(victimBytes, File.ReadAllBytes(Path.Combine(root, victim.Request.Output.Path)));
+        Assert.Equal(victimBytes, File.ReadAllBytes(Path.Combine(_root, victim.Request.Output.Path)));
     }
 
     /// <summary>Rejects alternate relative spellings of an approved output before publication changes either file.</summary>
@@ -265,8 +265,8 @@ public sealed class PublicationRecoveryTests : IDisposable
             Request = Manifest(victimBytes, 1, "victim").Request with { Lifecycle = AssetLifecycle.Approved },
             Approval = new ApprovalRecord("owner", DateTimeOffset.UtcNow, "approved"),
         };
-        string victimManifestPath = Path.Combine(root, victim.ManifestPath);
-        File.WriteAllBytes(Path.Combine(root, victim.Request.Output.Path), victimBytes);
+        string victimManifestPath = Path.Combine(_root, victim.ManifestPath);
+        File.WriteAllBytes(Path.Combine(_root, victim.Request.Output.Path), victimBytes);
         File.WriteAllText(victimManifestPath, ManifestStore.Serialize(victim));
         string victimManifestBefore = File.ReadAllText(victimManifestPath);
         byte[] attackerBytes = "attacker"u8.ToArray();
@@ -277,7 +277,7 @@ public sealed class PublicationRecoveryTests : IDisposable
                 Output = Manifest(attackerBytes, 1, "attacker").Request.Output with { Path = attackerPath },
             },
         };
-        File.WriteAllText(Path.Combine(root, attacker.ManifestPath), ManifestStore.Serialize(attacker));
+        File.WriteAllText(Path.Combine(_root, attacker.ManifestPath), ManifestStore.Serialize(attacker));
 
         Assert.Throws<AssetCtlException>(() =>
             AtomicPublisher.Publish(
@@ -289,7 +289,7 @@ public sealed class PublicationRecoveryTests : IDisposable
             )
         );
 
-        Assert.Equal(victimBytes, File.ReadAllBytes(Path.Combine(root, victim.Request.Output.Path)));
+        Assert.Equal(victimBytes, File.ReadAllBytes(Path.Combine(_root, victim.Request.Output.Path)));
         Assert.Equal(victimManifestBefore, File.ReadAllText(victimManifestPath));
     }
 
@@ -304,7 +304,7 @@ public sealed class PublicationRecoveryTests : IDisposable
         EffectiveConfiguration configuration = Configuration();
         AssetManifest request = ManifestWithoutOutput();
         string requestText = ManifestStore.Serialize(request);
-        File.WriteAllText(Path.Combine(root, request.ManifestPath), requestText);
+        File.WriteAllText(Path.Combine(_root, request.ManifestPath), requestText);
         byte[] bytes = "first-generated-asset"u8.ToArray();
         AssetManifest generated = Manifest(bytes, revision: request.Revision + 1);
 
@@ -325,8 +325,8 @@ public sealed class PublicationRecoveryTests : IDisposable
             )
         );
 
-        Assert.False(File.Exists(Path.Combine(root, request.Request.Output.Path)));
-        Assert.Equal(requestText, File.ReadAllText(Path.Combine(root, request.ManifestPath)));
+        Assert.False(File.Exists(Path.Combine(_root, request.Request.Output.Path)));
+        Assert.Equal(requestText, File.ReadAllText(Path.Combine(_root, request.ManifestPath)));
     }
 
     /// <summary>Recovers an interrupted first publication to its manifest-only request or complete new pair.</summary>
@@ -343,7 +343,7 @@ public sealed class PublicationRecoveryTests : IDisposable
         EffectiveConfiguration configuration = Configuration();
         AssetManifest request = ManifestWithoutOutput();
         string requestText = ManifestStore.Serialize(request);
-        File.WriteAllText(Path.Combine(root, request.ManifestPath), requestText);
+        File.WriteAllText(Path.Combine(_root, request.ManifestPath), requestText);
         byte[] bytes = "first-generated-asset"u8.ToArray();
         AssetManifest generated = Manifest(bytes, revision: request.Revision + 1);
 
@@ -373,8 +373,8 @@ public sealed class PublicationRecoveryTests : IDisposable
         }
         else
         {
-            Assert.False(File.Exists(Path.Combine(root, request.Request.Output.Path)));
-            Assert.Equal(requestText, File.ReadAllText(Path.Combine(root, request.ManifestPath)));
+            Assert.False(File.Exists(Path.Combine(_root, request.Request.Output.Path)));
+            Assert.Equal(requestText, File.ReadAllText(Path.Combine(_root, request.ManifestPath)));
         }
     }
 
@@ -385,7 +385,7 @@ public sealed class PublicationRecoveryTests : IDisposable
         EffectiveConfiguration configuration = Configuration();
         byte[] oldBytes = "orphaned-asset"u8.ToArray();
         AssetManifest generated = Manifest(oldBytes, revision: 2);
-        File.WriteAllBytes(Path.Combine(root, generated.Request.Output.Path), oldBytes);
+        File.WriteAllBytes(Path.Combine(_root, generated.Request.Output.Path), oldBytes);
 
         AssetCtlException exception = Assert.Throws<AssetCtlException>(() =>
             AtomicPublisher.Publish(
@@ -407,7 +407,7 @@ public sealed class PublicationRecoveryTests : IDisposable
         EffectiveConfiguration configuration = Configuration();
         AssetManifest unrelated = ManifestWithoutOutput("other");
         AssetManifest generated = Manifest("new"u8.ToArray(), revision: 2);
-        File.WriteAllText(Path.Combine(root, generated.ManifestPath), ManifestStore.Serialize(unrelated));
+        File.WriteAllText(Path.Combine(_root, generated.ManifestPath), ManifestStore.Serialize(unrelated));
 
         AssetCtlException exception = Assert.Throws<AssetCtlException>(() =>
             AtomicPublisher.Publish(
@@ -500,7 +500,7 @@ public sealed class PublicationRecoveryTests : IDisposable
             AssertPair(oldBytes, oldManifest);
         }
         Assert.Empty(
-            Directory.EnumerateFiles(Path.Combine(root, ".assetctl", "state"), "*.json", SearchOption.AllDirectories)
+            Directory.EnumerateFiles(Path.Combine(_root, ".assetctl", "state"), "*.json", SearchOption.AllDirectories)
         );
     }
 
@@ -516,11 +516,11 @@ public sealed class PublicationRecoveryTests : IDisposable
         AssetManifest first = Manifest(firstBytes, 1, "first");
         AssetManifest second = Manifest(secondBytes, 1, "second");
         await File.WriteAllTextAsync(
-            Path.Combine(root, first.ManifestPath),
+            Path.Combine(_root, first.ManifestPath),
             ManifestStore.Serialize(first with { Integrity = null })
         );
         await File.WriteAllTextAsync(
-            Path.Combine(root, second.ManifestPath),
+            Path.Combine(_root, second.ManifestPath),
             ManifestStore.Serialize(second with { Integrity = null })
         );
 
@@ -566,7 +566,7 @@ public sealed class PublicationRecoveryTests : IDisposable
     public void OversizedPublicationJournalIsQuarantined()
     {
         EffectiveConfiguration configuration = Configuration();
-        string journalRoot = Path.Combine(root, ".assetctl", "state", "publish-transactions");
+        string journalRoot = Path.Combine(_root, ".assetctl", "state", "publish-transactions");
         Directory.CreateDirectory(journalRoot);
         string journal = Path.Combine(journalRoot, "oversized.json");
         File.WriteAllText(journal, new string('x', 70_000));
@@ -582,7 +582,7 @@ public sealed class PublicationRecoveryTests : IDisposable
     public void DeeplyNestedPublicationJournalIsQuarantined()
     {
         EffectiveConfiguration configuration = Configuration();
-        string journalRoot = Path.Combine(root, ".assetctl", "state", "publish-transactions");
+        string journalRoot = Path.Combine(_root, ".assetctl", "state", "publish-transactions");
         Directory.CreateDirectory(journalRoot);
         string journal = Path.Combine(journalRoot, Guid.NewGuid().ToString("N") + ".json");
         File.WriteAllText(journal, "{\"padding\":" + new string('[', 20) + "0" + new string(']', 20) + "}");
@@ -598,8 +598,8 @@ public sealed class PublicationRecoveryTests : IDisposable
     public void PublicationJournalSymlinkCannotEscapeStateRoot()
     {
         EffectiveConfiguration configuration = Configuration();
-        string journalRoot = Path.Combine(root, ".assetctl", "state", "publish-transactions");
-        string outside = Path.Combine(root, "outside-journal.json");
+        string journalRoot = Path.Combine(_root, ".assetctl", "state", "publish-transactions");
+        string outside = Path.Combine(_root, "outside-journal.json");
         Directory.CreateDirectory(journalRoot);
         File.WriteAllText(outside, "external evidence");
         string journal = Path.Combine(journalRoot, Guid.NewGuid().ToString("N") + ".json");
@@ -617,7 +617,7 @@ public sealed class PublicationRecoveryTests : IDisposable
     public void PublicationQuarantineSymlinkCannotEscapeStateRoot()
     {
         EffectiveConfiguration configuration = Configuration();
-        string journalRoot = Path.Combine(root, ".assetctl", "state", "publish-transactions");
+        string journalRoot = Path.Combine(_root, ".assetctl", "state", "publish-transactions");
         string external = Path.Combine(
             Path.GetTempPath(),
             "assetctl-quarantine-external-" + Guid.NewGuid().ToString("N")
@@ -644,7 +644,7 @@ public sealed class PublicationRecoveryTests : IDisposable
     public void PublicationQuarantineSubstitutionCannotRedirectJournalMove()
     {
         EffectiveConfiguration configuration = Configuration();
-        string journalRoot = Path.Combine(root, ".assetctl", "state", "publish-transactions");
+        string journalRoot = Path.Combine(_root, ".assetctl", "state", "publish-transactions");
         string external = Path.Combine(
             Path.GetTempPath(),
             "assetctl-quarantine-race-external-" + Guid.NewGuid().ToString("N")
@@ -682,18 +682,18 @@ public sealed class PublicationRecoveryTests : IDisposable
     /// <summary>Removes the isolated repository used by each publication test.</summary>
     public void Dispose()
     {
-        if (Directory.Exists(root))
+        if (Directory.Exists(_root))
         {
-            Directory.Delete(root, recursive: true);
+            Directory.Delete(_root, recursive: true);
         }
     }
 
     private EffectiveConfiguration Configuration()
     {
-        Directory.CreateDirectory(Path.Combine(root, "assets"));
-        Directory.CreateDirectory(Path.Combine(root, "catalog"));
+        Directory.CreateDirectory(Path.Combine(_root, "assets"));
+        Directory.CreateDirectory(Path.Combine(_root, "catalog"));
         return new EffectiveConfiguration(
-            root,
+            _root,
             new AssetCtlPaths("assets", "catalog", "styles", ".assetctl/work", "runs", ".assetctl/state", "logs"),
             new AssetCtlPolicy(false, true, true, true, false, "reject"),
             new AssetCtlLimits(1_000_000, 1_000_000, 10, 10, 10, 30, 1_000_000),
@@ -718,8 +718,8 @@ public sealed class PublicationRecoveryTests : IDisposable
     {
         byte[] bytes = "old-asset"u8.ToArray();
         AssetManifest manifest = Manifest(bytes, revision: 1);
-        File.WriteAllBytes(Path.Combine(root, manifest.Request.Output.Path), bytes);
-        File.WriteAllText(Path.Combine(root, manifest.ManifestPath), ManifestStore.Serialize(manifest));
+        File.WriteAllBytes(Path.Combine(_root, manifest.Request.Output.Path), bytes);
+        File.WriteAllText(Path.Combine(_root, manifest.ManifestPath), ManifestStore.Serialize(manifest));
         return (bytes, manifest);
     }
 
@@ -750,7 +750,7 @@ public sealed class PublicationRecoveryTests : IDisposable
 
     private void AssertPair(byte[] expectedBytes, AssetManifest expectedManifest)
     {
-        Assert.Equal(expectedBytes, File.ReadAllBytes(Path.Combine(root, expectedManifest.Request.Output.Path)));
+        Assert.Equal(expectedBytes, File.ReadAllBytes(Path.Combine(_root, expectedManifest.Request.Output.Path)));
         AssetManifest actual = ManifestStore.Load(Configuration(), expectedManifest.ManifestPath);
         Assert.Equal(expectedManifest.Integrity!.Sha256, actual.Integrity!.Sha256);
         Assert.Equal(Convert.ToHexStringLower(SHA256.HashData(expectedBytes)), actual.Integrity.Sha256);

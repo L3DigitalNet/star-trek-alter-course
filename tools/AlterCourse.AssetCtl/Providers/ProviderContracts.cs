@@ -78,22 +78,22 @@ internal static class ProviderContracts
 
     public sealed class AdapterRegistry
     {
-        private readonly Dictionary<string, IAdapterDescriptor> adapters;
+        private readonly Dictionary<string, IAdapterDescriptor> _adapters;
 
         public AdapterRegistry(IEnumerable<IAdapterDescriptor> values)
         {
-            adapters = values.ToDictionary(value => value.AdapterId, StringComparer.Ordinal);
+            _adapters = values.ToDictionary(value => value.AdapterId, StringComparer.Ordinal);
         }
 
-        public IReadOnlyDictionary<string, IAdapterDescriptor> Descriptors => adapters;
+        public IReadOnlyDictionary<string, IAdapterDescriptor> Descriptors => _adapters;
 
         public IAssetGenerator Generator(string adapterId) =>
-            adapters.TryGetValue(adapterId, out IAdapterDescriptor? adapter) && adapter is IAssetGenerator generator
+            _adapters.TryGetValue(adapterId, out IAdapterDescriptor? adapter) && adapter is IAssetGenerator generator
                 ? generator
                 : throw new AssetCtlException($"Adapter '{adapterId}' does not generate assets.", 5);
 
         public IAssetReviewer Reviewer(string adapterId) =>
-            adapters.TryGetValue(adapterId, out IAdapterDescriptor? adapter) && adapter is IAssetReviewer reviewer
+            _adapters.TryGetValue(adapterId, out IAdapterDescriptor? adapter) && adapter is IAssetReviewer reviewer
                 ? reviewer
                 : throw new AssetCtlException($"Adapter '{adapterId}' does not review assets.", 5);
     }

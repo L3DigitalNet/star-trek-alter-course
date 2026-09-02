@@ -177,17 +177,17 @@ public sealed class ProviderBoundaryRepairTests
 
     private sealed class FixtureHandler : HttpMessageHandler
     {
-        private readonly Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> response;
+        private readonly Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> _response;
 
         public FixtureHandler(Func<HttpRequestMessage, HttpResponseMessage> response) =>
-            this.response = (request, _) => Task.FromResult(response(request));
+            _response = (request, _) => Task.FromResult(response(request));
 
         public FixtureHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> response) =>
-            this.response = response;
+            _response = response;
 
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken
-        ) => response(request, cancellationToken);
+        ) => _response(request, cancellationToken);
     }
 }

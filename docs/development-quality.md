@@ -24,9 +24,12 @@ related:
 ## Required environment
 
 - Linux x86_64 with Git, Bash, `curl`, `tar` with xz support, `unzip`, and `sha256sum`.
-- .NET SDK 10.0.111, selected by [`global.json`](../global.json). Projects target .NET 8 for Godot compatibility.
+- The exact .NET SDK selected by [`global.json`](../global.json), with roll-forward disabled. The resolver supplies that SDK plus the .NET 8 runtime required by Godot.
+- Node 24 with `npx`, selected by [`.node-version`](../.node-version). Repository scripts reject a different Node major before running npm-based tools.
 - Godot 4.7.2 stable .NET/C#. The verifier accepts an exact matching `GODOT_BIN` or `godot` command, or downloads the checksum-pinned official editor to the user cache.
 - GdUnit4 6.2.0, vendored from upstream commit `d18770221c2df4a3c991a42fdce7907df40eea75` under the Godot project.
+
+The Core, Godot, and Core-test projects target .NET 8. AssetCtl and its tests target .NET 10. All projects use the repository-wide C# 12 baseline from [`Directory.Build.props`](../Directory.Build.props).
 
 Repository-local .NET tools and checksum-pinned native tools are restored automatically. Native binaries are cached outside the repository and never replace globally installed tools.
 
@@ -39,7 +42,9 @@ Apply safe formatting, then run the complete gate:
 ./scripts/verify.sh
 ```
 
-`fix.sh` runs CSharpier and `shfmt`. `verify.sh` checks locked dependencies, C# and shell formatting, ShellCheck, actionlint, gitleaks, diagnostic-suppression policy, a warning-free Release build, Core and AssetCtl .NET tests, offline read-only AssetCtl configuration and catalog validation, GdUnit integration tests, and Godot headless startup.
+`fix.sh` runs CSharpier for repository-owned C#, Prettier for tracked Markdown and structured configuration, and `shfmt` for shell scripts and Git hooks. `verify.sh` checks their output, locked dependencies, markdownlint, ShellCheck, actionlint, gitleaks, diagnostic-suppression and solution-configuration policy, a warning-free solution-wide Release build, Core and AssetCtl .NET tests, offline read-only AssetCtl configuration and catalog validation, and Godot integration. After proving the solution's Release mapping, verification builds the Godot project explicitly as Debug because the Godot editor runtime loads that managed configuration for GdUnit and headless smoke tests.
+
+CSharpier is the sole C# whitespace formatter. Bare `dotnet format` and `dotnet format whitespace` are noncanonical because Roslyn's formatter can produce whitespace that CSharpier changes. `.editorconfig`, SDK analyzers, and Meziantou own semantic style; the compiler owns language correctness. Private instance fields use `_camelCase`, while private constants and static readonly fields use PascalCase.
 
 ## AssetCtl development
 
@@ -75,9 +80,17 @@ Mutation testing is intentionally outside the fast gate. Run it when simulation 
 
 Stryker is pinned but has no mutation-score threshold until the simulation suite supplies an evidence-based baseline.
 
+## Testing framework availability
+
+xUnit is installed for ordinary .NET tests, and vendored GdUnit4 runs the current Godot integration tests. ADR 0009 selects CsCheck for qualifying property/model tests, GdUnit4Net for C# tests that genuinely require the engine runtime, and ArchUnitNET for architecture rules that the project graph cannot express. Those three remain admission-triggered and must not be added until their stated need exists.
+
+## Managed Markdown policy
+
+The repository-owned gate runs Prettier and markdownlint over the same tracked Markdown and structured-text configuration adopted by Project Standards. Managed Project Standards workflows remain complementary: they own externally managed formatting, Markdown structure, and frontmatter policy and are intentionally not reproduced by `verify.sh`. Keep overlapping formatter and linter versions aligned when the managed package changes.
+
 ## Enforcement philosophy
 
-- CI is authoritative and runs the same `./scripts/verify.sh` implementation used locally.
+- Canonical CI runs the same `./scripts/verify.sh` implementation used locally; managed Project Standards workflows remain separate policy checks under ADR 0002.
 - Compiler and analyzer warnings are build failures. Fix causes instead of suppressing diagnostics or weakening central settings.
 - CSharpier owns C# whitespace; EditorConfig owns semantic style and analyzer severity; editor integrations are conveniences.
 - `AlterCourse.Core` must remain independently buildable and testable without Godot. Godot nodes and resources belong in `AlterCourse.Godot`.
