@@ -37,7 +37,7 @@ public sealed class GameSimulation
     public TravelRequestResult RequestTravel(TravelIntent intent)
     {
         var command = new ShipTravelCommand(_state.PlayerShipId, intent.Destination);
-        ShipTravelApplicationResult application = ApplyShipTravel(_state, command, _shipCatalog);
+        ShipTravelApplicationResult application = ApplyShipTravel(_state, command);
         if (application.Outcome == TravelOutcome.Accepted)
         {
             Commit(application.CandidateState);
@@ -46,11 +46,7 @@ public sealed class GameSimulation
         return new TravelRequestResult(application.Outcome);
     }
 
-    internal static ShipTravelApplicationResult ApplyShipTravel(
-        SimulationState state,
-        ShipTravelCommand command,
-        ShipDefinitionCatalog shipCatalog
-    )
+    internal static ShipTravelApplicationResult ApplyShipTravel(SimulationState state, ShipTravelCommand command)
     {
         ShipState targetShip = state.GetRequiredShip(command.TargetShipId);
         if (targetShip.StrategicState is TravelingState)
@@ -86,7 +82,9 @@ public sealed class GameSimulation
         {
             Scheduler = scheduler,
         };
-        candidate.Validate(shipCatalog);
+        // Same-time batches dequeue all due work before resolving each owner, so other ships may
+        // temporarily reference work absent from the scheduler. Aggregate validation belongs after
+        // the batch or at the public command commit boundary, never inside this local command path.
         return new ShipTravelApplicationResult(TravelOutcome.Accepted, candidate);
     }
 
@@ -224,10 +222,11 @@ public sealed class GameSimulation
             }
 
             current = AdvanceSegment(current, boundary, ref actualShipSteps);
-            current = ResolveDueAtCurrentBoundary(current, traces, ref totalExecutions, shipCatalog);
+            current = ResolveDueAtCurrentBoundary(current, traces, ref totalExecutions);
         }
 
-        current = ResolveDueAtCurrentBoundary(current, traces, ref totalExecutions, shipCatalog);
+        current = ResolveDueAtCurrentBoundary(current, traces, ref totalExecutions);
+        current.Validate(shipCatalog);
         return new SimulationAdvanceTraceResult(current, new ReadOnlyValueList<ScheduledConsequenceTrace>(traces));
     }
 
@@ -316,8 +315,7 @@ public sealed class GameSimulation
     private static SimulationState ResolveDueAtCurrentBoundary(
         SimulationState state,
         List<ScheduledConsequenceTrace> traces,
-        ref int totalExecutions,
-        ShipDefinitionCatalog shipCatalog
+        ref int totalExecutions
     )
     {
         SimulationState current = state;
@@ -355,7 +353,7 @@ public sealed class GameSimulation
                 }
 
                 totalExecutions = attemptedTotal;
-                (current, ScheduledConsequenceTrace trace) = ResolveScheduledWork(current, work, shipCatalog);
+                (current, ScheduledConsequenceTrace trace) = ResolveScheduledWork(current, work);
                 traces.Add(trace);
             }
         }
@@ -363,13 +361,12 @@ public sealed class GameSimulation
 
     private static (SimulationState State, ScheduledConsequenceTrace Trace) ResolveScheduledWork(
         SimulationState state,
-        ScheduledWork work,
-        ShipDefinitionCatalog shipCatalog
+        ScheduledWork work
     ) =>
         work.Kind switch
         {
             ScheduledWorkKind.SensorRepairCompletion => CompleteSensorRepair(state, work),
-            ScheduledWorkKind.TravelArrival => CompleteTravel(state, work, shipCatalog),
+            ScheduledWorkKind.TravelArrival => CompleteTravel(state, work),
             ScheduledWorkKind.OrderWake => CompleteHold(state, work),
             _ => throw new InvalidOperationException("Scheduled work kind is unsupported."),
         };
@@ -409,8 +406,7 @@ public sealed class GameSimulation
 
     private static (SimulationState State, ScheduledConsequenceTrace Trace) CompleteTravel(
         SimulationState state,
-        ScheduledWork work,
-        ShipDefinitionCatalog shipCatalog
+        ScheduledWork work
     )
     {
         ShipState ship = state.GetRequiredShip(work.TargetShipId);
@@ -433,7 +429,7 @@ public sealed class GameSimulation
 
         if (order is PatrolRouteOrder patrol)
         {
-            return ContinuePatrol(state, arrived, ship, patrol, work, shipCatalog);
+            return ContinuePatrol(state, arrived, ship, patrol, work);
         }
 
         return (
@@ -458,8 +454,7 @@ public sealed class GameSimulation
         SimulationState arrived,
         ShipState ship,
         PatrolRouteOrder patrol,
-        ScheduledWork work,
-        ShipDefinitionCatalog shipCatalog
+        ScheduledWork work
     )
     {
         int followingIndex = (patrol.NextWaypointIndex + 1) % patrol.Waypoints.Length;
@@ -473,8 +468,7 @@ public sealed class GameSimulation
         );
         ShipTravelApplicationResult application = ApplyShipTravel(
             arrived,
-            new ShipTravelCommand(ship.InstanceId, continuedOrder.Waypoints[followingIndex]),
-            shipCatalog
+            new ShipTravelCommand(ship.InstanceId, continuedOrder.Waypoints[followingIndex])
         );
         if (application.Outcome != TravelOutcome.Accepted)
         {

@@ -174,7 +174,6 @@ public sealed class OrderExecutionTests
     [Fact]
     public void SharedTravelApplicationConsumesNonplayerCommand()
     {
-        ShipDefinitionCatalog catalog = CreateCatalog();
         SimulationState atLocation = CreateState(
             SimulationScheduler.Create(),
             [CreateShip(PlayerId, Alpha), CreateShip(NpcId, Alpha)]
@@ -182,8 +181,7 @@ public sealed class OrderExecutionTests
 
         ShipTravelApplicationResult application = GameSimulation.ApplyShipTravel(
             atLocation,
-            new ShipTravelCommand(NpcId, Beta),
-            catalog
+            new ShipTravelCommand(NpcId, Beta)
         );
 
         Assert.Equal(TravelOutcome.Accepted, application.Outcome);
@@ -309,6 +307,44 @@ public sealed class OrderExecutionTests
         Assert.Equal(hiddenOnly, noPlayerBoundary.CaptureState());
     }
 
+    /// <summary>Confirms an earlier same-time patrol consequence cannot block the player boundary.</summary>
+    [Fact]
+    public void SameBoundaryPatrolBeforePlayerRepairProgressesAndReportsOnlyPlayerWork()
+    {
+        (SimulationState state, ShipDefinitionCatalog catalog) = CreateSameBoundaryPatrolAndRepairState();
+        var game = GameSimulation.RestoreState(state, catalog);
+
+        AdvanceUntilResult result = game.AdvanceUntilNextPlayerRelevantEvent();
+
+        Assert.Equal(new SimulationTime(1000), result.StoppedAt);
+        Assert.Equal([ScheduledWorkKind.SensorRepairCompletion], result.ResolvedKinds);
+        Assert.Null(game.CaptureState().GetRequiredShip(PlayerId).SensorRepair);
+        AssertPatrolLeg(game.CaptureState(), NpcId, new ShipOrderId(1), 2, Beta, Gamma);
+    }
+
+    /// <summary>Confirms either same-time patrol sequence advances both owners deterministically.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SameBoundaryPatrolArrivalsProgressForEitherSequenceOrder(bool reverseSequenceAndInsertion)
+    {
+        (SimulationState state, ShipDefinitionCatalog catalog) = CreateSameBoundaryPatrolState(
+            reverseSequenceAndInsertion
+        );
+
+        SimulationAdvanceTraceResult result = GameSimulation.AdvanceTo(state, new SimulationTime(1000), catalog);
+
+        ShipInstanceId[] expectedOrder = reverseSequenceAndInsertion ? [SecondNpcId, NpcId] : [NpcId, SecondNpcId];
+        Assert.Equal(expectedOrder, result.Traces.Select(trace => trace.TargetShipId));
+        Assert.Equal(expectedOrder, result.State.Scheduler.OutstandingWork.Select(work => work.TargetShipId));
+        Assert.All(
+            result.State.Scheduler.OutstandingWork,
+            work => Assert.Equal(new SimulationTime(2000), work.DueTime)
+        );
+        AssertPatrolLeg(result.State, NpcId, new ShipOrderId(1), 2, Beta, Gamma);
+        AssertPatrolLeg(result.State, SecondNpcId, new ShipOrderId(2), 0, Gamma, Alpha);
+    }
+
     /// <summary>Confirms zero speed permits a long strategic jump regardless of heading.</summary>
     [Fact]
     public void StrategicJumpHandlesSeventyTwoHoursAndRepairsAnalytically()
@@ -431,6 +467,126 @@ public sealed class OrderExecutionTests
             CreateState(scheduler, [player, npc], orderIdAllocator: ShipOrderIdAllocator.Restore(2)),
             CreateCatalog(new SimulationDuration(800))
         );
+    }
+
+    private static (SimulationState State, ShipDefinitionCatalog Catalog) CreateSameBoundaryPatrolAndRepairState()
+    {
+        var scheduler = SimulationScheduler.Create();
+        (scheduler, ScheduledWork arrival) = scheduler.Schedule(
+            new SimulationTime(1000),
+            NpcId,
+            ScheduledWorkKind.TravelArrival
+        );
+        (scheduler, ScheduledWork repairWork) = scheduler.Schedule(
+            new SimulationTime(1000),
+            PlayerId,
+            ScheduledWorkKind.SensorRepairCompletion
+        );
+        var repair = new SensorRepairState(
+            new SensorIntegrity(0.5),
+            new SensorIntegrity(1),
+            new SimulationTime(0),
+            repairWork.DueTime,
+            repairWork.Id
+        );
+        ShipState player = CreateShip(PlayerId, Alpha) with
+        {
+            SensorIntegrity = new SensorIntegrity(0.5),
+            SensorRepair = repair,
+        };
+        ShipState npc = CreatePatrollingShip(NpcId, new ShipOrderId(1), Alpha, Beta, 1, arrival);
+        return (
+            CreateState(scheduler, [player, npc], orderIdAllocator: ShipOrderIdAllocator.Restore(2)),
+            CreateCatalog()
+        );
+    }
+
+    private static (SimulationState State, ShipDefinitionCatalog Catalog) CreateSameBoundaryPatrolState(
+        bool reverseSequenceAndInsertion
+    )
+    {
+        (SimulationScheduler scheduler, ScheduledWork firstArrival, ScheduledWork secondArrival) =
+            ScheduleSameBoundaryArrivals(reverseSequenceAndInsertion);
+        ShipState firstNpc = CreatePatrollingShip(NpcId, new ShipOrderId(1), Alpha, Beta, 1, firstArrival);
+        ShipState secondNpc = CreatePatrollingShip(SecondNpcId, new ShipOrderId(2), Beta, Gamma, 2, secondArrival);
+        ShipState player = CreateShip(PlayerId, Alpha);
+        ShipState[] ships = reverseSequenceAndInsertion ? [secondNpc, player, firstNpc] : [player, firstNpc, secondNpc];
+        var state = new SimulationState(
+            new SimulationTime(0),
+            scheduler,
+            ShipInstanceIdAllocator.Restore(4),
+            CreateMap(new SimulationDuration(1000)),
+            PlayerId,
+            ships,
+            ShipOrderIdAllocator.Restore(3)
+        );
+        return (state, CreateCatalog());
+    }
+
+    private static (
+        SimulationScheduler Scheduler,
+        ScheduledWork First,
+        ScheduledWork Second
+    ) ScheduleSameBoundaryArrivals(bool reverseSequence)
+    {
+        var scheduler = SimulationScheduler.Create();
+        ScheduledWork first;
+        ScheduledWork second;
+        if (reverseSequence)
+        {
+            (scheduler, second) = scheduler.Schedule(
+                new SimulationTime(1000),
+                SecondNpcId,
+                ScheduledWorkKind.TravelArrival
+            );
+            (scheduler, first) = scheduler.Schedule(new SimulationTime(1000), NpcId, ScheduledWorkKind.TravelArrival);
+        }
+        else
+        {
+            (scheduler, first) = scheduler.Schedule(new SimulationTime(1000), NpcId, ScheduledWorkKind.TravelArrival);
+            (scheduler, second) = scheduler.Schedule(
+                new SimulationTime(1000),
+                SecondNpcId,
+                ScheduledWorkKind.TravelArrival
+            );
+        }
+
+        return (scheduler, first, second);
+    }
+
+    private static ShipState CreatePatrollingShip(
+        ShipInstanceId shipId,
+        ShipOrderId orderId,
+        LocationId origin,
+        LocationId destination,
+        int nextWaypointIndex,
+        ScheduledWork arrival
+    )
+    {
+        var travel = new TravelState(origin, destination, new SimulationTime(0), arrival.DueTime, arrival.Id);
+        return CreateShip(shipId, origin) with
+        {
+            StrategicState = new TravelingState(travel),
+            ActiveOrder = new PatrolRouteOrder(orderId, [Alpha, Beta, Gamma], nextWaypointIndex),
+        };
+    }
+
+    private static void AssertPatrolLeg(
+        SimulationState state,
+        ShipInstanceId shipId,
+        ShipOrderId orderId,
+        int nextWaypointIndex,
+        LocationId origin,
+        LocationId destination
+    )
+    {
+        ShipState ship = state.GetRequiredShip(shipId);
+        PatrolRouteOrder patrol = Assert.IsType<PatrolRouteOrder>(ship.ActiveOrder);
+        TravelingState traveling = Assert.IsType<TravelingState>(ship.StrategicState);
+        Assert.Equal(orderId, patrol.Id);
+        Assert.Equal(nextWaypointIndex, patrol.NextWaypointIndex);
+        Assert.Equal(origin, traveling.Travel.Origin);
+        Assert.Equal(destination, traveling.Travel.Destination);
     }
 
     private static SimulationState CreateState(
