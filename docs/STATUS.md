@@ -3,11 +3,11 @@
 ## Current snapshot
 
 - Feature #25 delivers the first executable gameplay walking skeleton: a pure deterministic Core simulation, a map-centric Godot command shell, and a V1 quick-save/load path.
-- The playable development slice has three arbitrarily positioned strategic locations and connected routes; travel is persistent state until its scheduled arrival rather than an immediate relocation.
+- The strategic map has three arbitrarily positioned locations and connected routes. Travel remains active until its scheduled arrival.
 - The player ship starts with damaged sensors and an active repair. Repair progresses on the same simulation timeline during real-time play, accelerated play, and strategic travel.
-- The Godot shell exposes Pause, 0.5x, 1x, 2x, and 4x presentation-rate controls. It converts elapsed presentation time into bounded, explicit 100 ms Core steps; rendering cadence is not simulation truth.
-- Strategic and tactical views are distinct open-map presentations. Tactical state uses continuous kilometer coordinates and a Core-owned Y-positive-up reference frame; the Godot adapter performs screen projection.
-- The first validated game-domain ship definition is `src/AlterCourse.Godot/content/ships/pathfinder.json`, with its V1 schema in the adjacent `content/schemas/` directory. It is intentionally separate from AssetCtl.
+- The Godot shell exposes Pause, 0.5x, 1x, 2x, and 4x. Its bounded adapter converts presentation time into explicit 100 ms Core steps.
+- Strategic and tactical views are distinct open maps. Core tactical state uses continuous kilometers and Y-positive-up; Godot performs screen projection.
+- The first validated ship definition and V1 schema live under `src/AlterCourse.Godot/content/`, separate from AssetCtl.
 - V1 JSON quick saves use Godot's `user://quick-save-v1.json` boundary and restore active travel, repair, scheduler, and runtime identity state only after validation succeeds.
 - The walking skeleton deliberately defers combat, shields, weapons, power distribution, crew, factions, diplomacy, economy, missions, AI, narrative, networking, and final art.
 - Fresh Catalog 5 adoption is configured for Project Standards v5.27.0.
