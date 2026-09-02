@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using AlterCourse.Core.Content;
 using AlterCourse.Core.Identity;
+using AlterCourse.Core.Orders;
 using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
@@ -90,6 +91,11 @@ public sealed class GameBootstrap
         {
             throw new ArgumentException("Player ship identity must resolve exactly once.", nameof(playerShipId));
         }
+
+        if (shipStarts.Single(start => start.InstanceId == playerShipId).ActiveOrder is not null)
+        {
+            throw new ArgumentException("The player ship cannot declare an autonomous order.", nameof(shipStarts));
+        }
     }
 
     private static void ValidateInitialTime(SimulationTime initialTime)
@@ -113,9 +119,11 @@ public sealed class GameBootstrap
     {
         ArgumentNullException.ThrowIfNull(catalog);
         var scheduler = SimulationScheduler.Create();
+        var orderIdAllocator = ShipOrderIdAllocator.Create();
         List<ShipState> ships = [];
 
-        // Ship order and repair-before-travel scheduling jointly define stable work identities and sequences.
+        // Canonical ship order plus repair-before-travel-before-order scheduling defines stable work identities and
+        // sequences without exposing either scheduler concern to authored declarations.
         foreach (ShipStart start in _shipStarts)
         {
             ShipDefinition definition = catalog.GetRequired(start.DefinitionId);
@@ -131,6 +139,7 @@ public sealed class GameBootstrap
                 TravelingStart traveling => CreateTraveling(start, traveling, ref scheduler),
                 _ => throw new ArgumentException("Ship strategic start kind is unsupported.", nameof(catalog)),
             };
+            ShipOrder? activeOrder = CreateOrder(start, strategicState, ref scheduler, ref orderIdAllocator);
             ships.Add(
                 new ShipState(
                     start.InstanceId,
@@ -140,7 +149,8 @@ public sealed class GameBootstrap
                     start.TacticalMotion,
                     start.SensorIntegrity,
                     repair,
-                    strategicState
+                    strategicState,
+                    activeOrder
                 )
             );
         }
@@ -152,7 +162,8 @@ public sealed class GameBootstrap
             ShipInstanceIdAllocator.Restore(nextShipId),
             StrategicMap,
             PlayerShipId,
-            ships
+            ships,
+            orderIdAllocator
         );
         return GameSimulation.RestoreState(candidate, catalog);
     }
@@ -225,5 +236,112 @@ public sealed class GameBootstrap
 
         (scheduler, ScheduledWork work) = scheduler.Schedule(arrival, ship.InstanceId, ScheduledWorkKind.TravelArrival);
         return new TravelingState(new TravelState(start.Origin, start.Destination, start.Departure, arrival, work.Id));
+    }
+
+    private ShipOrder? CreateOrder(
+        ShipStart ship,
+        ShipStrategicState strategicState,
+        ref SimulationScheduler scheduler,
+        ref ShipOrderIdAllocator allocator
+    )
+    {
+        if (ship.ActiveOrder is null)
+        {
+            return null;
+        }
+
+        (allocator, ShipOrderId id) = allocator.Allocate();
+        return ship.ActiveOrder switch
+        {
+            TravelToOrderStart travelTo => CreateTravelToOrder(travelTo, strategicState, id),
+            PatrolRouteOrderStart patrol => CreatePatrolOrder(patrol, strategicState, id),
+            HoldUntilOrderStart hold => CreateHoldOrder(ship, hold, strategicState, id, ref scheduler),
+            _ => throw new ArgumentException("Ship order start kind is unsupported.", nameof(ship)),
+        };
+    }
+
+    private static TravelToOrder CreateTravelToOrder(
+        TravelToOrderStart start,
+        ShipStrategicState strategicState,
+        ShipOrderId id
+    )
+    {
+        if (strategicState is not TravelingState traveling || traveling.Travel.Destination != start.Destination)
+        {
+            throw new ArgumentException(
+                "A TravelTo order start must match active travel to its destination.",
+                nameof(start)
+            );
+        }
+
+        return new TravelToOrder(id, start.Destination);
+    }
+
+    private PatrolRouteOrder CreatePatrolOrder(
+        PatrolRouteOrderStart start,
+        ShipStrategicState strategicState,
+        ShipOrderId id
+    )
+    {
+        foreach (LocationId waypoint in start.Waypoints)
+        {
+            StrategicMap.GetLocation(waypoint);
+        }
+
+        for (int index = 0; index < start.Waypoints.Length; index++)
+        {
+            LocationId origin = start.Waypoints[index];
+            LocationId destination = start.Waypoints[(index + 1) % start.Waypoints.Length];
+            if (StrategicMap.FindRoute(origin, destination) is null)
+            {
+                throw new ArgumentException(
+                    "Every adjacent patrol waypoint, including wraparound, requires a route.",
+                    nameof(start)
+                );
+            }
+        }
+
+        int previousIndex = (start.NextWaypointIndex - 1 + start.Waypoints.Length) % start.Waypoints.Length;
+        if (
+            strategicState is not TravelingState traveling
+            || traveling.Travel.Origin != start.Waypoints[previousIndex]
+            || traveling.Travel.Destination != start.Waypoints[start.NextWaypointIndex]
+        )
+        {
+            throw new ArgumentException("A patrol order start must match its declared current leg.", nameof(start));
+        }
+
+        return new PatrolRouteOrder(id, start.Waypoints, start.NextWaypointIndex);
+    }
+
+    private HoldUntilOrder CreateHoldOrder(
+        ShipStart ship,
+        HoldUntilOrderStart start,
+        ShipStrategicState strategicState,
+        ShipOrderId id,
+        ref SimulationScheduler scheduler
+    )
+    {
+        if (strategicState is not AtLocationState || start.Until.Milliseconds <= InitialTime.Milliseconds)
+        {
+            throw new ArgumentException(
+                "A HoldUntil order start requires an at-location ship and a future wake time.",
+                nameof(start)
+            );
+        }
+
+        if (
+            start.Until.Milliseconds % SimulationFixedStep.Duration.Milliseconds != 0
+            || start.Until.Milliseconds > long.MaxValue - SimulationFixedStep.Duration.Milliseconds
+        )
+        {
+            throw new ArgumentException(
+                "A HoldUntil wake must align to the fixed simulation step and retain continuation headroom.",
+                nameof(start)
+            );
+        }
+
+        (scheduler, ScheduledWork wake) = scheduler.Schedule(start.Until, ship.InstanceId, ScheduledWorkKind.OrderWake);
+        return new HoldUntilOrder(id, start.Until, wake.Id);
     }
 }

@@ -8,4 +8,7 @@ public enum ScheduledWorkKind
 
     /// <summary>Completes repair of a ship sensor system.</summary>
     SensorRepairCompletion = 2,
+
+    /// <summary>Wakes an active order at its next decision boundary.</summary>
+    OrderWake = 3,
 }

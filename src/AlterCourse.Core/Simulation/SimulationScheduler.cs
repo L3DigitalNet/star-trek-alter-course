@@ -120,6 +120,31 @@ public sealed class SimulationScheduler
         return (new SimulationScheduler(followingWorkId, followingSequence, outstanding), scheduled);
     }
 
+    /// <summary>Cancels the outstanding work with an exact stable identity.</summary>
+    /// <param name="id">The initialized identity of the work to cancel.</param>
+    /// <returns>
+    /// The following scheduler state and whether matching outstanding work was removed. A missing or stale identity is
+    /// an ordinary negative result.
+    /// </returns>
+    /// <exception cref="ArgumentException"><paramref name="id"/> is uninitialized.</exception>
+    public (SimulationScheduler Scheduler, bool Removed) Cancel(ScheduledWorkId id)
+    {
+        if (id.Value <= 0)
+        {
+            throw new ArgumentException("Cancellation requires an initialized scheduled-work identity.", nameof(id));
+        }
+
+        for (int index = 0; index < OutstandingWork.Length; index++)
+        {
+            if (OutstandingWork[index].Id == id)
+            {
+                return (new SimulationScheduler(NextWorkId, NextSequence, OutstandingWork.RemoveAt(index)), true);
+            }
+        }
+
+        return (this, false);
+    }
+
     /// <summary>
     /// Removes and returns an immutable snapshot of work outstanding at call time and due at or before a boundary.
     /// </summary>

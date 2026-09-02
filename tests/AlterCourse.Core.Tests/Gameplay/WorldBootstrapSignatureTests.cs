@@ -12,7 +12,7 @@ using AlterCourse.Core.Tactical;
 
 namespace AlterCourse.Core.Tests.Gameplay;
 
-/// <summary>Locks the public typed bootstrap to its deterministic three-ship V2 world signature.</summary>
+/// <summary>Locks the public typed bootstrap to its deterministic three-ship V3 world signature.</summary>
 public sealed class WorldBootstrapSignatureTests
 {
     private static readonly GameSaveMetadata Metadata = new(
@@ -22,7 +22,7 @@ public sealed class WorldBootstrapSignatureTests
         new DateTimeOffset(2026, 9, 2, 12, 30, 0, TimeSpan.Zero)
     );
 
-    /// <summary>Confirms declaration order cannot alter projection, V2 bytes, ship order, or work order.</summary>
+    /// <summary>Confirms declaration order cannot alter projection, V3 bytes, ship order, or work order.</summary>
     [Fact]
     public void NormalizesEquivalentInputsToOneStableWorldSignature()
     {
@@ -65,7 +65,7 @@ public sealed class WorldBootstrapSignatureTests
         );
     }
 
-    /// <summary>Confirms the largest accepted authored world is immediately compatible with its V2 loader.</summary>
+    /// <summary>Confirms the largest accepted authored world is immediately compatible with its V3 loader.</summary>
     [Fact]
     public void MaximumBootstrapWorldSerializesAndDeserializes()
     {
@@ -139,18 +139,18 @@ public sealed class WorldBootstrapSignatureTests
 
         AdvanceUntilResult repairs = game.AdvanceUntilNextScheduledEvent();
         Assert.Equal(8000, repairs.StoppedAt.Milliseconds);
-        Assert.Equal(
-            [ScheduledWorkKind.SensorRepairCompletion, ScheduledWorkKind.SensorRepairCompletion],
-            repairs.ResolvedKinds
-        );
+        Assert.Equal([ScheduledWorkKind.SensorRepairCompletion], repairs.ResolvedKinds);
         JsonArray afterRepairs = Ships(Parse(game));
         Assert.Null(afterRepairs[0]!["sensorRepair"]);
         Assert.Null(afterRepairs[1]!["sensorRepair"]);
         Assert.Equal("traveling", afterRepairs[2]!["strategicState"]!["kind"]!.GetValue<string>());
 
-        AdvanceUntilResult arrival = game.AdvanceUntilNextScheduledEvent();
-        Assert.Equal(14000, arrival.StoppedAt.Milliseconds);
-        Assert.Equal([ScheduledWorkKind.TravelArrival], arrival.ResolvedKinds);
+        AdvanceUntilResult noPlayerEvent = game.AdvanceUntilNextScheduledEvent();
+        Assert.Equal(AdvanceUntilOutcome.NoScheduledEvent, noPlayerEvent.Outcome);
+        Assert.Equal(8000, noPlayerEvent.StoppedAt.Milliseconds);
+        Assert.Empty(noPlayerEvent.ResolvedKinds);
+        SimulationAdvanceResult hiddenArrival = game.AdvanceFixedSteps(60);
+        Assert.Empty(hiddenArrival.ResolvedKinds);
         JsonArray complete = Ships(Parse(game));
         Assert.Equal("dawn-anchor", complete[0]!["strategicState"]!["locationId"]!.GetValue<string>());
         Assert.Equal("vesper-reach", complete[1]!["strategicState"]!["locationId"]!.GetValue<string>());
@@ -207,7 +207,7 @@ public sealed class WorldBootstrapSignatureTests
         Assert.Equal(4.1, afterStep[1]!["tacticalPosition"]!["yKilometers"]!.GetValue<double>(), 10);
     }
 
-    /// <summary>Confirms a V2 save at four seconds resumes byte-identically through both event boundaries.</summary>
+    /// <summary>Confirms a V3 save at four seconds resumes byte-identically through both event boundaries.</summary>
     [Fact]
     public void SaveReloadContinuationMatchesUninterruptedWorld()
     {

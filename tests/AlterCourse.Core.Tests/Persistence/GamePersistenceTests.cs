@@ -9,13 +9,13 @@ using AlterCourse.Core.Simulation;
 
 namespace AlterCourse.Core.Tests.Persistence;
 
-/// <summary>Verifies plural V2 snapshots, strict validation, and explicit V1 migration.</summary>
+/// <summary>Verifies current snapshots, strict validation, and adjacent historical migration.</summary>
 public sealed class GamePersistenceTests
 {
     private static readonly DateTimeOffset CreatedAt = new(2026, 9, 1, 12, 30, 0, TimeSpan.Zero);
     private static readonly DateTimeOffset SavedAt = new(2026, 9, 2, 14, 45, 0, TimeSpan.Zero);
 
-    /// <summary>Confirms every ship-owned state and work target survives a plural V2 round trip.</summary>
+    /// <summary>Confirms every historical ship-owned state and work target migrates into V3.</summary>
     [Fact]
     public void RoundTripsPluralV2WorldWithPerShipOperations()
     {
@@ -26,7 +26,9 @@ public sealed class GamePersistenceTests
         JsonArray ships = simulation["ships"]!.AsArray();
         JsonArray work = simulation["scheduler"]!["outstandingWork"]!.AsArray();
 
-        Assert.Equal(2, root["schemaVersion"]!.GetValue<int>());
+        Assert.Equal(3, root["schemaVersion"]!.GetValue<int>());
+        Assert.Equal("active-world-orders-v1", root["simulationRulesVersion"]!.GetValue<string>());
+        Assert.Equal(1, simulation["orderAllocatorNextId"]!.GetValue<long>());
         Assert.Equal(2, simulation["playerShipId"]!.GetValue<long>());
         Assert.Equal([1L, 2L, 3L], ships.Select(ship => ship!["instanceId"]!.GetValue<long>()));
         Assert.Equal([1L, 2L, 3L], work.Select(item => item!["targetShipId"]!.GetValue<long>()));
@@ -392,7 +394,11 @@ public sealed class GamePersistenceTests
             JsonNode repair = Ship(root, 0)["sensorRepair"]!;
             repair["expectedCompletionMilliseconds"] = 8100;
             Ship(root, 0)["sensorIntegrity"] = 0.5 + (0.5 * (4000d / 8100d));
-            root["simulation"]!["scheduler"]!["outstandingWork"]![0]!["dueTimeMilliseconds"] = 8100;
+            JsonArray work = root["simulation"]!["scheduler"]!["outstandingWork"]!.AsArray();
+            JsonNode repairCompletion = work[0]!;
+            repairCompletion["dueTimeMilliseconds"] = 8100;
+            work.RemoveAt(0);
+            work.Insert(1, repairCompletion);
         });
 
         AssertFailure(invalid, "repair-duration.json", "duration");
@@ -522,7 +528,7 @@ public sealed class GamePersistenceTests
         }
     }
 
-    /// <summary>Confirms V2 carries durable meaning without runtime or authored catalog contents.</summary>
+    /// <summary>Confirms current output carries durable meaning without runtime or authored catalog contents.</summary>
     [Fact]
     public void OutputContainsOnlyExplicitPersistenceContract()
     {
@@ -550,17 +556,20 @@ public sealed class GamePersistenceTests
 
     /// <summary>Confirms V1 migration preserves singleton identities, state, and active-work ownership.</summary>
     [Fact]
-    public void MigratesV1WithActiveWorkToTargetedV2()
+    public void MigratesV1WithActiveWorkThroughV2ToV3()
     {
         byte[] v1 = CreateV1(activeWork: true);
         Assert.DoesNotContain("targetShipId", Encoding.UTF8.GetString(v1), StringComparison.Ordinal);
 
         LoadedGameSave migrated = GamePersistence.Deserialize(v1, CreateCatalog(), "active-v1.json");
-        JsonObject v2 = Parse(GamePersistence.Serialize(migrated.Simulation, migrated.Metadata));
-        JsonObject simulation = v2["simulation"]!.AsObject();
+        JsonObject v3 = Parse(GamePersistence.Serialize(migrated.Simulation, migrated.Metadata));
+        JsonObject simulation = v3["simulation"]!.AsObject();
         JsonObject ship = simulation["ships"]![0]!.AsObject();
 
-        Assert.Equal(2, v2["schemaVersion"]!.GetValue<int>());
+        Assert.Equal(3, v3["schemaVersion"]!.GetValue<int>());
+        Assert.Equal("active-world-orders-v1", v3["simulationRulesVersion"]!.GetValue<string>());
+        Assert.Equal(1, simulation["orderAllocatorNextId"]!.GetValue<long>());
+        Assert.All(simulation["ships"]!.AsArray(), candidate => Assert.Null(candidate!["activeOrder"]));
         Assert.Equal(7, simulation["playerShipId"]!.GetValue<long>());
         Assert.Equal(7, ship["instanceId"]!.GetValue<long>());
         Assert.Equal("Pathfinder class", ship["displayName"]!.GetValue<string>());
@@ -601,28 +610,39 @@ public sealed class GamePersistenceTests
             CreateCatalog(),
             "idle-v1.json"
         );
-        JsonObject v2 = Parse(GamePersistence.Serialize(migrated.Simulation, migrated.Metadata));
+        JsonObject v3 = Parse(GamePersistence.Serialize(migrated.Simulation, migrated.Metadata));
 
-        Assert.Empty(v2["simulation"]!["scheduler"]!["outstandingWork"]!.AsArray());
-        Assert.Equal("atLocation", v2["simulation"]!["ships"]![0]!["strategicState"]!["kind"]!.GetValue<string>());
-        Assert.Null(v2["simulation"]!["ships"]![0]!["sensorRepair"]);
+        Assert.Empty(v3["simulation"]!["scheduler"]!["outstandingWork"]!.AsArray());
+        Assert.Equal("atLocation", v3["simulation"]!["ships"]![0]!["strategicState"]!["kind"]!.GetValue<string>());
+        Assert.Null(v3["simulation"]!["ships"]![0]!["sensorRepair"]);
     }
 
-    /// <summary>Confirms migrated V1 continuation equals its explicitly materialized V2 semantics.</summary>
+    /// <summary>Confirms migrated V1 continuation equals its explicitly materialized current semantics.</summary>
     [Fact]
-    public void MigratedV1ContinuationMatchesEquivalentV2()
+    public void MigratedV1ContinuationMatchesEquivalentV3()
     {
         LoadedGameSave fromV1 = GamePersistence.Deserialize(CreateV1(activeWork: true), CreateCatalog(), "v1.json");
-        byte[] equivalentV2 = GamePersistence.Serialize(fromV1.Simulation, fromV1.Metadata);
-        LoadedGameSave fromV2 = GamePersistence.Deserialize(equivalentV2, CreateCatalog(), "v2.json");
+        byte[] equivalentV3 = GamePersistence.Serialize(fromV1.Simulation, fromV1.Metadata);
+        LoadedGameSave fromV3 = GamePersistence.Deserialize(equivalentV3, CreateCatalog(), "v3.json");
 
         ContinueWorld(fromV1.Simulation);
-        ContinueWorld(fromV2.Simulation);
+        ContinueWorld(fromV3.Simulation);
 
         Assert.Equal(
             GamePersistence.Serialize(fromV1.Simulation, fromV1.Metadata),
-            GamePersistence.Serialize(fromV2.Simulation, fromV2.Metadata)
+            GamePersistence.Serialize(fromV3.Simulation, fromV3.Metadata)
         );
+    }
+
+    /// <summary>Confirms the historical V1 mapper does not accept current simulation rules.</summary>
+    [Fact]
+    public void RejectsCurrentRulesOnV1()
+    {
+        byte[] invalid = Mutate(
+            CreateV1(activeWork: false),
+            root => root["simulationRulesVersion"] = "active-world-orders-v1"
+        );
+        AssertFailure(invalid, "rules-v1.json", "rules version");
     }
 
     /// <summary>Confirms unsupported versions and established parser bounds remain explicit failures.</summary>
@@ -630,7 +650,7 @@ public sealed class GamePersistenceTests
     public void RejectsUnsupportedDuplicateOversizedDeepAndUnknownInput()
     {
         AssertFailure(
-            MutateV2(root => root["schemaVersion"] = 3),
+            MutateV2(root => root["schemaVersion"] = 4),
             "future.json",
             "unsupported",
             GamePersistenceFailure.UnsupportedVersion
@@ -645,14 +665,16 @@ public sealed class GamePersistenceTests
         AssertFailure(MutateV2(root => root["unexpected"] = true), "unknown.json", "incompatible");
     }
 
-    /// <summary>Confirms ordinary live plural construction serializes only schema V2.</summary>
+    /// <summary>Confirms ordinary live plural construction serializes only schema V3.</summary>
     [Fact]
-    public void SerializeEmitsOnlyV2()
+    public void SerializeEmitsOnlyV3()
     {
         GameSimulation game = FirstGameSetup.Create(CreateCatalog());
         JsonObject root = Parse(GamePersistence.Serialize(game, CreateMetadata()));
 
-        Assert.Equal(2, root["schemaVersion"]!.GetValue<int>());
+        Assert.Equal(3, root["schemaVersion"]!.GetValue<int>());
+        Assert.Equal("active-world-orders-v1", root["simulationRulesVersion"]!.GetValue<string>());
+        Assert.Equal(1, root["simulation"]!["orderAllocatorNextId"]!.GetValue<long>());
         Assert.NotNull(root["simulation"]!["ships"]);
         Assert.Null(root["simulation"]!["playerShip"]);
         Assert.Null(root["simulation"]!["strategicState"]);
@@ -660,7 +682,7 @@ public sealed class GamePersistenceTests
 
     /// <summary>Confirms atomic replacement still preserves metadata and removes staging files.</summary>
     [Fact]
-    public void AtomicPathSaveReplacesPriorV2AndCleansTemporaryFiles()
+    public void AtomicPathSaveReplacesPriorSaveWithV3AndCleansTemporaryFiles()
     {
         string directory = CreateTemporaryDirectory();
         string path = Path.Combine(directory, "slot-one.json");
@@ -689,7 +711,7 @@ public sealed class GamePersistenceTests
     private static void ContinueWorld(GameSimulation simulation)
     {
         simulation.AdvanceUntilNextScheduledEvent();
-        simulation.AdvanceUntilNextScheduledEvent();
+        simulation.AdvanceFixedSteps(60);
         simulation.AdvanceFixedSteps(7);
     }
 
@@ -869,8 +891,11 @@ public sealed class GamePersistenceTests
         );
         Assert.Equal(failure, exception.Failure);
         Assert.Equal(source, exception.SourceIdentity);
-        Assert.Contains(messageFragment, exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(messageFragment, FailureReason(exception), StringComparison.OrdinalIgnoreCase);
     }
+
+    private static string FailureReason(GamePersistenceException exception) =>
+        exception.Message[$"Save '{exception.SourceIdentity}' ".Length..];
 
     private static ShipDefinition CreateDefinition() =>
         new(

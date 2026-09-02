@@ -7,4 +7,4 @@
 ## Agent tasks
 
 - Fix the tracked launch path and documentation so direct Godot launch cannot reuse a stale Debug assembly after branch changes.
-- Milestone 2+: add NPC orders, AI, and offscreen decisions; later milestones may add fog-of-war, contacts, factions, combat, engineering, and related systems.
+- Milestone 3+: add actor knowledge, sensor contacts, and first contact; later milestones may add faction strategy, combat, engineering, and related systems.

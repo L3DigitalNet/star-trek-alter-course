@@ -21,6 +21,8 @@ func test_main_scene_constructs_gameplay_shell() -> void:
 	assert_object(screen.get_node_or_null("Shell/MapPanel")).is_not_null()
 	assert_object(screen.get_node_or_null("Shell/StatusPanel")).is_not_null()
 	assert_int(screen.get_node("%RateControls").get_child_count()).is_equal(5)
+	assert_str(screen.get_node("%AdvanceUntilButton").text).is_equal("ADVANCE UNTIL NEXT PLAYER EVENT")
+	assert_str(screen.get_node("%AdvanceUntilButton").tooltip_text).contains("player ship")
 	assert_str(screen.get_meta("load_error", "")).is_empty()
 
 
@@ -31,7 +33,7 @@ func test_quick_save_and_load_controls_exist() -> void:
 	assert_object(screen.get_node_or_null("%QuickLoadButton")).is_instanceof(Button)
 
 
-func test_default_quick_save_writes_schema_v2_without_touching_legacy_slot() -> void:
+func test_default_quick_save_writes_schema_v3_without_touching_legacy_slot() -> void:
 	_write_text(LEGACY_DEFAULT_QUICK_SAVE_PATH, "legacy-slot-sentinel")
 	var screen := _create_default_screen()
 
@@ -42,13 +44,14 @@ func test_default_quick_save_writes_schema_v2_without_touching_legacy_slot() -> 
 	var save_json: Dictionary = JSON.parse_string(
 		FileAccess.get_file_as_string(DEFAULT_QUICK_SAVE_PATH)
 	)
-	assert_int(int(save_json.get("schemaVersion", -1))).is_equal(2)
+	assert_int(int(save_json.get("schemaVersion", -1))).is_equal(3)
+	assert_str(save_json.get("simulationRulesVersion", "")).is_equal("active-world-orders-v1")
 	assert_str(FileAccess.get_file_as_string(LEGACY_DEFAULT_QUICK_SAVE_PATH)).is_equal(
 		"legacy-slot-sentinel"
 	)
 
 
-func test_default_quick_load_discovers_legacy_slot_path_then_saves_generic_v2() -> void:
+func test_default_quick_load_discovers_legacy_slot_path_then_saves_generic_v3() -> void:
 	var snapshot_screen := _create_screen()
 	snapshot_screen.call("ProcessSyntheticDelta", 0.6)
 	snapshot_screen.call("QuickSave")
@@ -67,7 +70,8 @@ func test_default_quick_load_discovers_legacy_slot_path_then_saves_generic_v2() 
 	var save_json: Dictionary = JSON.parse_string(
 		FileAccess.get_file_as_string(DEFAULT_QUICK_SAVE_PATH)
 	)
-	assert_int(int(save_json.get("schemaVersion", -1))).is_equal(2)
+	assert_int(int(save_json.get("schemaVersion", -1))).is_equal(3)
+	assert_str(save_json.get("simulationRulesVersion", "")).is_equal("active-world-orders-v1")
 	assert_str(FileAccess.get_file_as_string(LEGACY_DEFAULT_QUICK_SAVE_PATH)).is_equal(
 		legacy_contents
 	)
@@ -163,8 +167,8 @@ func test_quick_save_load_restores_active_operations_and_continues_scheduler() -
 	screen.get_node("%QuickSaveButton").emit_signal("pressed")
 	assert_str(screen.get_meta("quick_save_created_at_utc", "")).is_equal(created_at_utc)
 
-	screen.call("AdvanceUntilNextEvent")
-	screen.call("AdvanceUntilNextEvent")
+	screen.call("AdvanceUntilNextPlayerRelevantEvent")
+	screen.call("AdvanceUntilNextPlayerRelevantEvent")
 	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(12000)
 	assert_bool(screen.get_meta("travel_active", true)).is_false()
 
@@ -187,11 +191,11 @@ func test_quick_save_load_restores_active_operations_and_continues_scheduler() -
 	assert_int(screen.call("ProcessSyntheticDelta", 0.1)).is_equal(1)
 	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(3100)
 
-	screen.call("AdvanceUntilNextEvent")
+	screen.call("AdvanceUntilNextPlayerRelevantEvent")
 	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(8000)
 	assert_str(screen.get_meta("last_advance_event", "")).contains("SensorRepairCompletion")
 	assert_bool(screen.get_meta("travel_active", false)).is_true()
-	screen.call("AdvanceUntilNextEvent")
+	screen.call("AdvanceUntilNextPlayerRelevantEvent")
 	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(12000)
 	assert_str(screen.get_meta("last_advance_event", "")).contains("TravelArrival")
 	assert_bool(screen.get_meta("travel_active", true)).is_false()
@@ -244,6 +248,7 @@ func test_synthetic_rates_fractional_carry_and_catch_up_cap() -> void:
 	assert_int(quad_rate.call("ProcessSyntheticDelta", 0.1)).is_equal(4)
 	assert_int(quad_rate.call("ProcessSyntheticDelta", 30.0)).is_equal(6)
 	assert_int(quad_rate.get_meta("simulation_time_milliseconds", -1)).is_equal(1000)
+	assert_str(quad_rate.get_meta("advance_status", "")).is_equal("advanced")
 
 
 func test_pause_repeated_processing_never_advances_core_time() -> void:
@@ -286,19 +291,52 @@ func test_time_driven_arrival_refreshes_connected_destination_buttons() -> void:
 	assert_bool(_find_destination_button(screen, "Vesper Reach").disabled).is_true()
 	assert_bool(_find_destination_button(screen, "Meridian Drift").disabled).is_false()
 
+	screen.call("AdvanceUntilNextPlayerRelevantEvent")
+	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(12000)
+	assert_str(screen.get_meta("last_advance_event", "")).is_equal("NoScheduledEvent")
+	assert_str(screen.get_node("%Message").text).not_contains("TravelArrival")
+	assert_str(screen.get_node("%Message").text).not_contains("14000")
+	assert_str(screen.get_meta("last_advance_event", "")).not_contains("TravelArrival")
+
+
+func test_fixed_rate_hidden_horizon_arrival_does_not_masquerade_as_player_arrival() -> void:
+	var screen := _create_screen()
+	var initial_button_count := screen.get_node("%DestinationButtons").get_child_count()
+	var initial_vesper_disabled: bool = _find_destination_button(screen, "Vesper Reach").disabled
+	var initial_meridian_disabled: bool = _find_destination_button(screen, "Meridian Drift").disabled
+
+	for _step in range(23):
+		assert_int(screen.call("ProcessSyntheticDelta", 0.6)).is_equal(6)
+	assert_int(screen.call("ProcessSyntheticDelta", 0.2)).is_equal(2)
+
+	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(14000)
+	assert_bool(screen.get_meta("travel_active", true)).is_false()
+	assert_str(screen.get_meta("travel_origin", "")).is_empty()
+	assert_str(screen.get_meta("travel_destination", "")).is_empty()
+	assert_int(screen.get_meta("travel_eta_milliseconds", -1)).is_equal(-1)
+	assert_int(screen.get_node("%DestinationButtons").get_child_count()).is_equal(initial_button_count)
+	assert_str(screen.get_node("%TravelStatus").text).contains("AT LOCATION")
+	assert_bool(_find_destination_button(screen, "Vesper Reach").disabled).is_equal(
+		initial_vesper_disabled
+	)
+	assert_bool(_find_destination_button(screen, "Meridian Drift").disabled).is_equal(
+		initial_meridian_disabled
+	)
+
 
 func test_advance_until_stops_at_repair_before_arrival() -> void:
 	var screen := _create_screen()
 	screen.call("SelectDestination", "vesper-reach")
 	screen.call("RequestSelectedTravel")
-	screen.call("AdvanceUntilNextEvent")
+	screen.call("AdvanceUntilNextPlayerRelevantEvent")
 
 	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(8000)
+	assert_str(screen.get_meta("advance_status", "")).is_equal("advanced")
 	assert_str(screen.get_meta("last_advance_event", "")).contains("SensorRepairCompletion")
 	assert_bool(screen.get_meta("travel_active", false)).is_true()
 	assert_float(screen.get_meta("sensor_integrity", 0.0)).is_equal_approx(1.0, 0.0001)
 
-	screen.call("AdvanceUntilNextEvent")
+	screen.call("AdvanceUntilNextPlayerRelevantEvent")
 	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(12000)
 	assert_str(screen.get_meta("last_advance_event", "")).contains("TravelArrival")
 	assert_bool(screen.get_meta("travel_active", true)).is_false()

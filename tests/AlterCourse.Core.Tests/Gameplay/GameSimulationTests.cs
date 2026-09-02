@@ -7,6 +7,7 @@ using AlterCourse.Core.Quantities;
 using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
+using AlterCourse.Core.Tactical;
 
 namespace AlterCourse.Core.Tests.Gameplay;
 
@@ -45,6 +46,13 @@ public sealed class GameSimulationTests
     {
         GameSimulation game = CreateGame();
         PlayerProjection initial = game.GetPlayerProjection();
+        var metadata = new GameSaveMetadata(
+            "travel-rejection",
+            "Travel Rejection",
+            DateTimeOffset.UnixEpoch,
+            DateTimeOffset.UnixEpoch
+        );
+        byte[] initialSnapshot = GamePersistence.Serialize(game, metadata);
         LocationId origin = initial.Strategic.CurrentLocation!.Id;
         LocationId connected = initial.Strategic.Routes.Single(route => route.Origin == origin).Destination;
         LocationId unconnected = initial
@@ -54,14 +62,17 @@ public sealed class GameSimulationTests
         Assert.Equal(TravelOutcome.SameLocation, game.RequestTravel(new TravelIntent(origin)).Outcome);
         Assert.Equal(TravelOutcome.RouteUnavailable, game.RequestTravel(new TravelIntent(unconnected)).Outcome);
         Assert.Equal(initial, game.GetPlayerProjection());
+        Assert.Equal(initialSnapshot, GamePersistence.Serialize(game, metadata));
 
         Assert.Equal(TravelOutcome.Accepted, game.RequestTravel(new TravelIntent(connected)).Outcome);
         PlayerProjection traveling = game.GetPlayerProjection();
+        byte[] travelingSnapshot = GamePersistence.Serialize(game, metadata);
         Assert.Equal(TravelOutcome.AlreadyTraveling, game.RequestTravel(new TravelIntent(unconnected)).Outcome);
         Assert.DoesNotContain(PlayerAction.Travel, traveling.AvailableActions);
         Assert.DoesNotContain(PlayerAction.SetTacticalCourse, traveling.AvailableActions);
         Assert.Contains(PlayerAction.AdvanceTime, traveling.AvailableActions);
         Assert.Equal(traveling, game.GetPlayerProjection());
+        Assert.Equal(travelingSnapshot, GamePersistence.Serialize(game, metadata));
     }
 
     /// <summary>Confirms travel remains explicit until its scheduled arrival boundary.</summary>
@@ -223,20 +234,13 @@ public sealed class GameSimulationTests
 
         Assert.Equal(AdvanceUntilOutcome.ScheduledEventResolved, repair.Outcome);
         Assert.Equal(8000, repair.StoppedAt.Milliseconds);
-        Assert.Equal(
-            [ScheduledWorkKind.SensorRepairCompletion, ScheduledWorkKind.SensorRepairCompletion],
-            repair.ResolvedKinds
-        );
+        Assert.Equal([ScheduledWorkKind.SensorRepairCompletion], repair.ResolvedKinds);
         Assert.NotNull(repair.Projection.Strategic.Travel);
         Assert.Equal(12000, arrival.StoppedAt.Milliseconds);
         Assert.Equal([ScheduledWorkKind.TravelArrival], arrival.ResolvedKinds);
         Assert.Equal(12000, ordinaryAdvance.FinalTime.Milliseconds);
         Assert.Equal(
-            [
-                ScheduledWorkKind.SensorRepairCompletion,
-                ScheduledWorkKind.SensorRepairCompletion,
-                ScheduledWorkKind.TravelArrival,
-            ],
+            [ScheduledWorkKind.SensorRepairCompletion, ScheduledWorkKind.TravelArrival],
             ordinaryAdvance.ResolvedKinds
         );
         Assert.Equal(ordinary.GetPlayerProjection(), ordinaryAdvance.Projection);
@@ -323,13 +327,69 @@ public sealed class GameSimulationTests
             DateTimeOffset.UnixEpoch
         );
         byte[] initial = GamePersistence.Serialize(game, metadata);
+        game.SetTacticalCourse(new SetTacticalCourseIntent(new HeadingDegrees(90), new SpeedKilometersPerSecond(1)));
+        byte[] moving = GamePersistence.Serialize(game, metadata);
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
             game.AdvanceFixedSteps(1_000_001)
         );
 
-        Assert.Contains("ship-step work budget", exception.Message, StringComparison.Ordinal);
-        Assert.Equal(initial, GamePersistence.Serialize(game, metadata));
+        Assert.Contains("actual ship-step work budget", exception.Message, StringComparison.Ordinal);
+        Assert.NotEqual(initial, moving);
+        Assert.Equal(moving, GamePersistence.Serialize(game, metadata));
+    }
+
+    /// <summary>Confirms fixed-step work is charged only for ships that require tactical integration.</summary>
+    [Fact]
+    public void FixedStepWorkSkipsInactiveShipsAndMaterializesRepairsAtBoundaries()
+    {
+        const int shipCount = 256;
+        const int stepCount = 5_000;
+        var location = new StrategicLocation(new LocationId("shared-location"), "Shared Location", default);
+        ShipStart[] starts =
+        [
+            .. Enumerable
+                .Range(1, shipCount)
+                .Select(index =>
+                {
+                    bool isMover = index == 1;
+                    bool isRepairing = index == 2;
+                    return new ShipStart(
+                        new ShipInstanceId(index),
+                        new ShipDefinitionId("pathfinder"),
+                        $"USS Test {index}",
+                        isMover ? default : new TacticalPosition(index, -index),
+                        isMover ? new TacticalMotion(new HeadingDegrees(90), new SpeedKilometersPerSecond(1)) : default,
+                        new SensorIntegrity(isRepairing ? 0.4 : 1),
+                        new AtLocationStart(location.Id),
+                        isRepairing
+                            ? new SensorRepairStart(
+                                new SensorIntegrity(0.4),
+                                new SensorIntegrity(1),
+                                new SimulationTime(0)
+                            )
+                            : null
+                    );
+                }),
+        ];
+        GameSimulation game = new GameBootstrap(
+            new SimulationTime(0),
+            new StrategicMap([location], []),
+            new ShipInstanceId(1),
+            starts
+        ).CreateSimulation(CreateCatalog());
+        TacticalPosition inactivePosition = game.CaptureState()
+            .GetRequiredShip(new ShipInstanceId(shipCount))
+            .TacticalPosition;
+
+        SimulationAdvanceResult result = game.AdvanceFixedSteps(stepCount);
+        SimulationState final = game.CaptureState();
+
+        Assert.Equal(stepCount * 100, result.FinalTime.Milliseconds);
+        Assert.Equal(500, final.GetRequiredShip(new ShipInstanceId(1)).TacticalPosition.XKilometers, 8);
+        Assert.Equal(inactivePosition, final.GetRequiredShip(new ShipInstanceId(shipCount)).TacticalPosition);
+        Assert.Equal(1, final.GetRequiredShip(new ShipInstanceId(2)).SensorIntegrity.Value);
+        Assert.Null(final.GetRequiredShip(new ShipInstanceId(2)).SensorRepair);
     }
 
     /// <summary>Confirms bootstrap cannot admit scheduled work that persistence would reject for time exhaustion.</summary>
