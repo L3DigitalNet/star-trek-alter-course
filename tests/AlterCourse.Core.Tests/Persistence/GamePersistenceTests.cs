@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using AlterCourse.Core.Content;
 using AlterCourse.Core.Gameplay;
 using AlterCourse.Core.Persistence;
+using AlterCourse.Core.Player;
 using AlterCourse.Core.Quantities;
 using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
@@ -84,6 +85,104 @@ public sealed class GamePersistenceTests
         );
     }
 
+    /// <summary>Confirms repair interpolation remains relative to a persisted nonzero start time.</summary>
+    [Fact]
+    public void RestoresRepairThatStartedAfterSimulationOrigin()
+    {
+        byte[] saved = Mutate(root =>
+        {
+            JsonObject simulation = root["simulation"]!.AsObject();
+            JsonObject repair = simulation["playerShip"]!["sensorRepair"]!.AsObject();
+            repair["startedAtMilliseconds"] = 1000;
+            repair["expectedCompletionMilliseconds"] = 9000;
+            simulation["playerShip"]!["sensorIntegrity"] = 0.625;
+            simulation["scheduler"]!["outstandingWork"]![0]!["dueTimeMilliseconds"] = 9000;
+        });
+
+        GameSimulation restored = GamePersistence
+            .Deserialize(saved, CreateCatalog(), "nonzero-repair-start.json")
+            .Simulation;
+        PlayerProjection active = restored.GetPlayerProjection();
+
+        Assert.Equal(0.375, active.Ship.Sensors.RepairProgress, 10);
+        Assert.Equal(0.625, active.Ship.Sensors.Integrity, 10);
+        restored.AdvanceFixedSteps(50);
+        Assert.False(restored.GetPlayerProjection().Ship.Sensors.IsRepairing);
+        Assert.Equal(1, restored.GetPlayerProjection().Ship.Sensors.Integrity);
+    }
+
+    /// <summary>Confirms a ship at its exact authored speed limit survives snapshot reconstruction.</summary>
+    [Fact]
+    public void RoundTripsMaximumTacticalSpeedAtLocation()
+    {
+        GameSimulation original = FirstGameSetup.Create(CreateDefinition());
+        original.SetTacticalCourse(
+            new SetTacticalCourseIntent(new HeadingDegrees(90), new SpeedKilometersPerSecond(10))
+        );
+
+        LoadedGameSave loaded = GamePersistence.Deserialize(
+            GamePersistence.Serialize(original, CreateMetadata()),
+            CreateCatalog(),
+            "maximum-speed.json"
+        );
+
+        Assert.Equal(original.GetPlayerProjection(), loaded.Simulation.GetPlayerProjection());
+    }
+
+    /// <summary>Confirms active travel and repair restore at their inclusive start boundary.</summary>
+    [Fact]
+    public void RoundTripsTravelAndRepairAtTheirStartBoundary()
+    {
+        GameSimulation original = FirstGameSetup.Create(CreateDefinition());
+        LocationId destination = original
+            .GetPlayerProjection()
+            .Strategic.Routes.Single(route =>
+                route.Origin == original.GetPlayerProjection().Strategic.CurrentLocation!.Id
+            )
+            .Destination;
+        original.RequestTravel(new TravelIntent(destination));
+
+        LoadedGameSave loaded = GamePersistence.Deserialize(
+            GamePersistence.Serialize(original, CreateMetadata()),
+            CreateCatalog(),
+            "start-boundary.json"
+        );
+
+        Assert.Equal(original.GetPlayerProjection(), loaded.Simulation.GetPlayerProjection());
+    }
+
+    /// <summary>Confirms a completed at-location state with no repair or scheduled work is a valid V1 save.</summary>
+    [Fact]
+    public void RoundTripsAfterTravelAndRepairComplete()
+    {
+        GameSimulation original = CreateTravelingGame();
+        original.AdvanceUntilNextScheduledEvent();
+        original.AdvanceUntilNextScheduledEvent();
+
+        LoadedGameSave loaded = GamePersistence.Deserialize(
+            GamePersistence.Serialize(original, CreateMetadata()),
+            CreateCatalog(),
+            "completed.json"
+        );
+        PlayerProjection projection = loaded.Simulation.GetPlayerProjection();
+
+        Assert.Equal(original.GetPlayerProjection(), projection);
+        Assert.NotNull(projection.Strategic.CurrentLocation);
+        Assert.Null(projection.Strategic.Travel);
+        Assert.False(projection.Ship.Sensors.IsRepairing);
+        Assert.Equal(
+            GamePersistence.Serialize(original, CreateMetadata()),
+            GamePersistence.Serialize(loaded.Simulation, CreateMetadata())
+        );
+        Assert.Equal(AdvanceUntilOutcome.NoScheduledEvent, loaded.Simulation.AdvanceUntilNextScheduledEvent().Outcome);
+        var course = new SetTacticalCourseIntent(new HeadingDegrees(90), new SpeedKilometersPerSecond(2));
+        original.SetTacticalCourse(course);
+        loaded.Simulation.SetTacticalCourse(course);
+        original.AdvanceFixedSteps(1);
+        loaded.Simulation.AdvanceFixedSteps(1);
+        Assert.Equal(original.GetPlayerProjection(), loaded.Simulation.GetPlayerProjection());
+    }
+
     /// <summary>Confirms V1 is selected explicitly and all unsupported versions fail closed.</summary>
     [Theory]
     [InlineData(0)]
@@ -144,6 +243,38 @@ public sealed class GamePersistenceTests
 
         AssertFailure(unknown, "unknown.json", GamePersistenceFailure.InvalidData, "unexpected");
         AssertFailure(missing, "missing.json", GamePersistenceFailure.InvalidData, "simulation");
+    }
+
+    /// <summary>Confirms explicit nulls at required nested boundaries fail through the typed load contract.</summary>
+    [Fact]
+    public void RejectsExplicitNullRequiredMembers()
+    {
+        byte[] metadata = Mutate(root => root["metadata"] = null);
+        byte[] playerShip = Mutate(root => root["simulation"]!["playerShip"] = null);
+        byte[] locationPosition = Mutate(root =>
+            root["simulation"]!["strategicMap"]!["locations"]![0]!["position"] = null
+        );
+        byte[] tacticalPosition = Mutate(root => root["simulation"]!["playerShip"]!["tacticalPosition"] = null);
+
+        AssertFailure(metadata, "null-metadata.json", GamePersistenceFailure.InvalidData, "null");
+        AssertFailure(playerShip, "null-player-ship.json", GamePersistenceFailure.InvalidData, "null");
+        AssertFailure(locationPosition, "null-location-position.json", GamePersistenceFailure.InvalidData, "null");
+        AssertFailure(tacticalPosition, "null-tactical-position.json", GamePersistenceFailure.InvalidData, "required");
+    }
+
+    /// <summary>Confirms required save-property names remain case-sensitive at nested boundaries.</summary>
+    [Fact]
+    public void RejectsDifferentlyCasedPropertyNames()
+    {
+        byte[] changedCase = Mutate(root =>
+        {
+            JsonObject ship = root["simulation"]!["playerShip"]!.AsObject();
+            JsonNode? definitionId = ship["definitionId"];
+            ship.Remove("definitionId");
+            ship["DefinitionId"] = definitionId;
+        });
+
+        AssertFailure(changedCase, "property-case.json", GamePersistenceFailure.InvalidData, "DefinitionId");
     }
 
     /// <summary>Confirms content references and scheduler ordering are semantic load boundaries.</summary>
@@ -233,6 +364,47 @@ public sealed class GamePersistenceTests
         AssertFailure(travel, "travel-correlation.json", GamePersistenceFailure.InvalidData, "correlat");
         AssertFailure(repair, "repair-correlation.json", GamePersistenceFailure.InvalidData, "correlat");
         AssertFailure(surplusArrival, "surplus-arrival.json", GamePersistenceFailure.InvalidData, "exactly one");
+    }
+
+    /// <summary>Confirms active travel and repair cannot remain live at their completion boundaries.</summary>
+    [Fact]
+    public void RejectsActiveOperationsAtTheirCompletionBoundary()
+    {
+        byte[] travel = Mutate(root =>
+        {
+            JsonObject simulation = root["simulation"]!.AsObject();
+            simulation["strategicState"]!["travel"]!["expectedArrivalMilliseconds"] = 4000;
+            simulation["playerShip"]!["sensorRepair"]!["expectedCompletionMilliseconds"] = 4000;
+            simulation["playerShip"]!["sensorIntegrity"] = 1;
+            simulation["scheduler"]!["outstandingWork"]![0]!["dueTimeMilliseconds"] = 4000;
+            simulation["scheduler"]!["outstandingWork"]![1]!["dueTimeMilliseconds"] = 4000;
+        });
+        byte[] repair = Mutate(root =>
+        {
+            JsonObject simulation = root["simulation"]!.AsObject();
+            simulation["playerShip"]!["sensorRepair"]!["expectedCompletionMilliseconds"] = 4000;
+            simulation["playerShip"]!["sensorIntegrity"] = 1;
+            simulation["scheduler"]!["outstandingWork"]![0]!["dueTimeMilliseconds"] = 4000;
+        });
+
+        AssertFailure(travel, "travel-at-arrival.json", GamePersistenceFailure.InvalidData, "active travel");
+        AssertFailure(repair, "repair-at-completion.json", GamePersistenceFailure.InvalidData, "active sensor repair");
+    }
+
+    /// <summary>Confirms persisted integrity must equal time-derived active repair state.</summary>
+    [Fact]
+    public void RejectsSensorIntegrityThatDoesNotMatchActiveRepair()
+    {
+        byte[] mismatch = Mutate(root => root["simulation"]!["playerShip"]!["sensorIntegrity"] = 0.6);
+        byte[] noWork = Mutate(root =>
+        {
+            JsonObject ship = root["simulation"]!["playerShip"]!.AsObject();
+            ship["sensorRepair"]!["targetIntegrity"] = 0.4;
+            ship["sensorIntegrity"] = 0.4;
+        });
+
+        AssertFailure(mismatch, "sensor-mismatch.json", GamePersistenceFailure.InvalidData, "does not match");
+        AssertFailure(noWork, "sensor-no-work.json", GamePersistenceFailure.InvalidData, "target");
     }
 
     /// <summary>Confirms nonfinite physical values and unknown event kinds never reach domain records.</summary>

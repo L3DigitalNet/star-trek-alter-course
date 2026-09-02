@@ -228,6 +228,26 @@ public sealed class ShipDefinitionCatalogLoaderTests
         Assert.Equal("content.size-limit", streamed.Diagnostics.Single().Code);
     }
 
+    /// <summary>Confirms the documented byte ceiling is inclusive for every authored-input path.</summary>
+    [Fact]
+    public void AcceptsDocumentsAtTheExactByteLimit()
+    {
+        const int maximumDocumentBytes = 256 * 1024;
+        string exact =
+            ValidDefinition + new string(' ', maximumDocumentBytes - Encoding.UTF8.GetByteCount(ValidDefinition));
+        byte[] bytes = Encoding.UTF8.GetBytes(exact);
+        ShipDefinitionCatalogLoader loader = CreateLoader();
+
+        ShipDefinition fromText = loader.LoadText(exact, "limit-text.json");
+        ShipDefinition fromBytes = loader.LoadUtf8(bytes, "limit-bytes.json");
+        using var stream = new MemoryStream(bytes);
+        ShipDefinition fromStream = loader.Load(stream, "limit-stream.json");
+
+        Assert.Equal(maximumDocumentBytes, bytes.Length);
+        Assert.Equal(fromText, fromBytes);
+        Assert.Equal(fromText, fromStream);
+    }
+
     private static ShipDefinitionCatalogLoader CreateLoader() =>
         new(
             File.ReadAllText(

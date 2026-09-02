@@ -31,9 +31,7 @@ public sealed class GameSimulationTests
         Assert.Contains(PlayerAction.Travel, projection.AvailableActions);
         Assert.Contains(PlayerAction.SetTacticalCourse, projection.AvailableActions);
 
-        Assert.IsAssignableFrom<IReadOnlyList<StrategicLocationProjection>>(
-            projection.Strategic.Locations
-        );
+        Assert.IsAssignableFrom<IReadOnlyList<StrategicLocationProjection>>(projection.Strategic.Locations);
         Assert.NotSame(projection.Strategic.Locations, first.GetPlayerProjection().Strategic.Locations);
     }
 
@@ -45,23 +43,20 @@ public sealed class GameSimulationTests
         PlayerProjection initial = game.GetPlayerProjection();
         LocationId origin = initial.Strategic.CurrentLocation!.Id;
         LocationId connected = initial.Strategic.Routes.Single(route => route.Origin == origin).Destination;
-        LocationId unconnected = initial.Strategic.Locations
-            .Select(location => location.Id)
+        LocationId unconnected = initial
+            .Strategic.Locations.Select(location => location.Id)
             .Single(id => id != origin && id != connected);
 
         Assert.Equal(TravelOutcome.SameLocation, game.RequestTravel(new TravelIntent(origin)).Outcome);
-        Assert.Equal(
-            TravelOutcome.RouteUnavailable,
-            game.RequestTravel(new TravelIntent(unconnected)).Outcome
-        );
+        Assert.Equal(TravelOutcome.RouteUnavailable, game.RequestTravel(new TravelIntent(unconnected)).Outcome);
         Assert.Equal(initial, game.GetPlayerProjection());
 
         Assert.Equal(TravelOutcome.Accepted, game.RequestTravel(new TravelIntent(connected)).Outcome);
         PlayerProjection traveling = game.GetPlayerProjection();
-        Assert.Equal(
-            TravelOutcome.AlreadyTraveling,
-            game.RequestTravel(new TravelIntent(unconnected)).Outcome
-        );
+        Assert.Equal(TravelOutcome.AlreadyTraveling, game.RequestTravel(new TravelIntent(unconnected)).Outcome);
+        Assert.DoesNotContain(PlayerAction.Travel, traveling.AvailableActions);
+        Assert.DoesNotContain(PlayerAction.SetTacticalCourse, traveling.AvailableActions);
+        Assert.Contains(PlayerAction.AdvanceTime, traveling.AvailableActions);
         Assert.Equal(traveling, game.GetPlayerProjection());
     }
 
@@ -82,6 +77,7 @@ public sealed class GameSimulationTests
         Assert.Equal(origin, beforeArrival.Strategic.Travel!.Origin);
         Assert.Equal(destination, beforeArrival.Strategic.Travel.Destination);
         Assert.Equal(12000, beforeArrival.Strategic.Travel.ExpectedArrival.Milliseconds);
+        Assert.True(beforeArrival.Strategic.Travel.IsActive);
 
         game.AdvanceFixedSteps(1);
         PlayerProjection arrived = game.GetPlayerProjection();
@@ -97,22 +93,14 @@ public sealed class GameSimulationTests
     [InlineData(90, 1, 0)]
     [InlineData(180, 0, -1)]
     [InlineData(270, -1, 0)]
-    public void TacticalHeadingUsesClockwiseDegreesFromNorth(
-        double heading,
-        double expectedX,
-        double expectedY
-    )
+    public void TacticalHeadingUsesClockwiseDegreesFromNorth(double heading, double expectedX, double expectedY)
     {
         GameSimulation game = CreateGame();
         Assert.Equal(
             SetTacticalCourseOutcome.Accepted,
             game.SetTacticalCourse(
-                    new SetTacticalCourseIntent(
-                        new HeadingDegrees(heading),
-                        new SpeedKilometersPerSecond(10)
-                    )
-                )
-                .Outcome
+                new SetTacticalCourseIntent(new HeadingDegrees(heading), new SpeedKilometersPerSecond(10))
+            ).Outcome
         );
 
         game.AdvanceFixedSteps(1);
@@ -128,10 +116,7 @@ public sealed class GameSimulationTests
     {
         GameSimulation tenSingles = CreateGame();
         GameSimulation twoBatches = CreateGame();
-        var intent = new SetTacticalCourseIntent(
-            new HeadingDegrees(45),
-            new SpeedKilometersPerSecond(3.5)
-        );
+        var intent = new SetTacticalCourseIntent(new HeadingDegrees(45), new SpeedKilometersPerSecond(3.5));
         tenSingles.SetTacticalCourse(intent);
         twoBatches.SetTacticalCourse(intent);
 
@@ -157,18 +142,12 @@ public sealed class GameSimulationTests
         Assert.Equal(
             SetTacticalCourseOutcome.SpeedExceedsMaximum,
             game.SetTacticalCourse(
-                    new SetTacticalCourseIntent(
-                        new HeadingDegrees(10),
-                        new SpeedKilometersPerSecond(10.01)
-                    )
-                )
-                .Outcome
+                new SetTacticalCourseIntent(new HeadingDegrees(10), new SpeedKilometersPerSecond(10.01))
+            ).Outcome
         );
         Assert.Equal(initial, game.GetPlayerProjection());
 
-        game.SetTacticalCourse(
-            new SetTacticalCourseIntent(new HeadingDegrees(90), new SpeedKilometersPerSecond(0))
-        );
+        game.SetTacticalCourse(new SetTacticalCourseIntent(new HeadingDegrees(90), new SpeedKilometersPerSecond(0)));
         game.AdvanceFixedSteps(5);
         Assert.Equal(initial.Ship.Tactical.Position, game.GetPlayerProjection().Ship.Tactical.Position);
 
@@ -177,14 +156,25 @@ public sealed class GameSimulationTests
         Assert.Equal(
             SetTacticalCourseOutcome.UnavailableWhileTraveling,
             game.SetTacticalCourse(
-                    new SetTacticalCourseIntent(
-                        new HeadingDegrees(20),
-                        new SpeedKilometersPerSecond(1)
-                    )
-                )
-                .Outcome
+                new SetTacticalCourseIntent(new HeadingDegrees(20), new SpeedKilometersPerSecond(1))
+            ).Outcome
         );
         Assert.Equal(traveling, game.GetPlayerProjection());
+    }
+
+    /// <summary>Confirms the authored maximum tactical speed is an inclusive valid command boundary.</summary>
+    [Fact]
+    public void MaximumTacticalSpeedIsAccepted()
+    {
+        GameSimulation game = CreateGame();
+
+        SetTacticalCourseResult result = game.SetTacticalCourse(
+            new SetTacticalCourseIntent(new HeadingDegrees(0), new SpeedKilometersPerSecond(10))
+        );
+        game.AdvanceFixedSteps(1);
+
+        Assert.Equal(SetTacticalCourseOutcome.Accepted, result.Outcome);
+        Assert.Equal(-6.5, game.GetPlayerProjection().Ship.Tactical.Position.YKilometers, 10);
     }
 
     /// <summary>Confirms one clock drives meaningful repair progress during strategic travel.</summary>
@@ -255,12 +245,7 @@ public sealed class GameSimulationTests
     public void TravelClearsLocalTacticalMotionWhilePositionRemainsStable()
     {
         GameSimulation game = CreateGame();
-        game.SetTacticalCourse(
-            new SetTacticalCourseIntent(
-                new HeadingDegrees(45),
-                new SpeedKilometersPerSecond(3.5)
-            )
-        );
+        game.SetTacticalCourse(new SetTacticalCourseIntent(new HeadingDegrees(45), new SpeedKilometersPerSecond(3.5)));
         TacticalPositionProjection before = game.GetPlayerProjection().Ship.Tactical.Position;
 
         game.RequestTravel(new TravelIntent(ConnectedDestination(game)));
@@ -283,12 +268,8 @@ public sealed class GameSimulationTests
         Assert.Equal(
             SetTacticalCourseOutcome.Accepted,
             game.SetTacticalCourse(
-                    new SetTacticalCourseIntent(
-                        new HeadingDegrees(90),
-                        new SpeedKilometersPerSecond(2)
-                    )
-                )
-                .Outcome
+                new SetTacticalCourseIntent(new HeadingDegrees(90), new SpeedKilometersPerSecond(2))
+            ).Outcome
         );
         game.AdvanceFixedSteps(1);
 
@@ -302,6 +283,8 @@ public sealed class GameSimulationTests
         GameSimulation game = CreateGame();
         PlayerProjection initial = game.GetPlayerProjection();
 
+        game.AdvanceFixedSteps(0);
+        Assert.Equal(initial, game.GetPlayerProjection());
         Assert.Throws<ArgumentOutOfRangeException>(() => game.AdvanceFixedSteps(-1));
         Assert.Throws<OverflowException>(() => game.AdvanceFixedSteps(int.MaxValue));
         Assert.Equal(initial, game.GetPlayerProjection());

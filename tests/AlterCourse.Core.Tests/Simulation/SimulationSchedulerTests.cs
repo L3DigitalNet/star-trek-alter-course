@@ -87,15 +87,17 @@ public sealed class SimulationSchedulerTests
         (SimulationScheduler scheduled, ScheduledWork first) = SimulationScheduler
             .Create()
             .Schedule(new SimulationTime(100), ScheduledWorkKind.TravelArrival);
-        (SimulationScheduler remaining, IReadOnlyList<ScheduledWork> firstBatch) =
-            scheduled.DequeueDue(new SimulationTime(100));
+        (SimulationScheduler remaining, IReadOnlyList<ScheduledWork> firstBatch) = scheduled.DequeueDue(
+            new SimulationTime(100)
+        );
         (SimulationScheduler rescheduled, ScheduledWork second) = remaining.Schedule(
             new SimulationTime(100),
             ScheduledWorkKind.SensorRepairCompletion
         );
 
-        (SimulationScheduler final, IReadOnlyList<ScheduledWork> secondBatch) =
-            rescheduled.DequeueDue(new SimulationTime(100));
+        (SimulationScheduler final, IReadOnlyList<ScheduledWork> secondBatch) = rescheduled.DequeueDue(
+            new SimulationTime(100)
+        );
 
         Assert.Equal(new[] { first }, firstBatch);
         Assert.Equal(new[] { second }, secondBatch);
@@ -106,12 +108,7 @@ public sealed class SimulationSchedulerTests
     [Fact]
     public void RestoreSortsOutstandingWorkAndContinuesCounters()
     {
-        ScheduledWork later = new(
-            new ScheduledWorkId(7),
-            new SimulationTime(900),
-            12,
-            ScheduledWorkKind.TravelArrival
-        );
+        ScheduledWork later = new(new ScheduledWorkId(7), new SimulationTime(900), 12, ScheduledWorkKind.TravelArrival);
         ScheduledWork earlier = new(
             new ScheduledWorkId(4),
             new SimulationTime(200),
@@ -130,6 +127,18 @@ public sealed class SimulationSchedulerTests
         Assert.Equal(13, scheduled.Sequence);
         Assert.Equal(9, next.NextWorkId);
         Assert.Equal(14, next.NextSequence);
+    }
+
+    /// <summary>Confirms restoration uses persisted sequence rather than input order at one due time.</summary>
+    [Fact]
+    public void RestoreOrdersSameTimeWorkByPersistedSequence()
+    {
+        ScheduledWork first = Work(1, 0, 500);
+        ScheduledWork second = Work(2, 1, 500);
+
+        var restored = SimulationScheduler.Restore(3, 2, [second, first]);
+
+        Assert.Equal(new[] { first, second }, restored.OutstandingWork);
     }
 
     /// <summary>Confirms live post-dequeue state restores and continues deterministic allocation.</summary>
@@ -189,6 +198,8 @@ public sealed class SimulationSchedulerTests
         Assert.Throws<ArgumentOutOfRangeException>(() => SimulationScheduler.Restore(6, 9, [work]));
         Assert.Throws<ArgumentOutOfRangeException>(() => SimulationScheduler.Restore(0, 10, [work]));
         Assert.Throws<ArgumentOutOfRangeException>(() => SimulationScheduler.Restore(6, -1, [work]));
+        Assert.Throws<ArgumentOutOfRangeException>(() => SimulationScheduler.Restore(0, 0, []));
+        Assert.Throws<ArgumentOutOfRangeException>(() => SimulationScheduler.Restore(1, -1, []));
     }
 
     /// <summary>Confirms invalid work data cannot cross public boundaries.</summary>
@@ -196,28 +207,13 @@ public sealed class SimulationSchedulerTests
     public void ScheduledWorkRejectsInvalidSequenceOrKind()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
-            new ScheduledWork(
-                new ScheduledWorkId(1),
-                new SimulationTime(0),
-                -1,
-                ScheduledWorkKind.TravelArrival
-            )
+            new ScheduledWork(new ScheduledWorkId(1), new SimulationTime(0), -1, ScheduledWorkKind.TravelArrival)
         );
         Assert.Throws<ArgumentOutOfRangeException>(() =>
-            new ScheduledWork(
-                new ScheduledWorkId(1),
-                new SimulationTime(0),
-                0,
-                (ScheduledWorkKind)0
-            )
+            new ScheduledWork(new ScheduledWorkId(1), new SimulationTime(0), 0, (ScheduledWorkKind)0)
         );
         Assert.Throws<ArgumentOutOfRangeException>(() =>
-            new ScheduledWork(
-                new ScheduledWorkId(1),
-                new SimulationTime(0),
-                0,
-                (ScheduledWorkKind)999
-            )
+            new ScheduledWork(new ScheduledWorkId(1), new SimulationTime(0), 0, (ScheduledWorkKind)999)
         );
         ArgumentException invalidRestoration = Assert.Throws<ArgumentException>(() =>
             SimulationScheduler.Restore(1, 0, [default])
@@ -256,10 +252,5 @@ public sealed class SimulationSchedulerTests
     }
 
     private static ScheduledWork Work(long id, long sequence, long dueTime = 100) =>
-        new(
-            new ScheduledWorkId(id),
-            new SimulationTime(dueTime),
-            sequence,
-            ScheduledWorkKind.TravelArrival
-        );
+        new(new ScheduledWorkId(id), new SimulationTime(dueTime), sequence, ScheduledWorkKind.TravelArrival);
 }
