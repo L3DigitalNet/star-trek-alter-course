@@ -55,6 +55,25 @@ public sealed class PhysicalQuantityTests
         Assert.Equal(expected, new HeadingDegrees(input).Value);
     }
 
+    /// <summary>Confirms a tiny negative heading cannot round up to the excluded upper bound.</summary>
+    [Fact]
+    public void TinyNegativeHeadingNormalizesBelowFullTurn()
+    {
+        double normalized = new HeadingDegrees(-double.Epsilon).Value;
+
+        Assert.Equal(0, normalized);
+        Assert.InRange(normalized, 0, Math.BitDecrement(360));
+    }
+
+    /// <summary>Confirms canonical quantity zero never retains a negative sign bit.</summary>
+    [Fact]
+    public void NegativeZeroFoldsToPositiveZero()
+    {
+        Assert.Equal(0, BitConverter.DoubleToInt64Bits(new DistanceKilometers(-0.0).Value));
+        Assert.Equal(0, BitConverter.DoubleToInt64Bits(new SpeedKilometersPerSecond(-0.0).Value));
+        Assert.Equal(0, BitConverter.DoubleToInt64Bits(new HeadingDegrees(-0.0).Value));
+    }
+
     /// <summary>Confirms headings reject nonfinite degree values.</summary>
     [Theory]
     [InlineData(double.NaN)]

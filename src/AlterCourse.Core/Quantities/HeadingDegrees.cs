@@ -21,7 +21,7 @@ public readonly record struct HeadingDegrees
             normalized += FullTurn;
         }
 
-        Value = normalized == 0 ? 0 : normalized;
+        Value = normalized == 0 || normalized >= FullTurn ? 0 : normalized;
     }
 
     /// <summary>Gets the normalized heading in degrees.</summary>

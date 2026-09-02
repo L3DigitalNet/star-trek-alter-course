@@ -54,11 +54,20 @@ public sealed class SimulationScheduler
 
         ScheduledWork[] work = outstandingWork.ToArray();
         HashSet<long> identities = [];
+        // Sequences are globally unique, not merely unique per due time: (DueTime, Sequence)
+        // must remain a total order independent of input enumeration and sort stability.
         HashSet<long> sequences = [];
 
         foreach (ScheduledWork item in work)
         {
-            ValidateRestoredItem(item, nextWorkId, nextSequence, identities, sequences);
+            ValidateRestoredItem(
+                item,
+                nextWorkId,
+                nextSequence,
+                identities,
+                sequences,
+                nameof(outstandingWork)
+            );
         }
 
         ImmutableArray<ScheduledWork> ordered =
@@ -86,7 +95,9 @@ public sealed class SimulationScheduler
         return (new SimulationScheduler(followingWorkId, followingSequence, outstanding), scheduled);
     }
 
-    /// <summary>Removes and returns every item due at or before an explicit boundary.</summary>
+    /// <summary>
+    /// Removes and returns an immutable snapshot of work outstanding at call time and due at or before a boundary.
+    /// </summary>
     /// <param name="through">The inclusive simulation-time boundary.</param>
     /// <returns>The following scheduler state and due work in stable order.</returns>
     public (SimulationScheduler Scheduler, IReadOnlyList<ScheduledWork> DueWork) DequeueDue(
@@ -118,17 +129,18 @@ public sealed class SimulationScheduler
         long nextWorkId,
         long nextSequence,
         HashSet<long> identities,
-        HashSet<long> sequences
+        HashSet<long> sequences,
+        string outstandingWorkParameterName
     )
     {
         if (item.Id.Value <= 0)
         {
-            throw new ArgumentException("Outstanding work contains an uninitialized identity.", nameof(item));
+            throw InvalidOutstandingWork("Outstanding work contains an uninitialized identity.");
         }
 
         if (item.Sequence < 0)
         {
-            throw new ArgumentException("Outstanding work contains a negative sequence.", nameof(item));
+            throw InvalidOutstandingWork("Outstanding work contains a negative sequence.");
         }
 
         try
@@ -137,17 +149,21 @@ public sealed class SimulationScheduler
         }
         catch (ArgumentOutOfRangeException exception)
         {
-            throw new ArgumentException("Outstanding work contains an unknown kind.", nameof(item), exception);
+            throw new ArgumentException(
+                "Outstanding work contains an unknown kind.",
+                outstandingWorkParameterName,
+                exception
+            );
         }
 
         if (!identities.Add(item.Id.Value))
         {
-            throw new ArgumentException("Outstanding work contains a duplicate identity.", nameof(item));
+            throw InvalidOutstandingWork("Outstanding work contains a duplicate identity.");
         }
 
         if (!sequences.Add(item.Sequence))
         {
-            throw new ArgumentException("Outstanding work contains a duplicate sequence.", nameof(item));
+            throw InvalidOutstandingWork("Outstanding work contains a duplicate sequence.");
         }
 
         if (item.Id.Value >= nextWorkId)
@@ -167,5 +183,8 @@ public sealed class SimulationScheduler
                 "Next sequence must exceed every outstanding sequence."
             );
         }
+
+        ArgumentException InvalidOutstandingWork(string message) =>
+            new(message, outstandingWorkParameterName);
     }
 }

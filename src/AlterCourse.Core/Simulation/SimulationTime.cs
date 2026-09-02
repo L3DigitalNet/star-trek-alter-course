@@ -37,5 +37,4 @@ public readonly record struct SimulationTime
 
         return target;
     }
-
 }

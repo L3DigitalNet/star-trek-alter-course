@@ -56,6 +56,52 @@ public sealed class SimulationSchedulerTests
         Assert.Equal(new[] { future }, remaining.OutstandingWork);
     }
 
+    /// <summary>Confirms immutable operations do not alter their receiver.</summary>
+    [Fact]
+    public void OperationsPreserveReceiverState()
+    {
+        var initial = SimulationScheduler.Create();
+        (SimulationScheduler scheduled, ScheduledWork work) = initial.Schedule(
+            new SimulationTime(100),
+            ScheduledWorkKind.TravelArrival
+        );
+
+        (SimulationScheduler remaining, IReadOnlyList<ScheduledWork> due) = scheduled.DequeueDue(
+            new SimulationTime(100)
+        );
+
+        Assert.Empty(initial.OutstandingWork);
+        Assert.Equal(1, initial.NextWorkId);
+        Assert.Equal(0, initial.NextSequence);
+        Assert.Equal(new[] { work }, scheduled.OutstandingWork);
+        Assert.Equal(2, scheduled.NextWorkId);
+        Assert.Equal(1, scheduled.NextSequence);
+        Assert.Empty(remaining.OutstandingWork);
+        Assert.Equal(new[] { work }, due);
+    }
+
+    /// <summary>Confirms a due batch is a snapshot of work outstanding when dequeue begins.</summary>
+    [Fact]
+    public void DequeueDueReturnsSameBoundarySnapshot()
+    {
+        (SimulationScheduler scheduled, ScheduledWork first) = SimulationScheduler
+            .Create()
+            .Schedule(new SimulationTime(100), ScheduledWorkKind.TravelArrival);
+        (SimulationScheduler remaining, IReadOnlyList<ScheduledWork> firstBatch) =
+            scheduled.DequeueDue(new SimulationTime(100));
+        (SimulationScheduler rescheduled, ScheduledWork second) = remaining.Schedule(
+            new SimulationTime(100),
+            ScheduledWorkKind.SensorRepairCompletion
+        );
+
+        (SimulationScheduler final, IReadOnlyList<ScheduledWork> secondBatch) =
+            rescheduled.DequeueDue(new SimulationTime(100));
+
+        Assert.Equal(new[] { first }, firstBatch);
+        Assert.Equal(new[] { second }, secondBatch);
+        Assert.Empty(final.OutstandingWork);
+    }
+
     /// <summary>Confirms restoration sorts work and continues persisted counters.</summary>
     [Fact]
     public void RestoreSortsOutstandingWorkAndContinuesCounters()
@@ -86,18 +132,51 @@ public sealed class SimulationSchedulerTests
         Assert.Equal(14, next.NextSequence);
     }
 
+    /// <summary>Confirms live post-dequeue state restores and continues deterministic allocation.</summary>
+    [Fact]
+    public void PostDequeueStateRestoresAndContinues()
+    {
+        (SimulationScheduler afterFirst, _) = SimulationScheduler
+            .Create()
+            .Schedule(new SimulationTime(100), ScheduledWorkKind.TravelArrival);
+        (SimulationScheduler live, ScheduledWork future) = afterFirst.Schedule(
+            new SimulationTime(300),
+            ScheduledWorkKind.SensorRepairCompletion
+        );
+        (SimulationScheduler postDequeue, _) = live.DequeueDue(new SimulationTime(100));
+
+        var restored = SimulationScheduler.Restore(
+            postDequeue.NextWorkId,
+            postDequeue.NextSequence,
+            postDequeue.OutstandingWork
+        );
+        (SimulationScheduler continued, ScheduledWork next) = restored.Schedule(
+            new SimulationTime(200),
+            ScheduledWorkKind.TravelArrival
+        );
+
+        Assert.Equal(new[] { next, future }, continued.OutstandingWork);
+        Assert.Equal(new ScheduledWorkId(3), next.Id);
+        Assert.Equal(2, next.Sequence);
+        Assert.Equal(4, continued.NextWorkId);
+        Assert.Equal(3, continued.NextSequence);
+    }
+
     /// <summary>Confirms restoration rejects duplicate identities and sequences.</summary>
     [Fact]
     public void RestoreRejectsDuplicateWorkIdentityOrSequence()
     {
         ScheduledWork first = Work(1, 0);
 
-        Assert.Throws<ArgumentException>(() =>
+        ArgumentException duplicateIdentity = Assert.Throws<ArgumentException>(() =>
             SimulationScheduler.Restore(3, 2, [first, Work(1, 1)])
         );
-        Assert.Throws<ArgumentException>(() =>
-            SimulationScheduler.Restore(3, 2, [first, Work(2, 0)])
+        ArgumentException duplicateSequence = Assert.Throws<ArgumentException>(() =>
+            SimulationScheduler.Restore(3, 2, [first, Work(2, 0, 200)])
         );
+
+        Assert.Equal("outstandingWork", duplicateIdentity.ParamName);
+        Assert.Equal("outstandingWork", duplicateSequence.ParamName);
     }
 
     /// <summary>Confirms restoration counters are valid next values, not reused values.</summary>
@@ -129,10 +208,36 @@ public sealed class SimulationSchedulerTests
                 new ScheduledWorkId(1),
                 new SimulationTime(0),
                 0,
+                (ScheduledWorkKind)0
+            )
+        );
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new ScheduledWork(
+                new ScheduledWorkId(1),
+                new SimulationTime(0),
+                0,
                 (ScheduledWorkKind)999
             )
         );
-        Assert.Throws<ArgumentException>(() => SimulationScheduler.Restore(1, 0, [default]));
+        ArgumentException invalidRestoration = Assert.Throws<ArgumentException>(() =>
+            SimulationScheduler.Restore(1, 0, [default])
+        );
+
+        Assert.Equal("outstandingWork", invalidRestoration.ParamName);
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            SimulationScheduler.Create().Schedule(new SimulationTime(0), (ScheduledWorkKind)0)
+        );
+    }
+
+    /// <summary>Confirms null outstanding work is rejected at the public restoration boundary.</summary>
+    [Fact]
+    public void RestoreRejectsNullOutstandingWork()
+    {
+        ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() =>
+            SimulationScheduler.Restore(1, 0, null!)
+        );
+
+        Assert.Equal("outstandingWork", exception.ParamName);
     }
 
     /// <summary>Confirms scheduling rejects exhausted persisted counters.</summary>
@@ -150,10 +255,10 @@ public sealed class SimulationSchedulerTests
         );
     }
 
-    private static ScheduledWork Work(long id, long sequence) =>
+    private static ScheduledWork Work(long id, long sequence, long dueTime = 100) =>
         new(
             new ScheduledWorkId(id),
-            new SimulationTime(100),
+            new SimulationTime(dueTime),
             sequence,
             ScheduledWorkKind.TravelArrival
         );
