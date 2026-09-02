@@ -19,7 +19,7 @@ public sealed record AdvanceUntilResult
     /// <summary>Gets the exact stop time.</summary>
     public SimulationTime StoppedAt { get; }
 
-    /// <summary>Gets due consequences resolved at the stop boundary in stable order.</summary>
+    /// <summary>Gets player-targeted consequences resolved through the stop boundary in stable order.</summary>
     public IReadOnlyList<ScheduledWorkKind> ResolvedKinds { get; }
 
     /// <summary>Gets the fresh player view after resolution.</summary>

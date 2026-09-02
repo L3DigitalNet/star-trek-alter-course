@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using AlterCourse.Core.Content;
 using AlterCourse.Core.Identity;
+using AlterCourse.Core.Orders;
 using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
@@ -17,7 +18,8 @@ internal sealed record SimulationState
         ShipInstanceIdAllocator shipIdAllocator,
         StrategicMap strategicMap,
         ShipInstanceId playerShipId,
-        IEnumerable<ShipState> ships
+        IEnumerable<ShipState> ships,
+        ShipOrderIdAllocator? orderIdAllocator = null
     )
     {
         ArgumentNullException.ThrowIfNull(ships);
@@ -47,6 +49,7 @@ internal sealed record SimulationState
         ShipIdAllocator = shipIdAllocator;
         StrategicMap = strategicMap;
         PlayerShipId = playerShipId;
+        OrderIdAllocator = orderIdAllocator ?? ShipOrderIdAllocator.Create();
         // Canonical order makes every per-ship pass independent of caller enumeration order.
         Ships = [.. materialized.OrderBy(ship => ship.InstanceId.Value)];
     }
@@ -54,6 +57,7 @@ internal sealed record SimulationState
     internal SimulationTime Time { get; init; }
     internal SimulationScheduler Scheduler { get; init; }
     internal ShipInstanceIdAllocator ShipIdAllocator { get; init; }
+    internal ShipOrderIdAllocator OrderIdAllocator { get; init; }
     internal StrategicMap StrategicMap { get; init; }
     internal ShipInstanceId PlayerShipId { get; init; }
     internal ImmutableArray<ShipState> Ships { get; private init; }
@@ -144,6 +148,8 @@ internal sealed record SimulationState
             ValidateShip(ship, definition);
         }
 
+        ValidateOrders();
+
         foreach (ScheduledWork work in Scheduler.OutstandingWork)
         {
             ValidateScheduledWork(work);
@@ -152,7 +158,7 @@ internal sealed record SimulationState
 
     private void ValidateAggregateMembers()
     {
-        if (Scheduler is null || ShipIdAllocator is null || StrategicMap is null)
+        if (Scheduler is null || ShipIdAllocator is null || OrderIdAllocator is null || StrategicMap is null)
         {
             throw new InvalidOperationException("Simulation state contains a null aggregate member.");
         }
@@ -169,6 +175,7 @@ internal sealed record SimulationState
 
         if (
             ShipIdAllocator.NextId == long.MaxValue
+            || OrderIdAllocator.NextId == long.MaxValue
             || !SimulationScheduler.AreCountersWithinPersistedRange(Scheduler.NextWorkId, Scheduler.NextSequence)
         )
         {
@@ -214,6 +221,9 @@ internal sealed record SimulationState
             ScheduledWorkKind.TravelArrival => target.StrategicState is TravelingState traveling
                 && traveling.Travel.ScheduledArrivalId == work.Id
                 && traveling.Travel.ExpectedArrival == work.DueTime,
+            ScheduledWorkKind.OrderWake => target.ActiveOrder is HoldUntilOrder hold
+                && hold.ScheduledWakeId == work.Id
+                && hold.Until == work.DueTime,
             _ => false,
         };
         if (!correlated)
@@ -237,6 +247,96 @@ internal sealed record SimulationState
         }
 
         ValidateRepair(ship, definition);
+    }
+
+    private void ValidateOrders()
+    {
+        ShipOrder[] activeOrders = [.. Ships.Select(ship => ship.ActiveOrder).OfType<ShipOrder>()];
+        if (Ships.Single(ship => ship.InstanceId == PlayerShipId).ActiveOrder is not null)
+        {
+            throw new InvalidOperationException("The player ship cannot have an autonomous order.");
+        }
+
+        if (activeOrders.Select(order => order.Id).Distinct().Count() != activeOrders.Length)
+        {
+            throw new InvalidOperationException("Active ship orders require unique identities.");
+        }
+
+        long greatestOrderId = activeOrders.Length == 0 ? 0 : activeOrders.Max(order => order.Id.Value);
+        if (OrderIdAllocator.NextId <= greatestOrderId)
+        {
+            throw new InvalidOperationException("Order allocator must follow every active order identity.");
+        }
+
+        foreach (ShipState ship in Ships)
+        {
+            switch (ship.ActiveOrder)
+            {
+                case null:
+                    break;
+                case TravelToOrder travelTo:
+                    ValidateTravelToOrder(ship, travelTo);
+                    break;
+                case PatrolRouteOrder patrol:
+                    ValidatePatrolOrder(ship, patrol);
+                    break;
+                case HoldUntilOrder hold:
+                    ValidateHoldOrder(ship, hold);
+                    break;
+                default:
+                    throw new InvalidOperationException("Active ship order kind is unsupported.");
+            }
+        }
+    }
+
+    private static void ValidateTravelToOrder(ShipState ship, TravelToOrder order)
+    {
+        if (ship.StrategicState is not TravelingState traveling || traveling.Travel.Destination != order.Destination)
+        {
+            throw new InvalidOperationException("A TravelTo order must match the ship's active travel destination.");
+        }
+    }
+
+    private void ValidatePatrolOrder(ShipState ship, PatrolRouteOrder order)
+    {
+        foreach (LocationId waypoint in order.Waypoints)
+        {
+            StrategicMap.GetLocation(waypoint);
+        }
+
+        for (int index = 0; index < order.Waypoints.Length; index++)
+        {
+            LocationId origin = order.Waypoints[index];
+            LocationId destination = order.Waypoints[(index + 1) % order.Waypoints.Length];
+            if (StrategicMap.FindRoute(origin, destination) is null)
+            {
+                throw new InvalidOperationException(
+                    "Every adjacent patrol waypoint, including wraparound, requires a route."
+                );
+            }
+        }
+
+        int previousIndex = (order.NextWaypointIndex - 1 + order.Waypoints.Length) % order.Waypoints.Length;
+        if (
+            ship.StrategicState is not TravelingState traveling
+            || traveling.Travel.Origin != order.Waypoints[previousIndex]
+            || traveling.Travel.Destination != order.Waypoints[order.NextWaypointIndex]
+        )
+        {
+            throw new InvalidOperationException("A patrol order must match its declared current leg.");
+        }
+    }
+
+    private void ValidateHoldOrder(ShipState ship, HoldUntilOrder order)
+    {
+        if (ship.StrategicState is not AtLocationState || order.Until.Milliseconds <= Time.Milliseconds)
+        {
+            throw new InvalidOperationException(
+                "A HoldUntil order requires an at-location ship and a future wake time."
+            );
+        }
+
+        EnsureExactlyCorrelated(ship.InstanceId, order.ScheduledWakeId, order.Until, ScheduledWorkKind.OrderWake);
     }
 
     private void ValidateTravel(ShipState ship, TravelingState traveling)

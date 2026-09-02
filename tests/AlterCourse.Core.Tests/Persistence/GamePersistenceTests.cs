@@ -689,7 +689,7 @@ public sealed class GamePersistenceTests
     private static void ContinueWorld(GameSimulation simulation)
     {
         simulation.AdvanceUntilNextScheduledEvent();
-        simulation.AdvanceUntilNextScheduledEvent();
+        simulation.AdvanceFixedSteps(60);
         simulation.AdvanceFixedSteps(7);
     }
 

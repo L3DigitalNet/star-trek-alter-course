@@ -1,4 +1,6 @@
 using AlterCourse.Core.Content;
+using AlterCourse.Core.Identity;
+using AlterCourse.Core.Orders;
 using AlterCourse.Core.Player;
 using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
@@ -11,6 +13,7 @@ namespace AlterCourse.Core.Gameplay;
 public sealed class GameSimulation
 {
     private const int SameBoundaryExecutionBudget = 1024;
+    private const int TotalConsequenceExecutionBudget = 10_000;
     private const long ShipStepWorkBudget = 1_000_000;
 
     // Local arrival frames use one non-origin offset so tactical positions remain continuous values,
@@ -43,7 +46,7 @@ public sealed class GameSimulation
         return new TravelRequestResult(application.Outcome);
     }
 
-    private static ShipTravelApplicationResult ApplyShipTravel(
+    internal static ShipTravelApplicationResult ApplyShipTravel(
         SimulationState state,
         ShipTravelCommand command,
         ShipDefinitionCatalog shipCatalog
@@ -119,15 +122,22 @@ public sealed class GameSimulation
         ArgumentOutOfRangeException.ThrowIfNegative(stepCount);
         int milliseconds = checked(stepCount * checked((int)SimulationFixedStep.Duration.Milliseconds));
         SimulationTime target = _state.Time.AdvanceBy(new SimulationDuration(milliseconds));
-        (SimulationState candidate, IReadOnlyList<ScheduledWorkKind> resolvedKinds) = AdvanceTo(_state, target);
-        Commit(candidate);
-        return new SimulationAdvanceResult(_state.Time, resolvedKinds, Project(_state));
+        SimulationAdvanceTraceResult advance = AdvanceTo(_state, target, _shipCatalog);
+        Commit(advance.State);
+        return new SimulationAdvanceResult(
+            _state.Time,
+            PlayerVisibleKinds(advance.Traces, _state.PlayerShipId),
+            Project(_state)
+        );
     }
 
-    /// <summary>Advances through the ordinary scheduler path to the earliest current event boundary.</summary>
-    public AdvanceUntilResult AdvanceUntilNextScheduledEvent()
+    /// <summary>Advances through hidden work to the next consequence targeting the player ship.</summary>
+    public AdvanceUntilResult AdvanceUntilNextPlayerRelevantEvent()
     {
-        if (_state.Scheduler.OutstandingWork.IsDefaultOrEmpty)
+        ScheduledWork? nextPlayerWork = _state
+            .Scheduler.OutstandingWork.Cast<ScheduledWork?>()
+            .FirstOrDefault(work => work!.Value.TargetShipId == _state.PlayerShipId);
+        if (nextPlayerWork is null)
         {
             PlayerProjection unchanged = Project(_state);
             return new AdvanceUntilResult(
@@ -138,15 +148,44 @@ public sealed class GameSimulation
             );
         }
 
-        SimulationTime boundary = _state.Scheduler.OutstandingWork[0].DueTime;
-        (SimulationState candidate, IReadOnlyList<ScheduledWorkKind> resolvedKinds) = AdvanceTo(_state, boundary);
-        Commit(candidate);
+        SimulationTime boundary = nextPlayerWork.Value.DueTime;
+        SimulationAdvanceTraceResult advance = AdvanceTo(_state, boundary, _shipCatalog);
+        Commit(advance.State);
         return new AdvanceUntilResult(
             AdvanceUntilOutcome.ScheduledEventResolved,
             _state.Time,
-            resolvedKinds,
+            PlayerVisibleKinds(advance.Traces, _state.PlayerShipId),
             Project(_state)
         );
+    }
+
+    /// <summary>Advances safely to the next player-relevant scheduled consequence.</summary>
+    public AdvanceUntilResult AdvanceUntilNextScheduledEvent() => AdvanceUntilNextPlayerRelevantEvent();
+
+    internal OrderCancellationResult CancelOrder(ShipOrderId orderId)
+    {
+        ShipState? owner = _state.Ships.FirstOrDefault(ship => ship.ActiveOrder?.Id == orderId);
+        if (owner is null)
+        {
+            return new OrderCancellationResult(OrderCancellationOutcome.NotFound);
+        }
+
+        SimulationScheduler scheduler = _state.Scheduler;
+        if (owner.ActiveOrder is HoldUntilOrder hold)
+        {
+            (scheduler, bool removed) = scheduler.Cancel(hold.ScheduledWakeId);
+            if (!removed)
+            {
+                throw new InvalidOperationException("A HoldUntil cancellation lacks its exact scheduled wake.");
+            }
+        }
+
+        SimulationState candidate = _state.ReplaceShip(owner.InstanceId, owner with { ActiveOrder = null }) with
+        {
+            Scheduler = scheduler,
+        };
+        Commit(candidate);
+        return new OrderCancellationResult(OrderCancellationOutcome.Cancelled);
     }
 
     // Persistence translates explicit snapshots without gaining a public mutation path into live state.
@@ -155,9 +194,10 @@ public sealed class GameSimulation
     internal static GameSimulation RestoreState(SimulationState restoredState, ShipDefinitionCatalog shipCatalog) =>
         new(restoredState, shipCatalog);
 
-    private static (SimulationState State, IReadOnlyList<ScheduledWorkKind> ResolvedKinds) AdvanceTo(
+    internal static SimulationAdvanceTraceResult AdvanceTo(
         SimulationState initial,
-        SimulationTime target
+        SimulationTime target,
+        ShipDefinitionCatalog shipCatalog
     )
     {
         initial.Time.AdvanceTo(target);
@@ -167,18 +207,10 @@ public sealed class GameSimulation
             throw new InvalidOperationException("Advancement boundaries must be fixed-step aligned.");
         }
 
-        long stepCount = elapsed / SimulationFixedStep.Duration.Milliseconds;
-        // The whole call is admitted before the first immutable replacement so a rejected catch-up
-        // cannot expose a partially advanced aggregate to its caller.
-        if (stepCount > ShipStepWorkBudget / initial.Ships.Length)
-        {
-            throw new InvalidOperationException(
-                $"Advancement exceeds the finite {ShipStepWorkBudget} ship-step work budget."
-            );
-        }
-
         SimulationState current = initial;
-        List<ScheduledWorkKind> resolvedKinds = [];
+        List<ScheduledConsequenceTrace> traces = [];
+        long actualShipSteps = 0;
+        int totalExecutions = 0;
 
         while (current.Time.Milliseconds < target.Milliseconds)
         {
@@ -191,15 +223,19 @@ public sealed class GameSimulation
                 boundary = current.Scheduler.OutstandingWork[0].DueTime;
             }
 
-            current = AdvanceSegment(current, boundary);
-            current = ResolveDueAtCurrentBoundary(current, resolvedKinds);
+            current = AdvanceSegment(current, boundary, ref actualShipSteps);
+            current = ResolveDueAtCurrentBoundary(current, traces, ref totalExecutions, shipCatalog);
         }
 
-        current = ResolveDueAtCurrentBoundary(current, resolvedKinds);
-        return (current, new ReadOnlyValueList<ScheduledWorkKind>(resolvedKinds));
+        current = ResolveDueAtCurrentBoundary(current, traces, ref totalExecutions, shipCatalog);
+        return new SimulationAdvanceTraceResult(current, new ReadOnlyValueList<ScheduledConsequenceTrace>(traces));
     }
 
-    private static SimulationState AdvanceSegment(SimulationState state, SimulationTime boundary)
+    private static SimulationState AdvanceSegment(
+        SimulationState state,
+        SimulationTime boundary,
+        ref long actualShipSteps
+    )
     {
         long elapsed = boundary.Milliseconds - state.Time.Milliseconds;
         if (elapsed < 0 || elapsed % SimulationFixedStep.Duration.Milliseconds != 0)
@@ -207,9 +243,25 @@ public sealed class GameSimulation
             throw new InvalidOperationException("Advancement boundaries must be monotonic and fixed-step aligned.");
         }
 
+        // With no local motion, repair integrity is the only step-derived state and is already a pure
+        // function of time, so materializing it at the boundary is fixed-step equivalent.
+        if (state.Ships.All(ship => ship.StrategicState is not AtLocationState || ship.TacticalMotion == default))
+        {
+            return AdvanceStrategically(state, boundary);
+        }
+
         SimulationState current = state;
         while (current.Time.Milliseconds < boundary.Milliseconds)
         {
+            long attemptedShipSteps = checked(actualShipSteps + current.Ships.Length);
+            if (attemptedShipSteps > ShipStepWorkBudget)
+            {
+                throw new InvalidOperationException(
+                    $"Advancement exceeds the {ShipStepWorkBudget} actual ship-step work budget at attempted unit {attemptedShipSteps}."
+                );
+            }
+
+            actualShipSteps = attemptedShipSteps;
             SimulationTime nextTime = current.Time.AdvanceBy(SimulationFixedStep.Duration);
             var replacements = new ShipState[current.Ships.Length];
             for (int index = 0; index < current.Ships.Length; index++)
@@ -241,9 +293,31 @@ public sealed class GameSimulation
         return current;
     }
 
+    private static SimulationState AdvanceStrategically(SimulationState state, SimulationTime boundary)
+    {
+        var replacements = new ShipState[state.Ships.Length];
+        for (int index = 0; index < state.Ships.Length; index++)
+        {
+            ShipState ship = state.Ships[index];
+            replacements[index] = ship.SensorRepair is SensorRepairState repair
+                ? ship with
+                {
+                    SensorIntegrity = repair.IntegrityAt(boundary),
+                }
+                : ship;
+        }
+
+        return state.ReplaceShips(replacements) with
+        {
+            Time = boundary,
+        };
+    }
+
     private static SimulationState ResolveDueAtCurrentBoundary(
         SimulationState state,
-        List<ScheduledWorkKind> resolvedKinds
+        List<ScheduledConsequenceTrace> traces,
+        ref int totalExecutions,
+        ShipDefinitionCatalog shipCatalog
     )
     {
         SimulationState current = state;
@@ -272,21 +346,38 @@ public sealed class GameSimulation
                     );
                 }
 
-                current = ResolveScheduledWork(current, work);
-                resolvedKinds.Add(work.Kind);
+                int attemptedTotal = checked(totalExecutions + 1);
+                if (attemptedTotal > TotalConsequenceExecutionBudget)
+                {
+                    throw new InvalidOperationException(
+                        $"Scheduled work exceeds the {TotalConsequenceExecutionBudget} total consequence execution budget at attempt {attemptedTotal}."
+                    );
+                }
+
+                totalExecutions = attemptedTotal;
+                (current, ScheduledConsequenceTrace trace) = ResolveScheduledWork(current, work, shipCatalog);
+                traces.Add(trace);
             }
         }
     }
 
-    private static SimulationState ResolveScheduledWork(SimulationState state, ScheduledWork work) =>
+    private static (SimulationState State, ScheduledConsequenceTrace Trace) ResolveScheduledWork(
+        SimulationState state,
+        ScheduledWork work,
+        ShipDefinitionCatalog shipCatalog
+    ) =>
         work.Kind switch
         {
             ScheduledWorkKind.SensorRepairCompletion => CompleteSensorRepair(state, work),
-            ScheduledWorkKind.TravelArrival => CompleteTravel(state, work),
+            ScheduledWorkKind.TravelArrival => CompleteTravel(state, work, shipCatalog),
+            ScheduledWorkKind.OrderWake => CompleteHold(state, work),
             _ => throw new InvalidOperationException("Scheduled work kind is unsupported."),
         };
 
-    private static SimulationState CompleteSensorRepair(SimulationState state, ScheduledWork work)
+    private static (SimulationState State, ScheduledConsequenceTrace Trace) CompleteSensorRepair(
+        SimulationState state,
+        ScheduledWork work
+    )
     {
         ShipState ship = state.GetRequiredShip(work.TargetShipId);
         SensorRepairState? repair = ship.SensorRepair;
@@ -295,7 +386,7 @@ public sealed class GameSimulation
             throw new InvalidOperationException("Sensor completion lacks matching active repair.");
         }
 
-        return state.ReplaceShip(
+        SimulationState candidate = state.ReplaceShip(
             ship.InstanceId,
             ship with
             {
@@ -303,9 +394,24 @@ public sealed class GameSimulation
                 SensorRepair = null,
             }
         );
+        return (
+            candidate,
+            Trace(
+                state,
+                work,
+                null,
+                ScheduledConsequenceRule.SensorRepairCompletion,
+                ScheduledConsequenceAction.CompleteSensorRepair,
+                true
+            )
+        );
     }
 
-    private static SimulationState CompleteTravel(SimulationState state, ScheduledWork work)
+    private static (SimulationState State, ScheduledConsequenceTrace Trace) CompleteTravel(
+        SimulationState state,
+        ScheduledWork work,
+        ShipDefinitionCatalog shipCatalog
+    )
     {
         ShipState ship = state.GetRequiredShip(work.TargetShipId);
         if (ship.StrategicState is not TravelingState traveling || traveling.Travel.ScheduledArrivalId != work.Id)
@@ -313,16 +419,126 @@ public sealed class GameSimulation
             throw new InvalidOperationException("Arrival lacks matching active travel.");
         }
 
-        return state.ReplaceShip(
+        ShipOrder? order = ship.ActiveOrder;
+        SimulationState arrived = state.ReplaceShip(
             ship.InstanceId,
             ship with
             {
                 StrategicState = new AtLocationState(traveling.Travel.Destination),
                 TacticalPosition = ArrivalPosition,
                 TacticalMotion = default,
+                ActiveOrder = order is TravelToOrder ? null : order,
             }
         );
+
+        if (order is PatrolRouteOrder patrol)
+        {
+            return ContinuePatrol(state, arrived, ship, patrol, work, shipCatalog);
+        }
+
+        return (
+            arrived,
+            Trace(
+                state,
+                work,
+                order,
+                order is TravelToOrder
+                    ? ScheduledConsequenceRule.TravelToArrival
+                    : ScheduledConsequenceRule.OrderlessTravelArrival,
+                order is TravelToOrder
+                    ? ScheduledConsequenceAction.CompleteTravelTo
+                    : ScheduledConsequenceAction.FinishTravel,
+                true
+            )
+        );
     }
+
+    private static (SimulationState State, ScheduledConsequenceTrace Trace) ContinuePatrol(
+        SimulationState state,
+        SimulationState arrived,
+        ShipState ship,
+        PatrolRouteOrder patrol,
+        ScheduledWork work,
+        ShipDefinitionCatalog shipCatalog
+    )
+    {
+        int followingIndex = (patrol.NextWaypointIndex + 1) % patrol.Waypoints.Length;
+        var continuedOrder = new PatrolRouteOrder(patrol.Id, patrol.Waypoints, followingIndex);
+        arrived = arrived.ReplaceShip(
+            ship.InstanceId,
+            arrived.GetRequiredShip(ship.InstanceId) with
+            {
+                ActiveOrder = continuedOrder,
+            }
+        );
+        ShipTravelApplicationResult application = ApplyShipTravel(
+            arrived,
+            new ShipTravelCommand(ship.InstanceId, continuedOrder.Waypoints[followingIndex]),
+            shipCatalog
+        );
+        if (application.Outcome != TravelOutcome.Accepted)
+        {
+            throw new InvalidOperationException("A validated patrol could not begin its declared next leg.");
+        }
+
+        return (
+            application.CandidateState,
+            Trace(
+                state,
+                work,
+                patrol,
+                ScheduledConsequenceRule.PatrolWaypointArrival,
+                ScheduledConsequenceAction.ContinuePatrol,
+                false
+            )
+        );
+    }
+
+    private static (SimulationState State, ScheduledConsequenceTrace Trace) CompleteHold(
+        SimulationState state,
+        ScheduledWork work
+    )
+    {
+        ShipState ship = state.GetRequiredShip(work.TargetShipId);
+        if (
+            ship.ActiveOrder is not HoldUntilOrder hold
+            || hold.ScheduledWakeId != work.Id
+            || hold.Until != work.DueTime
+        )
+        {
+            throw new InvalidOperationException("Order wake lacks its exact active HoldUntil order.");
+        }
+
+        SimulationState candidate = state.ReplaceShip(ship.InstanceId, ship with { ActiveOrder = null });
+        return (
+            candidate,
+            Trace(
+                state,
+                work,
+                hold,
+                ScheduledConsequenceRule.HoldUntilWake,
+                ScheduledConsequenceAction.CompleteHold,
+                true
+            )
+        );
+    }
+
+    private static ScheduledConsequenceTrace Trace(
+        SimulationState state,
+        ScheduledWork work,
+        ShipOrder? order,
+        ScheduledConsequenceRule rule,
+        ScheduledConsequenceAction action,
+        bool completed
+    ) => new(work.Id, work.TargetShipId, work.Kind, state.Time, order?.Id, order?.Kind, rule, action, completed, false);
+
+    private static ReadOnlyValueList<ScheduledWorkKind> PlayerVisibleKinds(
+        IReadOnlyList<ScheduledConsequenceTrace> traces,
+        ShipInstanceId playerShipId
+    ) =>
+        new ReadOnlyValueList<ScheduledWorkKind>(
+            traces.Where(trace => trace.TargetShipId == playerShipId).Select(trace => trace.WorkKind)
+        );
 
     private static PlayerProjection Project(SimulationState state)
     {

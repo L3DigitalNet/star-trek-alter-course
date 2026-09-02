@@ -233,20 +233,13 @@ public sealed class GameSimulationTests
 
         Assert.Equal(AdvanceUntilOutcome.ScheduledEventResolved, repair.Outcome);
         Assert.Equal(8000, repair.StoppedAt.Milliseconds);
-        Assert.Equal(
-            [ScheduledWorkKind.SensorRepairCompletion, ScheduledWorkKind.SensorRepairCompletion],
-            repair.ResolvedKinds
-        );
+        Assert.Equal([ScheduledWorkKind.SensorRepairCompletion], repair.ResolvedKinds);
         Assert.NotNull(repair.Projection.Strategic.Travel);
         Assert.Equal(12000, arrival.StoppedAt.Milliseconds);
         Assert.Equal([ScheduledWorkKind.TravelArrival], arrival.ResolvedKinds);
         Assert.Equal(12000, ordinaryAdvance.FinalTime.Milliseconds);
         Assert.Equal(
-            [
-                ScheduledWorkKind.SensorRepairCompletion,
-                ScheduledWorkKind.SensorRepairCompletion,
-                ScheduledWorkKind.TravelArrival,
-            ],
+            [ScheduledWorkKind.SensorRepairCompletion, ScheduledWorkKind.TravelArrival],
             ordinaryAdvance.ResolvedKinds
         );
         Assert.Equal(ordinary.GetPlayerProjection(), ordinaryAdvance.Projection);
@@ -333,13 +326,16 @@ public sealed class GameSimulationTests
             DateTimeOffset.UnixEpoch
         );
         byte[] initial = GamePersistence.Serialize(game, metadata);
+        game.SetTacticalCourse(new SetTacticalCourseIntent(new HeadingDegrees(90), new SpeedKilometersPerSecond(1)));
+        byte[] moving = GamePersistence.Serialize(game, metadata);
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
             game.AdvanceFixedSteps(1_000_001)
         );
 
-        Assert.Contains("ship-step work budget", exception.Message, StringComparison.Ordinal);
-        Assert.Equal(initial, GamePersistence.Serialize(game, metadata));
+        Assert.Contains("actual ship-step work budget", exception.Message, StringComparison.Ordinal);
+        Assert.NotEqual(initial, moving);
+        Assert.Equal(moving, GamePersistence.Serialize(game, metadata));
     }
 
     /// <summary>Confirms bootstrap cannot admit scheduled work that persistence would reject for time exhaustion.</summary>

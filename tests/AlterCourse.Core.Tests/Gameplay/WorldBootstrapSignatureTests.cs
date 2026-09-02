@@ -139,18 +139,18 @@ public sealed class WorldBootstrapSignatureTests
 
         AdvanceUntilResult repairs = game.AdvanceUntilNextScheduledEvent();
         Assert.Equal(8000, repairs.StoppedAt.Milliseconds);
-        Assert.Equal(
-            [ScheduledWorkKind.SensorRepairCompletion, ScheduledWorkKind.SensorRepairCompletion],
-            repairs.ResolvedKinds
-        );
+        Assert.Equal([ScheduledWorkKind.SensorRepairCompletion], repairs.ResolvedKinds);
         JsonArray afterRepairs = Ships(Parse(game));
         Assert.Null(afterRepairs[0]!["sensorRepair"]);
         Assert.Null(afterRepairs[1]!["sensorRepair"]);
         Assert.Equal("traveling", afterRepairs[2]!["strategicState"]!["kind"]!.GetValue<string>());
 
-        AdvanceUntilResult arrival = game.AdvanceUntilNextScheduledEvent();
-        Assert.Equal(14000, arrival.StoppedAt.Milliseconds);
-        Assert.Equal([ScheduledWorkKind.TravelArrival], arrival.ResolvedKinds);
+        AdvanceUntilResult noPlayerEvent = game.AdvanceUntilNextScheduledEvent();
+        Assert.Equal(AdvanceUntilOutcome.NoScheduledEvent, noPlayerEvent.Outcome);
+        Assert.Equal(8000, noPlayerEvent.StoppedAt.Milliseconds);
+        Assert.Empty(noPlayerEvent.ResolvedKinds);
+        SimulationAdvanceResult hiddenArrival = game.AdvanceFixedSteps(60);
+        Assert.Empty(hiddenArrival.ResolvedKinds);
         JsonArray complete = Ships(Parse(game));
         Assert.Equal("dawn-anchor", complete[0]!["strategicState"]!["locationId"]!.GetValue<string>());
         Assert.Equal("vesper-reach", complete[1]!["strategicState"]!["locationId"]!.GetValue<string>());
