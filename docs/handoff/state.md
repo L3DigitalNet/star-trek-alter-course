@@ -2,8 +2,8 @@
 
 ## Current focus
 
-- Record only active work that should survive into the next session.
+- Open the Final PR for Feature #36 from `feature/36-world-state-bootstrap`, then complete CI and readiness admission.
 
 ## Active incidents
 
-- Record unresolved incidents; remove resolved items after routing durable lessons to a bug record.
+- No active incidents.

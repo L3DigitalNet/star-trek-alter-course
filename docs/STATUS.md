@@ -2,14 +2,16 @@
 
 ## Current snapshot
 
-- Feature #25 delivers the first executable gameplay walking skeleton: a pure deterministic Core simulation, a map-centric Godot command shell, and a V1 quick-save/load path.
+- Feature #36 has completed Milestone 1 world-state bootstrap on `feature/36-world-state-bootstrap`; its Final PR is pending.
 - Version 0.1.0 is the first source release. It ships repository source only; no packaged gameplay artifact is published.
 - The strategic map has three arbitrarily positioned locations and connected routes. Travel remains active until its scheduled arrival.
-- The player ship starts with damaged sensors and an active repair. Repair progresses on the same simulation timeline during real-time play, accelerated play, and strategic travel.
+- `GameSimulation` owns an immutable ship-definition catalog and plural ordinary ship state, with `PlayerShipId` used only for player-facing projection and commands.
+- The bootstrap starts player Dawn local and repairing, NPC Vesper independent and repairing, and NPC Meridian already traveling; NPC AI and orders remain deferred.
 - The Godot shell exposes Pause, 0.5x, 1x, 2x, and 4x. Its bounded adapter converts presentation time into explicit 100 ms Core steps.
 - Strategic and tactical views are distinct open maps. Core tactical state uses continuous kilometers and Y-positive-up; Godot performs screen projection.
-- The first validated ship definition and V1 schema live under `src/AlterCourse.Godot/content/`, separate from AssetCtl.
-- V1 JSON quick saves use Godot's `user://quick-save-v1.json` boundary and restore active travel, repair, scheduler, and runtime identity state only after validation succeeds.
+- Ship definitions use schema V2; typed bootstrap state owns vessel display names and starting sensor integrity.
+- V2 saves persist bounded plural world state and migrate V1 saves before construction.
+- The default slot is `user://quick-save.json`; only that default discovers `user://quick-save-v1.json`.
 - The walking skeleton deliberately defers combat, shields, weapons, power distribution, crew, factions, diplomacy, economy, missions, AI, narrative, networking, and final art.
 - Fresh Catalog 5 adoption is configured for Project Standards v5.27.0.
 - Enabled packages: markdown-frontmatter 1.15, adr 1.6, markdown-tooling 1.15, agent-handoff 1.16, and github-workflow 1.8.
