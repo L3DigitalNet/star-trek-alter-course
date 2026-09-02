@@ -7,6 +7,7 @@ using AlterCourse.Core.Quantities;
 using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
+using AlterCourse.Core.Tactical;
 
 namespace AlterCourse.Core.Tests.Gameplay;
 
@@ -308,7 +309,7 @@ public sealed class OrderExecutionTests
         Assert.Equal(hiddenOnly, noPlayerBoundary.CaptureState());
     }
 
-    /// <summary>Confirms a strategic jump avoids imaginary fixed steps and materializes repair at the boundary.</summary>
+    /// <summary>Confirms zero speed permits a long strategic jump regardless of heading.</summary>
     [Fact]
     public void StrategicJumpHandlesSeventyTwoHoursAndRepairsAnalytically()
     {
@@ -331,7 +332,12 @@ public sealed class OrderExecutionTests
             SensorIntegrity = new SensorIntegrity(0.25),
             SensorRepair = repair,
         };
-        SimulationState state = CreateState(scheduler, [player, CreateShip(NpcId, Beta)]);
+        ShipState stationaryNpc = CreateShip(NpcId, Beta) with
+        {
+            TacticalPosition = new TacticalPosition(4, -3),
+            TacticalMotion = new TacticalMotion(new HeadingDegrees(237), new SpeedKilometersPerSecond(0)),
+        };
+        SimulationState state = CreateState(scheduler, [player, stationaryNpc]);
         var game = GameSimulation.RestoreState(state, CreateCatalog(duration));
 
         AdvanceUntilResult result = game.AdvanceUntilNextPlayerRelevantEvent();
@@ -339,7 +345,9 @@ public sealed class OrderExecutionTests
         Assert.Equal(duration.Milliseconds, result.StoppedAt.Milliseconds);
         Assert.Equal(1, result.Projection.Ship.Sensors.Integrity);
         Assert.False(result.Projection.Ship.Sensors.IsRepairing);
-        Assert.Equal(default, game.CaptureState().GetRequiredShip(NpcId).TacticalMotion);
+        ShipState advancedNpc = game.CaptureState().GetRequiredShip(NpcId);
+        Assert.Equal(stationaryNpc.TacticalPosition, advancedNpc.TacticalPosition);
+        Assert.Equal(stationaryNpc.TacticalMotion, advancedNpc.TacticalMotion);
     }
 
     /// <summary>Confirms the total consequence budget rejects the candidate at the documented attempt.</summary>

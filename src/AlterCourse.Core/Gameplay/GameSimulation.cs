@@ -245,7 +245,7 @@ public sealed class GameSimulation
 
         // With no local motion, repair integrity is the only step-derived state and is already a pure
         // function of time, so materializing it at the boundary is fixed-step equivalent.
-        if (state.Ships.All(ship => ship.StrategicState is not AtLocationState || ship.TacticalMotion == default))
+        if (state.Ships.All(ship => ship.StrategicState is not AtLocationState || ship.TacticalMotion.Speed.Value == 0))
         {
             return AdvanceStrategically(state, boundary);
         }
