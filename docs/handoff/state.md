@@ -2,7 +2,9 @@
 
 ## Current focus
 
-- Rebuild the Godot Debug assembly, then manually test Milestone 1 on merged `dev` before release promotion.
+- Prepare draft Final PR #39 for Feature #38 for canonical-gate and CI review.
+- PR #39 targets `dev` from `feature/38-active-world-orders`; do not claim merge, release, `main`, or tag activity.
+- Manually test Milestone 1 gameplay on merged `dev` before any release promotion.
 
 ## Active incidents
 
