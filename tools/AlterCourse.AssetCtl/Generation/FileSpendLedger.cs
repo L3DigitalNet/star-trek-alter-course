@@ -6,8 +6,8 @@ namespace AlterCourse.AssetCtl.Generation;
 
 internal sealed class FileSpendLedger : ISpendLedger
 {
-    private readonly string ledgerPath;
-    private readonly string lockPath;
+    private readonly string _ledgerPath;
+    private readonly string _lockPath;
 
     public FileSpendLedger(EffectiveConfiguration configuration)
     {
@@ -18,8 +18,8 @@ internal sealed class FileSpendLedger : ISpendLedger
             allowMissing: true
         );
         Directory.CreateDirectory(stateRoot);
-        ledgerPath = Path.Combine(stateRoot, "daily-spend.json");
-        lockPath = Path.Combine(stateRoot, "daily-spend.lock");
+        _ledgerPath = Path.Combine(stateRoot, "daily-spend.json");
+        _lockPath = Path.Combine(stateRoot, "daily-spend.lock");
     }
 
     public void Reserve(DateOnly date, decimal amount, decimal dailyLimit)
@@ -34,11 +34,11 @@ internal sealed class FileSpendLedger : ISpendLedger
         }
 
         totals[key] = next;
-        string stage = ledgerPath + ".tmp-" + Guid.NewGuid().ToString("N");
+        string stage = _ledgerPath + ".tmp-" + Guid.NewGuid().ToString("N");
         try
         {
             File.WriteAllText(stage, JsonSerializer.Serialize(totals, JsonOptions.Stable));
-            File.Move(stage, ledgerPath, overwrite: true);
+            File.Move(stage, _ledgerPath, overwrite: true);
         }
         finally
         {
@@ -54,9 +54,9 @@ internal sealed class FileSpendLedger : ISpendLedger
         try
         {
             string directory =
-                Path.GetDirectoryName(lockPath)
+                Path.GetDirectoryName(_lockPath)
                 ?? throw new AssetCtlException("daily spending ledger lock directory is invalid.", 7);
-            return StateFile.OpenLockedLeaf(directory, Path.GetFileName(lockPath), "daily spending ledger lock");
+            return StateFile.OpenLockedLeaf(directory, Path.GetFileName(_lockPath), "daily spending ledger lock");
         }
         catch (IOException)
         {
@@ -66,14 +66,14 @@ internal sealed class FileSpendLedger : ISpendLedger
 
     private Dictionary<string, decimal> ReadTotals()
     {
-        if (!File.Exists(ledgerPath))
+        if (!File.Exists(_ledgerPath))
         {
             return new Dictionary<string, decimal>(StringComparer.Ordinal);
         }
 
         try
         {
-            return JsonSerializer.Deserialize<Dictionary<string, decimal>>(File.ReadAllText(ledgerPath))
+            return JsonSerializer.Deserialize<Dictionary<string, decimal>>(File.ReadAllText(_ledgerPath))
                 ?? throw new JsonException("ledger root was null");
         }
         catch (JsonException exception)

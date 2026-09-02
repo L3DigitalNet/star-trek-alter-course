@@ -21,7 +21,7 @@ These are design goals, not claims about currently playable features. The archit
 ## Technology
 
 - Godot 4.7.2 .NET/C#
-- .NET SDK 10.0.111, targeting .NET 8 for Godot compatibility
+- Exact .NET SDK 10.0.111 with C# 12, targeting .NET 8 for Godot compatibility
 - A standalone .NET 10 `assetctl` development tool for validated visual placeholders and asset provenance
 - A pure `AlterCourse.Core` domain assembly with a one-way dependency from `AlterCourse.Godot`
 - xUnit for Core tests and GdUnit4 for Godot integration tests
@@ -29,7 +29,7 @@ These are design goals, not claims about currently playable features. The archit
 
 ## Getting started
 
-The supported development environment is Linux x86_64 with Git, Bash, `curl`, `tar` with xz support, `unzip`, and `sha256sum`. The repository resolves its pinned .NET, Godot, and native development tools.
+The supported development environment is Linux x86_64 with Git, Bash, Node 24 with `npx`, `curl`, `tar` with xz support, `unzip`, and `sha256sum`. The repository resolves its exact .NET SDK, Godot editor, and native development tools; [`.node-version`](.node-version) owns the supported Node major.
 
 ```bash
 git clone https://github.com/L3DigitalNet/star-trek-alter-course.git

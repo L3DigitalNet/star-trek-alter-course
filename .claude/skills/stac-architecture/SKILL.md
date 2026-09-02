@@ -19,7 +19,7 @@ Load this skill before project implementation. Active ADRs and normative reposit
 - Saves are versioned JSON snapshots of explicit Core models, with compatibility validation and migration policy—not scene trees.
 - Simulation time, scheduling, and randomness are explicit and deterministic. Presentation may interpolate or animate without changing truth.
 - Application logging uses Serilog with Microsoft logging abstractions at boundaries; structured events carry useful identifiers and context without duplicating domain state.
-- Tests are layered: xUnit for Core, CsCheck for properties, GdUnit4Net for engine integration, ArchUnitNET for boundaries, named scenarios for behavior, and long-running simulations for stability.
+- Tests are layered. The installed baseline is xUnit for .NET tests and GdUnit4 for current Godot integration tests. CsCheck, GdUnit4Net, and ArchUnitNET are selected by ADR 0009 but remain admission-triggered until a qualifying property, C# engine-integration, or architecture-conformance test exists. Named scenarios and long-running simulations cover behavior and stability as the implemented systems justify them.
 - AI is explainable, deterministic where authoritative, and project-owned. Do not select or embed an LLM by product/model name as the decision authority.
 - Physical quantities use explicit units and conversions. Never pass ambiguous numeric distance, duration, velocity, mass, or energy values.
 - Branching narrative consumes read-only typed context and requests finite typed consequences. Core validates outcomes; narrative flow never becomes a second rules engine.

@@ -1744,17 +1744,17 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
 
     private sealed class AttemptBudget(int maximumAttempts)
     {
-        private int used;
+        private int _used;
 
         public int Take()
         {
             // Generation and review share this counter so a fallback tree cannot multiply per-route retry limits.
-            if (used >= maximumAttempts)
+            if (_used >= maximumAttempts)
             {
                 throw new AssetCtlException("The global maximum physical-attempt limit was reached.", 4);
             }
 
-            return ++used;
+            return ++_used;
         }
     }
 }

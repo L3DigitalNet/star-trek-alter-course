@@ -7,7 +7,7 @@ namespace AlterCourse.AssetCtl.Tests;
 /// <summary>Verifies manifest parsing and mutation preserve the complete tracked contract.</summary>
 public sealed class ManifestRoundTripTests : IDisposable
 {
-    private readonly string root = Path.Combine(
+    private readonly string _root = Path.Combine(
         Path.GetTempPath(),
         "assetctl-manifest-roundtrip-" + Guid.NewGuid().ToString("N")
     );
@@ -107,7 +107,7 @@ public sealed class ManifestRoundTripTests : IDisposable
         Assert.Equal("bespoke-preview", actual.Request.QualityTier);
         Assert.Contains(
             "quality_tier: 'bespoke-preview'",
-            File.ReadAllText(Path.Combine(root, expected.ManifestPath)),
+            File.ReadAllText(Path.Combine(_root, expected.ManifestPath)),
             StringComparison.Ordinal
         );
     }
@@ -143,7 +143,7 @@ public sealed class ManifestRoundTripTests : IDisposable
         };
         WriteManifest(expected);
 
-        string yaml = File.ReadAllText(Path.Combine(root, expected.ManifestPath));
+        string yaml = File.ReadAllText(Path.Combine(_root, expected.ManifestPath));
         AssetManifest actual = ManifestStore.Load(configuration, expected.ManifestPath);
 
         Assert.Contains("estimated_cost_usd: null", yaml, StringComparison.Ordinal);
@@ -159,7 +159,7 @@ public sealed class ManifestRoundTripTests : IDisposable
         string yaml = ManifestStore
             .Serialize(expected)
             .Replace("  estimated_cost_usd: 0.42\n", string.Empty, StringComparison.Ordinal);
-        File.WriteAllText(Path.Combine(root, expected.ManifestPath), yaml);
+        File.WriteAllText(Path.Combine(_root, expected.ManifestPath), yaml);
 
         AssetManifest actual = ManifestStore.Load(configuration, expected.ManifestPath);
 
@@ -259,7 +259,7 @@ public sealed class ManifestRoundTripTests : IDisposable
         };
         string serialized = ManifestStore.Serialize(manifest).Replace(current, invalid, StringComparison.Ordinal);
         Assert.DoesNotContain(current, serialized, StringComparison.Ordinal);
-        File.WriteAllText(Path.Combine(root, manifest.ManifestPath), serialized);
+        File.WriteAllText(Path.Combine(_root, manifest.ManifestPath), serialized);
 
         AssetCtlException exception = Assert.Throws<AssetCtlException>(() =>
             ManifestStore.Load(configuration, manifest.ManifestPath)
@@ -278,7 +278,7 @@ public sealed class ManifestRoundTripTests : IDisposable
         string serialized = ManifestStore
             .Serialize(manifest)
             .Replace("references: []", "references: ['not-a-map']", StringComparison.Ordinal);
-        File.WriteAllText(Path.Combine(root, manifest.ManifestPath), serialized);
+        File.WriteAllText(Path.Combine(_root, manifest.ManifestPath), serialized);
 
         AssetCtlException exception = Assert.Throws<AssetCtlException>(() =>
             ManifestStore.Load(configuration, manifest.ManifestPath)
@@ -356,7 +356,7 @@ public sealed class ManifestRoundTripTests : IDisposable
         };
         string serialized = ManifestStore.Serialize(manifest).Replace(current, unsupported, StringComparison.Ordinal);
         Assert.DoesNotContain(current, serialized, StringComparison.Ordinal);
-        File.WriteAllText(Path.Combine(root, manifest.ManifestPath), serialized);
+        File.WriteAllText(Path.Combine(_root, manifest.ManifestPath), serialized);
 
         Assert.Throws<AssetCtlException>(() => ManifestStore.Load(configuration, manifest.ManifestPath));
     }
@@ -370,7 +370,7 @@ public sealed class ManifestRoundTripTests : IDisposable
         string serialized = ManifestStore
             .Serialize(manifest)
             .Replace("transparency: 'required'", "transparency: 'sometimes'", StringComparison.Ordinal);
-        File.WriteAllText(Path.Combine(root, manifest.ManifestPath), serialized);
+        File.WriteAllText(Path.Combine(_root, manifest.ManifestPath), serialized);
 
         AssetCtlException exception = Assert.Throws<AssetCtlException>(() =>
             ManifestStore.Load(configuration, manifest.ManifestPath)
@@ -384,28 +384,28 @@ public sealed class ManifestRoundTripTests : IDisposable
     public void ManifestLoadRejectsCatalogSymlinkEscape()
     {
         EffectiveConfiguration configuration = Configuration();
-        string outside = Path.Combine(root, "catalog-sibling");
+        string outside = Path.Combine(_root, "catalog-sibling");
         Directory.CreateDirectory(outside);
         File.WriteAllText(Path.Combine(outside, "escaped.asset.yaml"), ManifestStore.Serialize(Manifest()));
-        Directory.CreateSymbolicLink(Path.Combine(root, "catalog", "escaped"), outside);
+        Directory.CreateSymbolicLink(Path.Combine(_root, "catalog", "escaped"), outside);
         Assert.Throws<AssetCtlException>(() => ManifestStore.Load(configuration, "catalog/escaped/escaped.asset.yaml"));
     }
 
     /// <summary>Removes the isolated repository used by each manifest contract test.</summary>
     public void Dispose()
     {
-        if (Directory.Exists(root))
+        if (Directory.Exists(_root))
         {
-            Directory.Delete(root, recursive: true);
+            Directory.Delete(_root, recursive: true);
         }
     }
 
     private EffectiveConfiguration Configuration()
     {
-        Directory.CreateDirectory(Path.Combine(root, "assets"));
-        Directory.CreateDirectory(Path.Combine(root, "catalog"));
+        Directory.CreateDirectory(Path.Combine(_root, "assets"));
+        Directory.CreateDirectory(Path.Combine(_root, "catalog"));
         return new EffectiveConfiguration(
-            root,
+            _root,
             new AssetCtlPaths("assets", "catalog", "styles", ".assetctl/work", "runs", ".assetctl/state", "logs"),
             new AssetCtlPolicy(false, true, true, true, false, "reject"),
             new AssetCtlLimits(1_000_000, 1_000_000, 10, 10, 10, 30, 1_000_000),
@@ -501,5 +501,5 @@ public sealed class ManifestRoundTripTests : IDisposable
         };
 
     private void WriteManifest(AssetManifest manifest) =>
-        File.WriteAllText(Path.Combine(root, manifest.ManifestPath), ManifestStore.Serialize(manifest));
+        File.WriteAllText(Path.Combine(_root, manifest.ManifestPath), ManifestStore.Serialize(manifest));
 }

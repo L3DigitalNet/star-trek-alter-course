@@ -7,7 +7,7 @@ namespace AlterCourse.AssetCtl.Tests;
 /// <summary>Verifies stable status output and terminal deprecation behavior.</summary>
 public sealed class CliStatusAndTerminalLifecycleTests : IDisposable
 {
-    private readonly string root = Path.Combine(
+    private readonly string _root = Path.Combine(
         Path.GetTempPath(),
         "assetctl-cli-status-" + Guid.NewGuid().ToString("N")
     );
@@ -40,7 +40,7 @@ public sealed class CliStatusAndTerminalLifecycleTests : IDisposable
         EffectiveConfiguration configuration = Configuration();
         AssetManifest deprecated = Manifest("terminal", AssetLifecycle.Deprecated, "disabled", null);
         WriteManifest(deprecated);
-        string path = Path.Combine(root, deprecated.ManifestPath);
+        string path = Path.Combine(_root, deprecated.ManifestPath);
         string before = File.ReadAllText(path);
 
         TargetInvocationException invocation = Assert.Throws<TargetInvocationException>(() =>
@@ -91,7 +91,7 @@ public sealed class CliStatusAndTerminalLifecycleTests : IDisposable
         EffectiveConfiguration configuration = Configuration();
         AssetManifest candidate = Manifest("blank", AssetLifecycle.Candidate, "development", null);
         WriteManifest(candidate);
-        string path = Path.Combine(root, candidate.ManifestPath);
+        string path = Path.Combine(_root, candidate.ManifestPath);
         string before = File.ReadAllText(path);
         string[] arguments =
         [
@@ -121,7 +121,7 @@ public sealed class CliStatusAndTerminalLifecycleTests : IDisposable
         EffectiveConfiguration configuration = Configuration();
         AssetManifest candidate = Manifest("blank-approval", AssetLifecycle.Candidate, "development", null);
         WriteManifest(candidate);
-        string path = Path.Combine(root, candidate.ManifestPath);
+        string path = Path.Combine(_root, candidate.ManifestPath);
         string before = File.ReadAllText(path);
         string[] arguments =
         [
@@ -204,10 +204,10 @@ public sealed class CliStatusAndTerminalLifecycleTests : IDisposable
         WriteManifest(selected);
         WriteManifest(unrelated);
         File.WriteAllBytes(
-            Path.Combine(root, selected.Request.Output.Path),
+            Path.Combine(_root, selected.Request.Output.Path),
             AlterCourse.AssetCtl.Generation.LocalPlaceholderGenerator.RenderPng(selected.Request)
         );
-        File.WriteAllBytes(Path.Combine(root, unrelated.Request.Output.Path), [0]);
+        File.WriteAllBytes(Path.Combine(_root, unrelated.Request.Output.Path), [0]);
 
         object result = Invoke("Verify", configuration, CliOptions.Parse(["--manifest", selected.ManifestPath]));
         string json = JsonSerializer.Serialize(result, JsonOptions.Stable);
@@ -219,18 +219,18 @@ public sealed class CliStatusAndTerminalLifecycleTests : IDisposable
     /// <summary>Removes the isolated catalog used by each CLI contract test.</summary>
     public void Dispose()
     {
-        if (Directory.Exists(root))
+        if (Directory.Exists(_root))
         {
-            Directory.Delete(root, recursive: true);
+            Directory.Delete(_root, recursive: true);
         }
     }
 
     private EffectiveConfiguration Configuration()
     {
-        Directory.CreateDirectory(Path.Combine(root, "assets"));
-        Directory.CreateDirectory(Path.Combine(root, "catalog"));
+        Directory.CreateDirectory(Path.Combine(_root, "assets"));
+        Directory.CreateDirectory(Path.Combine(_root, "catalog"));
         return new EffectiveConfiguration(
-            root,
+            _root,
             new AssetCtlPaths("assets", "catalog", "styles", ".assetctl/work", "runs", ".assetctl/state", "logs"),
             new AssetCtlPolicy(false, true, true, true, false, "reject"),
             new AssetCtlLimits(1_000_000, 1_000_000, 10, 10, 10, 30, 1_000_000),
@@ -316,7 +316,7 @@ public sealed class CliStatusAndTerminalLifecycleTests : IDisposable
     }
 
     private void WriteManifest(AssetManifest manifest) =>
-        File.WriteAllText(Path.Combine(root, manifest.ManifestPath), ManifestStore.Serialize(manifest));
+        File.WriteAllText(Path.Combine(_root, manifest.ManifestPath), ManifestStore.Serialize(manifest));
 
     private static object Invoke(string name, params object[] arguments)
     {

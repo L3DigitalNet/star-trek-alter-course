@@ -19,12 +19,17 @@ UI projects read-only Core/application state and turns user actions into explici
 6. Establish initial focus, tab order or focus neighbors, mouse filtering, and layouts that remain usable when text or window size changes.
 
 ```csharp
+namespace AlterCourse.Godot.UI;
+
+/// <summary>Presents target orders and emits explicit engagement intent.</summary>
 public partial class OrdersPanel : VBoxContainer
 {
     private Button _engage = null!;
 
+    /// <summary>Notifies the application boundary that engagement was requested.</summary>
     public event Action<EngageTargetIntent>? EngageRequested;
 
+    /// <inheritdoc />
     public override void _Ready()
     {
         _engage = GetNode<Button>("%Engage");
@@ -32,6 +37,7 @@ public partial class OrdersPanel : VBoxContainer
         _engage.GrabFocus();
     }
 
+    /// <summary>Displays the supplied target projection without changing domain state.</summary>
     public void Present(TargetProjection target)
     {
         _engage.Disabled = !target.CanRequestEngagement;

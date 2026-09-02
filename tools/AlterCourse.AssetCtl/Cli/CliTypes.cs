@@ -717,9 +717,9 @@ internal static class CliTypes
             ),
         };
 
-        private readonly Dictionary<string, string?> values;
+        private readonly Dictionary<string, string?> _values;
 
-        private CliOptions(Dictionary<string, string?> values) => this.values = values;
+        private CliOptions(Dictionary<string, string?> values) => _values = values;
 
         public static CliOptions Parse(string[] arguments)
         {
@@ -749,12 +749,12 @@ internal static class CliTypes
         }
 
         public string? Value(string key) =>
-            values.TryGetValue(key, out string? value)
+            _values.TryGetValue(key, out string? value)
                 ? value ?? throw new AssetCtlException($"--{key} requires a value.", 2)
                 : null;
 
         public bool Flag(string key) =>
-            values.TryGetValue(key, out string? value)
+            _values.TryGetValue(key, out string? value)
                 ? value is null
                     ? true
                     : throw new AssetCtlException($"--{key} does not take a value.", 2)
@@ -769,7 +769,7 @@ internal static class CliTypes
                 return;
             }
 
-            string? unknown = values.Keys.FirstOrDefault(key => !allowed.Contains(key));
+            string? unknown = _values.Keys.FirstOrDefault(key => !allowed.Contains(key));
             if (unknown is not null)
             {
                 throw new AssetCtlException($"Unknown option '--{unknown}' for command '{command}'.", 2);

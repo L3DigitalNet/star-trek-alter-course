@@ -24,11 +24,11 @@ internal static partial class PublishingTypes
 
         internal sealed class DirectoryHandle : IDisposable
         {
-            private readonly SafeFileHandle handle;
+            private readonly SafeFileHandle _handle;
 
             private DirectoryHandle(SafeFileHandle handle, string path)
             {
-                this.handle = handle;
+                _handle = handle;
                 Path = path;
             }
 
@@ -154,9 +154,9 @@ internal static partial class PublishingTypes
                 }
             }
 
-            public void Dispose() => handle.Dispose();
+            public void Dispose() => _handle.Dispose();
 
-            private int Descriptor => handle.DangerousGetHandle().ToInt32();
+            private int Descriptor => _handle.DangerousGetHandle().ToInt32();
         }
 
         public static FileStream OpenLockedLeaf(string directory, string leaf, string field)
@@ -238,9 +238,9 @@ internal static partial class PublishingTypes
 
     public sealed class AssetLock : IDisposable
     {
-        private readonly FileStream stream;
+        private readonly FileStream _stream;
 
-        private AssetLock(FileStream stream) => this.stream = stream;
+        private AssetLock(FileStream stream) => _stream = stream;
 
         public static AssetLock Acquire(EffectiveConfiguration configuration, string assetId)
         {
@@ -282,7 +282,7 @@ internal static partial class PublishingTypes
             return new AssetLock(lockStream);
         }
 
-        public void Dispose() => stream.Dispose();
+        public void Dispose() => _stream.Dispose();
 
         internal static void RejectReparsePoint(string path, string field)
         {
@@ -1093,15 +1093,15 @@ internal static partial class PublishingTypes
                 JournalPath = journalPath;
                 Journal = journal;
                 RecoveryJournal = recoveryJournal;
-                this.transactionRoot = transactionRoot;
-                this.leasePath = leasePath;
-                this.lease = lease;
+                _transactionRoot = transactionRoot;
+                _leasePath = leasePath;
+                _lease = lease;
                 TransactionDirectory = transactionDirectory;
             }
 
-            private readonly string transactionRoot;
-            private readonly string leasePath;
-            private readonly FileStream lease;
+            private readonly string _transactionRoot;
+            private readonly string _leasePath;
+            private readonly FileStream _lease;
 
             public string Asset { get; }
 
@@ -1117,12 +1117,12 @@ internal static partial class PublishingTypes
 
             public void Dispose()
             {
-                lease.Dispose();
+                _lease.Dispose();
                 TransactionDirectory.Dispose();
-                DeleteIfExists(leasePath);
-                if (Directory.Exists(transactionRoot) && !Directory.EnumerateFileSystemEntries(transactionRoot).Any())
+                DeleteIfExists(_leasePath);
+                if (Directory.Exists(_transactionRoot) && !Directory.EnumerateFileSystemEntries(_transactionRoot).Any())
                 {
-                    Directory.Delete(transactionRoot);
+                    Directory.Delete(_transactionRoot);
                 }
             }
         }
