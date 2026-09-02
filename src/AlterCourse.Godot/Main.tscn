@@ -1,3 +1,227 @@
-[gd_scene format=3]
+[gd_scene load_steps=4 format=3]
 
-[node name="AlterCourse" type="Node"]
+[ext_resource type="Script" path="res://src/Gameplay/GameScreen.cs" id="1_screen"]
+[ext_resource type="Script" path="res://src/Gameplay/StrategicMapView.cs" id="2_strategic"]
+[ext_resource type="Script" path="res://src/Gameplay/TacticalMapView.cs" id="3_tactical"]
+
+[node name="GameScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/font_color = Color(0.72, 0.82, 0.84, 1)
+theme_override_colors/font_outline_color = Color(0.02, 0.04, 0.05, 1)
+theme_override_constants/outline_size = 2
+theme_override_font_sizes/font_size = 16
+script = ExtResource("1_screen")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.025, 0.055, 0.065, 1)
+
+[node name="Shell" type="HBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 18.0
+offset_top = 18.0
+offset_right = -18.0
+offset_bottom = -18.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 18
+
+[node name="MapPanel" type="VBoxContainer" parent="Shell"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 3.0
+theme_override_constants/separation = 10
+
+[node name="MapHeader" type="HBoxContainer" parent="Shell/MapPanel"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Title" type="Label" parent="Shell/MapPanel/MapHeader"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.84, 0.72, 0.37, 1)
+theme_override_font_sizes/font_size = 22
+text = "COMMAND MAP"
+
+[node name="StrategicButton" type="Button" parent="Shell/MapPanel/MapHeader"]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 2
+text = "STRATEGIC"
+tooltip_text = "Show connected systems and strategic travel"
+
+[node name="TacticalButton" type="Button" parent="Shell/MapPanel/MapHeader"]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 2
+text = "TACTICAL"
+tooltip_text = "Show continuous local ship motion"
+
+[node name="MapViewport" type="PanelContainer" parent="Shell/MapPanel"]
+custom_minimum_size = Vector2(480, 360)
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="StrategicMap" type="Control" parent="Shell/MapPanel/MapViewport"]
+unique_name_in_owner = true
+layout_mode = 2
+mouse_default_cursor_shape = 2
+tooltip_text = "Select a labeled connected destination"
+script = ExtResource("2_strategic")
+
+[node name="TacticalMap" type="Control" parent="Shell/MapPanel/MapViewport"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+mouse_filter = 2
+script = ExtResource("3_tactical")
+
+[node name="Message" type="Label" parent="Shell/MapPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.56, 0.85, 0.93, 1)
+text = "Initializing command systems…"
+autowrap_mode = 2
+
+[node name="StatusPanel" type="PanelContainer" parent="Shell"]
+custom_minimum_size = Vector2(320, 0)
+layout_mode = 2
+size_flags_horizontal = 1
+
+[node name="StatusMargin" type="MarginContainer" parent="Shell/StatusPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="Status" type="VBoxContainer" parent="Shell/StatusPanel/StatusMargin"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="StatusTitle" type="Label" parent="Shell/StatusPanel/StatusMargin/Status"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.84, 0.72, 0.37, 1)
+theme_override_font_sizes/font_size = 20
+text = "SHIP / STATUS"
+
+[node name="SimulationTime" type="Label" parent="Shell/StatusPanel/StatusMargin/Status"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "SIMULATION TIME"
+
+[node name="Separator1" type="HSeparator" parent="Shell/StatusPanel/StatusMargin/Status"]
+layout_mode = 2
+
+[node name="ShipStatus" type="Label" parent="Shell/StatusPanel/StatusMargin/Status"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "SHIP"
+
+[node name="SensorStatus" type="Label" parent="Shell/StatusPanel/StatusMargin/Status"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "SENSORS"
+
+[node name="TravelStatus" type="Label" parent="Shell/StatusPanel/StatusMargin/Status"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "STRATEGIC STATUS"
+
+[node name="CourseStatus" type="Label" parent="Shell/StatusPanel/StatusMargin/Status"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "TACTICAL STATUS"
+
+[node name="Separator2" type="HSeparator" parent="Shell/StatusPanel/StatusMargin/Status"]
+layout_mode = 2
+
+[node name="DestinationLabel" type="Label" parent="Shell/StatusPanel/StatusMargin/Status"]
+layout_mode = 2
+text = "CONNECTED DESTINATIONS"
+
+[node name="DestinationButtons" type="VBoxContainer" parent="Shell/StatusPanel/StatusMargin/Status"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="TravelButton" type="Button" parent="Shell/StatusPanel/StatusMargin/Status"]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 2
+disabled = true
+text = "ENGAGE TRAVEL"
+tooltip_text = "Submit travel to the selected connected destination"
+
+[node name="CourseButton" type="Button" parent="Shell/StatusPanel/StatusMargin/Status"]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 2
+text = "SET COURSE 045° / 2 km/s"
+tooltip_text = "Submit a typed tactical course command"
+
+[node name="AdvanceUntilButton" type="Button" parent="Shell/StatusPanel/StatusMargin/Status"]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 2
+text = "ADVANCE UNTIL NEXT EVENT"
+tooltip_text = "Stop at the earliest scheduled repair or travel event"
+
+[node name="RateLabel" type="Label" parent="Shell/StatusPanel/StatusMargin/Status"]
+layout_mode = 2
+text = "SIMULATION RATE"
+
+[node name="RateControls" type="HBoxContainer" parent="Shell/StatusPanel/StatusMargin/Status"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="PauseRate" type="Button" parent="Shell/StatusPanel/StatusMargin/Status/RateControls"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 2
+text = "Ⅱ"
+tooltip_text = "Pause simulation"
+
+[node name="HalfRate" type="Button" parent="Shell/StatusPanel/StatusMargin/Status/RateControls"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 2
+text = "0.5x"
+
+[node name="NormalRate" type="Button" parent="Shell/StatusPanel/StatusMargin/Status/RateControls"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 2
+text = "1x"
+
+[node name="DoubleRate" type="Button" parent="Shell/StatusPanel/StatusMargin/Status/RateControls"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 2
+text = "2x"
+
+[node name="QuadRate" type="Button" parent="Shell/StatusPanel/StatusMargin/Status/RateControls"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 2
+text = "4x"
