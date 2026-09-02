@@ -48,7 +48,7 @@ func test_default_quick_save_writes_schema_v2_without_touching_legacy_slot() -> 
 	)
 
 
-func test_default_quick_load_falls_back_to_legacy_then_saves_generic_v2() -> void:
+func test_default_quick_load_discovers_legacy_slot_path_then_saves_generic_v2() -> void:
 	var snapshot_screen := _create_screen()
 	snapshot_screen.call("ProcessSyntheticDelta", 0.6)
 	snapshot_screen.call("QuickSave")

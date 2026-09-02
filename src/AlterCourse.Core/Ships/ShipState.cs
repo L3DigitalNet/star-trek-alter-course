@@ -6,6 +6,8 @@ namespace AlterCourse.Core.Ships;
 
 internal sealed record ShipState
 {
+    internal const int MaximumVesselDisplayNameLength = 256;
+
     internal ShipState(
         ShipInstanceId instanceId,
         ShipDefinitionId definitionId,
@@ -31,6 +33,14 @@ internal sealed record ShipState
         }
 
         ArgumentException.ThrowIfNullOrWhiteSpace(vesselDisplayName);
+        if (vesselDisplayName.Length > MaximumVesselDisplayNameLength)
+        {
+            throw new ArgumentException(
+                $"Vessel display name cannot exceed {MaximumVesselDisplayNameLength} characters.",
+                nameof(vesselDisplayName)
+            );
+        }
+
         ArgumentNullException.ThrowIfNull(strategicState);
 
         InstanceId = instanceId;

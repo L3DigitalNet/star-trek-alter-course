@@ -3,6 +3,8 @@ namespace AlterCourse.Core.Strategic;
 /// <summary>Defines one neutral strategic location.</summary>
 public sealed record StrategicLocation
 {
+    internal const int MaximumDisplayNameLength = 256;
+
     /// <summary>Initializes a strategic location.</summary>
     public StrategicLocation(LocationId id, string displayName, StrategicMapPosition position)
     {
@@ -12,6 +14,14 @@ public sealed record StrategicLocation
         }
 
         ArgumentException.ThrowIfNullOrWhiteSpace(displayName);
+        if (displayName.Length > MaximumDisplayNameLength)
+        {
+            throw new ArgumentException(
+                $"Location display name cannot exceed {MaximumDisplayNameLength} characters.",
+                nameof(displayName)
+            );
+        }
+
         Id = id;
         DisplayName = displayName;
         Position = position;

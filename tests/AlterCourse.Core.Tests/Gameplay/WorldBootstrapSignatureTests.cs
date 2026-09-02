@@ -65,6 +65,38 @@ public sealed class WorldBootstrapSignatureTests
         );
     }
 
+    /// <summary>Confirms the largest accepted authored world is immediately compatible with its V2 loader.</summary>
+    [Fact]
+    public void MaximumBootstrapWorldSerializesAndDeserializes()
+    {
+        StrategicMap map = CreateMaximumMap();
+        ShipStart[] starts =
+        [
+            .. Enumerable
+                .Range(1, 256)
+                .Select(id => new ShipStart(
+                    new ShipInstanceId(id),
+                    new ShipDefinitionId("pathfinder"),
+                    new string('V', 256),
+                    default,
+                    default,
+                    new SensorIntegrity(1),
+                    new AtLocationStart(map.Locations[0].Id)
+                )),
+        ];
+        GameSimulation game = new GameBootstrap(
+            new SimulationTime(0),
+            map,
+            starts[0].InstanceId,
+            starts
+        ).CreateSimulation(CreateCatalog());
+
+        byte[] saved = GamePersistence.Serialize(game, Metadata);
+        LoadedGameSave restored = GamePersistence.Deserialize(saved, CreateCatalog(), "maximum-bootstrap.json");
+
+        Assert.Equal(saved, GamePersistence.Serialize(restored.Simulation, restored.Metadata));
+    }
+
     /// <summary>Confirms player input and scheduled consequences remain isolated to their declared ship targets.</summary>
     [Fact]
     public void AdvancesIndependentLocalRepairAndTravelStateByTarget()
@@ -131,6 +163,33 @@ public sealed class WorldBootstrapSignatureTests
         Assert.True(JsonNode.DeepEquals(npcWork, WorkForShip(after, new ShipInstanceId(3))));
     }
 
+    /// <summary>Confirms a player course command leaves an independently moving local NPC course intact.</summary>
+    [Fact]
+    public void PlayerTacticalCourseChangesOnlyPlayerShip()
+    {
+        ShipStart[] starts = CreateStarts();
+        starts[1] = starts[1] with
+        {
+            TacticalMotion = new TacticalMotion(new HeadingDegrees(0), new SpeedKilometersPerSecond(1)),
+        };
+        GameSimulation game = CreateBootstrap(starts).CreateSimulation(CreateCatalog());
+        JsonNode npcCourse = Ships(Parse(game))[1]!["tacticalMotion"]!.DeepClone();
+
+        Assert.Equal(
+            SetTacticalCourseOutcome.Accepted,
+            game.SetTacticalCourse(
+                new SetTacticalCourseIntent(new HeadingDegrees(90), new SpeedKilometersPerSecond(2))
+            ).Outcome
+        );
+        JsonArray afterCommand = Ships(Parse(game));
+        Assert.True(JsonNode.DeepEquals(npcCourse, afterCommand[1]!["tacticalMotion"]));
+
+        game.AdvanceFixedSteps(1);
+        JsonArray afterStep = Ships(Parse(game));
+        Assert.Equal(-2, afterStep[1]!["tacticalPosition"]!["xKilometers"]!.GetValue<double>(), 10);
+        Assert.Equal(4.1, afterStep[1]!["tacticalPosition"]!["yKilometers"]!.GetValue<double>(), 10);
+    }
+
     /// <summary>Confirms a V2 save at four seconds resumes byte-identically through both event boundaries.</summary>
     [Fact]
     public void SaveReloadContinuationMatchesUninterruptedWorld()
@@ -180,6 +239,17 @@ public sealed class WorldBootstrapSignatureTests
         );
         Assert.Throws<ArgumentException>(() =>
             CreateBootstrap([valid with { Strategic = null! }]).CreateSimulation(CreateCatalog())
+        );
+        Assert.Throws<ArgumentException>(() =>
+            CreateBootstrap([valid with { VesselDisplayName = new string('V', 257) }])
+        );
+        Assert.Throws<ArgumentException>(() => CreateBootstrap(OverflowAfter(valid, 257)));
+        Assert.Throws<ArgumentException>(() =>
+            new GameBootstrap(new SimulationTime(9223372036854775800), CreateMap(), valid.InstanceId, [valid])
+        );
+        Assert.Throws<ArgumentException>(() =>
+            CreateBootstrap([valid with { InstanceId = new ShipInstanceId(long.MaxValue - 1) }])
+                .CreateSimulation(CreateCatalog())
         );
     }
 
@@ -382,6 +452,46 @@ public sealed class WorldBootstrapSignatureTests
                 new StrategicRoute(vesper.Id, meridian.Id, new SimulationDuration(14000)),
             ]
         );
+    }
+
+    private static StrategicMap CreateMaximumMap()
+    {
+        StrategicLocation[] locations =
+        [
+            .. Enumerable
+                .Range(0, 256)
+                .Select(index => new StrategicLocation(
+                    new LocationId($"location-{index}"),
+                    new string('L', 256),
+                    new StrategicMapPosition(index, -index)
+                )),
+        ];
+        var routes = new List<StrategicRoute>(1024);
+        for (int origin = 0; origin < locations.Length && routes.Count < routes.Capacity; origin++)
+        {
+            for (
+                int destination = origin + 1;
+                destination < locations.Length && routes.Count < routes.Capacity;
+                destination++
+            )
+            {
+                routes.Add(
+                    new StrategicRoute(locations[origin].Id, locations[destination].Id, new SimulationDuration(100))
+                );
+            }
+        }
+
+        return new StrategicMap(locations, routes);
+    }
+
+    private static IEnumerable<T> OverflowAfter<T>(T value, int yieldedCount)
+    {
+        for (int index = 0; index < yieldedCount; index++)
+        {
+            yield return value;
+        }
+
+        throw new InvalidOperationException("The bounded consumer enumerated past its rejection threshold.");
     }
 
     private static ShipDefinitionCatalog CreateCatalog()

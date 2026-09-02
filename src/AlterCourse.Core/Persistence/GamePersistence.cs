@@ -50,14 +50,7 @@ public static class GamePersistence
     private const int MaximumJsonDepth = 32;
     private const int MaximumMetadataTextLength = 128;
     private const int MaximumIdentityLength = 128;
-    private const int MaximumDisplayNameLength = 256;
-    private const int MaximumLocations = 256;
-    private const int MaximumRoutes = 1024;
     private const int MaximumOutstandingWork = 4096;
-
-    // Saves are untrusted input. The prototype map is already bounded to a few hundred locations,
-    // so 256 ships permits representative development worlds without allowing unbounded allocation.
-    private const int MaximumShips = 256;
 
     private static readonly JsonSerializerOptions SerializerOptions = CreateSerializerOptions();
     private static readonly JsonDocumentOptions DocumentOptions = new()
@@ -242,9 +235,11 @@ public static class GamePersistence
 
     private static SaveEnvelopeV2 CaptureV2(SimulationState state, GameSaveMetadata metadata)
     {
-        if (state.Ships.Length > MaximumShips)
+        if (state.Ships.Length > SimulationState.MaximumShips)
         {
-            throw new InvalidOperationException($"V2 persistence supports at most {MaximumShips} ships.");
+            throw new InvalidOperationException(
+                $"V2 persistence supports at most {SimulationState.MaximumShips} ships."
+            );
         }
 
         return new SaveEnvelopeV2
@@ -727,6 +722,13 @@ public static class GamePersistence
             throw new InvalidOperationException("Current simulation time cannot be negative.");
         }
 
+        if (snapshot.TimeMilliseconds > long.MaxValue - SimulationFixedStep.Duration.Milliseconds)
+        {
+            throw new InvalidOperationException(
+                "Current simulation time lacks one fixed-step of continuation headroom."
+            );
+        }
+
         EnsureFixedStep(snapshot.TimeMilliseconds, "Current simulation time");
         ValidateMapCandidateV2(snapshot.StrategicMap);
 
@@ -771,7 +773,7 @@ public static class GamePersistence
             throw new InvalidOperationException("The save must contain at least one ship.");
         }
 
-        EnsureCount(ships.Length, MaximumShips, "ships");
+        EnsureCount(ships.Length, SimulationState.MaximumShips, "ships");
         var shipIds = new HashSet<long>();
         var definitions = new Dictionary<long, ShipDefinition>();
         foreach (ShipSnapshotV2? ship in ships)
@@ -787,7 +789,7 @@ public static class GamePersistence
             }
 
             ValidateText(ship.DefinitionId, "Ship definition identity", MaximumIdentityLength);
-            ValidateText(ship.DisplayName, "Ship display name", MaximumDisplayNameLength);
+            ValidateText(ship.DisplayName, "Ship display name", ShipState.MaximumVesselDisplayNameLength);
             definitions.Add(ship.InstanceId, catalog.GetRequired(new ShipDefinitionId(ship.DefinitionId)));
         }
 
@@ -806,8 +808,8 @@ public static class GamePersistence
             throw new InvalidOperationException("A strategic map requires at least one location.");
         }
 
-        EnsureCount(map.Locations.Length, MaximumLocations, "strategic locations");
-        EnsureCount(map.Routes.Length, MaximumRoutes, "strategic routes");
+        EnsureCount(map.Locations.Length, StrategicMap.MaximumLocations, "strategic locations");
+        EnsureCount(map.Routes.Length, StrategicMap.MaximumRoutes, "strategic routes");
         var locationIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (StrategicLocationSnapshotV2? location in map.Locations)
         {
@@ -816,8 +818,8 @@ public static class GamePersistence
                 throw new InvalidOperationException("Strategic location data cannot be null.");
             }
 
-            ValidateText(location.Id, "Location identity", MaximumIdentityLength);
-            ValidateText(location.DisplayName, "Location display name", MaximumDisplayNameLength);
+            ValidateText(location.Id, "Location identity", LocationId.MaximumLength);
+            ValidateText(location.DisplayName, "Location display name", StrategicLocation.MaximumDisplayNameLength);
             if (!locationIds.Add(location.Id))
             {
                 throw new InvalidOperationException("Strategic location identities must be unique.");
@@ -840,8 +842,8 @@ public static class GamePersistence
                 throw new InvalidOperationException("Strategic route data cannot be null.");
             }
 
-            ValidateText(route.Origin, "Route origin", MaximumIdentityLength);
-            ValidateText(route.Destination, "Route destination", MaximumIdentityLength);
+            ValidateText(route.Origin, "Route origin", LocationId.MaximumLength);
+            ValidateText(route.Destination, "Route destination", LocationId.MaximumLength);
             if (!locationIds.Contains(route.Origin) || !locationIds.Contains(route.Destination))
             {
                 throw new InvalidOperationException("Every route endpoint must exist in the strategic map.");
@@ -987,7 +989,7 @@ public static class GamePersistence
 
         EnsureUnitInterval(ship.SensorIntegrity, "Ship sensor integrity");
         ValidateStrategicCandidateV2(ship, map, scheduler, currentTime);
-        ValidateRepairCandidateV2(ship, scheduler, currentTime);
+        ValidateRepairCandidateV2(ship, definition, scheduler, currentTime);
     }
 
     private static void ValidateStrategicCandidateV2(
@@ -1024,7 +1026,7 @@ public static class GamePersistence
             throw new InvalidOperationException("At-location state cannot contain active travel.");
         }
 
-        ValidateText(strategic.LocationId, "Current location identity", MaximumIdentityLength);
+        ValidateText(strategic.LocationId, "Current location identity", LocationId.MaximumLength);
         if (!map.Locations.Any(location => string.Equals(location.Id, strategic.LocationId, StringComparison.Ordinal)))
         {
             throw new InvalidOperationException("Current location does not exist in the strategic map.");
@@ -1055,8 +1057,8 @@ public static class GamePersistence
         }
 
         TravelSnapshotV2 travel = strategic.Travel;
-        ValidateText(travel.Origin, "Travel origin", MaximumIdentityLength);
-        ValidateText(travel.Destination, "Travel destination", MaximumIdentityLength);
+        ValidateText(travel.Origin, "Travel origin", LocationId.MaximumLength);
+        ValidateText(travel.Destination, "Travel destination", LocationId.MaximumLength);
         StrategicRouteSnapshotV2? route = map.Routes.FirstOrDefault(candidate =>
             (
                 string.Equals(candidate.Origin, travel.Origin, StringComparison.Ordinal)
@@ -1098,7 +1100,12 @@ public static class GamePersistence
         );
     }
 
-    private static void ValidateRepairCandidateV2(ShipSnapshotV2 ship, SchedulerSnapshotV2 scheduler, long currentTime)
+    private static void ValidateRepairCandidateV2(
+        ShipSnapshotV2 ship,
+        ShipDefinition definition,
+        SchedulerSnapshotV2 scheduler,
+        long currentTime
+    )
     {
         if (ship.SensorRepair is null)
         {
@@ -1128,6 +1135,14 @@ public static class GamePersistence
         if (currentTime < repair.StartedAtMilliseconds || currentTime >= repair.ExpectedCompletionMilliseconds)
         {
             throw new InvalidOperationException("Active sensor repair does not contain the current simulation time.");
+        }
+
+        if (
+            repair.ExpectedCompletionMilliseconds - repair.StartedAtMilliseconds
+            != definition.SensorRepairDuration.Milliseconds
+        )
+        {
+            throw new InvalidOperationException("Sensor repair duration does not match its ship definition.");
         }
 
         double progress =

@@ -11,6 +11,7 @@ namespace AlterCourse.Core.Gameplay;
 public sealed class GameSimulation
 {
     private const int SameBoundaryExecutionBudget = 1024;
+    private const long ShipStepWorkBudget = 1_000_000;
 
     // Local arrival frames use one non-origin offset so tactical positions remain continuous values,
     // not a hidden grid or strategic-map projection.
@@ -144,6 +145,22 @@ public sealed class GameSimulation
     )
     {
         initial.Time.AdvanceTo(target);
+        long elapsed = target.Milliseconds - initial.Time.Milliseconds;
+        if (elapsed % SimulationFixedStep.Duration.Milliseconds != 0)
+        {
+            throw new InvalidOperationException("Advancement boundaries must be fixed-step aligned.");
+        }
+
+        long stepCount = elapsed / SimulationFixedStep.Duration.Milliseconds;
+        // The whole call is admitted before the first immutable replacement so a rejected catch-up
+        // cannot expose a partially advanced aggregate to its caller.
+        if (stepCount > ShipStepWorkBudget / initial.Ships.Length)
+        {
+            throw new InvalidOperationException(
+                $"Advancement exceeds the finite {ShipStepWorkBudget} ship-step work budget."
+            );
+        }
+
         SimulationState current = initial;
         List<ScheduledWorkKind> resolvedKinds = [];
 
@@ -178,8 +195,10 @@ public sealed class GameSimulation
         while (current.Time.Milliseconds < boundary.Milliseconds)
         {
             SimulationTime nextTime = current.Time.AdvanceBy(SimulationFixedStep.Duration);
-            foreach (ShipState ship in current.Ships)
+            var replacements = new ShipState[current.Ships.Length];
+            for (int index = 0; index < current.Ships.Length; index++)
             {
+                ShipState ship = current.Ships[index];
                 ShipState advanced = ship;
                 if (ship.StrategicState is AtLocationState)
                 {
@@ -197,10 +216,10 @@ public sealed class GameSimulation
                     advanced = advanced with { SensorIntegrity = repair.IntegrityAt(nextTime) };
                 }
 
-                current = current.ReplaceShip(ship.InstanceId, advanced);
+                replacements[index] = advanced;
             }
 
-            current = current with { Time = nextTime };
+            current = current.ReplaceShips(replacements) with { Time = nextTime };
         }
 
         return current;

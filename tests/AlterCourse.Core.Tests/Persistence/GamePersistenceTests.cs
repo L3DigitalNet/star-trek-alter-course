@@ -209,6 +209,7 @@ public sealed class GamePersistenceTests
     [InlineData("time")]
     [InlineData("work")]
     [InlineData("sequence")]
+    [InlineData("allocator")]
     [InlineData("zero-work")]
     public void RejectsInvalidOrTerminalCountersAndTime(string member)
     {
@@ -227,6 +228,9 @@ public sealed class GamePersistenceTests
                 case "sequence":
                     scheduler["nextSequence"] = long.MaxValue;
                     break;
+                case "allocator":
+                    simulation["shipAllocatorNextId"] = long.MaxValue;
+                    break;
                 case "zero-work":
                     scheduler["nextWorkId"] = 0;
                     break;
@@ -238,7 +242,12 @@ public sealed class GamePersistenceTests
         AssertFailure(
             invalid,
             $"terminal-{member}.json",
-            string.Equals(member, "time", StringComparison.Ordinal) ? "headroom" : "counter"
+            member switch
+            {
+                "time" => "headroom",
+                "allocator" => "allocator",
+                _ => "counter",
+            }
         );
     }
 
@@ -325,6 +334,21 @@ public sealed class GamePersistenceTests
         AssertFailure(invalid, "sensor-mismatch.json", "does not match");
     }
 
+    /// <summary>Confirms repair timing cannot diverge from the resolved ship definition while retaining correlation.</summary>
+    [Fact]
+    public void RejectsSensorRepairDurationMismatch()
+    {
+        byte[] invalid = MutateV2(root =>
+        {
+            JsonNode repair = Ship(root, 0)["sensorRepair"]!;
+            repair["expectedCompletionMilliseconds"] = 8100;
+            Ship(root, 0)["sensorIntegrity"] = 0.5 + (0.5 * (4000d / 8100d));
+            root["simulation"]!["scheduler"]!["outstandingWork"]![0]!["dueTimeMilliseconds"] = 8100;
+        });
+
+        AssertFailure(invalid, "repair-duration.json", "duration");
+    }
+
     /// <summary>Confirms nonfinite tactical data and unknown work kinds fail before domain construction.</summary>
     [Theory]
     [InlineData("nonfinite")]
@@ -383,8 +407,15 @@ public sealed class GamePersistenceTests
         });
         LoadedGameSave loaded = LoadV2(start);
         byte[] normalized = GamePersistence.Serialize(loaded.Simulation, loaded.Metadata);
+        JsonNode normalizedSimulation = Parse(normalized)["simulation"]!;
 
         Assert.Equal(normalized, GamePersistence.Serialize(LoadV2(normalized).Simulation, loaded.Metadata));
+        Assert.Equal(0, normalizedSimulation["timeMilliseconds"]!.GetValue<long>());
+        Assert.Equal(0, normalizedSimulation["ships"]![0]!["sensorRepair"]!["startedAtMilliseconds"]!.GetValue<long>());
+        Assert.Equal(
+            0,
+            normalizedSimulation["ships"]![2]!["strategicState"]!["travel"]!["departureMilliseconds"]!.GetValue<long>()
+        );
     }
 
     /// <summary>Confirms completed operations remain absent after a later save and reload.</summary>
@@ -492,6 +523,24 @@ public sealed class GamePersistenceTests
         );
         Assert.Equal("traveling", ship["strategicState"]!["kind"]!.GetValue<string>());
         Assert.NotNull(ship["sensorRepair"]);
+    }
+
+    /// <summary>Confirms V1 migration cannot preserve repair timing that contradicts resolved content.</summary>
+    [Fact]
+    public void RejectsV1SensorRepairDurationMismatch()
+    {
+        byte[] invalid = Mutate(
+            CreateV1(activeWork: true),
+            root =>
+            {
+                JsonNode repair = root["simulation"]!["playerShip"]!["sensorRepair"]!;
+                repair["expectedCompletionMilliseconds"] = 8100;
+                root["simulation"]!["playerShip"]!["sensorIntegrity"] = 0.5 + (0.5 * (4000d / 8100d));
+                root["simulation"]!["scheduler"]!["outstandingWork"]![0]!["dueTimeMilliseconds"] = 8100;
+            }
+        );
+
+        AssertFailure(invalid, "repair-duration-v1.json", "duration");
     }
 
     /// <summary>Confirms V1 without active work migrates without inventing scheduler consequences.</summary>

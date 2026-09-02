@@ -9,6 +9,8 @@ namespace AlterCourse.Core.Gameplay;
 
 internal sealed record SimulationState
 {
+    internal const int MaximumShips = 256;
+
     internal SimulationState(
         SimulationTime time,
         SimulationScheduler scheduler,
@@ -19,7 +21,12 @@ internal sealed record SimulationState
     )
     {
         ArgumentNullException.ThrowIfNull(ships);
-        ShipState[] materialized = ships.ToArray();
+        ShipState[] materialized = ships.Take(MaximumShips + 1).ToArray();
+        if (materialized.Length > MaximumShips)
+        {
+            throw new ArgumentException($"Simulation state supports at most {MaximumShips} ships.", nameof(ships));
+        }
+
         if (materialized.Length == 0 || materialized.Any(ship => ship is null))
         {
             throw new ArgumentException("Simulation state requires at least one nonnull ship.", nameof(ships));
@@ -97,6 +104,28 @@ internal sealed record SimulationState
         };
     }
 
+    internal SimulationState ReplaceShips(ShipState[] replacements)
+    {
+        ArgumentNullException.ThrowIfNull(replacements);
+        if (replacements.Length != Ships.Length)
+        {
+            throw new InvalidOperationException("Bulk ship replacement must preserve aggregate cardinality.");
+        }
+
+        for (int index = 0; index < replacements.Length; index++)
+        {
+            if (replacements[index] is null || replacements[index].InstanceId != Ships[index].InstanceId)
+            {
+                throw new InvalidOperationException("Bulk ship replacement must preserve canonical ship identities.");
+            }
+        }
+
+        return this with
+        {
+            Ships = [.. replacements],
+        };
+    }
+
     internal void Validate(ShipDefinitionCatalog catalog)
     {
         ArgumentNullException.ThrowIfNull(catalog);
@@ -112,7 +141,7 @@ internal sealed record SimulationState
                 );
             }
 
-            ValidateShip(ship);
+            ValidateShip(ship, definition);
         }
 
         foreach (ScheduledWork work in Scheduler.OutstandingWork)
@@ -136,6 +165,16 @@ internal sealed record SimulationState
         if (ShipIdAllocator.NextId <= Ships[^1].InstanceId.Value)
         {
             throw new InvalidOperationException("Ship allocator must follow every allocated ship identity.");
+        }
+
+        if (
+            ShipIdAllocator.NextId == long.MaxValue
+            || Scheduler.NextWorkId == long.MaxValue
+            || Scheduler.NextSequence == long.MaxValue
+            || Time.Milliseconds > long.MaxValue - SimulationFixedStep.Duration.Milliseconds
+        )
+        {
+            throw new InvalidOperationException("Simulation state lacks continuation headroom.");
         }
 
         if (
@@ -173,7 +212,7 @@ internal sealed record SimulationState
         }
     }
 
-    private void ValidateShip(ShipState ship)
+    private void ValidateShip(ShipState ship, ShipDefinition definition)
     {
         switch (ship.StrategicState)
         {
@@ -187,7 +226,7 @@ internal sealed record SimulationState
                 throw new InvalidOperationException("Ship strategic state kind is unsupported.");
         }
 
-        ValidateRepair(ship);
+        ValidateRepair(ship, definition);
     }
 
     private void ValidateTravel(ShipState ship, TravelingState traveling)
@@ -224,7 +263,7 @@ internal sealed record SimulationState
         );
     }
 
-    private void ValidateRepair(ShipState ship)
+    private void ValidateRepair(ShipState ship, ShipDefinition definition)
     {
         if (ship.SensorRepair is not SensorRepairState repair)
         {
@@ -237,6 +276,14 @@ internal sealed record SimulationState
         )
         {
             throw new InvalidOperationException("Active sensor repair must contain the current simulation time.");
+        }
+
+        if (
+            repair.ExpectedCompletion.Milliseconds - repair.StartedAt.Milliseconds
+            != definition.SensorRepairDuration.Milliseconds
+        )
+        {
+            throw new InvalidOperationException("Active sensor repair duration must match its ship definition.");
         }
 
         if (ship.SensorIntegrity != repair.IntegrityAt(Time))

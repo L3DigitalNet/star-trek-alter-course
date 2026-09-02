@@ -22,39 +22,9 @@ public sealed class GameBootstrap
     {
         ArgumentNullException.ThrowIfNull(strategicMap);
         ArgumentNullException.ThrowIfNull(shipStarts);
-        ShipStart[] materialized = shipStarts.ToArray();
-        if (materialized.Length == 0 || materialized.Any(start => start is null))
-        {
-            throw new ArgumentException("A bootstrap requires at least one nonnull ship start.", nameof(shipStarts));
-        }
-
-        if (materialized.Any(start => start.InstanceId.Value <= 0))
-        {
-            throw new ArgumentException("Bootstrap ship starts require initialized identities.", nameof(shipStarts));
-        }
-
-        if (materialized.Any(start => string.IsNullOrWhiteSpace(start.VesselDisplayName) || start.Strategic is null))
-        {
-            throw new ArgumentException(
-                "Bootstrap ship starts require a vessel display name and strategic state.",
-                nameof(shipStarts)
-            );
-        }
-
-        if (materialized.Select(start => start.InstanceId).Distinct().Count() != materialized.Length)
-        {
-            throw new ArgumentException("Bootstrap ship starts require unique identities.", nameof(shipStarts));
-        }
-
-        if (playerShipId.Value <= 0 || materialized.Count(start => start.InstanceId == playerShipId) != 1)
-        {
-            throw new ArgumentException("Player ship identity must resolve exactly once.", nameof(playerShipId));
-        }
-
-        if (initialTime.Milliseconds % SimulationFixedStep.Duration.Milliseconds != 0)
-        {
-            throw new ArgumentException("Initial time must align to the fixed simulation step.", nameof(initialTime));
-        }
+        ShipStart[] materialized = shipStarts.Take(SimulationState.MaximumShips + 1).ToArray();
+        ValidateStarts(materialized, playerShipId);
+        ValidateInitialTime(initialTime);
 
         InitialTime = initialTime;
         StrategicMap = strategicMap;
@@ -73,6 +43,70 @@ public sealed class GameBootstrap
 
     /// <summary>Gets ship declarations in ascending instance-identity order.</summary>
     public IReadOnlyList<ShipStart> ShipStarts => _shipStarts;
+
+    private static void ValidateStarts(ShipStart[] shipStarts, ShipInstanceId playerShipId)
+    {
+        if (shipStarts.Length > SimulationState.MaximumShips)
+        {
+            throw new ArgumentException(
+                $"A bootstrap supports at most {SimulationState.MaximumShips} ship starts.",
+                nameof(shipStarts)
+            );
+        }
+
+        if (shipStarts.Length == 0 || shipStarts.Any(start => start is null))
+        {
+            throw new ArgumentException("A bootstrap requires at least one nonnull ship start.", nameof(shipStarts));
+        }
+
+        if (shipStarts.Any(start => start.InstanceId.Value <= 0 || start.InstanceId.Value >= long.MaxValue - 1))
+        {
+            throw new ArgumentException(
+                "Bootstrap ship starts require initialized identities with allocator continuation headroom.",
+                nameof(shipStarts)
+            );
+        }
+
+        if (
+            shipStarts.Any(start =>
+                string.IsNullOrWhiteSpace(start.VesselDisplayName)
+                || start.VesselDisplayName.Length > ShipState.MaximumVesselDisplayNameLength
+                || start.Strategic is null
+            )
+        )
+        {
+            throw new ArgumentException(
+                $"Bootstrap ship starts require a vessel display name of at most {ShipState.MaximumVesselDisplayNameLength} characters and strategic state.",
+                nameof(shipStarts)
+            );
+        }
+
+        if (shipStarts.Select(start => start.InstanceId).Distinct().Count() != shipStarts.Length)
+        {
+            throw new ArgumentException("Bootstrap ship starts require unique identities.", nameof(shipStarts));
+        }
+
+        if (playerShipId.Value <= 0 || shipStarts.Count(start => start.InstanceId == playerShipId) != 1)
+        {
+            throw new ArgumentException("Player ship identity must resolve exactly once.", nameof(playerShipId));
+        }
+    }
+
+    private static void ValidateInitialTime(SimulationTime initialTime)
+    {
+        if (initialTime.Milliseconds % SimulationFixedStep.Duration.Milliseconds != 0)
+        {
+            throw new ArgumentException("Initial time must align to the fixed simulation step.", nameof(initialTime));
+        }
+
+        if (initialTime.Milliseconds > long.MaxValue - SimulationFixedStep.Duration.Milliseconds)
+        {
+            throw new ArgumentException(
+                "Initial time must retain one fixed-step of continuation headroom.",
+                nameof(initialTime)
+            );
+        }
+    }
 
     /// <summary>Validates catalog-dependent declarations and creates a new live simulation.</summary>
     public GameSimulation CreateSimulation(ShipDefinitionCatalog catalog)

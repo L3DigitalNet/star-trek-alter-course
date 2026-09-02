@@ -308,6 +308,21 @@ public sealed class GameSimulationTests
         Assert.Equal(initial, game.GetPlayerProjection());
     }
 
+    /// <summary>Confirms oversized catch-up work is rejected before any ship or clock mutation.</summary>
+    [Fact]
+    public void AdvanceRejectsShipStepWorkOverBudgetWithoutMutation()
+    {
+        GameSimulation game = CreateGame();
+        PlayerProjection initial = game.GetPlayerProjection();
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            game.AdvanceFixedSteps(1_000_001)
+        );
+
+        Assert.Contains("ship-step work budget", exception.Message, StringComparison.Ordinal);
+        Assert.Equal(initial, game.GetPlayerProjection());
+    }
+
     private static GameSimulation CreateGame()
     {
         const string definition = """
