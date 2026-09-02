@@ -141,7 +141,7 @@ public sealed class GameSimulation
         {
             PlayerProjection unchanged = Project(_state);
             return new AdvanceUntilResult(
-                AdvanceUntilOutcome.NoScheduledEvent,
+                AdvanceUntilOutcome.NoPlayerEvent,
                 _state.Time,
                 new ReadOnlyValueList<PlayerAdvanceEvent>([]),
                 unchanged
@@ -152,7 +152,7 @@ public sealed class GameSimulation
         SimulationAdvanceTraceResult advance = AdvanceTo(_state, boundary, _shipCatalog);
         Commit(advance.State);
         return new AdvanceUntilResult(
-            AdvanceUntilOutcome.ScheduledEventResolved,
+            AdvanceUntilOutcome.PlayerEventResolved,
             _state.Time,
             PlayerEvents(advance.Traces, _state.PlayerShipId),
             Project(_state)

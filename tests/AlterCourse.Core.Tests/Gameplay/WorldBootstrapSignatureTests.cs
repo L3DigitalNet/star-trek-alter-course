@@ -146,7 +146,7 @@ public sealed class WorldBootstrapSignatureTests
         Assert.Equal("traveling", afterRepairs[2]!["strategicState"]!["kind"]!.GetValue<string>());
 
         AdvanceUntilResult noPlayerEvent = game.AdvanceUntilNextPlayerRelevantEvent();
-        Assert.Equal(AdvanceUntilOutcome.NoScheduledEvent, noPlayerEvent.Outcome);
+        Assert.Equal(AdvanceUntilOutcome.NoPlayerEvent, noPlayerEvent.Outcome);
         Assert.Equal(8000, noPlayerEvent.StoppedAt.Milliseconds);
         Assert.Empty(noPlayerEvent.ResolvedEvents);
         SimulationAdvanceResult hiddenArrival = game.AdvanceFixedSteps(60);

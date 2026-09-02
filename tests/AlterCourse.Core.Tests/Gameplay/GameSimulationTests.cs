@@ -26,6 +26,19 @@ public sealed class GameSimulationTests
             typeof(IReadOnlyList<PlayerAdvanceEvent>),
             typeof(AdvanceUntilResult).GetProperty(nameof(AdvanceUntilResult.ResolvedEvents))!.PropertyType
         );
+        Assert.DoesNotContain(
+            typeof(GameSimulation).GetMembers().Concat(typeof(SimulationAdvanceResult).GetMembers()),
+            member => member.Name.Contains("Scheduled", StringComparison.Ordinal)
+        );
+        Assert.DoesNotContain(
+            typeof(AdvanceUntilResult).GetMembers(),
+            member => member.Name.Contains("Scheduled", StringComparison.Ordinal)
+        );
+        Assert.Equal(["PlayerEventResolved", "NoPlayerEvent"], Enum.GetNames<AdvanceUntilOutcome>());
+        Assert.DoesNotContain(
+            Enum.GetNames<AdvanceUntilOutcome>(),
+            name => name.Contains("Scheduled", StringComparison.Ordinal)
+        );
         Assert.Null(typeof(GameSimulation).GetMethod("AdvanceUntilNextScheduledEvent"));
         Assert.False(typeof(Milestone2ProofSetup).IsPublic);
     }
@@ -248,7 +261,7 @@ public sealed class GameSimulationTests
         AdvanceUntilResult arrival = until.AdvanceUntilNextPlayerRelevantEvent();
         SimulationAdvanceResult ordinaryAdvance = ordinary.AdvanceFixedSteps(120);
 
-        Assert.Equal(AdvanceUntilOutcome.ScheduledEventResolved, repair.Outcome);
+        Assert.Equal(AdvanceUntilOutcome.PlayerEventResolved, repair.Outcome);
         Assert.Equal(8000, repair.StoppedAt.Milliseconds);
         Assert.Equal([PlayerAdvanceEvent.SensorRepairCompleted], repair.ResolvedEvents);
         Assert.NotNull(repair.Projection.Strategic.Travel);
@@ -274,7 +287,7 @@ public sealed class GameSimulationTests
 
         AdvanceUntilResult result = game.AdvanceUntilNextPlayerRelevantEvent();
 
-        Assert.Equal(AdvanceUntilOutcome.NoScheduledEvent, result.Outcome);
+        Assert.Equal(AdvanceUntilOutcome.NoPlayerEvent, result.Outcome);
         Assert.Equal(before.SimulationTime, result.StoppedAt);
         Assert.Empty(result.ResolvedEvents);
         Assert.Equal(before, result.Projection);

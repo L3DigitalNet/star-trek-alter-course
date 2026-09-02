@@ -302,7 +302,7 @@ public sealed class OrderExecutionTests
         };
         var noPlayerBoundary = GameSimulation.RestoreState(hiddenOnly, catalog);
         AdvanceUntilResult noEvent = noPlayerBoundary.AdvanceUntilNextPlayerRelevantEvent();
-        Assert.Equal(AdvanceUntilOutcome.NoScheduledEvent, noEvent.Outcome);
+        Assert.Equal(AdvanceUntilOutcome.NoPlayerEvent, noEvent.Outcome);
         Assert.Equal(new SimulationTime(0), noEvent.StoppedAt);
         Assert.Equal(hiddenOnly, noPlayerBoundary.CaptureState());
     }
