@@ -23,23 +23,23 @@ write_fixture() {
     "${fixture}/src/AlterCourse.Godot"
   cp "${root}/scripts/launch-game.sh" "${fixture}/scripts/launch-game.sh"
 
-  cat >"${fixture}/scripts/resolve-dotnet.sh" <<'EOF'
+  cat > "${fixture}/scripts/resolve-dotnet.sh" << 'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../fake-dotnet" && pwd -P)"
 EOF
-  cat >"${fixture}/scripts/resolve-godot.sh" <<'EOF'
+  cat > "${fixture}/scripts/resolve-godot.sh" << 'EOF'
 #!/usr/bin/env bash
 fixture_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 printf '%s\n' "${fixture_root}/fake-godot/godot"
 EOF
-  cat >"${fixture}/fake-dotnet/dotnet" <<'EOF'
+  cat > "${fixture}/fake-dotnet/dotnet" << 'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"${LAUNCH_LOG}"
 if [[ "${FAIL_DOTNET_STAGE:-}" == "$1" ]]; then
   exit 19
 fi
 EOF
-  cat >"${fixture}/fake-godot/godot" <<'EOF'
+  cat > "${fixture}/fake-godot/godot" << 'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$@" >"${GODOT_ARGS}"
 printf 'godot\n' >>"${LAUNCH_LOG}"
@@ -62,12 +62,12 @@ success_args="${fixture}/success.args"
 LAUNCH_LOG="${success_log}" GODOT_ARGS="${success_args}" \
   "${fixture}/scripts/launch-game.sh" --editor --rendering-driver opengl3 -- 'argument with spaces' --application-flag
 
-cat >"${fixture}/expected-success.log" <<'EOF'
+cat > "${fixture}/expected-success.log" << 'EOF'
 restore AlterCourse.sln --locked-mode
 build src/AlterCourse.Godot/AlterCourse.Godot.csproj -c Debug --no-restore --warnaserror
 godot
 EOF
-cat >"${fixture}/expected-success.args" <<'EOF'
+cat > "${fixture}/expected-success.args" << 'EOF'
 --path
 src/AlterCourse.Godot
 --editor
@@ -86,7 +86,7 @@ if LAUNCH_LOG="${restore_log}" GODOT_ARGS="${fixture}/restore-failure.args" FAIL
   fail 'launcher succeeded after restore failed'
 fi
 [[ ! -e "${fixture}/restore-failure.args" ]] || fail 'Godot launched after restore failed'
-cat >"${fixture}/expected-restore-failure.log" <<'EOF'
+cat > "${fixture}/expected-restore-failure.log" << 'EOF'
 restore AlterCourse.sln --locked-mode
 EOF
 assert_file "${fixture}/expected-restore-failure.log" "${restore_log}"
@@ -97,7 +97,7 @@ if LAUNCH_LOG="${build_log}" GODOT_ARGS="${fixture}/build-failure.args" FAIL_DOT
   fail 'launcher succeeded after build failed'
 fi
 [[ ! -e "${fixture}/build-failure.args" ]] || fail 'Godot launched after build failed'
-cat >"${fixture}/expected-build-failure.log" <<'EOF'
+cat > "${fixture}/expected-build-failure.log" << 'EOF'
 restore AlterCourse.sln --locked-mode
 build src/AlterCourse.Godot/AlterCourse.Godot.csproj -c Debug --no-restore --warnaserror
 EOF
