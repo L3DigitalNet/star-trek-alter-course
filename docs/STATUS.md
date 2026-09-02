@@ -27,4 +27,4 @@
 - AssetCtl credentials remain OpenBao-owned; tracked content contains only references and environment-variable names.
 - Tooling now uses C# 12, exact SDK 10.0.111, Node 24, Release-mapped Godot builds, and idempotent owned-source formatting.
 - CSharpier owns C# whitespace; analyzers enforce semantic policy, including `_camelCase` private instance fields.
-- Issue #21 tooling convergence is implemented in open Final PR #22 and awaits merge.
+- Issue #21 tooling convergence was delivered through merged Final PR #22.
