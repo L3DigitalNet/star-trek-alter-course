@@ -6,7 +6,9 @@
 
 ## Project status
 
-The repository currently provides the project architecture, pinned development environment, quality gates, and a verified Godot/C# integration skeleton. There is no playable release yet.
+The repository provides a first executable gameplay walking skeleton alongside the project architecture, pinned development environment, and quality gates. Version 0.1.0 is the first source release; no packaged game artifact is published.
+
+The command screen proves a small, persistent, deterministic slice of play: a captain selects a connected destination on an open strategic map, begins travel, and sees the ship's damaged sensors repair as simulation time passes. Arrival is scheduled rather than immediate. A separate local tactical view displays continuous position and accepts a demonstration course command; neither map is governed by square or hex movement.
 
 The design centers on a persistent simulation in which the player commands one starship inside a changing political and strategic world. Planned areas include:
 
@@ -39,6 +41,29 @@ cd star-trek-alter-course
 ```
 
 See [Development quality](docs/development-quality.md) for the complete setup, verification, and deep-validation workflow.
+
+## Run the gameplay slice
+
+After setup, launch the Godot project from the repository root:
+
+```bash
+godot_bin="$(./scripts/resolve-godot.sh)"
+"${godot_bin}" --path src/AlterCourse.Godot
+```
+
+The map-first command screen starts at the `Dawn Anchor` strategic location. Select a connected destination from the map or the status-panel buttons, then choose **ENGAGE TRAVEL**. Travel remains active until its scheduled arrival, while the visible sensor repair progresses on the same simulation timeline.
+
+Use the **Pause**, **0.5x**, **1x**, **2x**, and **4x** controls to choose how quickly presentation elapsed time requests deterministic 100 ms Core steps. Pause leaves rendering active but submits no Core advancement. **ADVANCE UNTIL NEXT EVENT** follows the same scheduler path and stops at the earliest current repair or travel event.
+
+Switch to **TACTICAL** to view the local continuous reference frame. **SET COURSE 045° / 2 km/s** submits the first tactical movement intent. Core tactical coordinates use kilometers with positive Y toward tactical north; the Godot map adapter performs the presentation Y-axis conversion.
+
+**SAVE** and **LOAD** use one V1 quick-save slot at `user://quick-save-v1.json`. A save includes active travel, sensor repair, scheduled work, and deterministic runtime state. Loading validates a new candidate simulation before replacing the running one, so a failed load leaves the active game unchanged.
+
+The runtime reads the first validated, data-driven ship definition from [`src/AlterCourse.Godot/content/ships/pathfinder.json`](src/AlterCourse.Godot/content/ships/pathfinder.json), using its adjacent V1 JSON schema. This is game-domain content, separate from the AssetCtl visual-asset catalog.
+
+## Architecture at a glance
+
+`AlterCourse.Core` owns explicit simulation time, scheduled work, travel, tactical state, sensor repair, authored ship definitions, and V1 save/load mapping. It exposes read-only player projections and typed operations. `AlterCourse.Godot` owns scenes, input, rendering, presentation-time accumulation, and the coordinate projection into Godot screen space; it does not become simulation authority.
 
 ## Asset pipeline
 
