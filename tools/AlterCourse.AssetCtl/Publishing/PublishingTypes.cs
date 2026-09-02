@@ -1,13 +1,81 @@
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using AlterCourse.AssetCtl.Configuration;
+using Microsoft.Win32.SafeHandles;
 using YamlDotNet.RepresentationModel;
 
 namespace AlterCourse.AssetCtl.Publishing;
 
-internal static class PublishingTypes
+internal static partial class PublishingTypes
 {
+    internal static partial class StateFile
+    {
+        private const int OpenReadWrite = 0x0002;
+        private const int OpenCreate = 0x0040;
+        private const int OpenCloseOnExec = 0x80000;
+        private const int OpenDirectory = 0x10000;
+        private const int OpenNoFollow = 0x20000;
+        private const int LockExclusive = 2;
+        private const int LockNonBlocking = 4;
+
+        public static FileStream OpenLockedLeaf(string directory, string leaf, string field)
+        {
+            if (!OperatingSystem.IsLinux())
+            {
+                throw new AssetCtlException($"{field}: secure no-follow locking requires Linux.", 7);
+            }
+
+            int directoryDescriptor = Open(directory, OpenDirectory | OpenNoFollow | OpenCloseOnExec, 0);
+            if (directoryDescriptor < 0)
+            {
+                throw new AssetCtlException($"{field}: lock directory is unavailable or unsafe.", 7);
+            }
+
+            try
+            {
+                int descriptor = OpenAt(
+                    directoryDescriptor,
+                    leaf,
+                    OpenReadWrite | OpenCreate | OpenNoFollow | OpenCloseOnExec,
+                    0x180
+                );
+                if (descriptor < 0)
+                {
+                    throw new AssetCtlException($"{field}: symbolic links are prohibited.", 7);
+                }
+
+                var handle = new SafeFileHandle(descriptor, ownsHandle: true);
+                if (Flock(handle, LockExclusive | LockNonBlocking) != 0)
+                {
+                    handle.Dispose();
+                    throw new IOException($"{field} is already locked.");
+                }
+
+                // The directory descriptor and O_NOFOLLOW bind validation to this open. A path check alone
+                // permits a replacement symlink to redirect the state write between validation and opening.
+                return new FileStream(handle, FileAccess.ReadWrite);
+            }
+            finally
+            {
+                _ = Close(directoryDescriptor);
+            }
+        }
+
+        [LibraryImport("libc", EntryPoint = "open", SetLastError = true, StringMarshalling = StringMarshalling.Utf8)]
+        private static partial int Open(string path, int flags, uint mode);
+
+        [LibraryImport("libc", EntryPoint = "openat", SetLastError = true, StringMarshalling = StringMarshalling.Utf8)]
+        private static partial int OpenAt(int directoryDescriptor, string path, int flags, uint mode);
+
+        [LibraryImport("libc", EntryPoint = "flock", SetLastError = true)]
+        private static partial int Flock(SafeFileHandle descriptor, int operation);
+
+        [LibraryImport("libc", EntryPoint = "close", SetLastError = true)]
+        private static partial int Close(int descriptor);
+    }
+
     public sealed class AssetLock : IDisposable
     {
         private readonly FileStream stream;
@@ -26,12 +94,10 @@ internal static class PublishingTypes
             RejectReparsePoint(lockRoot, "asset lock directory");
             Directory.CreateDirectory(lockRoot);
             RejectReparsePoint(lockRoot, "asset lock directory");
-            string path = Path.Combine(lockRoot, "catalog.lock");
-            RejectReparsePoint(path, "asset catalog lock");
             FileStream lockStream;
             try
             {
-                lockStream = new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+                lockStream = StateFile.OpenLockedLeaf(lockRoot, "catalog.lock", "asset catalog lock");
             }
             catch (IOException)
             {
@@ -58,12 +124,10 @@ internal static class PublishingTypes
 
         public void Dispose() => stream.Dispose();
 
-        private static void RejectReparsePoint(string path, string field)
+        internal static void RejectReparsePoint(string path, string field)
         {
-            if (
-                (File.Exists(path) || Directory.Exists(path))
-                && (File.GetAttributes(path) & FileAttributes.ReparsePoint) == FileAttributes.ReparsePoint
-            )
+            FileSystemInfo info = Directory.Exists(path) ? new DirectoryInfo(path) : new FileInfo(path);
+            if (info.LinkTarget is not null)
             {
                 throw new AssetCtlException($"{field}: symbolic links are prohibited.", 7);
             }
@@ -274,8 +338,11 @@ internal static class PublishingTypes
                 "work_root",
                 allowMissing: true
             );
-            string transactionRoot = Path.Combine(workRoot, "publish", transaction);
+            string publishRoot = EnsureFixedDirectory(workRoot, "publish", "publication staging root");
+            string transactionRoot = Path.Combine(publishRoot, transaction);
+            AssetLock.RejectReparsePoint(transactionRoot, "publication transaction root");
             Directory.CreateDirectory(transactionRoot);
+            AssetLock.RejectReparsePoint(transactionRoot, "publication transaction root");
             string leasePath = Path.Combine(transactionRoot, LeaseFileName);
             FileStream? lease = null;
             string assetStage = Path.Combine(transactionRoot, "asset.stage");
@@ -471,12 +538,15 @@ internal static class PublishingTypes
                 "work_root",
                 allowMissing: true
             );
-            string transactionRoot = Path.Combine(workRoot, "publish", transactionId);
+            string publishRoot = EnsureFixedDirectory(workRoot, "publish", "publication staging root");
+            string transactionRoot = Path.Combine(publishRoot, transactionId);
+            AssetLock.RejectReparsePoint(transactionRoot, "publication transaction root");
             Directory.CreateDirectory(transactionRoot);
+            AssetLock.RejectReparsePoint(transactionRoot, "publication transaction root");
             string leasePath = Path.Combine(transactionRoot, LeaseFileName);
             try
             {
-                return new FileStream(leasePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+                return StateFile.OpenLockedLeaf(transactionRoot, LeaseFileName, "publication recovery lease");
             }
             catch (IOException)
             {
@@ -498,8 +568,7 @@ internal static class PublishingTypes
                 throw new AssetCtlException("Publication journal quarantine target escaped its configured root.", 7);
             }
 
-            string quarantineRoot = Path.Combine(fullRoot, "quarantine");
-            Directory.CreateDirectory(quarantineRoot);
+            string quarantineRoot = EnsureFixedDirectory(fullRoot, "quarantine", "publication quarantine root");
             string destination = Path.Combine(
                 quarantineRoot,
                 Path.GetFileNameWithoutExtension(fullPath) + "." + Guid.NewGuid().ToString("N") + ".invalid"
@@ -584,6 +653,15 @@ internal static class PublishingTypes
                 throw new AssetCtlException("Publication journal root cannot be a symbolic link.", 7);
             }
             return journalRoot;
+        }
+
+        private static string EnsureFixedDirectory(string root, string child, string field)
+        {
+            string path = Path.Combine(root, child);
+            AssetLock.RejectReparsePoint(path, field);
+            Directory.CreateDirectory(path);
+            AssetLock.RejectReparsePoint(path, field);
+            return path;
         }
 
         private static void RecoverJournal(

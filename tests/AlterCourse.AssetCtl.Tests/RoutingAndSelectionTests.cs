@@ -603,6 +603,33 @@ public sealed class RoutingAndSelectionTests
         Assert.Equal("first", plan.Reviewer!.ProviderId);
     }
 
+    /// <summary>Serializes every ordered reviewer eligibility decision in stable JSON and human plan output.</summary>
+    [Fact]
+    public void CliPlanOutputIncludesOrderedReviewerCandidatesAndReasons()
+    {
+        GenerationPlan plan = ReviewFallbackPlan();
+        System.Reflection.MethodInfo method =
+            typeof(global::AlterCourse.AssetCtl.Cli.CliTypes.CommandApp).GetMethod(
+                "PlanOutput",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static
+            ) ?? throw new InvalidOperationException("Missing CLI plan output projection.");
+        object output =
+            method.Invoke(null, ["ui.test.asset", plan])
+            ?? throw new InvalidOperationException("CLI plan output projection returned null.");
+        string json = System.Text.Json.JsonSerializer.Serialize(output, JsonOptions.Stable);
+        string human = "plan: " + json;
+
+        using var document = System.Text.Json.JsonDocument.Parse(json);
+        System.Text.Json.JsonElement reviewers = document.RootElement.GetProperty("reviewer_candidates");
+        Assert.Equal(
+            ["same", "first", "discovered", "generator"],
+            reviewers.EnumerateArray().Select(value => value.GetProperty("provider_id").GetString()),
+            StringComparer.Ordinal
+        );
+        Assert.Equal("reviewer-family-conflict", reviewers[0].GetProperty("rejection_reasons")[0].GetString());
+        Assert.Contains("\"reviewer_candidates\"", human, StringComparison.Ordinal);
+    }
+
     private static GenerationPlan ReviewFallbackPlan()
     {
         var generator = new FakeGenerator("openai-images");

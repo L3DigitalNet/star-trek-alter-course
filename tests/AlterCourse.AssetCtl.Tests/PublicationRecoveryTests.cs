@@ -95,6 +95,40 @@ public sealed class PublicationRecoveryTests : IDisposable
         }
     }
 
+    /// <summary>Rejects a symlinked publish-staging child without writing transaction files outside work state.</summary>
+    [Fact]
+    public void PublicationRejectsSymlinkedPublishChildBeforeStagingExternalFiles()
+    {
+        EffectiveConfiguration configuration = Configuration();
+        string external = Path.Combine(Path.GetTempPath(), "assetctl-publish-external-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, ".assetctl", "work"));
+        Directory.CreateDirectory(external);
+        Directory.CreateSymbolicLink(Path.Combine(root, ".assetctl", "work", "publish"), external);
+        byte[] bytes = "first-asset"u8.ToArray();
+        AssetManifest manifest = Manifest(bytes, revision: 1);
+        File.WriteAllText(
+            Path.Combine(root, manifest.ManifestPath),
+            ManifestStore.Serialize(manifest with { Integrity = null })
+        );
+        try
+        {
+            Assert.Throws<AssetCtlException>(() =>
+                AtomicPublisher.Publish(
+                    configuration,
+                    manifest.Request.Output.Path,
+                    bytes,
+                    manifest.ManifestPath,
+                    ManifestStore.Serialize(manifest)
+                )
+            );
+            Assert.Empty(Directory.EnumerateFileSystemEntries(external));
+        }
+        finally
+        {
+            Directory.Delete(external, recursive: true);
+        }
+    }
+
     /// <summary>Publishes the first generated output over its authoritative manifest-only request.</summary>
     [Fact]
     public void FirstGenerationPublishesOverManifestOnlyRequest()
@@ -531,6 +565,33 @@ public sealed class PublicationRecoveryTests : IDisposable
         Assert.Equal("external evidence", File.ReadAllText(outside));
         Assert.False(File.Exists(journal));
         Assert.Single(Directory.EnumerateFiles(Path.Combine(journalRoot, "quarantine"), "*.invalid"));
+    }
+
+    /// <summary>Rejects a symlinked quarantine child without moving an invalid journal outside state.</summary>
+    [Fact]
+    public void PublicationQuarantineSymlinkCannotEscapeStateRoot()
+    {
+        EffectiveConfiguration configuration = Configuration();
+        string journalRoot = Path.Combine(root, ".assetctl", "state", "publish-transactions");
+        string external = Path.Combine(
+            Path.GetTempPath(),
+            "assetctl-quarantine-external-" + Guid.NewGuid().ToString("N")
+        );
+        Directory.CreateDirectory(journalRoot);
+        Directory.CreateDirectory(external);
+        Directory.CreateSymbolicLink(Path.Combine(journalRoot, "quarantine"), external);
+        string journal = Path.Combine(journalRoot, "invalid.json");
+        File.WriteAllText(journal, "not-json");
+        try
+        {
+            Assert.Throws<AssetCtlException>(() => AtomicPublisher.RecoverPending(configuration));
+            Assert.True(File.Exists(journal));
+            Assert.Empty(Directory.EnumerateFileSystemEntries(external));
+        }
+        finally
+        {
+            Directory.Delete(external, recursive: true);
+        }
     }
 
     /// <summary>Removes the isolated repository used by each publication test.</summary>

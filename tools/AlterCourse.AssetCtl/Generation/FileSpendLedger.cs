@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using StateFile = AlterCourse.AssetCtl.Publishing.PublishingTypes.StateFile;
 
 namespace AlterCourse.AssetCtl.Generation;
 
@@ -52,7 +53,10 @@ internal sealed class FileSpendLedger : ISpendLedger
     {
         try
         {
-            return new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            string directory =
+                Path.GetDirectoryName(lockPath)
+                ?? throw new AssetCtlException("daily spending ledger lock directory is invalid.", 7);
+            return StateFile.OpenLockedLeaf(directory, Path.GetFileName(lockPath), "daily spending ledger lock");
         }
         catch (IOException)
         {

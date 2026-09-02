@@ -122,6 +122,27 @@ public sealed class PublishingAndBoundaryTests
         }
     }
 
+    /// <summary>Rejects a dangling lock-file symlink without creating its external target.</summary>
+    [Fact]
+    public void AssetLockRejectsDanglingSymlinkWithoutCreatingTarget()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "assetctl-lock-dangling-" + Guid.NewGuid().ToString("N"));
+        string external = Path.Combine(Path.GetTempPath(), "assetctl-lock-absent-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "state", "locks"));
+        File.CreateSymbolicLink(Path.Combine(root, "state", "locks", "catalog.lock"), external);
+        EffectiveConfiguration configuration = Configuration(root);
+        try
+        {
+            Assert.Throws<AssetCtlException>(() => AssetLock.Acquire(configuration, "ui.test.asset"));
+            Assert.False(File.Exists(external));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+            File.Delete(external);
+        }
+    }
+
     /// <summary>Rejects asset reads redirected within the repository but outside the configured output root.</summary>
     [Fact]
     public void IntegrityAndApprovalRejectOutputSymlinkOutsideConfiguredRoot()

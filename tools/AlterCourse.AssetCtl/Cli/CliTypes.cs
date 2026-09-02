@@ -411,19 +411,26 @@ internal static class CliTypes
                 configuration,
                 manifest.Request
             );
-            return new
+            return PlanOutput(manifest.Request.Id, plan);
+        }
+
+        internal static object PlanOutput(
+            string assetId,
+            global::AlterCourse.AssetCtl.Domain.DomainModels.GenerationPlan plan
+        ) =>
+            new
             {
-                asset_id = manifest.Request.Id,
+                asset_id = assetId,
                 required_capabilities = plan.RequiredCapabilities.Select(Capability),
                 matching_targets = plan.Targets,
                 selected_target = plan.SelectedTarget,
                 reviewer = plan.Reviewer,
+                reviewer_candidates = plan.ReviewerCandidates,
                 candidate_count = plan.CandidateCount,
                 attempts_per_route = plan.AttemptsPerRoute,
                 estimated_maximum_cost_usd = plan.EstimatedMaximumCost,
                 local_fallback = plan.UsesLocalFallback,
             };
-        }
 
         private static object Verify(EffectiveConfiguration configuration, CliOptions options)
         {
