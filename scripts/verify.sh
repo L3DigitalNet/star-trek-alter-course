@@ -57,8 +57,11 @@ gitleaks dir . --config .gitleaks.toml --redact --no-banner
 ./scripts/test-branch-policy.sh
 dotnet build AlterCourse.sln -c Release --no-restore --warnaserror
 dotnet test tests/AlterCourse.Core.Tests/AlterCourse.Core.Tests.csproj -c Release --no-build --no-restore
+dotnet test tests/AlterCourse.AssetCtl.Tests/AlterCourse.AssetCtl.Tests.csproj -c Release --no-build --no-restore
+dotnet run --project tools/AlterCourse.AssetCtl/AlterCourse.AssetCtl.csproj \
+  -c Release --no-build --no-restore -- validate-config --offline --output json
 
-"${godot_bin}" --headless --path "${godot_project}" --editor --quit-after 2
+"${godot_bin}" --headless --path "${godot_project}" --import
 "${godot_bin}" \
   --headless \
   --path "${godot_project}" \
@@ -66,6 +69,13 @@ dotnet test tests/AlterCourse.Core.Tests/AlterCourse.Core.Tests.csproj -c Releas
   --ignoreHeadlessMode \
   -a res://tests/IntegrationProbeTest.gd \
   -rd .godot/gdunit-reports
+"${godot_bin}" \
+  --headless \
+  --path "${godot_project}" \
+  --script res://addons/gdUnit4/bin/GdUnitCmdTool.gd \
+  --ignoreHeadlessMode \
+  -a res://tests/GeneratedAssetImportTest.gd \
+  -rd .godot/gdunit-reports-assets
 "${godot_bin}" --headless --path "${godot_project}" res://tests/SmokeRunner.tscn
 
 after_state="$(tracked_state)"

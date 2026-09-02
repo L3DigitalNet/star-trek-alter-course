@@ -16,6 +16,14 @@ Use the repo-local `agent-handoff` skill at session startup and closeout. Do not
 - Fix compiler, analyzer, formatting, and test failures at their cause. Never weaken central settings or add suppression merely to pass CI.
 - Keep pure simulation/domain code in `AlterCourse.Core` independent from Godot. Add behavioral and regression tests at the lowest applicable layer.
 
+## Visual asset workflow
+
+- Search the tracked AssetCtl catalog before creating a visual asset and reuse an asset when its semantic purpose and output contract fit.
+- For a missing routine visual, create or update its manifest under `config/assets/catalog/` and invoke `assetctl`; default development work to lifecycle `placeholder`, quality tier `development`, and the local fallback when external generation is unavailable or disallowed.
+- Include the selected asset and manifest in the same branch or pull request that consumes them. Report the asset ID and final `res://` path.
+- Never commit `.assetctl/` candidates, receipts, locks, logs, local state, or local overrides. Never put credential values in configuration, output, manifests, receipts, or diagnostics.
+- Do not change spend limits, enable paid providers, weaken validation, bypass rights requirements, invoke approval, or deprecate an approved asset merely to unblock work. Approval and approved-asset deprecation require an explicit owner instruction in the current task context.
+
 <!-- prettier-ignore-start -->
 
 <!-- BEGIN project-standards:github-workflow -->

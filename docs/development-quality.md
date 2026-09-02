@@ -2,7 +2,7 @@
 schema_version: '1.1'
 id: 'runbook-96lglv-development-quality'
 title: 'Development Quality'
-description: 'Canonical setup and verification workflow for Godot and C# development.'
+description: 'Canonical setup and verification workflow for Godot, C#, and AssetCtl development.'
 doc_type: 'runbook'
 status: 'active'
 created: '2026-09-01'
@@ -39,7 +39,31 @@ Apply safe formatting, then run the complete gate:
 ./scripts/verify.sh
 ```
 
-`fix.sh` runs CSharpier and `shfmt`. `verify.sh` checks locked dependencies, C# and shell formatting, ShellCheck, actionlint, gitleaks, diagnostic-suppression policy, a warning-free Release build, pure .NET tests, GdUnit integration tests, and Godot headless startup.
+`fix.sh` runs CSharpier and `shfmt`. `verify.sh` checks locked dependencies, C# and shell formatting, ShellCheck, actionlint, gitleaks, diagnostic-suppression policy, a warning-free Release build, Core and AssetCtl .NET tests, offline read-only AssetCtl configuration and catalog validation, GdUnit integration tests, and Godot headless startup.
+
+## AssetCtl development
+
+The standalone .NET 10 tool references neither game project nor Godot. Run it from any directory inside the repository; it locates the repository root and keeps command results on standard output while diagnostics go to standard error.
+
+```bash
+dotnet run --project tools/AlterCourse.AssetCtl -- validate-config --offline --output json
+dotnet run --project tools/AlterCourse.AssetCtl -- doctor --output json
+dotnet run --project tools/AlterCourse.AssetCtl -- status --output json
+```
+
+Tracked configuration in `config/assets/` is authoritative for provider instances, endpoints, credential environment-variable names, models, capabilities, economics, routes, quality tiers, and styles. Never put credential values in YAML. The committed policy denies paid generation; enabling it requires an untracked `.assetctl/config.local.yaml` owner override with bounded spend limits. Provider calls are never part of canonical verification.
+
+To create or refresh a development placeholder, first search the catalog, then generate from an existing manifest. `--offline` selects only a local endpoint-free target, and `--dry-run` reports the plan without provider calls or tracked writes.
+
+```bash
+dotnet run --project tools/AlterCourse.AssetCtl -- find --query engineering --output json
+dotnet run --project tools/AlterCourse.AssetCtl -- generate \
+  --asset-id tooling.assetctl.fixture.generated-marker-svg \
+  --offline \
+  --output json
+```
+
+Every published asset and manifest move as one rollback-safe pair. An approved asset is immutable: replacement requires a new semantic asset ID and `supersedes` record. Run `approve` or deprecate an approved asset only with explicit current owner authorization; approval requires the exact asset ID confirmation, actor, note, unchanged hash, passing validation, and complete non-placeholder rights data.
 
 ## Deep validation
 

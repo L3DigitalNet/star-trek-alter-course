@@ -1,0 +1,127 @@
+schema_version: "1"
+routes:
+  - id: "vector-placeholder"
+    priority: 100
+    lifecycle: "placeholder"
+    format: "svg"
+    capability: "vector.generate"
+    targets:
+      - "recraft-primary/vector"
+      - "local-placeholder/default"
+    fallback:
+      capability_match: true
+      allowed_error_categories:
+        - "authentication"
+        - "authorization"
+        - "insufficient-balance"
+        - "rate-limit"
+        - "transient-network"
+        - "provider-server"
+        - "timeout"
+        - "malformed-response"
+        - "unsafe-download"
+        - "unsupported-output"
+        - "validation"
+    retry:
+      maximum_attempts_per_target: 2
+      initial_delay_milliseconds: 250
+      maximum_delay_milliseconds: 5000
+      jitter_ratio: 0.2
+      error_categories:
+        - "rate-limit"
+        - "transient-network"
+        - "provider-server"
+        - "timeout"
+  - id: "raster-placeholder"
+    priority: 90
+    lifecycle: "placeholder"
+    format: "png"
+    capability: "raster.generate"
+    targets:
+      - "xai-primary/image"
+      - "openai-primary/image"
+      - "recraft-primary/raster"
+      - "local-placeholder/default"
+    fallback:
+      capability_match: true
+      allowed_error_categories:
+        - "authentication"
+        - "authorization"
+        - "insufficient-balance"
+        - "rate-limit"
+        - "transient-network"
+        - "provider-server"
+        - "timeout"
+        - "malformed-response"
+        - "unsafe-download"
+        - "unsupported-output"
+        - "validation"
+    retry:
+      maximum_attempts_per_target: 2
+      initial_delay_milliseconds: 250
+      maximum_delay_milliseconds: 5000
+      jitter_ratio: 0.2
+      error_categories:
+        - "rate-limit"
+        - "transient-network"
+        - "provider-server"
+        - "timeout"
+  - id: "raster-candidate"
+    priority: 110
+    lifecycle: "candidate"
+    format: "png"
+    capability: "raster.generate"
+    targets:
+      - "openai-primary/image"
+      - "recraft-primary/raster"
+      - "xai-primary/image"
+    fallback:
+      capability_match: false
+      allowed_error_categories:
+        - "authentication"
+        - "authorization"
+        - "rate-limit"
+        - "transient-network"
+        - "provider-server"
+        - "timeout"
+        - "malformed-response"
+        - "unsafe-download"
+        - "unsupported-output"
+        - "validation"
+    retry:
+      maximum_attempts_per_target: 2
+      initial_delay_milliseconds: 250
+      maximum_delay_milliseconds: 5000
+      jitter_ratio: 0.2
+      error_categories:
+        - "rate-limit"
+        - "transient-network"
+        - "provider-server"
+        - "timeout"
+review_routes:
+  - id: "default-semantic-review"
+    priority: 100
+    capability: "review.semantic"
+    targets:
+      - "openai-reviewer/economical"
+    fallback:
+      capability_match: true
+      allowed_error_categories:
+        - "authentication"
+        - "authorization"
+        - "rate-limit"
+        - "transient-network"
+        - "provider-server"
+        - "timeout"
+        - "malformed-response"
+        - "validation"
+    retry:
+      maximum_attempts_per_target: 2
+      initial_delay_milliseconds: 250
+      maximum_delay_milliseconds: 5000
+      jitter_ratio: 0.2
+      error_categories:
+        - "rate-limit"
+        - "transient-network"
+        - "provider-server"
+        - "timeout"
