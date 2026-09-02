@@ -6,7 +6,7 @@
 
 ## Project status
 
-The repository provides a first executable gameplay walking skeleton alongside the project architecture, pinned development environment, and quality gates. It is a development build, not a published playable release.
+The repository provides a first executable gameplay walking skeleton alongside the project architecture, pinned development environment, and quality gates. Version 0.1.0 is the first source release; no packaged game artifact is published.
 
 The command screen proves a small, persistent, deterministic slice of play: a captain selects a connected destination on an open strategic map, begins travel, and sees the ship's damaged sensors repair as simulation time passes. Arrival is scheduled rather than immediate. A separate local tactical view displays continuous position and accepts a demonstration course command; neither map is governed by square or hex movement.
 

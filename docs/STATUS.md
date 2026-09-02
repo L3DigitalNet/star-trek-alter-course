@@ -3,6 +3,7 @@
 ## Current snapshot
 
 - Feature #25 delivers the first executable gameplay walking skeleton: a pure deterministic Core simulation, a map-centric Godot command shell, and a V1 quick-save/load path.
+- Version 0.1.0 is the first source release. It ships repository source only; no packaged gameplay artifact is published.
 - The strategic map has three arbitrarily positioned locations and connected routes. Travel remains active until its scheduled arrival.
 - The player ship starts with damaged sensors and an active repair. Repair progresses on the same simulation timeline during real-time play, accelerated play, and strategic travel.
 - The Godot shell exposes Pause, 0.5x, 1x, 2x, and 4x. Its bounded adapter converts presentation time into explicit 100 ms Core steps.
