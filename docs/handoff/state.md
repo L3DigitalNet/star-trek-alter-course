@@ -2,7 +2,7 @@
 
 ## Current focus
 
-- Open the Final PR for Feature #36 from `feature/36-world-state-bootstrap`, then complete CI and readiness admission.
+- Await governed merge and admission for Final PR #37.
 
 ## Active incidents
 

@@ -4,4 +4,4 @@
 
 | Artifact | Status | Purpose |
 | --- | --- | --- |
-| Feature #36 | Final PR pending | Milestone 1 world-state bootstrap: plural ships, V2 persistence, and player-oriented Godot projection. |
+| Feature #36 | Final PR #37 open | Milestone 1 world-state bootstrap; all five checks passed and governed merge is pending. |
