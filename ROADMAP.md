@@ -112,6 +112,14 @@ The ordering expresses dependency and architectural risk, not an immutable relea
 
 ## Milestone 1 — World State and Bootstrap Generalization
 
+### Implementation outcome
+
+Feature #36 implements this milestone through Final PR #37. The authoritative aggregate now owns canonically ordered ordinary ship state plus an explicit `PlayerShipId`; strategic state and scheduled ship consequences belong to a specific ship. A typed `GameBootstrap` accepts declared `ShipStart` values, and the first setup is a thin producer of a three-ship proof world: USS Pathfinder is the player ship, USS Wayfarer repairs independently, and USS Horizon begins in strategic transit.
+
+Ship definitions use schema V2 and contain reusable design capability, while bootstrap owns vessel names and starting sensor condition. V2 saves persist the plural world and ship-targeted scheduler state, and the deterministic pre-1.0 V1 migration reconstructs the one representable ship without creating a permanent compatibility promise. The headless signature scenario proves simultaneous movement, repairs, and travel; target isolation; save/load continuation; and insertion-order independence.
+
+The current 256-ship admission limit bounds untrusted bootstrap/save input and fixed-step work at the present prototype scale. It is a safety limit, not a claim about final universe capacity, and should change only with profiling and a concrete scale requirement. The implementation deliberately adds no NPC order, autonomous decision, actor/entity hierarchy, ECS, or event bus.
+
 ### Goal
 
 Evolve the v0.1.0 single-player-ship walking skeleton into a world model that can contain multiple persistent ship instances without prematurely inventing a universal entity architecture.
@@ -197,7 +205,7 @@ Add coverage for:
 - targeted scheduled work;
 - save/load of plural actors;
 - deterministic continuation;
-- removal or invalidation of an actor with pending work;
+- restoration/bootstrap rejection of missing or orphaned scheduled-work targets;
 - insertion-order independence where applicable;
 - preservation of the Core/Godot dependency boundary.
 
@@ -224,13 +232,13 @@ The milestone is successful when:
 - procedural galaxy generation;
 - a general scenario scripting system.
 
-### Refinement questions before implementation
+### Resolved refinement decisions
 
-- What is the smallest state shape that replaces player-only ship ownership cleanly?
-- Which existing ship-definition fields are now proven to be starting-state rather than class capability?
-- What target and payload semantics are actually required by the second ship?
-- Does bootstrap need authored JSON immediately, or is a typed Core setup object sufficient for the first step?
-- What save-version compatibility promise should apply between v0.1.0 development saves and this milestone?
+- Use plural ordinary `ShipState` values with stable `ShipInstanceId` values and one explicit `PlayerShipId`; do not introduce a general actor abstraction.
+- Keep maximum tactical speed and sensor-repair duration on the reusable definition. Move vessel display name and initial sensor integrity to typed starting state.
+- Give every ship-affecting scheduled item a concrete target ship ID; keep the existing finite kind-based consequence model.
+- Use typed Core bootstrap input for this milestone. Authored scenario JSON and a scenario language remain unjustified.
+- Write V2 saves and retain one deterministic V1-to-V2 migration during pre-1.0 development. Future pre-1.0 compatibility remains an explicit per-version decision.
 
 ---
 
@@ -239,6 +247,8 @@ The milestone is successful when:
 ### Goal
 
 Prove that the universe is already in motion when the player begins and that autonomous activity progresses without requiring the player to enter a scene or observe it.
+
+Milestone 1 can bootstrap an NPC already in transit and resolve that scheduled travel independently, but it does not represent why the NPC is traveling or choose what it does next. Milestone 2 adds that durable intent and autonomous decision boundary rather than re-proving plural ship storage.
 
 This is the first direct implementation of the project's "lived-in universe" invariant.
 

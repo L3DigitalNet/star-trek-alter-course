@@ -10,6 +10,8 @@ The repository provides a first executable gameplay walking skeleton alongside t
 
 The command screen proves a small, persistent, deterministic slice of play: a captain selects a connected destination on an open strategic map, begins travel, and sees the ship's damaged sensors repair as simulation time passes. Arrival is scheduled rather than immediate. A separate local tactical view displays continuous position and accepts a demonstration course command; neither map is governed by square or hex movement.
 
+The current development line also establishes the Milestone 1 world foundation. Core owns three persistent ship instances, identifies one of them as the player ship, and advances each ship's strategic, tactical, repair, and scheduled state independently. The Godot shell remains deliberately player-oriented; the other ships prove authoritative world behavior without exposing omniscient NPC truth or adding AI and orders prematurely.
+
 The design centers on a persistent simulation in which the player commands one starship inside a changing political and strategic world. Planned areas include:
 
 - map-focused strategic and tactical play;
@@ -57,13 +59,15 @@ Use the **Pause**, **0.5x**, **1x**, **2x**, and **4x** controls to choose how q
 
 Switch to **TACTICAL** to view the local continuous reference frame. **SET COURSE 045° / 2 km/s** submits the first tactical movement intent. Core tactical coordinates use kilometers with positive Y toward tactical north; the Godot map adapter performs the presentation Y-axis conversion.
 
-**SAVE** and **LOAD** use one V1 quick-save slot at `user://quick-save-v1.json`. A save includes active travel, sensor repair, scheduled work, and deterministic runtime state. Loading validates a new candidate simulation before replacing the running one, so a failed load leaves the active game unchanged.
+**SAVE** and **LOAD** use one V2 quick-save slot at `user://quick-save.json`. The default load path discovers the legacy `user://quick-save-v1.json` slot only when the generic slot does not exist; custom paths never use that fallback. A V2 save includes every ship, player identity, per-ship strategic and tactical state, repairs, targeted scheduled work, allocator state, and deterministic scheduler order. Loading validates a complete candidate simulation before replacing the running one, so a failed load leaves the active game unchanged.
 
-The runtime reads the first validated, data-driven ship definition from [`src/AlterCourse.Godot/content/ships/pathfinder.json`](src/AlterCourse.Godot/content/ships/pathfinder.json), using its adjacent V1 JSON schema. This is game-domain content, separate from the AssetCtl visual-asset catalog.
+The loader accepts V1 saves through a deterministic pre-1.0 migration: it creates a one-ship V2 world, keeps the original player identity and state, moves strategic state onto that ship, and targets legacy scheduled work to it. Because V1 had no vessel name, migration uses the referenced definition's design label once; V2 then persists the resulting vessel name. This narrow migration is not a promise to retain every pre-1.0 save format indefinitely.
+
+The runtime loads the validated ship-definition catalog from [`src/AlterCourse.Godot/content/ships/pathfinder.json`](src/AlterCourse.Godot/content/ships/pathfinder.json), using the adjacent V2 JSON schema. The first proof world reuses that one immutable design definition for three separately named vessels; definition identity is stored in saves, while authored definition content remains external. This is game-domain content, separate from the AssetCtl visual-asset catalog.
 
 ## Architecture at a glance
 
-`AlterCourse.Core` owns explicit simulation time, scheduled work, travel, tactical state, sensor repair, authored ship definitions, and V1 save/load mapping. It exposes read-only player projections and typed operations. `AlterCourse.Godot` owns scenes, input, rendering, presentation-time accumulation, and the coordinate projection into Godot screen space; it does not become simulation authority.
+`AlterCourse.Core` owns explicit simulation time, an immutable ship-definition catalog, plural `ShipState`, per-ship strategic and tactical state, targeted scheduled work, sensor repair, and V2 snapshot mapping with V1 migration. `PlayerShipId` selects the ordinary ship controlled by player-facing commands and projections; it does not make that ship a separate kind of world object. `AlterCourse.Godot` owns scenes, input, rendering, presentation-time accumulation, and the coordinate projection into Godot screen space; it does not become simulation authority or receive unrestricted plural-world truth.
 
 ## Asset pipeline
 

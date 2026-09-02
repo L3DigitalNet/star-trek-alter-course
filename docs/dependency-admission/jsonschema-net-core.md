@@ -35,7 +35,7 @@ This record admits `JsonSchema.Net` 9.4.0 as a direct `AlterCourse.Core` consume
 
 ## Current consumer and alternatives
 
-`ShipDefinitionCatalogLoader` uses `Json.Schema.JsonSchema` to construct the canonical V1 ship schema and evaluate each raw JSON document before typed mapping. The loader then keeps project-owned responsibilities: strict UTF-8 JSON parsing, duplicate-member detection, semantic validation, stable-ID registration, and diagnostics. `ShipDefinition`, runtime ship state, snapshots, and player projections do not expose `JsonSchema.Net` types.
+`ShipDefinitionCatalogLoader` uses `Json.Schema.JsonSchema` to construct the canonical V2 ship schema and evaluate each raw JSON document before typed mapping. The loader then keeps project-owned responsibilities: strict UTF-8 JSON parsing, duplicate-member detection, semantic validation, stable-ID registration, and diagnostics. `ShipDefinition`, runtime ship state, snapshots, and player projections do not expose `JsonSchema.Net` types.
 
 `System.Text.Json` remains the parser and typed-mapping implementation, but it does not implement JSON Schema drafts, keyword evaluation, instance locations, or schema locations. Reimplementing that generic standards surface would add a larger and less reliable project-owned validator at an untrusted-content boundary. The BCL-only alternative is therefore insufficient; the focused package is the smallest concrete fit for ADR 0005's structural-validation requirement.
 

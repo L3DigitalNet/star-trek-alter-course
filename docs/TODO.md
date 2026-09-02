@@ -2,7 +2,7 @@
 
 ## User tasks
 
-- Preserve user-authored priorities and notes here.
+- Manually test the Milestone 1 gameplay on merged `dev` before any release promotion.
 
 ## Agent tasks
 

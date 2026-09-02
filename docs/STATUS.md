@@ -2,44 +2,24 @@
 
 ## Current snapshot
 
-- Feature #36 has completed Milestone 1 world-state bootstrap on `feature/36-world-state-bootstrap`; its Final PR is pending.
-- Version 0.1.0 is the first source release. It ships repository source only; no packaged gameplay artifact is published.
-- The strategic map has three arbitrarily positioned locations and connected routes. Travel remains active until its scheduled arrival.
-- `GameSimulation` owns an immutable ship-definition catalog and plural ordinary ship state, with `PlayerShipId` used only for player-facing projection and commands.
-- The bootstrap starts player Dawn local and repairing, NPC Vesper independent and repairing, and NPC Meridian already traveling; NPC AI and orders remain deferred.
-- The Godot shell exposes Pause, 0.5x, 1x, 2x, and 4x. Its bounded adapter converts presentation time into explicit 100 ms Core steps.
-- Strategic and tactical views are distinct open maps. Core tactical state uses continuous kilometers and Y-positive-up; Godot performs screen projection.
-- Ship definitions use schema V2; typed bootstrap state owns vessel display names and starting sensor integrity.
-- V2 saves persist bounded plural world state and migrate V1 saves before construction.
-- The default slot is `user://quick-save.json`; only that default discovers `user://quick-save-v1.json`.
-- The walking skeleton deliberately defers combat, shields, weapons, power distribution, crew, factions, diplomacy, economy, missions, AI, narrative, networking, and final art.
-- Fresh Catalog 5 adoption is configured for Project Standards v5.27.0.
-- Enabled packages: markdown-frontmatter 1.15, adr 1.6, markdown-tooling 1.15, agent-handoff 1.16, and github-workflow 1.8.
-- No legacy Agent Handoff implementation was found, so no migration was required.
-- Codex's user-scoped MCP registration was preserved; Claude Code's project-scoped registration was added and verified.
-- Repository-owned rexec configuration enables sanitized Git context and requires `git`, `npx`, and `uv` on the worker.
-- The solution separates pure `AlterCourse.Core` simulation code from the Godot-facing project through a one-way project reference.
-- Strict C# compilation, curated analyzers, deterministic formatting, tests, security lint, and Godot checks share one `scripts/verify.sh` gate.
-- Godot 4.7.2 .NET, .NET SDK 10.0.111, the .NET 8.0.30 runtime, GdUnit4 6.2.0, and development tools are pinned.
-- Reconciliation, Markdown gates, the canonical quality gate, hook checks, MCP checks, and organization workflow checks are green.
-- An adoption regression report was added to [project-standards issue #130](https://github.com/L3DigitalNet/project-standards/issues/130#issuecomment-5494024929).
-- `dev` is the protected default branch; `main` accepts one pre-release baseline, then release and hotfix promotions only.
-- Branch policy and canonical verification protect both permanent branches; `dev` permits the documented owner bypass for handoff-only pushes.
-- Releases use SemVer `v*` tags and immutable GitHub Releases; no playable release has been published yet.
-- ADR 0013 and its design brief define the branch, PR, commit, hotfix, and release lifecycle.
-- Public presentation includes a corrected description, eleven GitHub topics, contributor guidance, and community health at 87%.
-- The asset-pipeline specification is aligned with the repository ADRs and was merged through governed PR #15.
-- A legacy-named PR was auto-closed by branch enforcement; its content was recovered through Issue #14 and policy-compliant PR #15.
-- Local and remote topic branches are pruned; only permanent `dev` and `main` branches remain, with `origin/HEAD` at `dev`.
-- Project-local Godot/C# guidance is available as five byte-identical paired Claude/Codex skills with project-relative Codex registration and a canonical parity gate.
-- The skill set pins upstream `7110607ab816ece9669274bc84937857a8819796`, retaining Apache-2.0 and NOTICE obligations with provenance/update guidance.
-- Feature #16 fully implements AssetCtl and is merged into `dev` through governed PR #19.
-- AssetCtl has strict offline configuration, safe atomic publication, lifecycle approvals, provenance, and Godot import support.
-- AssetCtl credentials remain OpenBao-owned; tracked content contains only references and environment-variable names.
-- AssetCtl accepts bounded JPEG/WebP provider rasters and normalizes them to canonical PNG before Godot import.
-- Provider profiles use current low settings for OpenAI gpt-image-2 and xAI grok-imagine-image-2.0 1K.
-- Live Recraft, xAI, and OpenAI tests created four disposable placeholders that passed mechanical checks and Godot import.
-- Task #34 and Issue #32 are Done; PRs #35 (`9a537c9`) and #33 (`6258fb6`) merged into `dev`, leaving no open `dev` PRs.
-- Tooling now uses C# 12, exact SDK 10.0.111, Node 24, Release-mapped Godot builds, and idempotent owned-source formatting.
-- CSharpier owns C# whitespace; analyzers enforce semantic policy, including `_camelCase` private instance fields.
-- Issue #21 tooling convergence was delivered through merged Final PR #22.
+- Milestone 1 is implemented by Feature #36 and Final PR #37; manual gameplay testing on merged `dev` is the next release-facing step.
+- Version 0.1.0 remains the first source-only release. No packaged gameplay artifact is published.
+- The shell retains strategic travel, local tactical movement, sensor repair, deterministic time controls, advance-until-event, and quick save/load.
+- The proof world has three vessels: USS Pathfinder at Dawn Anchor, USS Wayfarer repairing at Vesper Reach, and USS Horizon traveling to Meridian Drift.
+- Core owns an immutable ship-definition catalog and plural ordinary `ShipState`; `PlayerShipId` selects one ship for commands and projection.
+- Strategic, tactical, sensor, repair, and scheduled consequence state is ship-owned. Targeted same-kind work cannot cross ship identities.
+- Ships use stable identity order, removing collection insertion order from simulation semantics.
+- Typed `GameBootstrap` consumes declared starting state. `FirstGameSetup` produces the three-ship proof world.
+- NPC orders, AI, and autonomous next-step selection remain Milestone 2 work.
+- Ship-definition schema V2 separates reusable capability from vessel names and starting sensor condition.
+- The proof world reuses one validated Pathfinder-class definition for three vessel instances.
+- Save schema V2 persists bounded plural world state and definition references; authored definitions remain external.
+- V1 migration creates the one representable ship, targets legacy work to it, and validates the V2 candidate before construction.
+- The generic quick-save slot is `user://quick-save.json`. Only the unchanged default path may discover the legacy `user://quick-save-v1.json` file when the generic slot is absent.
+- World admission is capped at 256 ships and simulation advancement at 1,000,000 ship-steps per call, bounding untrusted inputs and fixed-step work at current development scale.
+- Godot projects player-visible state and adapts coordinates, input, and elapsed presentation time; it neither owns authoritative ships nor exposes unrestricted NPC truth.
+- The solution uses a one-way Godot-to-Core project reference, exact .NET SDK 10.0.111, C# 12, Godot 4.7.2 .NET, .NET 8 runtime support, Node 24, xUnit, and GdUnit4 6.2.0.
+- `scripts/verify.sh` is the canonical read-only gate for formatting, analysis, policy, builds, tests, Godot integration, security, and smoke checks.
+- AssetCtl remains an isolated .NET 10 tool with bounded inputs, offline-first defaults, safe publication, provenance, and Godot import validation.
+- `dev` is the protected development branch and `main` is release-only. Significant work follows the governed issue, topic-branch, and pull-request workflow in ADR 0013.
+- Combat, engineering depth, factions, diplomacy, economy, missions, narrative, networking, autonomous NPC behavior, and final art remain deferred.
