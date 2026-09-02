@@ -12,7 +12,7 @@
 - Godot 4.7.2 .NET, .NET SDK 10.0.111, the .NET 8.0.30 runtime, GdUnit4 6.2.0, and development tools are pinned.
 - Reconciliation, Markdown gates, the canonical quality gate, hook checks, MCP checks, and organization workflow checks are green.
 - An adoption regression report was added to [project-standards issue #130](https://github.com/L3DigitalNet/project-standards/issues/130#issuecomment-5494024929).
-- `dev` is the protected default development branch; `main` accepts release and hotfix promotion only.
+- `dev` is the protected default branch; `main` accepts one pre-release baseline, then release and hotfix promotions only.
 - Branch policy and canonical verification protect both permanent branches; `dev` permits the documented owner bypass for handoff-only pushes.
 - Releases use SemVer `v*` tags and immutable GitHub Releases; no playable release has been published yet.
 - ADR 0013 and its design brief define the branch, PR, commit, hotfix, and release lifecycle.
