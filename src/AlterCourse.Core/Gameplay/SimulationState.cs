@@ -50,6 +50,18 @@ internal sealed record SimulationState(
             );
         }
 
+        if (
+            Time.Milliseconds % SimulationFixedStep.Duration.Milliseconds != 0
+            || Scheduler.OutstandingWork.Any(work =>
+                work.DueTime.Milliseconds % SimulationFixedStep.Duration.Milliseconds != 0
+            )
+        )
+        {
+            throw new InvalidOperationException(
+                "Simulation time and scheduled work must be fixed-step aligned."
+            );
+        }
+
         ValidateStrategicState();
         if (PlayerShip.SensorRepair is SensorRepairState repair)
         {

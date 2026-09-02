@@ -232,6 +232,45 @@ public sealed class GameSimulationTests
         Assert.Equal(until.GetPlayerProjection(), ordinary.GetPlayerProjection());
     }
 
+    /// <summary>Confirms advance-until is a no-op once no scheduled boundary remains.</summary>
+    [Fact]
+    public void AdvanceUntilWithoutScheduledWorkDoesNotAdvance()
+    {
+        GameSimulation game = CreateGame();
+        game.RequestTravel(new TravelIntent(ConnectedDestination(game)));
+        game.AdvanceFixedSteps(120);
+        PlayerProjection before = game.GetPlayerProjection();
+
+        AdvanceUntilResult result = game.AdvanceUntilNextScheduledEvent();
+
+        Assert.Equal(AdvanceUntilOutcome.NoScheduledEvent, result.Outcome);
+        Assert.Equal(before.SimulationTime, result.StoppedAt);
+        Assert.Empty(result.ResolvedKinds);
+        Assert.Equal(before, result.Projection);
+        Assert.Equal(before, game.GetPlayerProjection());
+    }
+
+    /// <summary>Confirms strategic departure freezes and clears prior local tactical motion.</summary>
+    [Fact]
+    public void TravelClearsLocalTacticalMotionWhilePositionRemainsStable()
+    {
+        GameSimulation game = CreateGame();
+        game.SetTacticalCourse(
+            new SetTacticalCourseIntent(
+                new HeadingDegrees(45),
+                new SpeedKilometersPerSecond(3.5)
+            )
+        );
+        TacticalPositionProjection before = game.GetPlayerProjection().Ship.Tactical.Position;
+
+        game.RequestTravel(new TravelIntent(ConnectedDestination(game)));
+        game.AdvanceFixedSteps(1);
+        TacticalProjection traveling = game.GetPlayerProjection().Ship.Tactical;
+
+        Assert.Equal(before, traveling.Position);
+        Assert.Equal(0, traveling.SpeedKilometersPerSecond);
+    }
+
     /// <summary>Confirms input at an arrival boundary observes the resolved local state.</summary>
     [Fact]
     public void InputsAtIdenticalBoundariesApplyAfterDueWorkAndThenMove()

@@ -10,32 +10,35 @@ namespace AlterCourse.Core.Gameplay;
 public sealed class GameSimulation
 {
     private const int SameBoundaryExecutionBudget = 1024;
-    private SimulationState state;
+    // Local arrival frames currently use one non-origin offset so the walking slice visibly proves
+    // that tactical positions are continuous values, not a hidden grid or strategic-map projection.
+    private static readonly TacticalPosition ArrivalPosition = new(0.25, -0.75);
+    private SimulationState _state;
 
     private GameSimulation(SimulationState state)
     {
         state.Validate();
-        this.state = state;
+        _state = state;
     }
 
     /// <summary>Returns a fresh read-only projection of player-known simulation state.</summary>
-    public PlayerProjection GetPlayerProjection() => Project(state);
+    public PlayerProjection GetPlayerProjection() => Project(_state);
 
     /// <summary>Validates and schedules persistent strategic travel without advancing time.</summary>
     public TravelRequestResult RequestTravel(TravelIntent intent)
     {
-        if (state.StrategicState is TravelingState)
+        if (_state.StrategicState is TravelingState)
         {
             return new TravelRequestResult(TravelOutcome.AlreadyTraveling);
         }
 
-        var atLocation = (AtLocationState)state.StrategicState;
+        var atLocation = (AtLocationState)_state.StrategicState;
         if (intent.Destination == atLocation.LocationId)
         {
             return new TravelRequestResult(TravelOutcome.SameLocation);
         }
 
-        StrategicRoute? route = state.StrategicMap.FindRoute(
+        StrategicRoute? route = _state.StrategicMap.FindRoute(
             atLocation.LocationId,
             intent.Destination
         );
@@ -44,22 +47,23 @@ public sealed class GameSimulation
             return new TravelRequestResult(TravelOutcome.RouteUnavailable);
         }
 
-        SimulationTime arrival = state.Time.AdvanceBy(route.Duration);
-        (SimulationScheduler scheduler, ScheduledWork arrivalWork) = state.Scheduler.Schedule(
+        SimulationTime arrival = _state.Time.AdvanceBy(route.Duration);
+        (SimulationScheduler scheduler, ScheduledWork arrivalWork) = _state.Scheduler.Schedule(
             arrival,
             ScheduledWorkKind.TravelArrival
         );
         var travel = new TravelState(
             atLocation.LocationId,
             intent.Destination,
-            state.Time,
+            _state.Time,
             arrival,
             arrivalWork.Id
         );
-        SimulationState candidate = state with
+        SimulationState candidate = _state with
         {
             Scheduler = scheduler,
             StrategicState = new TravelingState(travel),
+            PlayerShip = _state.PlayerShip with { TacticalMotion = default },
         };
         Commit(candidate);
         return new TravelRequestResult(TravelOutcome.Accepted);
@@ -68,21 +72,21 @@ public sealed class GameSimulation
     /// <summary>Validates and changes only authoritative local tactical motion.</summary>
     public SetTacticalCourseResult SetTacticalCourse(SetTacticalCourseIntent intent)
     {
-        if (state.StrategicState is TravelingState)
+        if (_state.StrategicState is TravelingState)
         {
             return new SetTacticalCourseResult(
                 SetTacticalCourseOutcome.UnavailableWhileTraveling
             );
         }
 
-        if (intent.Speed.Value > state.PlayerShipDefinition.MaximumTacticalSpeed.Value)
+        if (intent.Speed.Value > _state.PlayerShipDefinition.MaximumTacticalSpeed.Value)
         {
             return new SetTacticalCourseResult(SetTacticalCourseOutcome.SpeedExceedsMaximum);
         }
 
-        SimulationState candidate = state with
+        SimulationState candidate = _state with
         {
-            PlayerShip = state.PlayerShip with
+            PlayerShip = _state.PlayerShip with
             {
                 TacticalMotion = new TacticalMotion(intent.Heading, intent.Speed),
             },
@@ -98,42 +102,42 @@ public sealed class GameSimulation
         int milliseconds = checked(
             stepCount * checked((int)SimulationFixedStep.Duration.Milliseconds)
         );
-        SimulationTime target = state.Time.AdvanceBy(new SimulationDuration(milliseconds));
-        (SimulationState candidate, _) = AdvanceTo(state, target);
+        SimulationTime target = _state.Time.AdvanceBy(new SimulationDuration(milliseconds));
+        (SimulationState candidate, _) = AdvanceTo(_state, target);
         Commit(candidate);
     }
 
     /// <summary>Advances through the ordinary scheduler path to the earliest current event boundary.</summary>
     public AdvanceUntilResult AdvanceUntilNextScheduledEvent()
     {
-        if (state.Scheduler.OutstandingWork.IsDefaultOrEmpty)
+        if (_state.Scheduler.OutstandingWork.IsDefaultOrEmpty)
         {
-            PlayerProjection unchanged = Project(state);
+            PlayerProjection unchanged = Project(_state);
             return new AdvanceUntilResult(
                 AdvanceUntilOutcome.NoScheduledEvent,
-                state.Time,
+                _state.Time,
                 new ReadOnlyValueList<ScheduledWorkKind>([]),
                 unchanged
             );
         }
 
-        SimulationTime boundary = state.Scheduler.OutstandingWork[0].DueTime;
+        SimulationTime boundary = _state.Scheduler.OutstandingWork[0].DueTime;
         (SimulationState candidate, IReadOnlyList<ScheduledWorkKind> resolvedKinds) = AdvanceTo(
-            state,
+            _state,
             boundary
         );
         Commit(candidate);
         return new AdvanceUntilResult(
             AdvanceUntilOutcome.ScheduledEventResolved,
-            state.Time,
+            _state.Time,
             resolvedKinds,
-            Project(state)
+            Project(_state)
         );
     }
 
     // This same-assembly seam preserves aggregate ownership: persistence can translate explicit
     // snapshot models without gaining a second public mutation path into live simulation state.
-    internal SimulationState CaptureState() => state;
+    internal SimulationState CaptureState() => _state;
 
     internal static GameSimulation RestoreState(SimulationState restoredState) =>
         new(restoredState);
@@ -296,7 +300,7 @@ public sealed class GameSimulation
             StrategicState = new AtLocationState(traveling.Travel.Destination),
             PlayerShip = state.PlayerShip with
             {
-                TacticalPosition = new TacticalPosition(0.25, -0.75),
+                TacticalPosition = ArrivalPosition,
                 TacticalMotion = default,
             },
         };
@@ -389,6 +393,6 @@ public sealed class GameSimulation
     private void Commit(SimulationState candidate)
     {
         candidate.Validate();
-        state = candidate;
+        _state = candidate;
     }
 }
