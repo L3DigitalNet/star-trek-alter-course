@@ -111,6 +111,91 @@ public sealed class GenerationEndToEndTests
         Assert.Equal(0, reviewer.Calls);
     }
 
+    /// <summary>Rebinds reviewer independence after generation falls back to another provider family.</summary>
+    [Fact]
+    public async Task GenerationFallbackSkipsActualFamilyReviewerAndUsesIndependentAlternate()
+    {
+        var initial = new ScriptedGenerator(
+            "alpha-generator",
+            _ => throw new ProviderException(ProviderErrorCategory.Authentication, "denied")
+        );
+        var fallback = new ScriptedGenerator("beta-generator", request => Success(request.Request));
+        var sameFamily = new ScriptedReviewer("beta-reviewer", PassingReview);
+        var independent = new ScriptedReviewer("gamma-reviewer", PassingReview);
+        using var fixture = new GenerationFixture(
+            [initial, fallback, sameFamily, independent],
+            semanticReview: "required"
+        );
+
+        object result = await fixture.GenerateAsync();
+
+        Assert.Equal(1, initial.Calls);
+        Assert.Equal(1, fallback.Calls);
+        Assert.Equal(0, sameFamily.Calls);
+        Assert.Equal(1, independent.Calls);
+        AssetManifest published = ManifestStore.Load(fixture.Configuration, fixture.Manifest.ManifestPath);
+        Assert.Equal("gamma-reviewer", published.SemanticReview!.ReviewerProvider);
+        Assert.Equal("different-provider-family", published.SemanticReview.Independence);
+        string receipt = await fixture.ReadReceiptAsync(result);
+        Assert.Contains("review-target-rejected", receipt, StringComparison.Ordinal);
+        Assert.Contains("same-provider-family", receipt, StringComparison.Ordinal);
+        Assert.Contains("beta-generator", receipt, StringComparison.Ordinal);
+    }
+
+    /// <summary>Fails without publication when fallback generation leaves no independent reviewer.</summary>
+    [Fact]
+    public async Task GenerationFallbackWithoutIndependentReviewerFailsBeforePublication()
+    {
+        var initial = new ScriptedGenerator(
+            "alpha-generator",
+            _ => throw new ProviderException(ProviderErrorCategory.Authentication, "denied")
+        );
+        var fallback = new ScriptedGenerator("beta-generator", request => Success(request.Request));
+        var sameFamily = new ScriptedReviewer("beta-reviewer", PassingReview);
+        using var fixture = new GenerationFixture([initial, fallback, sameFamily], semanticReview: "required");
+
+        await Assert.ThrowsAsync<AssetCtlException>(() => fixture.GenerateAsync());
+
+        Assert.Equal(1, initial.Calls);
+        Assert.Equal(1, fallback.Calls);
+        Assert.Equal(0, sameFamily.Calls);
+        AssetManifest unchanged = ManifestStore.Load(fixture.Configuration, fixture.Manifest.ManifestPath);
+        Assert.Null(unchanged.Generation);
+        string receiptPath = Assert.Single(
+            Directory.EnumerateFiles(Path.Combine(fixture.Root, fixture.Configuration.Paths.ReceiptRoot), "*.json")
+        );
+        string receipt = await File.ReadAllTextAsync(receiptPath);
+        Assert.Contains("review-target-rejected", receipt, StringComparison.Ordinal);
+        Assert.Contains("same-provider-family", receipt, StringComparison.Ordinal);
+        Assert.Contains("No independent semantic reviewer", receipt, StringComparison.Ordinal);
+        Assert.Contains("\"published\": false", receipt, StringComparison.Ordinal);
+    }
+
+    /// <summary>Does not charge a skipped same-family reviewer against the shared physical-attempt ceiling.</summary>
+    [Fact]
+    public async Task DynamicReviewerIndependencePreservesSharedAttemptCeiling()
+    {
+        var initial = new ScriptedGenerator(
+            "alpha-generator",
+            _ => throw new ProviderException(ProviderErrorCategory.Authentication, "denied")
+        );
+        var fallback = new ScriptedGenerator("beta-generator", request => Success(request.Request));
+        var sameFamily = new ScriptedReviewer("beta-reviewer", PassingReview);
+        var independent = new ScriptedReviewer("gamma-reviewer", PassingReview);
+        using var fixture = new GenerationFixture(
+            [initial, fallback, sameFamily, independent],
+            semanticReview: "required",
+            maximumTotalAttempts: 2
+        );
+
+        await Assert.ThrowsAsync<AssetCtlException>(() => fixture.GenerateAsync());
+
+        Assert.Equal(1, initial.Calls);
+        Assert.Equal(1, fallback.Calls);
+        Assert.Equal(0, sameFamily.Calls);
+        Assert.Equal(0, independent.Calls);
+    }
+
     /// <summary>Retains generated evidence when a normalized malformed review response fails the run.</summary>
     [Fact]
     public async Task MalformedReviewFailureReceiptPreservesCandidateEvidenceAndInvocation()
@@ -1036,6 +1121,15 @@ public sealed class GenerationEndToEndTests
                 offline: false,
                 CancellationToken.None
             );
+
+        public async Task<string> ReadReceiptAsync(object result)
+        {
+            string receiptPath = JsonDocument
+                .Parse(JsonSerializer.Serialize(result, JsonOptions.Stable))
+                .RootElement.GetProperty("receipt_path")
+                .GetString()!;
+            return await File.ReadAllTextAsync(Path.Combine(Root, receiptPath)).ConfigureAwait(false);
+        }
 
         private static ProviderInstance Provider(IAdapterDescriptor adapter, decimal modelCost)
         {

@@ -304,6 +304,12 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
             || review.EvidenceSha256 is null
             || !configuration.Providers.TryGetValue(review.ReviewerProvider, out ProviderInstance? provider)
             || !provider.Models.ContainsKey(review.ReviewerModelProfile)
+            || !string.Equals(review.Independence, "different-provider-family", StringComparison.Ordinal)
+            || string.Equals(
+                ProviderFamily(provider.AdapterId),
+                ProviderFamily(manifest.Generation.Adapter),
+                StringComparison.Ordinal
+            )
         )
         {
             return false;
@@ -552,7 +558,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
             SemanticReviewResult? review = null;
             var failureEvidence = new ReceiptCandidateEvidence(candidate, mechanical, null);
             failureCandidates.Add(failureEvidence);
-            if (mechanical.Passed && plan.ReviewerCandidates.Any(target => target.Eligible) && !offline)
+            if (mechanical.Passed && plan.ReviewerCandidates.Any(IsPotentialReviewTarget) && !offline)
             {
                 try
                 {
@@ -597,11 +603,15 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
     )
     {
         ProviderException? lastFailure = null;
-        foreach (PlannedTarget target in candidates.Where(candidate => candidate.Eligible))
+        foreach (PlannedTarget target in candidates.Where(IsPotentialReviewTarget))
         {
             RouteDefinition route = configuration.ReviewRoutes.Single(value =>
                 string.Equals(value.Id, target.RouteId, StringComparison.Ordinal)
             );
+            if (RejectSameFamilyReviewer(configuration, target, generatorAdapterId, route, events))
+            {
+                continue;
+            }
             try
             {
                 return await Review(
@@ -649,8 +659,48 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         throw lastFailure
             ?? new ProviderException(
                 ProviderErrorCategory.Validation,
-                "No eligible independent semantic reviewer was available."
+                "No independent semantic reviewer is available for the actual generator family."
             );
+    }
+
+    // AssetRouter binds the initial family; fallback candidates need runtime rebinding before review spend.
+    private static bool IsPotentialReviewTarget(PlannedTarget target) =>
+        target.Eligible
+        || (
+            target.RejectionReasons.Count > 0
+            && target.RejectionReasons.All(reason =>
+                string.Equals(reason, "reviewer-family-conflict", StringComparison.Ordinal)
+            )
+        );
+
+    private static bool RejectSameFamilyReviewer(
+        EffectiveConfiguration configuration,
+        PlannedTarget target,
+        string generatorAdapterId,
+        RouteDefinition route,
+        List<object> events
+    )
+    {
+        ProviderInstance provider = configuration.Providers[target.ProviderId];
+        if (!SameProviderFamily(provider.AdapterId, generatorAdapterId))
+        {
+            return false;
+        }
+
+        events.Add(
+            new
+            {
+                event_type = "review-target-rejected",
+                route = route.Id,
+                target.ProviderId,
+                target.ModelProfileId,
+                target.AdapterId,
+                actual_generator_adapter = generatorAdapterId,
+                actual_generator_family = ProviderFamily(generatorAdapterId),
+                reason = "same-provider-family",
+            }
+        );
+        return true;
     }
 
     private static object Publish(
@@ -1296,6 +1346,13 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         global::AlterCourse.AssetCtl.Domain.DomainModels.ProviderInstance provider = configuration.Providers[
             target.ProviderId
         ];
+        if (SameProviderFamily(provider.AdapterId, generatorAdapterId))
+        {
+            throw new ProviderException(
+                ProviderErrorCategory.Validation,
+                "Semantic review cannot use the actual generator provider family."
+            );
+        }
         global::AlterCourse.AssetCtl.Domain.DomainModels.ModelProfile model = provider.Models[target.ModelProfileId];
         StyleProfile style = configuration.Styles[request.StyleProfile];
         RouteDefinition route = configuration.ReviewRoutes.Single(route =>
@@ -1320,16 +1377,9 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
                 cancellationToken
             )
             .ConfigureAwait(false);
-        string independence = string.Equals(
-            ProviderFamily(provider.AdapterId),
-            ProviderFamily(generatorAdapterId),
-            StringComparison.Ordinal
-        )
-            ? "same-provider-family"
-            : "different-provider-family";
         result = result with
         {
-            Independence = independence,
+            Independence = "different-provider-family",
             ReviewerProvider = provider.Id,
             ReviewerModelProfile = model.Id,
         };
@@ -1367,6 +1417,9 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         int separator = adapterId.IndexOf('-', StringComparison.Ordinal);
         return separator < 0 ? adapterId : adapterId[..separator];
     }
+
+    private static bool SameProviderFamily(string firstAdapterId, string secondAdapterId) =>
+        string.Equals(ProviderFamily(firstAdapterId), ProviderFamily(secondAdapterId), StringComparison.Ordinal);
 
     private static async Task<SemanticReviewResult> InvokeReviewWithRetry(
         IAssetReviewer reviewer,

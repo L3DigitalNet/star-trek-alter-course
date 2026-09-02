@@ -56,7 +56,11 @@ internal static class ApprovalPolicy
             || !configuration.Providers.TryGetValue(review.ReviewerProvider, out ProviderInstance? reviewer)
             || !reviewer.Models.TryGetValue(review.ReviewerModelProfile, out ModelProfile? reviewerModel)
             || !reviewerModel.Capabilities.Contains(AssetCapability.ReviewSemantic)
-            || string.Equals(reviewer.AdapterId, generation.Adapter, StringComparison.Ordinal)
+            || string.Equals(
+                ProviderFamily(reviewer.AdapterId),
+                ProviderFamily(generation.Adapter),
+                StringComparison.Ordinal
+            )
             || !string.Equals(review.Independence, "different-provider-family", StringComparison.Ordinal)
             || !ReviewEvidence.Verify(
                 manifest.Request,
@@ -70,5 +74,11 @@ internal static class ApprovalPolicy
         {
             throw new AssetCtlException("Approval requires current independently verifiable semantic evidence.", 8);
         }
+    }
+
+    private static string ProviderFamily(string adapterId)
+    {
+        int separator = adapterId.IndexOf('-', StringComparison.Ordinal);
+        return separator < 0 ? adapterId : adapterId[..separator];
     }
 }

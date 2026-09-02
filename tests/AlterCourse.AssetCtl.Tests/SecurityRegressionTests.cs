@@ -2,6 +2,7 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using AlterCourse.AssetCtl.Generation;
+using AlterCourse.AssetCtl.Review;
 using AlterCourse.AssetCtl.Validation;
 
 namespace AlterCourse.AssetCtl.Tests;
@@ -237,6 +238,57 @@ public sealed class SecurityRegressionTests
         Assert.Throws<AssetCtlException>(() => ApprovalPolicy.Validate(repository.Configuration, manifest));
     }
 
+    /// <summary>Rejects validly hashed review evidence from a different adapter in the generator's provider family.</summary>
+    [Fact]
+    public void ApprovalRejectsSameProviderFamilyDespiteIndependentLabel()
+    {
+        AssetRequest seed = TestData.Request() with
+        {
+            Lifecycle = AssetLifecycle.Candidate,
+            Output = TestData.Request().Output with { Path = "assets/asset.png" },
+            QualityTier = "production",
+        };
+        byte[] png = LocalPlaceholderGenerator.RenderPng(seed);
+        using var repository = new TemporaryRepository(png, semanticRequired: true);
+        AssetManifest baseline = repository.Manifest(mechanicalPassed: true);
+        SemanticReviewResult review = new(
+            true,
+            true,
+            true,
+            true,
+            1,
+            1,
+            [],
+            false,
+            false,
+            1,
+            "pass",
+            "different-provider-family",
+            null,
+            "reviewer",
+            "review-model"
+        );
+        review = review with
+        {
+            EvidenceSha256 = ReviewEvidence.Compute(
+                baseline.Request,
+                png,
+                repository.Configuration.EffectiveHash,
+                "reviewer",
+                "review-model",
+                review
+            ),
+        };
+        AssetManifest manifest = baseline with
+        {
+            Generation = repository.Generation("openai-images"),
+            SemanticReview = review,
+        };
+        repository.WriteManifest(manifest);
+
+        Assert.Throws<AssetCtlException>(() => ApprovalPolicy.Validate(repository.Configuration, manifest));
+    }
+
     /// <summary>Rejects a lifecycle write when the manifest changed after it was observed.</summary>
     [Fact]
     public void ManifestMutationUsesRevisionAndContentCompareAndSwap()
@@ -394,7 +446,7 @@ public sealed class SecurityRegressionTests
             );
         }
 
-        public GenerationProvenance Generation()
+        public GenerationProvenance Generation(string adapter = "recraft-images")
         {
             AssetRequest request = Manifest(mechanicalPassed: true).Request;
             return new GenerationProvenance(
@@ -402,7 +454,7 @@ public sealed class SecurityRegressionTests
                 "run",
                 "route",
                 "generator",
-                "recraft-images",
+                adapter,
                 "model",
                 "vendor-model",
                 "production",

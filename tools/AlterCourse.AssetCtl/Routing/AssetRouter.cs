@@ -123,7 +123,7 @@ internal sealed class AssetRouter(AdapterRegistry adapters)
     private List<PlannedTarget> EnforceRequiredReviewerAvailability(
         EffectiveConfiguration configuration,
         AssetLifecycle lifecycle,
-        IReadOnlyList<PlannedTarget> targets,
+        List<PlannedTarget> targets,
         bool offline
     )
     {
@@ -132,42 +132,33 @@ internal sealed class AssetRouter(AdapterRegistry adapters)
             && BuildReviewers(configuration, lifecycle, ProviderFamily(target.AdapterId), offline)
                 .Any(value => value.Eligible)
         );
-        return targets
-            .Select(target =>
-                EnforceReviewerAvailability(
-                    configuration,
-                    lifecycle,
-                    target,
-                    offline,
-                    anyGeneratorHasIndependentReviewer
-                )
-            )
-            .ToList();
-    }
+        bool initialTargetFound = false;
+        var result = new List<PlannedTarget>(targets.Count);
+        foreach (PlannedTarget target in targets)
+        {
+            bool hasIndependentReviewer =
+                target.Eligible
+                && BuildReviewers(configuration, lifecycle, ProviderFamily(target.AdapterId), offline)
+                    .Any(value => value.Eligible);
+            if (hasIndependentReviewer)
+            {
+                initialTargetFound = true;
+            }
 
-    private PlannedTarget EnforceReviewerAvailability(
-        EffectiveConfiguration configuration,
-        AssetLifecycle lifecycle,
-        PlannedTarget target,
-        bool offline,
-        bool anyGeneratorHasIndependentReviewer
-    )
-    {
-        if (!target.Eligible)
-        {
-            return target;
+            // Pre-spend planning must choose an independently reviewable initial target. Later targets stay
+            // executable because generation fallback changes the actual family and runtime rebinds review eligibility.
+            result.Add(
+                target.Eligible && !initialTargetFound
+                    ? Reject(
+                        target,
+                        anyGeneratorHasIndependentReviewer
+                            ? "reviewer-family-conflict"
+                            : "independent-reviewer-unavailable"
+                    )
+                    : target
+            );
         }
-        if (
-            BuildReviewers(configuration, lifecycle, ProviderFamily(target.AdapterId), offline)
-                .Any(value => value.Eligible)
-        )
-        {
-            return target;
-        }
-        return Reject(
-            target,
-            anyGeneratorHasIndependentReviewer ? "reviewer-family-conflict" : "independent-reviewer-unavailable"
-        );
+        return result;
     }
 
     private static PlannedTarget Reject(PlannedTarget target, string reason) =>

@@ -28,7 +28,16 @@ internal static class PromptCompiler
                 .Where(value =>
                     value.Review is null
                         ? !string.Equals(tier.SemanticReview, "required", StringComparison.Ordinal)
-                        : !value.Review.HasHardFailure && value.Review.OverallScore >= tier.MinimumSemanticScore
+                        : !value.Review.HasHardFailure
+                            && value.Review.OverallScore >= tier.MinimumSemanticScore
+                            && (
+                                !string.Equals(tier.SemanticReview, "required", StringComparison.Ordinal)
+                                || string.Equals(
+                                    value.Review.Independence,
+                                    "different-provider-family",
+                                    StringComparison.Ordinal
+                                )
+                            )
                 )
                 .OrderByDescending(value => value.Review?.OverallScore ?? 0)
                 .ThenByDescending(value => value.Review?.ReadableAtTargetSizes ?? false)

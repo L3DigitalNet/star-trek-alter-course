@@ -337,6 +337,31 @@ public sealed class RoutingAndSelectionTests
         );
     }
 
+    /// <summary>Rejects editable same-family evidence even when every semantic score passes.</summary>
+    [Fact]
+    public void CandidateSelectionRequiresIndependentReviewForRequiredTiers()
+    {
+        byte[] bytes = [1];
+        var mechanical = new MechanicalValidationResult(
+            true,
+            "image/png",
+            1,
+            1,
+            true,
+            [],
+            bytes,
+            new Dictionary<int, byte[]>(0)
+        );
+        SemanticReviewResult sameFamily = Review(1) with { Independence = "same-provider-family" };
+
+        Assert.Throws<AssetCtlException>(() =>
+            CandidateSelector.Select(
+                [(new GeneratedCandidate(0, bytes, "image/png", null, 0), mechanical, sameFamily)],
+                new QualityTier("test", 1, 1, "required", false, 0.80)
+            )
+        );
+    }
+
     /// <summary>Includes every reachable retry, fallback target, candidate, and reviewer attempt in plan cost.</summary>
     [Fact]
     public void PlanCostConservativelyIncludesFallbacksRetriesAndReviews()
