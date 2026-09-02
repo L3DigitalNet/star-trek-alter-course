@@ -6,6 +6,9 @@ namespace AlterCourse.Core.Simulation;
 /// <summary>Stores and orders immutable data-only scheduled simulation work.</summary>
 public sealed class SimulationScheduler
 {
+    /// <summary>Gets the maximum number of outstanding consequences retained by one scheduler.</summary>
+    public const int MaximumOutstandingWork = 4096;
+
     private SimulationScheduler(long nextWorkId, long nextSequence, ImmutableArray<ScheduledWork> outstandingWork)
     {
         NextWorkId = nextWorkId;
@@ -44,11 +47,26 @@ public sealed class SimulationScheduler
         IEnumerable<ScheduledWork> outstandingWork
     )
     {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(nextWorkId);
-        ArgumentOutOfRangeException.ThrowIfNegative(nextSequence);
         ArgumentNullException.ThrowIfNull(outstandingWork);
 
-        ScheduledWork[] work = outstandingWork.ToArray();
+        if (!HasContinuationHeadroom(nextWorkId, nextSequence))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(nextWorkId),
+                nextWorkId,
+                "Scheduler counters must retain one successful transition of continuation headroom."
+            );
+        }
+
+        ScheduledWork[] work = outstandingWork.Take(MaximumOutstandingWork + 1).ToArray();
+        if (work.Length > MaximumOutstandingWork)
+        {
+            throw new ArgumentException(
+                $"A scheduler supports at most {MaximumOutstandingWork} outstanding work items.",
+                nameof(outstandingWork)
+            );
+        }
+
         HashSet<long> identities = [];
         // Sequences are globally unique, not merely unique per due time: (DueTime, Sequence)
         // must remain a total order independent of input enumeration and sort stability.
@@ -82,8 +100,20 @@ public sealed class SimulationScheduler
     {
         ScheduledWork.ValidateTarget(targetShipId);
         ScheduledWork.ValidateKind(kind);
+        if (OutstandingWork.Length >= MaximumOutstandingWork)
+        {
+            throw new InvalidOperationException(
+                $"Scheduling would exceed the {MaximumOutstandingWork}-item outstanding-work limit."
+            );
+        }
+
         long followingWorkId = checked(NextWorkId + 1);
         long followingSequence = checked(NextSequence + 1);
+        if (!HasContinuationHeadroom(followingWorkId, followingSequence))
+        {
+            throw new OverflowException("Scheduling would exhaust persisted counter continuation headroom.");
+        }
+
         ScheduledWork scheduled = new(new ScheduledWorkId(NextWorkId), dueTime, NextSequence, targetShipId, kind);
 
         ImmutableArray<ScheduledWork> outstanding = OutstandingWork.Add(scheduled).Sort(CompareWork);
@@ -115,6 +145,9 @@ public sealed class SimulationScheduler
         int dueComparison = left.DueTime.Milliseconds.CompareTo(right.DueTime.Milliseconds);
         return dueComparison != 0 ? dueComparison : left.Sequence.CompareTo(right.Sequence);
     }
+
+    internal static bool HasContinuationHeadroom(long nextWorkId, long nextSequence) =>
+        nextWorkId > 0 && nextWorkId < long.MaxValue - 1 && nextSequence >= 0 && nextSequence < long.MaxValue - 1;
 
     private static void ValidateRestoredItem(
         ScheduledWork item,

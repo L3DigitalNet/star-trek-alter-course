@@ -93,6 +93,25 @@ public sealed class ShipDefinitionCatalogLoaderTests
         Assert.Equal("Pathfinder class", ship.DesignDisplayName);
     }
 
+    /// <summary>Confirms the domain and canonical schema share the exact persisted identity boundary.</summary>
+    [Fact]
+    public void EnforcesShipDefinitionIdentityLengthAcrossDomainAndContent()
+    {
+        string maximumId = new('i', ShipDefinitionId.MaximumLength);
+        string maximum = DefinitionWithId(maximumId);
+
+        ShipDefinition loaded = CreateLoader().LoadText(maximum, "maximum-id.json");
+
+        Assert.Equal(maximumId, loaded.Id.Value);
+        Assert.Throws<ArgumentException>(() =>
+            new ShipDefinitionId(new string('i', ShipDefinitionId.MaximumLength + 1))
+        );
+        Assert.Throws<ShipContentValidationException>(() =>
+            CreateLoader()
+                .LoadText(DefinitionWithId(new string('i', ShipDefinitionId.MaximumLength + 1)), "oversized-id.json")
+        );
+    }
+
     /// <summary>Confirms malformed and truncated JSON fail closed with source-aware diagnostics.</summary>
     [Theory]
     [InlineData("{\"schemaVersion\":2")]
@@ -231,6 +250,33 @@ public sealed class ShipDefinitionCatalogLoaderTests
         Assert.Contains("second.json", exception.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>Confirms catalog admission is finite and accepts the documented maximum.</summary>
+    [Fact]
+    public void BoundsCatalogDefinitionMaterialization()
+    {
+        ShipDefinitionContent[] maximum =
+        [
+            .. Enumerable
+                .Range(0, ShipDefinitionCatalogLoader.MaximumDefinitions)
+                .Select(index =>
+                    ShipDefinitionContent.FromText($"ship-{index}.json", DefinitionWithId($"ship-{index}"))
+                ),
+        ];
+
+        ShipDefinitionCatalog catalog = CreateLoader().LoadCatalog(maximum);
+
+        Assert.Equal(ShipDefinitionCatalogLoader.MaximumDefinitions, catalog.Definitions.Count);
+        Assert.Throws<ArgumentException>(() =>
+            CreateLoader()
+                .LoadCatalog(
+                    OverflowAfter(
+                        ShipDefinitionContent.FromText("overflow.json", ValidDefinition),
+                        ShipDefinitionCatalogLoader.MaximumDefinitions + 1
+                    )
+                )
+        );
+    }
+
     /// <summary>Confirms diagnostics are stable, source-aware, and carry instance/schema locations.</summary>
     [Fact]
     public void ProducesDeterministicUsefulDiagnostics()
@@ -311,6 +357,19 @@ public sealed class ShipDefinitionCatalogLoaderTests
                 )
             )
         );
+
+    private static string DefinitionWithId(string id) =>
+        ValidDefinition.Replace("\"id\": \"pathfinder\"", $"\"id\": \"{id}\"", StringComparison.Ordinal);
+
+    private static IEnumerable<T> OverflowAfter<T>(T value, int yieldedCount)
+    {
+        for (int index = 0; index < yieldedCount; index++)
+        {
+            yield return value;
+        }
+
+        throw new InvalidOperationException("The bounded consumer enumerated past its rejection threshold.");
+    }
 
     private static string FindRepositoryRoot()
     {

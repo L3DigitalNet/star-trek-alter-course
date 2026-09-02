@@ -274,12 +274,35 @@ public sealed class SimulationSchedulerTests
         Assert.Equal("outstandingWork", exception.ParamName);
     }
 
-    /// <summary>Confirms scheduling rejects exhausted persisted counters.</summary>
+    /// <summary>Confirms restoration stops hostile enumeration and accepts the scheduler-owned maximum.</summary>
     [Fact]
-    public void ScheduleRejectsCounterOverflow()
+    public void RestoreBoundsOutstandingWorkMaterialization()
     {
-        var exhaustedId = SimulationScheduler.Restore(long.MaxValue, 0, []);
-        var exhaustedSequence = SimulationScheduler.Restore(1, long.MaxValue, []);
+        ScheduledWork[] maximum =
+        [
+            .. Enumerable.Range(1, SimulationScheduler.MaximumOutstandingWork).Select(index => Work(index, index - 1)),
+        ];
+
+        var restored = SimulationScheduler.Restore(
+            SimulationScheduler.MaximumOutstandingWork + 1,
+            SimulationScheduler.MaximumOutstandingWork,
+            maximum
+        );
+
+        Assert.Equal(SimulationScheduler.MaximumOutstandingWork, restored.OutstandingWork.Length);
+        Assert.Throws<ArgumentException>(() =>
+            SimulationScheduler.Restore(2, 1, OverflowAfter(Work(1, 0), SimulationScheduler.MaximumOutstandingWork + 1))
+        );
+    }
+
+    /// <summary>Confirms restoration and scheduling reserve counter headroom before mutation.</summary>
+    [Fact]
+    public void RejectsCountersThatCannotProduceAContinuableScheduler()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => SimulationScheduler.Restore(long.MaxValue - 1, 0, []));
+        Assert.Throws<ArgumentOutOfRangeException>(() => SimulationScheduler.Restore(1, long.MaxValue - 1, []));
+        var exhaustedId = SimulationScheduler.Restore(long.MaxValue - 2, 0, []);
+        var exhaustedSequence = SimulationScheduler.Restore(1, long.MaxValue - 2, []);
 
         Assert.Throws<OverflowException>(() =>
             exhaustedId.Schedule(new SimulationTime(0), Target(), ScheduledWorkKind.TravelArrival)
@@ -287,6 +310,16 @@ public sealed class SimulationSchedulerTests
         Assert.Throws<OverflowException>(() =>
             exhaustedSequence.Schedule(new SimulationTime(0), Target(), ScheduledWorkKind.TravelArrival)
         );
+    }
+
+    private static IEnumerable<T> OverflowAfter<T>(T value, int yieldedCount)
+    {
+        for (int index = 0; index < yieldedCount; index++)
+        {
+            yield return value;
+        }
+
+        throw new InvalidOperationException("The bounded consumer enumerated past its rejection threshold.");
     }
 
     private static ScheduledWork Work(long id, long sequence, long dueTime = 100, long targetShipId = 1) =>

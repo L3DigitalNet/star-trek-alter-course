@@ -1,7 +1,10 @@
 using AlterCourse.Core.Content;
 using AlterCourse.Core.Gameplay;
+using AlterCourse.Core.Identity;
+using AlterCourse.Core.Persistence;
 using AlterCourse.Core.Player;
 using AlterCourse.Core.Quantities;
+using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
 
@@ -313,17 +316,55 @@ public sealed class GameSimulationTests
     public void AdvanceRejectsShipStepWorkOverBudgetWithoutMutation()
     {
         GameSimulation game = CreateGame();
-        PlayerProjection initial = game.GetPlayerProjection();
+        var metadata = new GameSaveMetadata(
+            "work-budget",
+            "Work Budget",
+            DateTimeOffset.UnixEpoch,
+            DateTimeOffset.UnixEpoch
+        );
+        byte[] initial = GamePersistence.Serialize(game, metadata);
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
             game.AdvanceFixedSteps(1_000_001)
         );
 
         Assert.Contains("ship-step work budget", exception.Message, StringComparison.Ordinal);
-        Assert.Equal(initial, game.GetPlayerProjection());
+        Assert.Equal(initial, GamePersistence.Serialize(game, metadata));
+    }
+
+    /// <summary>Confirms bootstrap cannot admit scheduled work that persistence would reject for time exhaustion.</summary>
+    [Fact]
+    public void BootstrapRejectsScheduledDueTimeWithoutContinuationHeadroom()
+    {
+        var origin = new StrategicLocation(new LocationId("origin"), "Origin", default);
+        var destination = new StrategicLocation(new LocationId("destination"), "Destination", default);
+        var map = new StrategicMap(
+            [origin, destination],
+            [new StrategicRoute(origin.Id, destination.Id, new SimulationDuration(9223372036854775800))]
+        );
+        var start = new ShipStart(
+            new ShipInstanceId(1),
+            new ShipDefinitionId("pathfinder"),
+            "USS Boundary",
+            default,
+            default,
+            new SensorIntegrity(1),
+            new TravelingStart(origin.Id, destination.Id, new SimulationTime(0))
+        );
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            new GameBootstrap(new SimulationTime(0), map, start.InstanceId, [start]).CreateSimulation(CreateCatalog())
+        );
+
+        Assert.Contains("continuation headroom", exception.Message, StringComparison.Ordinal);
     }
 
     private static GameSimulation CreateGame()
+    {
+        return FirstGameSetup.Create(CreateCatalog());
+    }
+
+    private static ShipDefinitionCatalog CreateCatalog()
     {
         const string definition = """
             {
@@ -340,7 +381,7 @@ public sealed class GameSimulationTests
         ShipDefinitionCatalog catalog = new ShipDefinitionCatalogLoader(schema).LoadCatalog([
             ShipDefinitionContent.FromText("pathfinder.json", definition),
         ]);
-        return FirstGameSetup.Create(catalog);
+        return catalog;
     }
 
     private static string FindRepositoryRoot()

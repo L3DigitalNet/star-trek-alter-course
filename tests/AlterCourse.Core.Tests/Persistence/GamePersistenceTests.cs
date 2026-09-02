@@ -223,10 +223,10 @@ public sealed class GamePersistenceTests
                     simulation["timeMilliseconds"] = 9223372036854775800L;
                     break;
                 case "work":
-                    scheduler["nextWorkId"] = long.MaxValue;
+                    scheduler["nextWorkId"] = long.MaxValue - 1;
                     break;
                 case "sequence":
-                    scheduler["nextSequence"] = long.MaxValue;
+                    scheduler["nextSequence"] = long.MaxValue - 1;
                     break;
                 case "allocator":
                     simulation["shipAllocatorNextId"] = long.MaxValue;
@@ -248,6 +248,32 @@ public sealed class GamePersistenceTests
                 "allocator" => "allocator",
                 _ => "counter",
             }
+        );
+    }
+
+    /// <summary>Confirms the maximum definition identity survives normalized V2 serialization and reload.</summary>
+    [Fact]
+    public void RoundTripsMaximumShipDefinitionIdentity()
+    {
+        string maximumId = new('i', ShipDefinitionId.MaximumLength);
+        byte[] candidate = MutateV2(root =>
+        {
+            foreach (JsonNode? ship in root["simulation"]!["ships"]!.AsArray())
+            {
+                ship!["definitionId"] = maximumId;
+            }
+        });
+        ShipDefinitionCatalog catalog = CreateCatalog(maximumId);
+
+        LoadedGameSave loaded = GamePersistence.Deserialize(candidate, catalog, "maximum-definition-id.json");
+        byte[] normalized = GamePersistence.Serialize(loaded.Simulation, loaded.Metadata);
+
+        Assert.Equal(
+            normalized,
+            GamePersistence.Serialize(
+                GamePersistence.Deserialize(normalized, catalog, "maximum-definition-id-reload.json").Simulation,
+                loaded.Metadata
+            )
         );
     }
 
@@ -596,7 +622,7 @@ public sealed class GamePersistenceTests
         AssertFailure(MutateV2(root => root["unexpected"] = true), "unknown.json", "incompatible");
     }
 
-    /// <summary>Confirms ordinary live singleton construction now serializes only schema V2.</summary>
+    /// <summary>Confirms ordinary live plural construction serializes only schema V2.</summary>
     [Fact]
     public void SerializeEmitsOnlyV2()
     {
@@ -831,12 +857,12 @@ public sealed class GamePersistenceTests
             new SimulationDuration(8000)
         );
 
-    private static ShipDefinitionCatalog CreateCatalog()
+    private static ShipDefinitionCatalog CreateCatalog(string definitionId = "pathfinder")
     {
-        const string definition = """
+        string definition = $$"""
             {
               "schemaVersion": 2,
-              "id": "pathfinder",
+              "id": "{{definitionId}}",
               "designDisplayName": "Pathfinder class",
               "maximumTacticalSpeedKilometersPerSecond": 10,
               "sensorRepairDurationMilliseconds": 8000

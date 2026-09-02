@@ -49,8 +49,6 @@ public static class GamePersistence
     private const int MaximumSaveBytes = 1024 * 1024;
     private const int MaximumJsonDepth = 32;
     private const int MaximumMetadataTextLength = 128;
-    private const int MaximumIdentityLength = 128;
-    private const int MaximumOutstandingWork = 4096;
 
     private static readonly JsonSerializerOptions SerializerOptions = CreateSerializerOptions();
     private static readonly JsonDocumentOptions DocumentOptions = new()
@@ -457,7 +455,7 @@ public static class GamePersistence
         }
 
         PlayerShipSnapshotV1 player = source.PlayerShip;
-        ValidateText(player.DefinitionId, "Ship definition identity", MaximumIdentityLength);
+        ValidateText(player.DefinitionId, "Ship definition identity", ShipDefinitionId.MaximumLength);
         ShipDefinition definition = catalog.GetRequired(new ShipDefinitionId(player.DefinitionId));
 
         // V1 predates runtime vessel names. During pre-1.0 migration only, the authored design label
@@ -788,7 +786,7 @@ public static class GamePersistence
                 throw new InvalidOperationException("Ship identities must be positive and unique.");
             }
 
-            ValidateText(ship.DefinitionId, "Ship definition identity", MaximumIdentityLength);
+            ValidateText(ship.DefinitionId, "Ship definition identity", ShipDefinitionId.MaximumLength);
             ValidateText(ship.DisplayName, "Ship display name", ShipState.MaximumVesselDisplayNameLength);
             definitions.Add(ship.InstanceId, catalog.GetRequired(new ShipDefinitionId(ship.DefinitionId)));
         }
@@ -876,13 +874,8 @@ public static class GamePersistence
             throw new InvalidOperationException("Outstanding scheduler work is required.");
         }
 
-        EnsureCount(scheduler.OutstandingWork.Length, MaximumOutstandingWork, "scheduler work");
-        if (
-            scheduler.NextWorkId <= 0
-            || scheduler.NextSequence < 0
-            || scheduler.NextWorkId == long.MaxValue
-            || scheduler.NextSequence == long.MaxValue
-        )
+        EnsureCount(scheduler.OutstandingWork.Length, SimulationScheduler.MaximumOutstandingWork, "scheduler work");
+        if (!SimulationScheduler.HasContinuationHeadroom(scheduler.NextWorkId, scheduler.NextSequence))
         {
             throw new InvalidOperationException("Scheduler counters are invalid or lack continuation headroom.");
         }

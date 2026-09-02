@@ -169,9 +169,11 @@ internal sealed record SimulationState
 
         if (
             ShipIdAllocator.NextId == long.MaxValue
-            || Scheduler.NextWorkId == long.MaxValue
-            || Scheduler.NextSequence == long.MaxValue
+            || !SimulationScheduler.HasContinuationHeadroom(Scheduler.NextWorkId, Scheduler.NextSequence)
             || Time.Milliseconds > long.MaxValue - SimulationFixedStep.Duration.Milliseconds
+            || Scheduler.OutstandingWork.Any(work =>
+                work.DueTime.Milliseconds > long.MaxValue - SimulationFixedStep.Duration.Milliseconds
+            )
         )
         {
             throw new InvalidOperationException("Simulation state lacks continuation headroom.");

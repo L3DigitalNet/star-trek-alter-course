@@ -10,6 +10,9 @@ namespace AlterCourse.Core.Content;
 /// <summary>Strictly validates version-two authored ship JSON and constructs domain definitions.</summary>
 public sealed class ShipDefinitionCatalogLoader
 {
+    /// <summary>Gets the maximum number of authored definitions admitted into one development catalog.</summary>
+    public const int MaximumDefinitions = 256;
+
     private static readonly Uri SchemaBaseUri = new(
         "https://l3digital.net/star-trek-alter-course/schemas/ship-definition-v2.schema.json"
     );
@@ -48,10 +51,19 @@ public sealed class ShipDefinitionCatalogLoader
     public ShipDefinitionCatalog LoadCatalog(IEnumerable<ShipDefinitionContent> content)
     {
         ArgumentNullException.ThrowIfNull(content);
+        ShipDefinitionContent[] materialized = content.Take(MaximumDefinitions + 1).ToArray();
+        if (materialized.Length > MaximumDefinitions)
+        {
+            throw new ArgumentException(
+                $"A ship definition catalog supports at most {MaximumDefinitions} definitions.",
+                nameof(content)
+            );
+        }
+
         var definitions = new Dictionary<ShipDefinitionId, ShipDefinition>();
         var identities = new Dictionary<ShipDefinitionId, string>();
 
-        foreach (ShipDefinitionContent source in content)
+        foreach (ShipDefinitionContent source in materialized)
         {
             ShipDefinition definition = Load(source);
             if (identities.TryGetValue(definition.Id, out string? earlierSource))
