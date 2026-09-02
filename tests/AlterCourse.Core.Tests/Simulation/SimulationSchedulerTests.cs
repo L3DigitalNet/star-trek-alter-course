@@ -88,6 +88,111 @@ public sealed class SimulationSchedulerTests
         Assert.Equal(new[] { work }, due);
     }
 
+    /// <summary>Confirms exact cancellation removes work at any ordered position without reallocating counters.</summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void CancelRemovesExactWorkAtEveryOrderedPosition(int cancellationIndex)
+    {
+        (SimulationScheduler afterFirst, ScheduledWork first) = SimulationScheduler
+            .Create()
+            .Schedule(new SimulationTime(100), Target(1), ScheduledWorkKind.TravelArrival);
+        (SimulationScheduler afterSecond, ScheduledWork second) = afterFirst.Schedule(
+            new SimulationTime(200),
+            Target(2),
+            ScheduledWorkKind.SensorRepairCompletion
+        );
+        (SimulationScheduler scheduled, ScheduledWork third) = afterSecond.Schedule(
+            new SimulationTime(300),
+            Target(3),
+            ScheduledWorkKind.OrderWake
+        );
+        ScheduledWork[] original = [first, second, third];
+
+        (SimulationScheduler following, bool removed) = scheduled.Cancel(original[cancellationIndex].Id);
+
+        Assert.True(removed);
+        Assert.Equal(original.Where((_, index) => index != cancellationIndex).ToArray(), following.OutstandingWork);
+        Assert.Equal(4, following.NextWorkId);
+        Assert.Equal(3, following.NextSequence);
+        Assert.Equal(original, scheduled.OutstandingWork);
+        Assert.Equal(4, scheduled.NextWorkId);
+        Assert.Equal(3, scheduled.NextSequence);
+    }
+
+    /// <summary>Confirms cancellation correlates only by identity among otherwise identical work.</summary>
+    [Fact]
+    public void CancelPreservesSameTimeKindAndTargetWork()
+    {
+        (SimulationScheduler afterFirst, ScheduledWork first) = SimulationScheduler
+            .Create()
+            .Schedule(new SimulationTime(500), Target(), ScheduledWorkKind.OrderWake);
+        (SimulationScheduler afterSecond, ScheduledWork cancelled) = afterFirst.Schedule(
+            new SimulationTime(500),
+            Target(),
+            ScheduledWorkKind.OrderWake
+        );
+        (SimulationScheduler scheduled, ScheduledWork third) = afterSecond.Schedule(
+            new SimulationTime(500),
+            Target(),
+            ScheduledWorkKind.OrderWake
+        );
+
+        (SimulationScheduler following, bool removed) = scheduled.Cancel(cancelled.Id);
+
+        Assert.True(removed);
+        Assert.Equal(new[] { first, third }, following.OutstandingWork);
+        Assert.Equal(new[] { first, cancelled, third }, scheduled.OutstandingWork);
+    }
+
+    /// <summary>Confirms an initialized identity never allocated by this scheduler is an ordinary negative result.</summary>
+    [Fact]
+    public void CancelMissingIdentityReturnsUnchangedScheduler()
+    {
+        (SimulationScheduler scheduled, ScheduledWork work) = SimulationScheduler
+            .Create()
+            .Schedule(new SimulationTime(100), Target(), ScheduledWorkKind.OrderWake);
+
+        (SimulationScheduler following, bool removed) = scheduled.Cancel(new ScheduledWorkId(999));
+
+        Assert.False(removed);
+        Assert.Equal(new[] { work }, following.OutstandingWork);
+        Assert.Equal(scheduled.NextWorkId, following.NextWorkId);
+        Assert.Equal(scheduled.NextSequence, following.NextSequence);
+    }
+
+    /// <summary>Confirms an identity for work already dequeued is an ordinary negative result.</summary>
+    [Fact]
+    public void CancelStaleIdentityReturnsUnchangedScheduler()
+    {
+        (SimulationScheduler scheduled, ScheduledWork work) = SimulationScheduler
+            .Create()
+            .Schedule(new SimulationTime(100), Target(), ScheduledWorkKind.OrderWake);
+        (SimulationScheduler dequeued, IReadOnlyList<ScheduledWork> due) = scheduled.DequeueDue(
+            new SimulationTime(100)
+        );
+
+        (SimulationScheduler following, bool removed) = dequeued.Cancel(work.Id);
+
+        Assert.Equal(new[] { work }, due);
+        Assert.False(removed);
+        Assert.Empty(following.OutstandingWork);
+        Assert.Equal(dequeued.NextWorkId, following.NextWorkId);
+        Assert.Equal(dequeued.NextSequence, following.NextSequence);
+    }
+
+    /// <summary>Confirms cancellation rejects an uninitialized correlation identity.</summary>
+    [Fact]
+    public void CancelRejectsUninitializedIdentity()
+    {
+        ArgumentException exception = Assert.Throws<ArgumentException>(() =>
+            SimulationScheduler.Create().Cancel(default)
+        );
+
+        Assert.Equal("id", exception.ParamName);
+    }
+
     /// <summary>Confirms a due batch is a snapshot of work outstanding when dequeue begins.</summary>
     [Fact]
     public void DequeueDueReturnsSameBoundarySnapshot()
@@ -261,6 +366,30 @@ public sealed class SimulationSchedulerTests
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             SimulationScheduler.Create().Schedule(new SimulationTime(0), Target(), (ScheduledWorkKind)0)
         );
+    }
+
+    /// <summary>Confirms order wake-up work crosses construction, scheduling, and restoration boundaries.</summary>
+    [Fact]
+    public void OrderWakeIsSupportedScheduledWork()
+    {
+        ScheduledWork persisted = new(
+            new ScheduledWorkId(4),
+            new SimulationTime(250),
+            8,
+            Target(),
+            ScheduledWorkKind.OrderWake
+        );
+
+        var restored = SimulationScheduler.Restore(5, 9, [persisted]);
+        (SimulationScheduler following, ScheduledWork scheduled) = restored.Schedule(
+            new SimulationTime(500),
+            Target(2),
+            ScheduledWorkKind.OrderWake
+        );
+
+        Assert.Equal(ScheduledWorkKind.OrderWake, restored.OutstandingWork.Single().Kind);
+        Assert.Equal(ScheduledWorkKind.OrderWake, scheduled.Kind);
+        Assert.Equal(new[] { persisted, scheduled }, following.OutstandingWork);
     }
 
     /// <summary>Confirms null outstanding work is rejected at the public restoration boundary.</summary>

@@ -71,7 +71,11 @@ public readonly record struct ScheduledWork
 
     internal static void ValidateKind(ScheduledWorkKind kind)
     {
-        if (kind is not ScheduledWorkKind.TravelArrival and not ScheduledWorkKind.SensorRepairCompletion)
+        if (
+            kind is not ScheduledWorkKind.TravelArrival
+            and not ScheduledWorkKind.SensorRepairCompletion
+            and not ScheduledWorkKind.OrderWake
+        )
         {
             throw new ArgumentOutOfRangeException(nameof(kind), kind, "Scheduled work kind is not supported.");
         }
