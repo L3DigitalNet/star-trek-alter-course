@@ -181,6 +181,26 @@ focus_mode = 2
 text = "ADVANCE UNTIL NEXT EVENT"
 tooltip_text = "Stop at the earliest scheduled repair or travel event"
 
+[node name="PersistenceControls" type="HBoxContainer" parent="Shell/StatusPanel/StatusMargin/Status"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="QuickSaveButton" type="Button" parent="Shell/StatusPanel/StatusMargin/Status/PersistenceControls"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 2
+text = "SAVE"
+tooltip_text = "Save the current simulation to the quick-save slot"
+
+[node name="QuickLoadButton" type="Button" parent="Shell/StatusPanel/StatusMargin/Status/PersistenceControls"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 2
+text = "LOAD"
+tooltip_text = "Load the quick-save slot without changing the current game on failure"
+
 [node name="RateLabel" type="Label" parent="Shell/StatusPanel/StatusMargin/Status"]
 layout_mode = 2
 text = "SIMULATION RATE"

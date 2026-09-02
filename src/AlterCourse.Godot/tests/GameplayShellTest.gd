@@ -1,6 +1,16 @@
 class_name GameplayShellTest
 extends GdUnitTestSuite
 
+const TEST_QUICK_SAVE_PATH := "user://gameplay-shell-test-quick-save.json"
+
+
+func before_test() -> void:
+	_remove_test_quick_save()
+
+
+func after_test() -> void:
+	_remove_test_quick_save()
+
 
 func test_main_scene_constructs_gameplay_shell() -> void:
 	var screen := _create_screen()
@@ -10,6 +20,88 @@ func test_main_scene_constructs_gameplay_shell() -> void:
 	assert_object(screen.get_node_or_null("Shell/StatusPanel")).is_not_null()
 	assert_int(screen.get_node("%RateControls").get_child_count()).is_equal(5)
 	assert_str(screen.get_meta("load_error", "")).is_empty()
+
+
+func test_quick_save_and_load_controls_exist() -> void:
+	var screen := _create_screen()
+
+	assert_object(screen.get_node_or_null("%QuickSaveButton")).is_instanceof(Button)
+	assert_object(screen.get_node_or_null("%QuickLoadButton")).is_instanceof(Button)
+
+
+func test_quick_save_load_restores_active_operations_and_continues_scheduler() -> void:
+	var screen := _create_screen()
+	screen.call("SelectDestination", "vesper-reach")
+	screen.call("RequestSelectedTravel")
+
+	for _step in range(5):
+		screen.call("ProcessSyntheticDelta", 0.6)
+
+	var saved_time: int = screen.get_meta("simulation_time_milliseconds", -1)
+	var saved_integrity: float = screen.get_meta("sensor_integrity", -1.0)
+	var saved_repair_progress: float = screen.get_meta("sensor_repair_progress", -1.0)
+	assert_int(saved_time).is_equal(3000)
+	assert_bool(screen.get_meta("travel_active", false)).is_true()
+	assert_float(saved_repair_progress).is_greater(0.0)
+	assert_float(saved_repair_progress).is_less(1.0)
+
+	screen.get_node("%QuickSaveButton").emit_signal("pressed")
+	assert_str(screen.get_meta("quick_save_status", "")).is_equal("saved")
+	assert_bool(FileAccess.file_exists(TEST_QUICK_SAVE_PATH)).is_true()
+	var created_at_utc: String = screen.get_meta("quick_save_created_at_utc", "")
+	assert_str(created_at_utc).is_not_empty()
+	screen.get_node("%QuickSaveButton").emit_signal("pressed")
+	assert_str(screen.get_meta("quick_save_created_at_utc", "")).is_equal(created_at_utc)
+
+	screen.call("AdvanceUntilNextEvent")
+	screen.call("AdvanceUntilNextEvent")
+	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(12000)
+	assert_bool(screen.get_meta("travel_active", true)).is_false()
+
+	screen.call("SetSimulationRate", 0.5)
+	assert_int(screen.call("ProcessSyntheticDelta", 0.1)).is_equal(0)
+	screen.get_node("%QuickLoadButton").emit_signal("pressed")
+
+	assert_str(screen.get_meta("quick_save_status", "")).is_equal("loaded")
+	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(saved_time)
+	assert_bool(screen.get_meta("travel_active", false)).is_true()
+	assert_str(screen.get_meta("travel_destination", "")).is_equal("vesper-reach")
+	assert_float(screen.get_meta("sensor_integrity", -1.0)).is_equal_approx(saved_integrity, 0.0001)
+	assert_float(screen.get_meta("sensor_repair_progress", -1.0)).is_equal_approx(
+		saved_repair_progress,
+		0.0001
+	)
+
+	# The selected rate remains 0.5x, while the pre-load fractional carry was discarded.
+	assert_int(screen.call("ProcessSyntheticDelta", 0.1)).is_equal(0)
+	assert_int(screen.call("ProcessSyntheticDelta", 0.1)).is_equal(1)
+	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(3100)
+
+	screen.call("AdvanceUntilNextEvent")
+	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(8000)
+	assert_str(screen.get_meta("last_advance_event", "")).contains("SensorRepairCompletion")
+	assert_bool(screen.get_meta("travel_active", false)).is_true()
+	screen.call("AdvanceUntilNextEvent")
+	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(12000)
+	assert_str(screen.get_meta("last_advance_event", "")).contains("TravelArrival")
+	assert_bool(screen.get_meta("travel_active", true)).is_false()
+
+
+func test_failed_quick_load_retains_current_projection() -> void:
+	var screen := _create_screen()
+	screen.call("ProcessSyntheticDelta", 0.6)
+	var retained_time: int = screen.get_meta("simulation_time_milliseconds", -1)
+	var retained_integrity: float = screen.get_meta("sensor_integrity", -1.0)
+
+	screen.get_node("%QuickLoadButton").emit_signal("pressed")
+
+	assert_str(screen.get_meta("quick_save_status", "")).is_equal("load_failed")
+	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(retained_time)
+	assert_float(screen.get_meta("sensor_integrity", -1.0)).is_equal_approx(
+		retained_integrity,
+		0.0001
+	)
+	assert_str(screen.get_node("%Message").text).contains("Quick load failed")
 
 
 func test_projection_populates_ship_time_sensors_and_map() -> void:
@@ -116,6 +208,12 @@ func test_tactical_transform_inverts_north_and_preserves_fractional_positions() 
 func _create_screen() -> Node:
 	var scene := load("res://Main.tscn") as PackedScene
 	var screen: Node = auto_free(scene.instantiate())
+	screen.set("QuickSaveUserPath", TEST_QUICK_SAVE_PATH)
 	add_child(screen)
 	screen.set_process(false)
 	return screen
+
+
+func _remove_test_quick_save() -> void:
+	if FileAccess.file_exists(TEST_QUICK_SAVE_PATH):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(TEST_QUICK_SAVE_PATH))

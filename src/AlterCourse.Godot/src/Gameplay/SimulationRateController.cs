@@ -28,6 +28,12 @@ public sealed class SimulationRateController
         Rate = rate;
     }
 
+    /// <summary>Drops fractional presentation carry without changing the selected rate.</summary>
+    public void ResetAccumulatedTime()
+    {
+        _fractionalSimulationSeconds = 0;
+    }
+
     /// <summary>Returns bounded whole steps for a controlled elapsed interval.</summary>
     public int ConsumeElapsed(double elapsedSeconds)
     {

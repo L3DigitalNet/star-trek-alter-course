@@ -1,5 +1,6 @@
 using AlterCourse.Core.Content;
 using AlterCourse.Core.Gameplay;
+using AlterCourse.Core.Persistence;
 using AlterCourse.Core.Player;
 using AlterCourse.Core.Quantities;
 using AlterCourse.Core.Ships;
@@ -14,11 +15,17 @@ public partial class GameScreen : Control
 {
     private const string SchemaPath = "res://content/schemas/ship-definition-v1.schema.json";
     private const string ShipPath = "res://content/ships/pathfinder.json";
+    private const string DefaultQuickSaveUserPath = "user://quick-save-v1.json";
+    private const string QuickSaveId = "quick-save";
+    private const string QuickSaveDisplayName = "Quick Save";
 
     private readonly SimulationRateController _rateController = new();
     private GameSimulation? _simulation;
+    private ShipDefinitionCatalog? _shipCatalog;
     private PlayerProjection? _projection;
     private LocationId? _selectedDestination;
+    private DateTimeOffset? _quickSaveCreatedAtUtc;
+    private string _quickSavePath = null!;
     private StrategicMapView _strategicMap = null!;
     private TacticalMapView _tacticalMap = null!;
     private VBoxContainer _destinationButtons = null!;
@@ -32,9 +39,15 @@ public partial class GameScreen : Control
     private Button _courseButton = null!;
     private Button _strategicButton = null!;
     private Button _tacticalButton = null!;
+    private Button _quickSaveButton = null!;
+    private Button _quickLoadButton = null!;
 
     /// <summary>Gets whether canonical content produced a complete playable simulation.</summary>
     public bool IsGameplayReady => _simulation is not null;
+
+    /// <summary>Gets or sets the Godot user-data path for the one quick-save slot.</summary>
+    [Export]
+    public string QuickSaveUserPath { get; set; } = DefaultQuickSaveUserPath;
 
     /// <summary>Gets the latest fresh player-known projection.</summary>
     public PlayerProjection? Projection => _projection;
@@ -45,8 +58,17 @@ public partial class GameScreen : Control
         BindScene();
         try
         {
-            GameSimulation simulation = CreateSimulationFromCanonicalContent();
+            if (!QuickSaveUserPath.StartsWith("user://", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("Quick-save storage must use Godot's user:// boundary.");
+            }
+
+            string quickSavePath = ProjectSettings.GlobalizePath(QuickSaveUserPath);
+            (ShipDefinitionCatalog catalog, GameSimulation simulation) = CreateSimulationFromCanonicalContent();
+            _quickSavePath = quickSavePath;
+            _shipCatalog = catalog;
             _simulation = simulation;
+            SetMeta("quick_save_user_path", QuickSaveUserPath);
             RefreshProjection();
             BuildDestinationButtons();
             _strategicButton.GrabFocus();
@@ -56,6 +78,7 @@ public partial class GameScreen : Control
             // Loading is fail-closed: retaining a half-built aggregate would make the visible UI
             // appear playable while its definition and validation contract had not completed.
             _simulation = null;
+            _shipCatalog = null;
             _projection = null;
             SetGameplayEnabled(false);
             _messageLabel.Text = $"Unable to load gameplay content: {exception.Message}";
@@ -89,6 +112,66 @@ public partial class GameScreen : Control
         _rateController.SetRate(rate);
         SetMeta("simulation_rate", rate);
         _messageLabel.Text = rate == 0 ? "Simulation paused." : $"Simulation rate: {rate:0.0#}x";
+    }
+
+    /// <summary>Saves the current simulation to the one application-owned quick-save slot.</summary>
+    public void QuickSave()
+    {
+        if (_simulation is null)
+        {
+            return;
+        }
+
+        DateTimeOffset savedAtUtc = DateTimeOffset.UtcNow;
+        DateTimeOffset createdAtUtc = _quickSaveCreatedAtUtc ?? savedAtUtc;
+        var metadata = new GameSaveMetadata(QuickSaveId, QuickSaveDisplayName, createdAtUtc, savedAtUtc);
+
+        try
+        {
+            GamePersistence.Save(_quickSavePath, _simulation, metadata);
+            _quickSaveCreatedAtUtc = createdAtUtc;
+            _messageLabel.Text = "Quick save complete.";
+            SetMeta("quick_save_status", "saved");
+            SetMeta("quick_save_created_at_utc", createdAtUtc.ToString("O"));
+            SetMeta("quick_save_saved_at_utc", savedAtUtc.ToString("O"));
+        }
+        catch (Exception exception)
+        {
+            ReportPersistenceFailure("Quick save", "save_failed", exception);
+        }
+    }
+
+    /// <summary>Loads a new validated simulation from the quick-save slot.</summary>
+    public void QuickLoad()
+    {
+        if (_simulation is null || _shipCatalog is null)
+        {
+            return;
+        }
+
+        try
+        {
+            LoadedGameSave loaded = GamePersistence.Load(_quickSavePath, _shipCatalog);
+
+            // Core constructs and validates the candidate in isolation. Assignment stays after that
+            // boundary so an unreadable or invalid save cannot damage the playable aggregate.
+            _simulation = loaded.Simulation;
+            _quickSaveCreatedAtUtc = loaded.Metadata.CreatedAtUtc;
+            _selectedDestination = null;
+
+            // Rate is a current player preference, so it survives load. Fractional carry is dropped
+            // because presentation time accumulated before the snapshot must not advance restored truth.
+            _rateController.ResetAccumulatedTime();
+            RefreshProjection();
+            BuildDestinationButtons();
+            _messageLabel.Text =
+                $"Quick load restored {loaded.Simulation.GetPlayerProjection().SimulationTime.Milliseconds / 1000.0:0.0} s.";
+            SetMeta("quick_save_status", "loaded");
+        }
+        catch (Exception exception)
+        {
+            ReportPersistenceFailure("Quick load", "load_failed", exception);
+        }
     }
 
     /// <summary>Selects a strategic destination by stable Core identifier.</summary>
@@ -183,6 +266,8 @@ public partial class GameScreen : Control
         _courseButton = GetNode<Button>("%CourseButton");
         _strategicButton = GetNode<Button>("%StrategicButton");
         _tacticalButton = GetNode<Button>("%TacticalButton");
+        _quickSaveButton = GetNode<Button>("%QuickSaveButton");
+        _quickLoadButton = GetNode<Button>("%QuickLoadButton");
 
         _strategicMap.DestinationSelected = OnDestinationSelected;
         _travelButton.Pressed += RequestSelectedTravel;
@@ -190,6 +275,8 @@ public partial class GameScreen : Control
         GetNode<Button>("%AdvanceUntilButton").Pressed += AdvanceUntilNextEvent;
         _strategicButton.Pressed += ShowStrategicView;
         _tacticalButton.Pressed += ShowTacticalView;
+        _quickSaveButton.Pressed += QuickSave;
+        _quickLoadButton.Pressed += QuickLoad;
         ConfigureRateButton("%PauseRate", 0);
         ConfigureRateButton("%HalfRate", 0.5);
         ConfigureRateButton("%NormalRate", 1);
@@ -198,13 +285,14 @@ public partial class GameScreen : Control
         ShowStrategicView();
     }
 
-    private static GameSimulation CreateSimulationFromCanonicalContent()
+    private static (ShipDefinitionCatalog Catalog, GameSimulation Simulation) CreateSimulationFromCanonicalContent()
     {
         string schema = ReadRequiredText(SchemaPath);
         string definitionJson = ReadRequiredText(ShipPath);
         var loader = new ShipDefinitionCatalogLoader(schema);
-        ShipDefinition definition = loader.LoadText(definitionJson, ShipPath);
-        return FirstGameSetup.Create(definition);
+        ShipDefinitionCatalog catalog = loader.LoadCatalog([ShipDefinitionContent.FromText(ShipPath, definitionJson)]);
+        ShipDefinition definition = catalog.Definitions.Single();
+        return (catalog, FirstGameSetup.Create(definition));
     }
 
     private static string ReadRequiredText(string path)
@@ -283,6 +371,7 @@ public partial class GameScreen : Control
         SetMeta("simulation_time_milliseconds", projection.SimulationTime.Milliseconds);
         SetMeta("ship_name", projection.Ship.DisplayName);
         SetMeta("sensor_integrity", projection.Ship.Sensors.Integrity);
+        SetMeta("sensor_repair_progress", projection.Ship.Sensors.RepairProgress);
         SetMeta("map_location_count", projection.Strategic.Locations.Count);
         SetMeta("map_route_count", projection.Strategic.Routes.Count);
         SetMeta("travel_active", projection.Strategic.Travel is not null);
@@ -324,9 +413,17 @@ public partial class GameScreen : Control
         _travelButton.Disabled = !enabled;
         _courseButton.Disabled = !enabled;
         GetNode<Button>("%AdvanceUntilButton").Disabled = !enabled;
+        _quickSaveButton.Disabled = !enabled;
+        _quickLoadButton.Disabled = !enabled;
         foreach (Button button in GetNode<HBoxContainer>("%RateControls").GetChildren().OfType<Button>())
         {
             button.Disabled = !enabled;
         }
+    }
+
+    private void ReportPersistenceFailure(string operation, string status, Exception exception)
+    {
+        _messageLabel.Text = $"{operation} failed: {exception.Message}";
+        SetMeta("quick_save_status", status);
     }
 }
