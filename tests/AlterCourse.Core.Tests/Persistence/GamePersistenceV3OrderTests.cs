@@ -189,7 +189,12 @@ public sealed class GamePersistenceV3OrderTests
         AssertFailure(
             invalid,
             $"patrol-{mutation}.json",
-            string.Equals(mutation, "too-many", StringComparison.Ordinal) ? "16" : "patrol"
+            mutation switch
+            {
+                "too-many" => "16",
+                "missing-waypoint" => "location",
+                _ => "patrol",
+            }
         );
     }
 
@@ -387,8 +392,11 @@ public sealed class GamePersistenceV3OrderTests
         );
         Assert.Equal(GamePersistenceFailure.InvalidData, exception.Failure);
         Assert.Equal(source, exception.SourceIdentity);
-        Assert.Contains(messageFragment, exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(messageFragment, FailureReason(exception), StringComparison.OrdinalIgnoreCase);
     }
+
+    private static string FailureReason(GamePersistenceException exception) =>
+        exception.Message[$"Save '{exception.SourceIdentity}' ".Length..];
 
     private static ShipDefinitionCatalog CreateCatalog()
     {

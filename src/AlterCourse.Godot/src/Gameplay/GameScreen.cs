@@ -109,7 +109,7 @@ public partial class GameScreen : Control
         {
             result = _simulation.AdvanceFixedSteps(steps);
         }
-        catch (InvalidOperationException)
+        catch (Exception exception) when (exception is InvalidOperationException or OverflowException)
         {
             ReportAdvanceFailure();
             return 0;
@@ -233,7 +233,7 @@ public partial class GameScreen : Control
         {
             result = _simulation.AdvanceUntilNextPlayerRelevantEvent();
         }
-        catch (InvalidOperationException)
+        catch (Exception exception) when (exception is InvalidOperationException or OverflowException)
         {
             ReportAdvanceFailure();
             return;

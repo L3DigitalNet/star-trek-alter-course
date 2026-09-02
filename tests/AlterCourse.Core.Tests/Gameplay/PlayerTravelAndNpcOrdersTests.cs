@@ -29,10 +29,11 @@ public sealed class PlayerTravelAndNpcOrdersTests
     {
         ShipDefinitionCatalog catalog = CreateCatalog();
         GameSimulation game = CreateSimulation(catalog);
+        Assert.Equal(TravelOutcome.Accepted, game.RequestTravel(new TravelIntent(PlayerDestination)).Outcome);
         SimulationState initial = game.CaptureState();
         PatrolRouteOrder initialPatrol = Assert.IsType<PatrolRouteOrder>(initial.GetRequiredShip(PatrolId).ActiveOrder);
 
-        SimulationAdvanceTraceResult advanced = GameSimulation.AdvanceTo(initial, Time(12), catalog);
+        SimulationAdvanceTraceResult advanced = GameSimulation.AdvanceTo(initial, Time(13), catalog);
 
         ShipState player = advanced.State.GetRequiredShip(PlayerId);
         Assert.Null(player.ActiveOrder);
@@ -57,8 +58,8 @@ public sealed class PlayerTravelAndNpcOrdersTests
             [
                 (PatrolId, ScheduledWorkKind.TravelArrival, Time(6)),
                 (HoldId, ScheduledWorkKind.OrderWake, Time(9)),
-                (PlayerId, ScheduledWorkKind.TravelArrival, Time(10)),
                 (PatrolId, ScheduledWorkKind.TravelArrival, Time(12)),
+                (PlayerId, ScheduledWorkKind.TravelArrival, Time(13)),
             ],
             advanced.Traces.Select(trace => (trace.TargetShipId, trace.WorkKind, trace.ResolutionTime))
         );
@@ -69,7 +70,7 @@ public sealed class PlayerTravelAndNpcOrdersTests
         StrategicMap map = CreateMap();
         ShipStart[] starts =
         [
-            CreateStart(PlayerId, new TravelingStart(PlayerOrigin, PlayerDestination, Time(0))),
+            CreateStart(PlayerId, new AtLocationStart(PlayerOrigin)),
             CreateStart(
                 PatrolId,
                 new TravelingStart(PatrolAlpha, PatrolBeta, Time(0)),

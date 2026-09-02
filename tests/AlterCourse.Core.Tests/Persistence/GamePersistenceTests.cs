@@ -394,7 +394,11 @@ public sealed class GamePersistenceTests
             JsonNode repair = Ship(root, 0)["sensorRepair"]!;
             repair["expectedCompletionMilliseconds"] = 8100;
             Ship(root, 0)["sensorIntegrity"] = 0.5 + (0.5 * (4000d / 8100d));
-            root["simulation"]!["scheduler"]!["outstandingWork"]![0]!["dueTimeMilliseconds"] = 8100;
+            JsonArray work = root["simulation"]!["scheduler"]!["outstandingWork"]!.AsArray();
+            JsonNode repairCompletion = work[0]!;
+            repairCompletion["dueTimeMilliseconds"] = 8100;
+            work.RemoveAt(0);
+            work.Insert(1, repairCompletion);
         });
 
         AssertFailure(invalid, "repair-duration.json", "duration");
@@ -887,8 +891,11 @@ public sealed class GamePersistenceTests
         );
         Assert.Equal(failure, exception.Failure);
         Assert.Equal(source, exception.SourceIdentity);
-        Assert.Contains(messageFragment, exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(messageFragment, FailureReason(exception), StringComparison.OrdinalIgnoreCase);
     }
+
+    private static string FailureReason(GamePersistenceException exception) =>
+        exception.Message[$"Save '{exception.SourceIdentity}' ".Length..];
 
     private static ShipDefinition CreateDefinition() =>
         new(
