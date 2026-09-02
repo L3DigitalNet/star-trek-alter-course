@@ -220,7 +220,8 @@ internal static class DomainModels
         string? CredentialEnvironmentVariable,
         IReadOnlySet<string> AllowedDownloadHosts,
         IReadOnlyDictionary<string, ModelProfile> Models,
-        IReadOnlySet<AssetLifecycle>? AllowedLifecycles = null
+        IReadOnlySet<AssetLifecycle>? AllowedLifecycles = null,
+        IReadOnlySet<string>? AllowedEndpointHosts = null
     );
 
     public sealed record RouteTarget(string ProviderId, string ModelProfileId);

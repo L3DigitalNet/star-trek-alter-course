@@ -5,7 +5,7 @@ using SemanticReviewPolicy = AlterCourse.AssetCtl.Domain.DomainModels.SemanticRe
 /// <summary>Evaluates declarative routes without interpreting provider identity or provider-specific options.</summary>
 internal sealed class AssetRouter(AdapterRegistry adapters)
 {
-    public GenerationPlan Plan(EffectiveConfiguration configuration, AssetRequest request)
+    public GenerationPlan Plan(EffectiveConfiguration configuration, AssetRequest request, bool offline = false)
     {
         if (!configuration.QualityTiers.TryGetValue(request.QualityTier, out QualityTier? tier))
         {
@@ -15,9 +15,17 @@ internal sealed class AssetRouter(AdapterRegistry adapters)
         global::System.Collections.Generic.IReadOnlyList<global::AlterCourse.AssetCtl.Domain.DomainModels.AssetCapability> required =
             RequiredCapabilities(request);
         List<PlannedTarget> targets = BuildTargets(configuration, request, required, tier);
-        PlannedTarget? reviewer = string.Equals(tier.SemanticReview, "disabled", StringComparison.Ordinal)
-            ? null
-            : FindReviewer(configuration, request.Lifecycle);
+        if (offline)
+        {
+            targets = ExcludeExternalTargets(configuration, targets);
+        }
+
+        PlannedTarget? reviewer = SelectReviewer(configuration, request.Lifecycle, tier, targets, offline);
+        if (tier.ReviewPolicy is SemanticReviewPolicy.Required)
+        {
+            targets = EnforceRequiredReviewerIndependence(configuration, targets, reviewer);
+        }
+
         targets = KeepAffordablePrefixWhenFreeFallbackExists(configuration, targets, reviewer, tier);
 
         global::AlterCourse.AssetCtl.Domain.DomainModels.PlannedTarget? selected = targets.FirstOrDefault(target =>
@@ -41,6 +49,86 @@ internal sealed class AssetRouter(AdapterRegistry adapters)
             estimatedMaximumCost,
             selected is not null && adapters.Descriptors[selected.AdapterId].IsLocalFallback
         );
+    }
+
+    private static List<PlannedTarget> ExcludeExternalTargets(
+        EffectiveConfiguration configuration,
+        IReadOnlyList<PlannedTarget> targets
+    ) =>
+        targets
+            .Select(target =>
+                configuration.Providers[target.ProviderId].Endpoint is null
+                    ? target
+                    : Reject(target, "offline-external-target")
+            )
+            .ToList();
+
+    private PlannedTarget? SelectReviewer(
+        EffectiveConfiguration configuration,
+        AssetLifecycle lifecycle,
+        QualityTier tier,
+        IReadOnlyList<PlannedTarget> generationTargets,
+        bool offline
+    )
+    {
+        if (tier.ReviewPolicy is SemanticReviewPolicy.Disabled)
+        {
+            return null;
+        }
+
+        if (tier.ReviewPolicy is not SemanticReviewPolicy.Required)
+        {
+            return FindReviewer(configuration, lifecycle, null, offline);
+        }
+
+        foreach (PlannedTarget generator in generationTargets.Where(target => target.Eligible))
+        {
+            string generatorFamily = ProviderFamily(generator.AdapterId);
+            PlannedTarget? reviewer = FindReviewer(configuration, lifecycle, generatorFamily, offline);
+            if (reviewer is not null)
+            {
+                return reviewer;
+            }
+        }
+
+        return null;
+    }
+
+    private static List<PlannedTarget> EnforceRequiredReviewerIndependence(
+        EffectiveConfiguration configuration,
+        IReadOnlyList<PlannedTarget> targets,
+        PlannedTarget? reviewer
+    )
+    {
+        if (reviewer is null)
+        {
+            return targets
+                .Select(target => target.Eligible ? Reject(target, "independent-reviewer-unavailable") : target)
+                .ToList();
+        }
+
+        string reviewerFamily = ProviderFamily(configuration.Providers[reviewer.ProviderId].AdapterId);
+        return targets
+            .Select(target =>
+                target.Eligible
+                && string.Equals(ProviderFamily(target.AdapterId), reviewerFamily, StringComparison.Ordinal)
+                    ? Reject(target, "reviewer-family-conflict")
+                    : target
+            )
+            .ToList();
+    }
+
+    private static PlannedTarget Reject(PlannedTarget target, string reason) =>
+        target with
+        {
+            Eligible = false,
+            RejectionReasons = target.RejectionReasons.Append(reason).ToArray(),
+        };
+
+    private static string ProviderFamily(string adapterId)
+    {
+        int separator = adapterId.IndexOf('-', StringComparison.Ordinal);
+        return separator < 0 ? adapterId : adapterId[..separator];
     }
 
     private List<PlannedTarget> BuildTargets(
@@ -201,7 +289,12 @@ internal sealed class AssetRouter(AdapterRegistry adapters)
         return total;
     }
 
-    private PlannedTarget? FindReviewer(EffectiveConfiguration configuration, AssetLifecycle lifecycle)
+    private PlannedTarget? FindReviewer(
+        EffectiveConfiguration configuration,
+        AssetLifecycle lifecycle,
+        string? excludedProviderFamily,
+        bool offline
+    )
     {
         foreach (RouteDefinition route in configuration.ReviewRoutes)
         {
@@ -216,7 +309,15 @@ internal sealed class AssetRouter(AdapterRegistry adapters)
                     lifecycle,
                     null
                 );
-                if (evaluated.Eligible)
+                ProviderInstance provider = configuration.Providers[evaluated.ProviderId];
+                bool independent =
+                    excludedProviderFamily is null
+                    || !string.Equals(
+                        ProviderFamily(provider.AdapterId),
+                        excludedProviderFamily,
+                        StringComparison.Ordinal
+                    );
+                if (evaluated.Eligible && independent && (!offline || provider.Endpoint is null))
                 {
                     return evaluated;
                 }

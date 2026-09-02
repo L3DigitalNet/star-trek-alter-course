@@ -81,6 +81,201 @@ public sealed class RoutingAndSelectionTests
         Assert.Contains("unknown-price", reasons, StringComparer.Ordinal);
     }
 
+    /// <summary>Keeps an unknown-price route usable only when the tracked policy explicitly accepts that risk.</summary>
+    [Fact]
+    public void UnknownPriceAllowKeepsTargetEligibleWithAnExplicitlyUnboundedEstimate()
+    {
+        var generator = new FakeGenerator("generator");
+        AssetRequest request = TestData.Request();
+        ProviderInstance provider = Provider("provider", generator.AdapterId, 0m, AssetCapability.RasterGenerate);
+        ModelProfile model = provider.Models["profile"] with { EstimatedCostPerOutput = null };
+        provider = provider with
+        {
+            Models = new Dictionary<string, ModelProfile>(StringComparer.Ordinal) { [model.Id] = model },
+        };
+        EffectiveConfiguration configuration = Configuration(provider, request) with
+        {
+            Policy = new AssetCtlPolicy(false, true, true, true, false, "allow"),
+        };
+
+        GenerationPlan plan = new AssetRouter(new AdapterRegistry([generator])).Plan(configuration, request);
+
+        Assert.True(Assert.Single(plan.Targets).Eligible);
+        Assert.NotNull(plan.SelectedTarget);
+        Assert.Null(plan.EstimatedMaximumCost);
+    }
+
+    /// <summary>Selects an independent reviewer before any required-review generation target can spend.</summary>
+    [Fact]
+    public void RequiredReviewRejectsGeneratorFamilyConflictsBeforeSelection()
+    {
+        var sameFamilyGenerator = new FakeGenerator("openai-images");
+        var independentGenerator = new FakeGenerator("recraft-images");
+        var reviewer = new FakeReviewer("openai-vision-review");
+        var registry = new AdapterRegistry([sameFamilyGenerator, independentGenerator, reviewer]);
+        AssetRequest request = TestData.Request() with { Lifecycle = AssetLifecycle.Candidate };
+        ProviderInstance sameFamily = Provider(
+            "first",
+            sameFamilyGenerator.AdapterId,
+            0.10m,
+            AssetCapability.RasterGenerate
+        );
+        ProviderInstance independent = Provider(
+            "second",
+            independentGenerator.AdapterId,
+            0.10m,
+            AssetCapability.RasterGenerate
+        );
+        ProviderInstance reviewProvider = Provider("review", reviewer.AdapterId, 0.05m, AssetCapability.ReviewSemantic);
+        var route = new RouteDefinition(
+            "generation",
+            100,
+            request.Lifecycle,
+            request.Output.Format,
+            AssetCapability.RasterGenerate,
+            [new RouteTarget(sameFamily.Id, "profile"), new RouteTarget(independent.Id, "profile")],
+            0
+        );
+        var reviewRoute = new RouteDefinition(
+            "review",
+            100,
+            null,
+            null,
+            AssetCapability.ReviewSemantic,
+            [new RouteTarget(reviewProvider.Id, "profile")],
+            0
+        );
+        var providers = new Dictionary<string, ProviderInstance>(StringComparer.Ordinal)
+        {
+            [sameFamily.Id] = sameFamily,
+            [independent.Id] = independent,
+            [reviewProvider.Id] = reviewProvider,
+        };
+
+        GenerationPlan plan = new AssetRouter(registry).Plan(
+            Configuration(providers, request, route, reviewRoute),
+            request
+        );
+
+        Assert.Equal("second", plan.SelectedTarget!.ProviderId);
+        Assert.Equal("review", plan.Reviewer!.ProviderId);
+        Assert.Contains(
+            "reviewer-family-conflict",
+            plan.Targets.Single(target =>
+                string.Equals(target.ProviderId, "first", StringComparison.Ordinal)
+            ).RejectionReasons,
+            StringComparer.Ordinal
+        );
+    }
+
+    /// <summary>Fails a required-review plan before generation when no independent reviewer family exists.</summary>
+    [Fact]
+    public void RequiredReviewFailsPlanWhenEveryReviewerSharesTheGeneratorFamily()
+    {
+        var generator = new FakeGenerator("openai-images");
+        var reviewer = new FakeReviewer("openai-vision-review");
+        AssetRequest request = TestData.Request() with { Lifecycle = AssetLifecycle.Candidate };
+        ProviderInstance provider = Provider("generator", generator.AdapterId, 0.10m, AssetCapability.RasterGenerate);
+        ProviderInstance reviewProvider = Provider("review", reviewer.AdapterId, 0.05m, AssetCapability.ReviewSemantic);
+        var route = new RouteDefinition(
+            "generation",
+            100,
+            request.Lifecycle,
+            request.Output.Format,
+            AssetCapability.RasterGenerate,
+            [new RouteTarget(provider.Id, "profile")],
+            0
+        );
+        var reviewRoute = new RouteDefinition(
+            "review",
+            100,
+            null,
+            null,
+            AssetCapability.ReviewSemantic,
+            [new RouteTarget(reviewProvider.Id, "profile")],
+            0
+        );
+        var providers = new Dictionary<string, ProviderInstance>(StringComparer.Ordinal)
+        {
+            [provider.Id] = provider,
+            [reviewProvider.Id] = reviewProvider,
+        };
+
+        GenerationPlan plan = new AssetRouter(new AdapterRegistry([generator, reviewer])).Plan(
+            Configuration(providers, request, route, reviewRoute),
+            request
+        );
+
+        Assert.Null(plan.SelectedTarget);
+        Assert.Null(plan.Reviewer);
+        Assert.Contains(
+            "independent-reviewer-unavailable",
+            Assert.Single(plan.Targets).RejectionReasons,
+            StringComparer.Ordinal
+        );
+    }
+
+    /// <summary>Projects an offline plan before cost aggregation so unreachable external spend is excluded.</summary>
+    [Fact]
+    public void OfflinePlanExcludesExternalTargetsAndTheirCost()
+    {
+        var external = new FakeGenerator("external");
+        var local = new FakeGenerator("local");
+        AssetRequest request = TestData.Request();
+        ProviderInstance externalProvider = Provider(
+            "external",
+            external.AdapterId,
+            0.90m,
+            AssetCapability.RasterGenerate
+        ) with
+        {
+            Endpoint = new Uri("https://provider.example/v1"),
+        };
+        ProviderInstance localProvider = Provider("local", local.AdapterId, 0m, AssetCapability.RasterGenerate);
+        var route = new RouteDefinition(
+            "generation",
+            100,
+            request.Lifecycle,
+            request.Output.Format,
+            AssetCapability.RasterGenerate,
+            [new RouteTarget(externalProvider.Id, "profile"), new RouteTarget(localProvider.Id, "profile")],
+            0
+        );
+        var providers = new Dictionary<string, ProviderInstance>(StringComparer.Ordinal)
+        {
+            [externalProvider.Id] = externalProvider,
+            [localProvider.Id] = localProvider,
+        };
+        EffectiveConfiguration configuration = Configuration(
+            providers,
+            request,
+            route,
+            new RouteDefinition("review", 1, null, null, AssetCapability.ReviewSemantic, [], 0)
+        ) with
+        {
+            QualityTiers = new Dictionary<string, QualityTier>(StringComparer.Ordinal)
+            {
+                [request.QualityTier] = new(request.QualityTier, 1, 1, "disabled", true, 0),
+            },
+        };
+
+        GenerationPlan plan = new AssetRouter(new AdapterRegistry([external, local])).Plan(
+            configuration,
+            request,
+            offline: true
+        );
+
+        Assert.Equal("local", plan.SelectedTarget!.ProviderId);
+        Assert.Equal(0m, plan.EstimatedMaximumCost);
+        Assert.Contains(
+            "offline-external-target",
+            plan.Targets.Single(target =>
+                string.Equals(target.ProviderId, "external", StringComparison.Ordinal)
+            ).RejectionReasons,
+            StringComparer.Ordinal
+        );
+    }
+
     /// <summary>Filters failed candidates and resolves score ties by creation order.</summary>
     [Fact]
     public void CandidateSelectionFiltersHardFailuresAndBreaksTiesByCreationOrder()
@@ -694,9 +889,10 @@ public sealed class RoutingAndSelectionTests
         ) => throw new NotSupportedException();
     }
 
-    private sealed class FakeReviewer : AlterCourse.AssetCtl.Providers.ProviderContracts.IAssetReviewer
+    private sealed class FakeReviewer(string adapterId = "reviewer")
+        : AlterCourse.AssetCtl.Providers.ProviderContracts.IAssetReviewer
     {
-        public string AdapterId => "reviewer";
+        public string AdapterId { get; } = adapterId;
 
         public IReadOnlySet<AssetCapability> SupportedCapabilities { get; } =
             new HashSet<AssetCapability> { AssetCapability.ReviewSemantic };

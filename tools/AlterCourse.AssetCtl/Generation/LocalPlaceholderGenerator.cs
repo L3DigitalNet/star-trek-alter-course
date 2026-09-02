@@ -21,8 +21,6 @@ internal sealed class LocalPlaceholderGenerator : IAssetGenerator
 
     public IReadOnlySet<AssetCapability> SupportedCapabilities => Capabilities;
 
-    public IReadOnlySet<string> AllowedEndpointHosts { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
     public void ValidateOptions(IReadOnlyDictionary<string, string> options)
     {
         if (options.Count != 0)

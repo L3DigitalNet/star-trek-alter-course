@@ -5,18 +5,13 @@ using AlterCourse.AssetCtl.Providers;
 
 namespace AlterCourse.AssetCtl.Review;
 
-internal sealed class OpenAiVisionReviewer(HttpClient client) : HttpProviderBase(client, EndpointHosts), IAssetReviewer
+internal sealed class OpenAiVisionReviewer(HttpClient client) : HttpProviderBase(client), IAssetReviewer
 {
     private static readonly JsonSerializerOptions StrictJson = new()
     {
         MaxDepth = 8,
         PropertyNameCaseInsensitive = false,
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
-    };
-
-    private static readonly IReadOnlySet<string> EndpointHosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-    {
-        "api.openai.com",
     };
 
     public static class SemanticReviewSchema
@@ -52,8 +47,6 @@ internal sealed class OpenAiVisionReviewer(HttpClient client) : HttpProviderBase
     public string AdapterId => "openai-vision-review";
 
     public IReadOnlySet<AssetCapability> SupportedCapabilities => Capabilities;
-
-    public IReadOnlySet<string> AllowedEndpointHosts => EndpointHosts;
 
     public void ValidateOptions(IReadOnlyDictionary<string, string> options) =>
         RecraftImageAdapter.ValidateKnown(options, "reasoning_effort");

@@ -61,18 +61,19 @@ public sealed class GenerationEndToEndTests
         Assert.Equal(1, reviewer.Calls);
     }
 
-    /// <summary>Treats image generation and vision review adapters from one configured family as non-independent.</summary>
+    /// <summary>Rejects a same-family generator and required reviewer before either adapter can spend.</summary>
     [Fact]
-    public async Task ReviewerIndependenceUsesProviderFamilyRatherThanAdapterIdentity()
+    public async Task RequiredReviewerIndependenceIsEnforcedBeforeGeneration()
     {
         var generator = new ScriptedGenerator("openai-images", request => Success(request.Request));
         var reviewer = new CapturingReviewer("openai-vision-review");
         using var fixture = new GenerationFixture([generator, reviewer], semanticReview: "required");
 
-        await fixture.GenerateAsync();
+        AssetCtlException exception = await Assert.ThrowsAsync<AssetCtlException>(() => fixture.GenerateAsync());
 
-        AssetManifest current = ManifestStore.Load(fixture.Configuration, fixture.Manifest.ManifestPath);
-        Assert.Equal("same-provider-family", current.SemanticReview!.Independence);
+        Assert.Equal(5, exception.ExitCode);
+        Assert.Equal(0, generator.Calls);
+        Assert.Equal(0, reviewer.Calls);
     }
 
     /// <summary>Retains generated evidence when a normalized malformed review response fails the run.</summary>

@@ -5,7 +5,7 @@ using System.Text.Json;
 
 namespace AlterCourse.AssetCtl.Providers;
 
-internal abstract class HttpProviderBase(HttpClient httpClient, IReadOnlySet<string> allowedEndpointHosts)
+internal abstract class HttpProviderBase(HttpClient httpClient)
 {
     private static readonly JsonSerializerOptions StrictJson = new()
     {
@@ -47,7 +47,7 @@ internal abstract class HttpProviderBase(HttpClient httpClient, IReadOnlySet<str
         CancellationToken cancellationToken
     )
     {
-        ValidateRequestEndpoint(message);
+        ValidateRequestEndpoint(message, context.Provider);
         message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", context.Credential);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(context.TimeoutSeconds));
@@ -110,7 +110,7 @@ internal abstract class HttpProviderBase(HttpClient httpClient, IReadOnlySet<str
         JsonSerializer.Deserialize<T>(json, StrictJson)
         ?? throw new ProviderException(ProviderErrorCategory.MalformedResponse, "Provider JSON response was null.");
 
-    private void ValidateRequestEndpoint(HttpRequestMessage message)
+    private static void ValidateRequestEndpoint(HttpRequestMessage message, ProviderInstance provider)
     {
         Uri endpoint =
             message.RequestUri
@@ -120,7 +120,11 @@ internal abstract class HttpProviderBase(HttpClient httpClient, IReadOnlySet<str
             );
         try
         {
-            ProviderEndpointPolicy.Validate(endpoint, allowedEndpointHosts, "provider request");
+            ProviderEndpointPolicy.Validate(
+                endpoint,
+                provider.AllowedEndpointHosts ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+                "provider request"
+            );
         }
         catch (AssetCtlException exception)
         {

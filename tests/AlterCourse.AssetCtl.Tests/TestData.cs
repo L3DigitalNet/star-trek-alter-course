@@ -60,7 +60,18 @@ internal static class TestData
             ),
             "TEST_API_KEY",
             new HashSet<string>(StringComparer.OrdinalIgnoreCase),
-            new Dictionary<string, ModelProfile>(StringComparer.Ordinal) { ["profile"] = profile }
+            new Dictionary<string, ModelProfile>(StringComparer.Ordinal) { ["profile"] = profile },
+            null,
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                adapter switch
+                {
+                    "recraft-images" => "external.api.recraft.ai",
+                    "openai-images" or "openai-vision-review" => "api.openai.com",
+                    "xai-images" => "api.x.ai",
+                    _ => "provider.example",
+                },
+            }
         );
         return new ProviderExecutionContext(
             provider,

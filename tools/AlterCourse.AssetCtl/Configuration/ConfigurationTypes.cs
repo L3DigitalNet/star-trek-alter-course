@@ -302,6 +302,7 @@ internal static class ConfigurationTypes
                 "adapter",
                 "enabled",
                 "endpoint",
+                "endpoint_hosts",
                 "credentials",
                 "downloads",
                 "allowed_lifecycles",
@@ -313,25 +314,8 @@ internal static class ConfigurationTypes
                 throw new AssetCtlException($"{path}.adapter: unregistered adapter '{adapterId}'.", 2);
             }
 
-            Uri? endpoint = null;
-            string? endpointText = node.OptionalScalar("endpoint", path);
-            if (endpointText is not null)
-            {
-                if (!Uri.TryCreate(endpointText, UriKind.Absolute, out endpoint))
-                {
-                    throw new AssetCtlException($"{path}.endpoint: invalid absolute URI.", 2);
-                }
-
-                if (
-                    policy.RequireHttpsEndpoints
-                    && !string.Equals(endpoint.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal)
-                )
-                {
-                    throw new AssetCtlException($"{path}.endpoint: HTTPS is required.", 2);
-                }
-
-                ProviderEndpointPolicy.Validate(endpoint, adapter.AllowedEndpointHosts, $"{path}.endpoint");
-            }
+            HashSet<string> endpointHosts = ReadEndpointHosts(node.OptionalSequence("endpoint_hosts", path), path);
+            Uri? endpoint = ReadEndpoint(node.OptionalScalar("endpoint", path), endpointHosts, policy, path);
 
             string? credential = ReadCredential(node.OptionalMapping("credentials", path), path);
             HashSet<string> allowedHosts = ReadAllowedHosts(node.OptionalMapping("downloads", path), path);
@@ -346,8 +330,71 @@ internal static class ConfigurationTypes
                 credential,
                 allowedHosts,
                 models,
-                allowedLifecycles
+                allowedLifecycles,
+                endpointHosts
             );
+        }
+
+        private static Uri? ReadEndpoint(
+            string? value,
+            HashSet<string> endpointHosts,
+            AssetCtlPolicy policy,
+            string path
+        )
+        {
+            if (value is null)
+            {
+                if (endpointHosts.Count != 0)
+                {
+                    throw new AssetCtlException(
+                        $"{path}.endpoint_hosts: local providers cannot authorize remote hosts.",
+                        2
+                    );
+                }
+
+                return null;
+            }
+
+            if (!Uri.TryCreate(value, UriKind.Absolute, out Uri? endpoint))
+            {
+                throw new AssetCtlException($"{path}.endpoint: invalid absolute URI.", 2);
+            }
+
+            if (
+                policy.RequireHttpsEndpoints
+                && !string.Equals(endpoint.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal)
+            )
+            {
+                throw new AssetCtlException($"{path}.endpoint: HTTPS is required.", 2);
+            }
+
+            ProviderEndpointPolicy.Validate(endpoint, endpointHosts, $"{path}.endpoint");
+            return endpoint;
+        }
+
+        private static HashSet<string> ReadEndpointHosts(YamlSequenceNode? values, string path)
+        {
+            var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (values is null)
+            {
+                return result;
+            }
+
+            foreach (string host in YamlValues.Strings(values, $"{path}.endpoint_hosts"))
+            {
+                ProviderEndpointPolicy.ValidateHost(host, $"{path}.endpoint_hosts");
+                if (!result.Add(host))
+                {
+                    throw new AssetCtlException($"{path}.endpoint_hosts: duplicate host '{host}'.", 2);
+                }
+            }
+
+            if (result.Count == 0)
+            {
+                throw new AssetCtlException($"{path}.endpoint_hosts: at least one host is required.", 2);
+            }
+
+            return result;
         }
 
         private static HashSet<AssetLifecycle> ReadAllowedLifecycles(YamlMappingNode node, string path)
@@ -948,8 +995,6 @@ internal static class ConfigurationTypes
         public string AdapterId { get; }
 
         public IReadOnlySet<AssetCapability> SupportedCapabilities { get; }
-
-        public IReadOnlySet<string> AllowedEndpointHosts { get; }
 
         public bool IsLocalFallback => false;
 

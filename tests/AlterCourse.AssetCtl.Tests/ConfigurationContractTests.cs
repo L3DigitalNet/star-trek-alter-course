@@ -612,6 +612,87 @@ public sealed class ConfigurationContractTests
         }
     }
 
+    /// <summary>Allows an existing adapter protocol to use a new base host only through a tracked exact allowlist.</summary>
+    [Fact]
+    public void ProviderEndpointHostIsConfigurationOwned()
+    {
+        string root = CopyTrackedConfiguration();
+        try
+        {
+            string providers = Path.Combine(root, "config", "assets", "providers.yaml");
+            File.WriteAllText(
+                providers,
+                File.ReadAllText(providers)
+                    .Replace("https://api.x.ai/v1", "https://images.example.test/v1", StringComparison.Ordinal)
+                    .Replace("      - \"api.x.ai\"", "      - \"images.example.test\"", StringComparison.Ordinal)
+            );
+
+            EffectiveConfiguration configuration = Loader().Load(root);
+
+            Assert.Equal("images.example.test", configuration.Providers["xai-primary"].Endpoint!.IdnHost);
+            Assert.Contains(
+                "images.example.test",
+                configuration.Providers["xai-primary"].AllowedEndpointHosts!,
+                StringComparer.OrdinalIgnoreCase
+            );
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    /// <summary>Rejects a provider endpoint before credentials can be bound when its host is not explicitly declared.</summary>
+    [Fact]
+    public void ProviderEndpointMustMatchItsConfiguredHostAllowlist()
+    {
+        string root = CopyTrackedConfiguration();
+        try
+        {
+            string providers = Path.Combine(root, "config", "assets", "providers.yaml");
+            File.WriteAllText(
+                providers,
+                File.ReadAllText(providers)
+                    .Replace("https://api.x.ai/v1", "https://undeclared.example.test/v1", StringComparison.Ordinal)
+            );
+
+            AssetCtlException exception = Assert.Throws<AssetCtlException>(() => Loader().Load(root));
+
+            Assert.Contains("authorized HTTPS hosts", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    /// <summary>Rejects endpoint allowlist entries that are URLs, wildcard domains, local names, or IP addresses.</summary>
+    [Theory]
+    [InlineData("https://api.x.ai")]
+    [InlineData("*.x.ai")]
+    [InlineData("localhost")]
+    [InlineData("127.0.0.1")]
+    [InlineData("api.x.ai/path")]
+    public void ProviderEndpointHostAllowlistRequiresExactDnsHostnames(string hostileHost)
+    {
+        string root = CopyTrackedConfiguration();
+        try
+        {
+            string providers = Path.Combine(root, "config", "assets", "providers.yaml");
+            File.WriteAllText(
+                providers,
+                File.ReadAllText(providers)
+                    .Replace("      - \"api.x.ai\"", $"      - \"{hostileHost}\"", StringComparison.Ordinal)
+            );
+
+            Assert.Throws<AssetCtlException>(() => Loader().Load(root));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     /// <summary>Models the local fallback as placeholder-only configuration rather than a provider-name rule.</summary>
     [Fact]
     public void SeedLocalProviderIsRestrictedToPlaceholderLifecycle()

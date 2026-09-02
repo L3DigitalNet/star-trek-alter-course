@@ -23,6 +23,8 @@ providers:
       - "placeholder"
       - "candidate"
     endpoint: "https://external.api.recraft.ai/v1"
+    endpoint_hosts:
+      - "external.api.recraft.ai"
     credentials:
       api_key:
         source: "environment"
@@ -59,6 +61,8 @@ providers:
       - "placeholder"
       - "candidate"
     endpoint: "https://api.openai.com/v1"
+    endpoint_hosts:
+      - "api.openai.com"
     credentials:
       api_key:
         source: "environment"
@@ -84,6 +88,8 @@ providers:
       - "placeholder"
       - "candidate"
     endpoint: "https://api.x.ai/v1"
+    endpoint_hosts:
+      - "api.x.ai"
     credentials:
       api_key:
         source: "environment"
@@ -108,6 +114,8 @@ providers:
       - "placeholder"
       - "candidate"
     endpoint: "https://api.openai.com/v1"
+    endpoint_hosts:
+      - "api.openai.com"
     credentials:
       api_key:
         source: "environment"
