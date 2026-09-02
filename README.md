@@ -54,7 +54,7 @@ After setup, launch the gameplay slice from the repository root:
 
 The launcher resolves the pinned .NET SDK, performs a locked restore, builds the Debug Godot assembly with warnings treated as errors, then resolves Godot and launches only if every preceding step succeeds. Pass Godot arguments after the command when needed.
 
-The map-first command screen starts at the `Dawn Anchor` strategic location. Select a connected destination from the map or the status-panel buttons, then choose **ENGAGE TRAVEL**. Travel remains active until its scheduled arrival, while the visible sensor repair progresses on the same simulation timeline.
+The map-first command screen starts at the `Dawn Anchor` strategic location. Select a connected destination from the map or the destination buttons in the contextual command panel, then choose **ENGAGE TRAVEL**. Travel remains active until its scheduled arrival, while the visible sensor repair progresses on the same simulation timeline.
 
 Use the **Pause**, **0.5x**, **1x**, **2x**, and **4x** controls to choose how quickly presentation elapsed time requests deterministic 100 ms Core steps. Pause leaves rendering active but submits no Core advancement. **ADVANCE TO EVENT** follows the same scheduler path and stops at the next player-relevant repair completion or travel arrival, not an arbitrary scheduler event.
 
