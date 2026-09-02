@@ -116,9 +116,11 @@ public sealed class GameSimulationTests
     {
         GameSimulation tenSingles = CreateGame();
         GameSimulation twoBatches = CreateGame();
+        GameSimulation oneBatch = CreateGame();
         var intent = new SetTacticalCourseIntent(new HeadingDegrees(45), new SpeedKilometersPerSecond(3.5));
         tenSingles.SetTacticalCourse(intent);
         twoBatches.SetTacticalCourse(intent);
+        oneBatch.SetTacticalCourse(intent);
 
         for (int index = 0; index < 10; index++)
         {
@@ -127,8 +129,10 @@ public sealed class GameSimulationTests
 
         twoBatches.AdvanceFixedSteps(5);
         twoBatches.AdvanceFixedSteps(5);
+        oneBatch.AdvanceFixedSteps(10);
 
         Assert.Equal(tenSingles.GetPlayerProjection(), twoBatches.GetPlayerProjection());
+        Assert.Equal(tenSingles.GetPlayerProjection(), oneBatch.GetPlayerProjection());
         Assert.NotEqual(3.25, tenSingles.GetPlayerProjection().Ship.Tactical.Position.XKilometers);
     }
 

@@ -148,8 +148,17 @@ func test_pause_repeated_processing_never_advances_core_time() -> void:
 
 func test_connected_destination_submits_travel_and_refreshes_visible_state() -> void:
 	var screen := _create_screen()
-	screen.call("SelectDestination", "vesper-reach")
-	screen.call("RequestSelectedTravel")
+	var destination_button: Button
+	for child in screen.get_node("%DestinationButtons").get_children():
+		if child is Button and child.text == "Vesper Reach":
+			destination_button = child
+			break
+
+	assert_object(destination_button).is_not_null()
+	destination_button.emit_signal("pressed")
+	var travel_button := screen.get_node("%TravelButton") as Button
+	assert_bool(travel_button.disabled).is_false()
+	travel_button.emit_signal("pressed")
 
 	assert_bool(screen.get_meta("travel_active", false)).is_true()
 	assert_str(screen.get_meta("travel_origin", "")).is_equal("dawn-anchor")
