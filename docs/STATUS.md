@@ -2,10 +2,11 @@
 
 ## Current snapshot
 
-- Feature #36 completed Milestone 1 through merged Final PR #37 (`eb3c976`); manual gameplay testing is the next release-facing step.
-- Feature #38 completed Milestone 2 through merged Final PR #39 (`fba9b438`) on `dev`.
+- Features #36 and #38 completed Milestones 1 and 2 through merged Final PRs #37 (`eb3c976`) and #39 (`fba9b438`) on `dev`.
+- Task #40 consolidates their gameplay shell in draft Final PR #41 targeting `dev`; owner review and manual gameplay testing remain in progress.
 - Version 0.1.0 remains the first source-only release. No packaged gameplay artifact is published.
 - The shell retains strategic travel, local tactical movement, sensor repair, deterministic time controls, player-relevant advance-until, and quick save/load.
+- The tracked launch script restores and builds before Godot starts, preventing stale local Debug content after branch changes.
 - The proof world has three vessels: USS Pathfinder at Dawn Anchor, USS Wayfarer repairing at Vesper Reach, and USS Horizon traveling to Meridian Drift.
 - Core owns an immutable ship-definition catalog and plural ordinary `ShipState`; `PlayerShipId` selects one ship for commands and projection.
 - Strategic, tactical, sensor, repair, and scheduled consequence state is ship-owned. Targeted same-kind work cannot cross ship identities.

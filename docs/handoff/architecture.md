@@ -22,7 +22,9 @@
 - Order execution shares the internal travel application with player travel. Cancellation removes only the identified order and its exact hold wake.
 - Strategic-only intervals jump event-to-event. Only at-location ships with nonzero tactical motion take fixed steps; repairs materialize analytically.
 - Player-relevant advance processes hidden NPC work but reports and stops only on `PlayerShipId`; Godot results stay filtered.
-- `CancelOrder` and complete consequence traces are internal M2 surfaces until a real command or diagnostic consumer exists.
+- Public advancement outcomes use player-semantic event names at the Godot boundary; scheduler consequences and proof traces remain internal surfaces.
+- The Godot command shell owns stable player controls and projections, while `GameSimulation` remains the command and state authority.
+- `scripts/launch-game.sh` is the safe direct-launch boundary: it restores and builds the Godot project before starting the editor.
 
 ## Standing backlog
 
