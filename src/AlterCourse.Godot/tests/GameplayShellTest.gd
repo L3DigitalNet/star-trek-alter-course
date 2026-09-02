@@ -4,25 +4,32 @@ extends GdUnitTestSuite
 const TEST_QUICK_SAVE_PATH := "user://gameplay-shell-test-quick-save.json"
 const DEFAULT_QUICK_SAVE_PATH := "user://quick-save.json"
 const LEGACY_DEFAULT_QUICK_SAVE_PATH := "user://quick-save-v1.json"
+const INVALID_CONTENT_PATH := "user://gameplay-shell-invalid-content.json"
 
 
 func before_test() -> void:
 	_remove_quick_save_files()
+	_remove_file(INVALID_CONTENT_PATH)
 
 
 func after_test() -> void:
 	_remove_quick_save_files()
+	_remove_file(INVALID_CONTENT_PATH)
 
 
 func test_main_scene_constructs_gameplay_shell() -> void:
 	var screen := _create_screen()
 
 	assert_object(screen).is_instanceof(Control)
-	assert_object(screen.get_node_or_null("Shell/MapPanel")).is_not_null()
-	assert_object(screen.get_node_or_null("Shell/StatusPanel")).is_not_null()
+	assert_object(screen.get_node_or_null("OuterMargin/Shell/Workspace/MapPanel")).is_not_null()
+	assert_object(screen.get_node_or_null("OuterMargin/Shell/Workspace/StatusPanel")).is_not_null()
+	assert_object(screen.get_node_or_null("OuterMargin/Shell/Workspace/ContextPanel")).is_not_null()
+	assert_object(screen.get_node_or_null("OuterMargin/Shell/FeedbackPanel")).is_not_null()
+	assert_object(screen.get_node_or_null("OuterMargin/Shell/BottomBar")).is_not_null()
+	assert_object(screen.theme).is_instanceof(Theme)
 	assert_int(screen.get_node("%RateControls").get_child_count()).is_equal(5)
-	assert_str(screen.get_node("%AdvanceUntilButton").text).is_equal("ADVANCE UNTIL NEXT PLAYER EVENT")
-	assert_str(screen.get_node("%AdvanceUntilButton").tooltip_text).contains("player ship")
+	assert_str(screen.get_node("%AdvanceUntilButton").text).contains("[U]")
+	assert_str(screen.get_node("%AdvanceUntilButton").tooltip_text).contains("player-visible")
 	assert_str(screen.get_meta("load_error", "")).is_empty()
 
 
@@ -31,6 +38,157 @@ func test_quick_save_and_load_controls_exist() -> void:
 
 	assert_object(screen.get_node_or_null("%QuickSaveButton")).is_instanceof(Button)
 	assert_object(screen.get_node_or_null("%QuickLoadButton")).is_instanceof(Button)
+
+
+func test_semantic_input_actions_and_theme_states_are_configured() -> void:
+	var screen := _create_screen()
+	var actions := [
+		"view_strategic",
+		"view_tactical",
+		"toggle_pause",
+		"cycle_time_rate",
+		"advance_until_event",
+		"quick_save",
+		"quick_load",
+		"engage_selected_travel",
+		"set_tactical_course",
+	]
+
+	for action in actions:
+		assert_bool(InputMap.has_action(action)).is_true()
+
+	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
+		assert_object(screen.theme.get_stylebox(state, "Button")).is_not_null()
+
+
+func test_keyboard_view_pause_rate_and_tactical_course_use_shell_actions() -> void:
+	var screen := _create_screen()
+
+	_send_action(screen, "view_tactical")
+	assert_str(screen.get_meta("active_view", "")).is_equal("tactical")
+	assert_bool((screen.get_node("%TacticalButton") as Button).button_pressed).is_true()
+	assert_bool(screen.get_node("%TacticalCommands").visible).is_true()
+	_send_action(screen, "toggle_pause")
+	assert_float(screen.get_meta("simulation_rate", -1.0)).is_equal(0.0)
+	assert_str(screen.get_node("%RateStatus").text).contains("PAUSED")
+	_send_action(screen, "toggle_pause")
+	assert_float(screen.get_meta("simulation_rate", -1.0)).is_equal(1.0)
+	_send_action(screen, "cycle_time_rate")
+	assert_float(screen.get_meta("simulation_rate", -1.0)).is_equal(2.0)
+	_send_action(screen, "set_tactical_course")
+	assert_float(screen.get_meta("tactical_heading", -1.0)).is_equal_approx(45.0, 0.0001)
+	assert_float(screen.get_meta("tactical_speed", -1.0)).is_equal_approx(2.0, 0.0001)
+
+
+func test_keyboard_travel_advance_save_and_load_match_button_commands() -> void:
+	var screen := _create_screen()
+	screen.call("SelectDestination", "vesper-reach")
+
+	_send_action(screen, "engage_selected_travel")
+	assert_bool(screen.get_meta("travel_active", false)).is_true()
+	_send_action(screen, "advance_until_event")
+	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(8000)
+	assert_str(screen.get_meta("last_advance_event", "")).contains("sensor repair complete")
+	_send_action(screen, "quick_save")
+	assert_str(screen.get_meta("quick_save_status", "")).is_equal("saved")
+	_send_action(screen, "advance_until_event")
+	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(12000)
+	_send_action(screen, "quick_load")
+	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(8000)
+	assert_str(screen.get_meta("selected_destination", "not-reset")).is_empty()
+
+
+func test_disabled_keyboard_commands_do_not_submit_hidden_actions() -> void:
+	var screen := _create_screen()
+	var ready_message: String = screen.get_node("%Message").text
+
+	_send_action(screen, "engage_selected_travel")
+	assert_bool(screen.get_meta("travel_active", false)).is_false()
+	assert_str(screen.get_node("%Message").text).is_equal(ready_message)
+	screen.call("SelectDestination", "vesper-reach")
+	screen.call("RequestSelectedTravel")
+	_send_action(screen, "set_tactical_course")
+	assert_float(screen.get_meta("tactical_heading", -1.0)).is_equal_approx(0.0, 0.0001)
+	assert_str(screen.get_node("%CourseButton").tooltip_text).contains("unavailable")
+
+
+func test_initial_focus_and_explicit_traversal_follow_visible_context() -> void:
+	var screen := _create_screen()
+	await get_tree().process_frame
+
+	var strategic := screen.get_node("%StrategicButton") as Button
+	assert_bool(strategic.has_focus()).is_true()
+	assert_str(str(strategic.focus_next)).is_not_empty()
+	var destination := _find_destination_button(screen, "Vesper Reach")
+	assert_str(str(destination.focus_next)).is_not_empty()
+	screen.call("ShowTacticalView")
+	var course := screen.get_node("%CourseButton") as Button
+	assert_str(str(course.focus_next)).is_not_empty()
+	assert_str(str(course.focus_previous)).is_not_empty()
+
+
+func test_container_layout_remains_stable_at_practical_sizes() -> void:
+	var screen := _create_screen()
+	screen.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	for viewport_size in [Vector2(1024, 640), Vector2(1440, 900)]:
+		screen.size = viewport_size
+		await get_tree().process_frame
+		var status := screen.get_node("OuterMargin/Shell/Workspace/StatusPanel") as Control
+		var map := screen.get_node("OuterMargin/Shell/Workspace/MapPanel") as Control
+		var context := screen.get_node("OuterMargin/Shell/Workspace/ContextPanel") as Control
+		var bottom := screen.get_node("OuterMargin/Shell/BottomBar") as Control
+		assert_bool(status.get_global_rect().intersects(map.get_global_rect())).is_false()
+		assert_bool(map.get_global_rect().intersects(context.get_global_rect())).is_false()
+		assert_float(map.size.x).is_greater(status.size.x)
+		assert_float(map.size.x).is_greater(context.size.x)
+		assert_float(screen.get_node("%Message").size.y).is_greater(0.0)
+		assert_float(bottom.get_global_rect().end.x).is_less_equal(screen.get_global_rect().end.x)
+		assert_float(bottom.get_global_rect().end.y).is_less_equal(screen.get_global_rect().end.y)
+
+
+func test_view_switch_preserves_workspace_geometry_and_persistent_header() -> void:
+	var screen := _create_screen()
+	await get_tree().process_frame
+	var context := screen.get_node("OuterMargin/Shell/Workspace/ContextPanel") as Control
+	var map_panel := screen.get_node("OuterMargin/Shell/Workspace/MapPanel") as Control
+	var context_size := context.size
+	var map_size := map_panel.size
+
+	screen.call("ShowTacticalView")
+	await get_tree().process_frame
+	assert_object(screen.get_node_or_null("%VesselStatus")).is_instanceof(Label)
+	assert_object(screen.get_node_or_null("%SimulationTime")).is_instanceof(Label)
+	assert_object(screen.get_node_or_null("%RateStatus")).is_instanceof(Label)
+	assert_object(screen.get_node_or_null("%ViewStatus")).is_instanceof(Label)
+	assert_vector(context.size).is_equal(context_size)
+	assert_vector(map_panel.size).is_equal(map_size)
+
+
+func test_invalid_content_bootstrap_is_fail_closed_and_player_safe() -> void:
+	_write_text(INVALID_CONTENT_PATH, "not-json")
+	var scene := load("res://Main.tscn") as PackedScene
+	var screen: Node = auto_free(scene.instantiate())
+	screen.set("ShipDefinitionResourcePath", INVALID_CONTENT_PATH)
+	add_child(screen)
+	screen.set_process(false)
+
+	assert_str(screen.get_meta("load_error", "")).contains("Gameplay content is unavailable")
+	assert_str(screen.get_node("%Message").text).not_contains("not-json")
+	assert_str(screen.get_node("%Message").text).not_contains(INVALID_CONTENT_PATH)
+	for control_name in [
+		"%TravelButton", "%CourseButton", "%AdvanceUntilButton", "%QuickSaveButton", "%QuickLoadButton"
+	]:
+		assert_bool((screen.get_node(control_name) as Button).disabled).is_true()
+
+
+func test_normal_shell_never_projects_hidden_vessel_or_scheduler_truth() -> void:
+	var screen := _create_screen()
+	var presented := _collect_control_text(screen)
+
+	assert_str(presented).not_contains("USS Wayfarer")
+	assert_str(presented).not_contains("USS Horizon")
+	assert_str(presented).not_contains("OrderWake")
+	assert_str(presented).not_contains("ScheduledWork")
 
 
 func test_default_quick_save_writes_schema_v3_without_touching_legacy_slot() -> void:
@@ -137,13 +295,14 @@ func test_quick_save_path_cannot_escape_user_boundary() -> void:
 	add_child(screen)
 	screen.set_process(false)
 
-	assert_str(screen.get_meta("load_error", "")).contains("user://")
+	assert_str(screen.get_meta("load_error", "")).contains("Gameplay content is unavailable")
+	assert_str(screen.get_node("%Message").text).not_contains("user://")
 	assert_bool((screen.get_node("%TravelButton") as Button).disabled).is_true()
 	screen.call("SelectDestination", "vesper-reach")
 	assert_str(screen.get_meta("selected_destination", "")).is_empty()
 
 
-func test_quick_save_load_restores_active_operations_and_continues_scheduler() -> void:
+func test_quick_save_load_restores_active_operations_and_continues_advancement() -> void:
 	var screen := _create_screen()
 	screen.call("SelectDestination", "vesper-reach")
 	screen.call("RequestSelectedTravel")
@@ -193,11 +352,11 @@ func test_quick_save_load_restores_active_operations_and_continues_scheduler() -
 
 	screen.call("AdvanceUntilNextPlayerRelevantEvent")
 	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(8000)
-	assert_str(screen.get_meta("last_advance_event", "")).contains("SensorRepairCompletion")
+	assert_str(screen.get_meta("last_advance_event", "")).contains("sensor repair complete")
 	assert_bool(screen.get_meta("travel_active", false)).is_true()
 	screen.call("AdvanceUntilNextPlayerRelevantEvent")
 	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(12000)
-	assert_str(screen.get_meta("last_advance_event", "")).contains("TravelArrival")
+	assert_str(screen.get_meta("last_advance_event", "")).contains("arrival complete")
 	assert_bool(screen.get_meta("travel_active", true)).is_false()
 
 
@@ -293,7 +452,7 @@ func test_time_driven_arrival_refreshes_connected_destination_buttons() -> void:
 
 	screen.call("AdvanceUntilNextPlayerRelevantEvent")
 	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(12000)
-	assert_str(screen.get_meta("last_advance_event", "")).is_equal("NoScheduledEvent")
+	assert_str(screen.get_meta("last_advance_event", "")).is_equal("No pending player event to advance to.")
 	assert_str(screen.get_node("%Message").text).not_contains("TravelArrival")
 	assert_str(screen.get_node("%Message").text).not_contains("14000")
 	assert_str(screen.get_meta("last_advance_event", "")).not_contains("TravelArrival")
@@ -332,13 +491,13 @@ func test_advance_until_stops_at_repair_before_arrival() -> void:
 
 	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(8000)
 	assert_str(screen.get_meta("advance_status", "")).is_equal("advanced")
-	assert_str(screen.get_meta("last_advance_event", "")).contains("SensorRepairCompletion")
+	assert_str(screen.get_meta("last_advance_event", "")).contains("sensor repair complete")
 	assert_bool(screen.get_meta("travel_active", false)).is_true()
 	assert_float(screen.get_meta("sensor_integrity", 0.0)).is_equal_approx(1.0, 0.0001)
 
 	screen.call("AdvanceUntilNextPlayerRelevantEvent")
 	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(12000)
-	assert_str(screen.get_meta("last_advance_event", "")).contains("TravelArrival")
+	assert_str(screen.get_meta("last_advance_event", "")).contains("arrival complete")
 	assert_bool(screen.get_meta("travel_active", true)).is_false()
 	assert_str(screen.get_node("%TravelStatus").text).contains("Vesper Reach")
 
@@ -370,6 +529,24 @@ func test_tactical_transform_inverts_north_and_preserves_fractional_positions() 
 	assert_float(north.y).is_less(origin.y)
 	assert_float(fractional.x - origin.x).is_equal_approx(4.5, 0.001)
 	assert_float(fractional.y - origin.y).is_equal_approx(13.5, 0.001)
+
+
+func _send_action(screen: Node, action: StringName) -> void:
+	var event := InputEventAction.new()
+	event.action = action
+	event.pressed = true
+	screen.call("_UnhandledInput", event)
+
+
+func _collect_control_text(node: Node) -> String:
+	var presented := ""
+	if node is Label or node is Button:
+		presented += str(node.text) + " "
+	if node is Control:
+		presented += str(node.tooltip_text) + " "
+	for child in node.get_children():
+		presented += _collect_control_text(child)
+	return presented
 
 
 func _create_screen() -> Node:

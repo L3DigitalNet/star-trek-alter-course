@@ -17,6 +17,45 @@ project/assembly_name="AlterCourse.Godot"
 
 enabled=PackedStringArray("res://addons/gdUnit4/plugin.cfg")
 
+[input]
+
+view_strategic={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":49,"unicode":49)]
+}
+view_tactical={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":50,"unicode":50)]
+}
+toggle_pause={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":32,"unicode":32)]
+}
+cycle_time_rate={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":82,"unicode":114)]
+}
+advance_until_event={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":85,"unicode":117)]
+}
+quick_save={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"ctrl_pressed":true,"physical_keycode":83,"unicode":115)]
+}
+quick_load={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"ctrl_pressed":true,"physical_keycode":76,"unicode":108)]
+}
+engage_selected_travel={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":69,"unicode":101)]
+}
+set_tactical_course={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":67,"unicode":99)]
+}
+
 [rendering]
 
 renderer/rendering_method="gl_compatibility"
