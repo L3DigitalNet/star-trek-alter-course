@@ -68,16 +68,23 @@ public sealed class SimulationScheduler
 
     /// <summary>Schedules a known consequence and returns the following scheduler state.</summary>
     /// <param name="dueTime">The simulation time at which the work becomes due.</param>
+    /// <param name="targetShipId">The ship instance that owns the scheduled consequence.</param>
     /// <param name="kind">The known consequence kind.</param>
     /// <returns>The following scheduler state and scheduled work item.</returns>
+    /// <exception cref="ArgumentException"><paramref name="targetShipId"/> is uninitialized.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="kind"/> is unknown.</exception>
     /// <exception cref="OverflowException">A following identity or sequence cannot be represented.</exception>
-    public (SimulationScheduler Scheduler, ScheduledWork Work) Schedule(SimulationTime dueTime, ScheduledWorkKind kind)
+    public (SimulationScheduler Scheduler, ScheduledWork Work) Schedule(
+        SimulationTime dueTime,
+        ShipInstanceId targetShipId,
+        ScheduledWorkKind kind
+    )
     {
+        ScheduledWork.ValidateTarget(targetShipId);
         ScheduledWork.ValidateKind(kind);
         long followingWorkId = checked(NextWorkId + 1);
         long followingSequence = checked(NextSequence + 1);
-        ScheduledWork scheduled = new(new ScheduledWorkId(NextWorkId), dueTime, NextSequence, kind);
+        ScheduledWork scheduled = new(new ScheduledWorkId(NextWorkId), dueTime, NextSequence, targetShipId, kind);
 
         ImmutableArray<ScheduledWork> outstanding = OutstandingWork.Add(scheduled).Sort(CompareWork);
         return (new SimulationScheduler(followingWorkId, followingSequence, outstanding), scheduled);
@@ -126,6 +133,11 @@ public sealed class SimulationScheduler
         if (item.Sequence < 0)
         {
             throw InvalidOutstandingWork("Outstanding work contains a negative sequence.");
+        }
+
+        if (item.TargetShipId.Value <= 0)
+        {
+            throw InvalidOutstandingWork("Outstanding work contains an uninitialized target ship identity.");
         }
 
         try

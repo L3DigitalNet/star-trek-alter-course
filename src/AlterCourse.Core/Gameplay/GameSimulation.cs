@@ -48,6 +48,7 @@ public sealed class GameSimulation
         SimulationTime arrival = _state.Time.AdvanceBy(route.Duration);
         (SimulationScheduler scheduler, ScheduledWork arrivalWork) = _state.Scheduler.Schedule(
             arrival,
+            _state.PlayerShip.InstanceId,
             ScheduledWorkKind.TravelArrival
         );
         var travel = new TravelState(atLocation.LocationId, intent.Destination, _state.Time, arrival, arrivalWork.Id);
@@ -248,7 +249,11 @@ public sealed class GameSimulation
     private static SimulationState CompleteSensorRepair(SimulationState state, ScheduledWork work)
     {
         SensorRepairState? repair = state.PlayerShip.SensorRepair;
-        if (repair is null || repair.ScheduledCompletionId != work.Id)
+        if (
+            repair is null
+            || repair.ScheduledCompletionId != work.Id
+            || work.TargetShipId != state.PlayerShip.InstanceId
+        )
         {
             throw new InvalidOperationException("Sensor completion lacks matching active repair.");
         }
@@ -261,7 +266,11 @@ public sealed class GameSimulation
 
     private static SimulationState CompleteTravel(SimulationState state, ScheduledWork work)
     {
-        if (state.StrategicState is not TravelingState traveling || traveling.Travel.ScheduledArrivalId != work.Id)
+        if (
+            state.StrategicState is not TravelingState traveling
+            || traveling.Travel.ScheduledArrivalId != work.Id
+            || work.TargetShipId != state.PlayerShip.InstanceId
+        )
         {
             throw new InvalidOperationException("Arrival lacks matching active travel.");
         }

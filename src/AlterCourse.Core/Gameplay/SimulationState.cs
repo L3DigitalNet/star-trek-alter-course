@@ -44,6 +44,11 @@ internal sealed record SimulationState(
             throw new InvalidOperationException("Scheduled work cannot be overdue in a restorable state.");
         }
 
+        if (Scheduler.OutstandingWork.Any(work => work.TargetShipId != PlayerShip.InstanceId))
+        {
+            throw new InvalidOperationException("Scheduled work targets a ship outside the singular aggregate.");
+        }
+
         if (
             Time.Milliseconds % SimulationFixedStep.Duration.Milliseconds != 0
             || Scheduler.OutstandingWork.Any(work =>
@@ -96,7 +101,13 @@ internal sealed record SimulationState(
 
     private void EnsureCorrelated(ScheduledWorkId id, SimulationTime dueTime, ScheduledWorkKind kind)
     {
-        if (!Scheduler.OutstandingWork.Any(work => work.Id == id && work.DueTime == dueTime && work.Kind == kind))
+        ScheduledWork[] matchingKind = [.. Scheduler.OutstandingWork.Where(work => work.Kind == kind)];
+        if (
+            matchingKind.Length != 1
+            || matchingKind[0].Id != id
+            || matchingKind[0].DueTime != dueTime
+            || matchingKind[0].TargetShipId != PlayerShip.InstanceId
+        )
         {
             throw new InvalidOperationException("Runtime state lacks its correlated scheduled work.");
         }

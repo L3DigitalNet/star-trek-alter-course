@@ -24,7 +24,7 @@ public static class FirstGameSetup
         SimulationTime repairCompletion = initialTime.AdvanceBy(playerShipDefinition.SensorRepairDuration);
         (SimulationScheduler scheduler, ScheduledWork repairWork) = SimulationScheduler
             .Create()
-            .Schedule(repairCompletion, ScheduledWorkKind.SensorRepairCompletion);
+            .Schedule(repairCompletion, playerId, ScheduledWorkKind.SensorRepairCompletion);
         var repair = new SensorRepairState(
             initialSensorIntegrity,
             new SensorIntegrity(1),

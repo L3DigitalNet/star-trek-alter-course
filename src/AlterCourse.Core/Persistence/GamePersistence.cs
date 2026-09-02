@@ -436,10 +436,10 @@ public static class GamePersistence
         var time = new SimulationTime(snapshot.TimeMilliseconds);
         EnsureFixedStep(time.Milliseconds, "Current simulation time");
         var allocator = ShipInstanceIdAllocator.Restore(snapshot.ShipAllocatorNextId);
-        SimulationScheduler scheduler = RestoreScheduler(snapshot.Scheduler);
         StrategicMap map = RestoreMap(snapshot.StrategicMap);
         PlayerStrategicState strategicState = RestoreStrategicState(snapshot.StrategicState, map, time);
         PlayerShipState playerShip = RestorePlayerShip(snapshot.PlayerShip, time);
+        SimulationScheduler scheduler = RestoreScheduler(snapshot.Scheduler, playerShip.InstanceId);
         ShipDefinition definition = catalog.GetRequired(playerShip.DefinitionId);
         if (playerShip.TacticalMotion.Speed.Value > definition.MaximumTacticalSpeed.Value)
         {
@@ -451,13 +451,13 @@ public static class GamePersistence
             throw new InvalidOperationException("Active strategic travel requires cleared local tactical motion.");
         }
 
-        ValidateOutstandingTravel(scheduler, strategicState);
-        ValidateOutstandingRepair(scheduler, playerShip.SensorRepair);
+        ValidateOutstandingTravel(scheduler, strategicState, playerShip.InstanceId);
+        ValidateOutstandingRepair(scheduler, playerShip.SensorRepair, playerShip.InstanceId);
         var state = new SimulationState(time, scheduler, allocator, map, strategicState, definition, playerShip);
         return GameSimulation.RestoreState(state);
     }
 
-    private static SimulationScheduler RestoreScheduler(SchedulerSnapshotV1 snapshot)
+    private static SimulationScheduler RestoreScheduler(SchedulerSnapshotV1 snapshot, ShipInstanceId playerShipId)
     {
         if (snapshot.OutstandingWork is null)
         {
@@ -482,7 +482,15 @@ public static class GamePersistence
             ScheduledWorkSnapshotV1 item =
                 snapshot.OutstandingWork[index]
                 ?? throw new InvalidOperationException("Scheduler work items cannot be null.");
-            work[index] = RestoreScheduledWork(item, index, previousDue, previousSequence, identities, sequences);
+            work[index] = RestoreScheduledWork(
+                item,
+                playerShipId,
+                index,
+                previousDue,
+                previousSequence,
+                identities,
+                sequences
+            );
             previousDue = item.DueTimeMilliseconds;
             previousSequence = item.Sequence;
         }
@@ -492,6 +500,7 @@ public static class GamePersistence
 
     private static ScheduledWork RestoreScheduledWork(
         ScheduledWorkSnapshotV1 item,
+        ShipInstanceId playerShipId,
         int index,
         long previousDue,
         long previousSequence,
@@ -527,6 +536,7 @@ public static class GamePersistence
             new ScheduledWorkId(item.Id),
             new SimulationTime(item.DueTimeMilliseconds),
             item.Sequence,
+            playerShipId,
             item.Kind switch
             {
                 TravelArrivalKind => ScheduledWorkKind.TravelArrival,
@@ -702,7 +712,11 @@ public static class GamePersistence
         );
     }
 
-    private static void ValidateOutstandingTravel(SimulationScheduler scheduler, PlayerStrategicState strategicState)
+    private static void ValidateOutstandingTravel(
+        SimulationScheduler scheduler,
+        PlayerStrategicState strategicState,
+        ShipInstanceId playerShipId
+    )
     {
         ScheduledWork[] arrivals =
         [
@@ -714,6 +728,7 @@ public static class GamePersistence
                 arrivals.Length != 1
                 || arrivals[0].Id != traveling.Travel.ScheduledArrivalId
                 || arrivals[0].DueTime != traveling.Travel.ExpectedArrival
+                || arrivals[0].TargetShipId != playerShipId
             )
             {
                 throw new InvalidOperationException(
@@ -727,7 +742,11 @@ public static class GamePersistence
         }
     }
 
-    private static void ValidateOutstandingRepair(SimulationScheduler scheduler, SensorRepairState? repair)
+    private static void ValidateOutstandingRepair(
+        SimulationScheduler scheduler,
+        SensorRepairState? repair,
+        ShipInstanceId playerShipId
+    )
     {
         ScheduledWork[] repairs =
         [
@@ -739,6 +758,7 @@ public static class GamePersistence
                 repairs.Length != 1
                 || repairs[0].Id != repair.ScheduledCompletionId
                 || repairs[0].DueTime != repair.ExpectedCompletion
+                || repairs[0].TargetShipId != playerShipId
             )
             {
                 throw new InvalidOperationException(

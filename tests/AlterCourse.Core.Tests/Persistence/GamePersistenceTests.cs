@@ -54,6 +54,7 @@ public sealed class GamePersistenceTests
         Assert.Equal(2, work.GetArrayLength());
         Assert.Equal("sensorRepairCompletion", work[0].GetProperty("kind").GetString());
         Assert.Equal("travelArrival", work[1].GetProperty("kind").GetString());
+        Assert.All(work.EnumerateArray(), item => Assert.False(item.TryGetProperty("targetShipId", out _)));
         Assert.Equal("traveling", strategic.GetProperty("kind").GetString());
         Assert.Equal(2, strategic.GetProperty("travel").GetProperty("scheduledArrivalId").GetInt64());
         Assert.Equal(1, repair.GetProperty("scheduledCompletionId").GetInt64());
@@ -83,6 +84,24 @@ public sealed class GamePersistenceTests
             GamePersistence.Serialize(continuous, CreateMetadata()),
             GamePersistence.Serialize(resumed, CreateMetadata())
         );
+    }
+
+    /// <summary>Confirms V1 work targets the sole persisted player identity during restoration.</summary>
+    [Fact]
+    public void RestoredV1WorkTargetsItsSolePlayerShip()
+    {
+        byte[] saved = Mutate(root =>
+        {
+            JsonObject simulation = root["simulation"]!.AsObject();
+            simulation["shipAllocatorNextId"] = 3;
+            simulation["playerShip"]!["instanceId"] = 2;
+        });
+
+        GameSimulation restored = GamePersistence.Deserialize(saved, CreateCatalog(), "non-default-player.json").Simulation;
+
+        Assert.Equal(2, restored.GetPlayerProjection().Ship.InstanceId.Value);
+        ContinueScenario(restored);
+        Assert.Equal(AdvanceUntilOutcome.NoScheduledEvent, restored.AdvanceUntilNextScheduledEvent().Outcome);
     }
 
     /// <summary>Confirms repair interpolation remains relative to a persisted nonzero start time.</summary>
