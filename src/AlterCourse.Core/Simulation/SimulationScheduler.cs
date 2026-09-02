@@ -138,10 +138,7 @@ public sealed class SimulationScheduler
         {
             if (OutstandingWork[index].Id == id)
             {
-                return (
-                    new SimulationScheduler(NextWorkId, NextSequence, OutstandingWork.RemoveAt(index)),
-                    true
-                );
+                return (new SimulationScheduler(NextWorkId, NextSequence, OutstandingWork.RemoveAt(index)), true);
             }
         }
 
