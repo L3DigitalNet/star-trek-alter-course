@@ -2,8 +2,7 @@
 
 ## Current focus
 
-- Prepare draft Final PR #39 for Feature #38 for canonical-gate and CI review.
-- PR #39 targets `dev` from `feature/38-active-world-orders`; do not claim merge, release, `main`, or tag activity.
+- Feature #38 Milestone 2 merged through Final PR #39 (`fba9b438`) on `dev`.
 - Manually test Milestone 1 gameplay on merged `dev` before any release promotion.
 
 ## Active incidents
