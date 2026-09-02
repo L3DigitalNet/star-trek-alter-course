@@ -132,6 +132,40 @@ public sealed class ManifestRoundTripTests : IDisposable
         Assert.Equal(ConfigurationLoader.Hash(actual.Generation.FinalPrompt), actual.Generation.PromptSha256);
     }
 
+    /// <summary>Preserves an allowed unknown price as unknown rather than recording a false zero estimate.</summary>
+    [Fact]
+    public void SerializationRoundTripsUnknownEstimatedCostAsNull()
+    {
+        EffectiveConfiguration configuration = Configuration();
+        AssetManifest expected = ManifestWithProvenance() with
+        {
+            Generation = ManifestWithProvenance().Generation! with { EstimatedCostUsd = null },
+        };
+        WriteManifest(expected);
+
+        string yaml = File.ReadAllText(Path.Combine(root, expected.ManifestPath));
+        AssetManifest actual = ManifestStore.Load(configuration, expected.ManifestPath);
+
+        Assert.Contains("estimated_cost_usd: null", yaml, StringComparison.Ordinal);
+        Assert.Null(actual.Generation!.EstimatedCostUsd);
+    }
+
+    /// <summary>Accepts omitted unknown estimated cost for compatibility without inventing a value.</summary>
+    [Fact]
+    public void LoadingOmittedEstimatedCostPreservesUnknown()
+    {
+        EffectiveConfiguration configuration = Configuration();
+        AssetManifest expected = ManifestWithProvenance();
+        string yaml = ManifestStore
+            .Serialize(expected)
+            .Replace("  estimated_cost_usd: 0.42\n", string.Empty, StringComparison.Ordinal);
+        File.WriteAllText(Path.Combine(root, expected.ManifestPath), yaml);
+
+        AssetManifest actual = ManifestStore.Load(configuration, expected.ManifestPath);
+
+        Assert.Null(actual.Generation!.EstimatedCostUsd);
+    }
+
     /// <summary>Preserves authored multiline request and rights fields without YAML folding or injection.</summary>
     [Fact]
     public void SerializationRoundTripsAllAuthoredMultilineScalars()

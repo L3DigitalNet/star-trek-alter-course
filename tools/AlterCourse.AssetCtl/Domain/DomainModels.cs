@@ -129,7 +129,7 @@ internal static class DomainModels
         string RequestSha256,
         string EffectiveConfigSha256,
         string? ProviderRequestId,
-        decimal EstimatedCostUsd,
+        decimal? EstimatedCostUsd,
         decimal? ActualCostUsd,
         string AdapterVersion = AssetContractVersions.Adapter,
         string ProvenanceSchemaVersion = AssetContractVersions.Provenance

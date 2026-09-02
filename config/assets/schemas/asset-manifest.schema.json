@@ -87,7 +87,8 @@
 			"required": ["adapter_version", "provenance_schema_version"],
 			"properties": {
 				"adapter_version": { "const": "1" },
-				"provenance_schema_version": { "const": "1" }
+				"provenance_schema_version": { "const": "1" },
+				"estimated_cost_usd": { "type": ["number", "null"], "minimum": 0 }
 			}
 		},
 		"output": {

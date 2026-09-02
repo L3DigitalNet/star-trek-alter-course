@@ -429,7 +429,8 @@ internal static class ManifestStore
         Line(builder, 2, "request_sha256", generation.RequestSha256);
         Line(builder, 2, "effective_config_sha256", generation.EffectiveConfigSha256);
         NullableLine(builder, 2, "provider_request_id", generation.ProviderRequestId);
-        builder.AppendLine(CultureInfo.InvariantCulture, $"  estimated_cost_usd: {generation.EstimatedCostUsd}");
+        string estimatedCost = generation.EstimatedCostUsd?.ToString(CultureInfo.InvariantCulture) ?? "null";
+        builder.AppendLine(CultureInfo.InvariantCulture, $"  estimated_cost_usd: {estimatedCost}");
         string actualCost = generation.ActualCostUsd?.ToString(CultureInfo.InvariantCulture) ?? "null";
         builder.AppendLine(CultureInfo.InvariantCulture, $"  actual_cost_usd: {actualCost}");
     }
@@ -679,7 +680,10 @@ internal static class ManifestStore
             node.Scalar("request_sha256", "generation"),
             node.Scalar("effective_config_sha256", "generation"),
             node.OptionalScalar("provider_request_id", "generation"),
-            ParseDecimal(node.Scalar("estimated_cost_usd", "generation"), "manifest.generation.estimated_cost_usd"),
+            ParseNullableDecimal(
+                node.OptionalScalar("estimated_cost_usd", "generation"),
+                "manifest.generation.estimated_cost_usd"
+            ),
             ParseNullableDecimal(
                 node.OptionalScalar("actual_cost_usd", "generation"),
                 "manifest.generation.actual_cost_usd"
