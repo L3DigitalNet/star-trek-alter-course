@@ -3,7 +3,7 @@ namespace AlterCourse.Core.Strategic;
 /// <summary>Defines one neutral strategic location.</summary>
 public sealed record StrategicLocation
 {
-    internal const int MaximumDisplayNameLength = 256;
+    internal const int MaximumDisplayNameLength = 64;
 
     /// <summary>Initializes a strategic location.</summary>
     public StrategicLocation(LocationId id, string displayName, StrategicMapPosition position)

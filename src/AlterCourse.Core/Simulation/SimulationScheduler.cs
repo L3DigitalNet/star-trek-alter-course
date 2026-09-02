@@ -49,12 +49,12 @@ public sealed class SimulationScheduler
     {
         ArgumentNullException.ThrowIfNull(outstandingWork);
 
-        if (!HasContinuationHeadroom(nextWorkId, nextSequence))
+        if (!AreCountersWithinPersistedRange(nextWorkId, nextSequence))
         {
             throw new ArgumentOutOfRangeException(
                 nameof(nextWorkId),
                 nextWorkId,
-                "Scheduler counters must retain one successful transition of continuation headroom."
+                "Scheduler counters are outside the persisted range."
             );
         }
 
@@ -109,9 +109,9 @@ public sealed class SimulationScheduler
 
         long followingWorkId = checked(NextWorkId + 1);
         long followingSequence = checked(NextSequence + 1);
-        if (!HasContinuationHeadroom(followingWorkId, followingSequence))
+        if (!AreCountersWithinPersistedRange(followingWorkId, followingSequence))
         {
-            throw new OverflowException("Scheduling would exhaust persisted counter continuation headroom.");
+            throw new OverflowException("Scheduling would produce counters outside the persisted range.");
         }
 
         ScheduledWork scheduled = new(new ScheduledWorkId(NextWorkId), dueTime, NextSequence, targetShipId, kind);
@@ -146,7 +146,7 @@ public sealed class SimulationScheduler
         return dueComparison != 0 ? dueComparison : left.Sequence.CompareTo(right.Sequence);
     }
 
-    internal static bool HasContinuationHeadroom(long nextWorkId, long nextSequence) =>
+    internal static bool AreCountersWithinPersistedRange(long nextWorkId, long nextSequence) =>
         nextWorkId > 0 && nextWorkId < long.MaxValue - 1 && nextSequence >= 0 && nextSequence < long.MaxValue - 1;
 
     private static void ValidateRestoredItem(

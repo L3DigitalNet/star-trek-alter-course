@@ -204,7 +204,7 @@ public sealed class GamePersistenceTests
         );
     }
 
-    /// <summary>Confirms restored counters and time retain valid ranges and continuation headroom.</summary>
+    /// <summary>Confirms restored counters retain persisted ranges and time retains fixed-step headroom.</summary>
     [Theory]
     [InlineData("time")]
     [InlineData("work")]
@@ -248,6 +248,29 @@ public sealed class GamePersistenceTests
                 "allocator" => "allocator",
                 _ => "counter",
             }
+        );
+    }
+
+    /// <summary>Confirms the maximum admitted scheduler counters remain writer-loader compatible.</summary>
+    [Fact]
+    public void RoundTripsMaximumPersistedSchedulerCounters()
+    {
+        byte[] candidate = MutateV2(root =>
+        {
+            JsonNode scheduler = root["simulation"]!["scheduler"]!;
+            scheduler["nextWorkId"] = long.MaxValue - 2;
+            scheduler["nextSequence"] = long.MaxValue - 2;
+        });
+
+        LoadedGameSave loaded = GamePersistence.Deserialize(candidate, CreateCatalog(), "maximum-counters.json");
+        byte[] normalized = GamePersistence.Serialize(loaded.Simulation, loaded.Metadata);
+
+        Assert.Equal(
+            normalized,
+            GamePersistence.Serialize(
+                GamePersistence.Deserialize(normalized, CreateCatalog(), "maximum-counters-reload.json").Simulation,
+                loaded.Metadata
+            )
         );
     }
 

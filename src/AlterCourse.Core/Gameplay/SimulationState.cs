@@ -169,14 +169,22 @@ internal sealed record SimulationState
 
         if (
             ShipIdAllocator.NextId == long.MaxValue
-            || !SimulationScheduler.HasContinuationHeadroom(Scheduler.NextWorkId, Scheduler.NextSequence)
-            || Time.Milliseconds > long.MaxValue - SimulationFixedStep.Duration.Milliseconds
+            || !SimulationScheduler.AreCountersWithinPersistedRange(Scheduler.NextWorkId, Scheduler.NextSequence)
+        )
+        {
+            throw new InvalidOperationException(
+                "Simulation state contains an identity counter outside its persisted range."
+            );
+        }
+
+        if (
+            Time.Milliseconds > long.MaxValue - SimulationFixedStep.Duration.Milliseconds
             || Scheduler.OutstandingWork.Any(work =>
                 work.DueTime.Milliseconds > long.MaxValue - SimulationFixedStep.Duration.Milliseconds
             )
         )
         {
-            throw new InvalidOperationException("Simulation state lacks continuation headroom.");
+            throw new InvalidOperationException("Simulation state lacks fixed-step time continuation headroom.");
         }
 
         if (

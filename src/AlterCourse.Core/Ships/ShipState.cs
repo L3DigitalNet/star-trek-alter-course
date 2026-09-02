@@ -6,7 +6,7 @@ namespace AlterCourse.Core.Ships;
 
 internal sealed record ShipState
 {
-    internal const int MaximumVesselDisplayNameLength = 256;
+    internal const int MaximumVesselDisplayNameLength = 64;
 
     internal ShipState(
         ShipInstanceId instanceId,

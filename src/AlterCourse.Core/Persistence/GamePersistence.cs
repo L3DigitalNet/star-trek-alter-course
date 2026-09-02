@@ -875,9 +875,9 @@ public static class GamePersistence
         }
 
         EnsureCount(scheduler.OutstandingWork.Length, SimulationScheduler.MaximumOutstandingWork, "scheduler work");
-        if (!SimulationScheduler.HasContinuationHeadroom(scheduler.NextWorkId, scheduler.NextSequence))
+        if (!SimulationScheduler.AreCountersWithinPersistedRange(scheduler.NextWorkId, scheduler.NextSequence))
         {
-            throw new InvalidOperationException("Scheduler counters are invalid or lack continuation headroom.");
+            throw new InvalidOperationException("Scheduler counters are outside the persisted range.");
         }
 
         var identities = new HashSet<long>();

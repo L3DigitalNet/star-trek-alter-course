@@ -295,9 +295,9 @@ public sealed class SimulationSchedulerTests
         );
     }
 
-    /// <summary>Confirms restoration and scheduling reserve counter headroom before mutation.</summary>
+    /// <summary>Confirms persisted counter bounds reject scheduling atomically at exhaustion.</summary>
     [Fact]
-    public void RejectsCountersThatCannotProduceAContinuableScheduler()
+    public void RejectsCountersOutsidePersistedRangeAndPreservesAtomicExhaustion()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => SimulationScheduler.Restore(long.MaxValue - 1, 0, []));
         Assert.Throws<ArgumentOutOfRangeException>(() => SimulationScheduler.Restore(1, long.MaxValue - 1, []));
@@ -310,6 +310,12 @@ public sealed class SimulationSchedulerTests
         Assert.Throws<OverflowException>(() =>
             exhaustedSequence.Schedule(new SimulationTime(0), Target(), ScheduledWorkKind.TravelArrival)
         );
+        Assert.Equal(long.MaxValue - 2, exhaustedId.NextWorkId);
+        Assert.Equal(0, exhaustedId.NextSequence);
+        Assert.Empty(exhaustedId.OutstandingWork);
+        Assert.Equal(1, exhaustedSequence.NextWorkId);
+        Assert.Equal(long.MaxValue - 2, exhaustedSequence.NextSequence);
+        Assert.Empty(exhaustedSequence.OutstandingWork);
     }
 
     private static IEnumerable<T> OverflowAfter<T>(T value, int yieldedCount)

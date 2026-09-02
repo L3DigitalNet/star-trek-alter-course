@@ -20,13 +20,26 @@ public sealed class StrategicDomainTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new StrategicMapPosition(double.NaN, 0));
         Assert.Equal(128, new LocationId(new string('i', 128)).Value.Length);
         Assert.Equal(
-            256,
-            new StrategicLocation(new LocationId("maximum-name"), new string('n', 256), default).DisplayName.Length
+            64,
+            new StrategicLocation(new LocationId("maximum-name"), new string('n', 64), default).DisplayName.Length
         );
         Assert.Throws<ArgumentException>(() => new LocationId(new string('i', 129)));
         Assert.Throws<ArgumentException>(() =>
-            new StrategicLocation(new LocationId("oversized-name"), new string('n', 257), default)
+            new StrategicLocation(new LocationId("oversized-name"), new string('n', 65), default)
         );
+    }
+
+    /// <summary>Confirms durable strategic identities use the compact ASCII wire alphabet.</summary>
+    [Theory]
+    [InlineData("non location")]
+    [InlineData("non/location")]
+    [InlineData("non:location")]
+    [InlineData("nonélocation")]
+    [InlineData("non\u0001location")]
+    public void LocationIdentityRejectsCharactersOutsideDurableAlphabet(string identity)
+    {
+        Assert.Throws<ArgumentException>(() => new LocationId(identity));
+        Assert.Equal("AZaz09-_.", new LocationId("AZaz09-_.").Value);
     }
 
     /// <summary>Confirms map construction rejects ambiguous locations and invalid connections.</summary>

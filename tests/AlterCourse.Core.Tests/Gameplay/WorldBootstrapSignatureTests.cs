@@ -69,6 +69,8 @@ public sealed class WorldBootstrapSignatureTests
     [Fact]
     public void MaximumBootstrapWorldSerializesAndDeserializes()
     {
+        string definitionId = CreateMaximumIdentity("definition");
+        string expandingDisplayName = new('\u0080', 64);
         StrategicMap map = CreateMaximumMap();
         ShipStart[] starts =
         [
@@ -76,8 +78,8 @@ public sealed class WorldBootstrapSignatureTests
                 .Range(1, 256)
                 .Select(id => new ShipStart(
                     new ShipInstanceId(id),
-                    new ShipDefinitionId("pathfinder"),
-                    new string('V', 256),
+                    new ShipDefinitionId(definitionId),
+                    expandingDisplayName,
                     default,
                     default,
                     new SensorIntegrity(1),
@@ -89,11 +91,26 @@ public sealed class WorldBootstrapSignatureTests
             map,
             starts[0].InstanceId,
             starts
-        ).CreateSimulation(CreateCatalog());
+        ).CreateSimulation(CreateCatalog(definitionId));
+        var maximumMetadata = new GameSaveMetadata(
+            new string('\u0080', 128),
+            new string('\u0080', 128),
+            Metadata.CreatedAtUtc,
+            Metadata.SavedAtUtc
+        );
 
-        byte[] saved = GamePersistence.Serialize(game, Metadata);
-        LoadedGameSave restored = GamePersistence.Deserialize(saved, CreateCatalog(), "maximum-bootstrap.json");
+        byte[] saved = GamePersistence.Serialize(game, maximumMetadata);
+        LoadedGameSave restored = GamePersistence.Deserialize(
+            saved,
+            CreateCatalog(definitionId),
+            "maximum-bootstrap.json"
+        );
+        JsonNode simulation = JsonNode.Parse(saved)!["simulation"]!;
 
+        Assert.InRange(saved.Length, 1, 1024 * 1024);
+        Assert.Equal(256, simulation["ships"]!.AsArray().Count);
+        Assert.Equal(256, simulation["strategicMap"]!["locations"]!.AsArray().Count);
+        Assert.Equal(1024, simulation["strategicMap"]!["routes"]!.AsArray().Count);
         Assert.Equal(saved, GamePersistence.Serialize(restored.Simulation, restored.Metadata));
     }
 
@@ -241,7 +258,7 @@ public sealed class WorldBootstrapSignatureTests
             CreateBootstrap([valid with { Strategic = null! }]).CreateSimulation(CreateCatalog())
         );
         Assert.Throws<ArgumentException>(() =>
-            CreateBootstrap([valid with { VesselDisplayName = new string('V', 257) }])
+            CreateBootstrap([valid with { VesselDisplayName = new string('V', 65) }])
         );
         Assert.Throws<ArgumentException>(() => CreateBootstrap(OverflowAfter(valid, 257)));
         Assert.Throws<ArgumentException>(() =>
@@ -461,8 +478,8 @@ public sealed class WorldBootstrapSignatureTests
             .. Enumerable
                 .Range(0, 256)
                 .Select(index => new StrategicLocation(
-                    new LocationId($"location-{index}"),
-                    new string('L', 256),
+                    new LocationId(CreateMaximumIdentity($"location-{index:D3}")),
+                    new string('\u0080', 64),
                     new StrategicMapPosition(index, -index)
                 )),
         ];
@@ -484,6 +501,8 @@ public sealed class WorldBootstrapSignatureTests
         return new StrategicMap(locations, routes);
     }
 
+    private static string CreateMaximumIdentity(string prefix) => prefix.PadRight(128, 'x');
+
     private static IEnumerable<T> OverflowAfter<T>(T value, int yieldedCount)
     {
         for (int index = 0; index < yieldedCount; index++)
@@ -494,12 +513,12 @@ public sealed class WorldBootstrapSignatureTests
         throw new InvalidOperationException("The bounded consumer enumerated past its rejection threshold.");
     }
 
-    private static ShipDefinitionCatalog CreateCatalog()
+    private static ShipDefinitionCatalog CreateCatalog(string definitionId = "pathfinder")
     {
-        const string definition = """
+        string definition = $$"""
             {
               "schemaVersion": 2,
-              "id": "pathfinder",
+              "id": "{{definitionId}}",
               "designDisplayName": "Pathfinder class",
               "maximumTacticalSpeedKilometersPerSecond": 10,
               "sensorRepairDurationMilliseconds": 8000

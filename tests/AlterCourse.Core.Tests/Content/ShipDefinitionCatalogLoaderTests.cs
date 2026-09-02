@@ -112,6 +112,20 @@ public sealed class ShipDefinitionCatalogLoaderTests
         );
     }
 
+    /// <summary>Confirms the canonical schema rejects identities outside the durable ASCII alphabet.</summary>
+    [Theory]
+    [InlineData("invalid id")]
+    [InlineData("invalid/id")]
+    [InlineData("invalid:id")]
+    [InlineData("invalidéid")]
+    [InlineData("invalid\\u0001id")]
+    public void RejectsShipDefinitionIdentityOutsideDurableAlphabet(string identity)
+    {
+        Assert.Throws<ShipContentValidationException>(() =>
+            CreateLoader().LoadText(DefinitionWithId(identity), "invalid-id.json")
+        );
+    }
+
     /// <summary>Confirms malformed and truncated JSON fail closed with source-aware diagnostics.</summary>
     [Theory]
     [InlineData("{\"schemaVersion\":2")]

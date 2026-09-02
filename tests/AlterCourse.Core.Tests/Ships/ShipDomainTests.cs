@@ -50,4 +50,17 @@ public sealed class ShipDomainTests
             )
         );
     }
+
+    /// <summary>Confirms durable ship-definition identities use the compact ASCII wire alphabet.</summary>
+    [Theory]
+    [InlineData("non ascii")]
+    [InlineData("non/ascii")]
+    [InlineData("non:ascii")]
+    [InlineData("nonéascii")]
+    [InlineData("non\u0001ascii")]
+    public void ShipDefinitionIdentityRejectsCharactersOutsideDurableAlphabet(string identity)
+    {
+        Assert.Throws<ArgumentException>(() => new ShipDefinitionId(identity));
+        Assert.Equal("AZaz09-_.", new ShipDefinitionId("AZaz09-_.").Value);
+    }
 }
