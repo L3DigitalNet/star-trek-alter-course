@@ -56,12 +56,14 @@ public sealed class ShipDefinitionCatalogLoaderTests
     }
 
     /// <summary>Confirms an integral JSON number outside the runtime range fails with a typed diagnostic.</summary>
-    [Fact]
-    public void RejectsUnmappableIntegralNumberWithSourceAwareDiagnostic()
+    [Theory]
+    [InlineData("1e100")]
+    [InlineData("10000000000000000000")]
+    public void RejectsUnmappableIntegralNumberWithSourceAwareDiagnostic(string invalidDuration)
     {
         string json = ValidDefinition.Replace(
             "\"sensorRepairDurationMilliseconds\": 8000",
-            "\"sensorRepairDurationMilliseconds\": 1e100",
+            $"\"sensorRepairDurationMilliseconds\": {invalidDuration}",
             StringComparison.Ordinal
         );
 

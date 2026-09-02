@@ -29,6 +29,19 @@ func test_quick_save_and_load_controls_exist() -> void:
 	assert_object(screen.get_node_or_null("%QuickLoadButton")).is_instanceof(Button)
 
 
+func test_quick_save_path_cannot_escape_user_boundary() -> void:
+	var scene := load("res://Main.tscn") as PackedScene
+	var screen: Node = auto_free(scene.instantiate())
+	screen.set("QuickSaveUserPath", "user://../outside.json")
+	add_child(screen)
+	screen.set_process(false)
+
+	assert_str(screen.get_meta("load_error", "")).contains("user://")
+	assert_bool((screen.get_node("%TravelButton") as Button).disabled).is_true()
+	screen.call("SelectDestination", "vesper-reach")
+	assert_str(screen.get_meta("selected_destination", "")).is_empty()
+
+
 func test_quick_save_load_restores_active_operations_and_continues_scheduler() -> void:
 	var screen := _create_screen()
 	screen.call("SelectDestination", "vesper-reach")

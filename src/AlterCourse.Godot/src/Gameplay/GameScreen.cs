@@ -59,12 +59,7 @@ public partial class GameScreen : Control
         BindScene();
         try
         {
-            if (!QuickSaveUserPath.StartsWith("user://", StringComparison.Ordinal))
-            {
-                throw new InvalidOperationException("Quick-save storage must use Godot's user:// boundary.");
-            }
-
-            string quickSavePath = ProjectSettings.GlobalizePath(QuickSaveUserPath);
+            string quickSavePath = ResolveQuickSavePath(QuickSaveUserPath);
             (ShipDefinitionCatalog catalog, GameSimulation simulation) = CreateSimulationFromCanonicalContent();
             _quickSavePath = quickSavePath;
             _shipCatalog = catalog;
@@ -183,6 +178,11 @@ public partial class GameScreen : Control
     /// <summary>Selects a strategic destination by stable Core identifier.</summary>
     public void SelectDestination(string destinationId)
     {
+        if (_simulation is null || _projection is null)
+        {
+            return;
+        }
+
         var destination = new LocationId(destinationId);
         OnDestinationSelected(destination);
     }
@@ -316,6 +316,29 @@ public partial class GameScreen : Control
         }
 
         return text;
+    }
+
+    private static string ResolveQuickSavePath(string userPath)
+    {
+        if (!userPath.StartsWith("user://", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("Quick-save storage must use Godot's user:// boundary.");
+        }
+
+        string userRoot = Path.GetFullPath(ProjectSettings.GlobalizePath("user://"));
+        string resolvedPath = Path.GetFullPath(ProjectSettings.GlobalizePath(userPath));
+        string relativePath = Path.GetRelativePath(userRoot, resolvedPath);
+        if (
+            Path.IsPathRooted(relativePath)
+            || relativePath.Equals("..", StringComparison.Ordinal)
+            || relativePath.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+            || relativePath.StartsWith($"..{Path.AltDirectorySeparatorChar}", StringComparison.Ordinal)
+        )
+        {
+            throw new InvalidOperationException("Quick-save storage must remain inside Godot's user:// boundary.");
+        }
+
+        return resolvedPath;
     }
 
     private void ConfigureRateButton(string path, double rate)
