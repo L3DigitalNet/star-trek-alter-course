@@ -31,6 +31,13 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
             {
                 event_type = "invocation",
                 command = "generate",
+                arguments = new[]
+                {
+                    "generate",
+                    $"--force={force.ToString().ToLowerInvariant()}",
+                    $"--dry-run={dryRun.ToString().ToLowerInvariant()}",
+                    $"--offline={offline.ToString().ToLowerInvariant()}",
+                },
                 force,
                 dry_run = dryRun,
                 offline,
@@ -165,7 +172,10 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
             );
         }
 
-        if (plan.EstimatedMaximumCost is null)
+        if (
+            plan.EstimatedMaximumCost is null
+            && string.Equals(configuration.Policy.UnknownPricePolicy, "reject", StringComparison.Ordinal)
+        )
         {
             throw new AssetCtlException("Generation cost cannot be conservatively bounded.", 6);
         }
@@ -252,7 +262,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
                 JsonSerializer.Serialize(manifest.Request, JsonOptions.Stable)
             );
             QualityTier tier = configuration.QualityTiers[manifest.Request.QualityTier];
-            bool reviewCurrent = CurrentReviewSatisfies(configuration, manifest, tier);
+            bool reviewCurrent = CurrentReviewSatisfies(configuration, manifest, tier, validation.NormalizedBytes);
             return
                 validation.Passed
                 && reviewCurrent
@@ -276,7 +286,8 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
     private static bool CurrentReviewSatisfies(
         EffectiveConfiguration configuration,
         AssetManifest manifest,
-        QualityTier tier
+        QualityTier tier,
+        byte[] normalizedBytes
     )
     {
         if (tier.ReviewPolicy is SemanticReviewPolicy.Disabled)
@@ -307,9 +318,14 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
             return false;
         }
 
-        // The tracked manifest retains the all-field digest but only a durable review summary. Request,
-        // configuration, output, and score are checked independently; Git plus owner approval trusts the digest.
-        return review.EvidenceSha256.Length == 64;
+        return ReviewEvidence.Verify(
+            manifest.Request,
+            normalizedBytes,
+            configuration.EffectiveHash,
+            review.ReviewerProvider,
+            review.ReviewerModelProfile,
+            review
+        );
     }
 
     private async Task<TargetOutcome?> GenerateFromRoutesAsync(
@@ -422,10 +438,10 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
     {
         ProviderInstance provider = configuration.Providers[target.ProviderId];
         ModelProfile model = provider.Models[target.ModelProfileId];
-        ProviderExecutionContext context = CreateContext(configuration, provider, model, runId);
         RouteDefinition route = configuration.Routes.Single(route =>
             string.Equals(route.Id, target.RouteId, StringComparison.Ordinal)
         );
+        ProviderExecutionContext context = CreateContext(configuration, provider, model, runId, route);
         GenerationBatchResult batch = await InvokeWithRetry(
                 adapters.Generator(provider.AdapterId),
                 context,
@@ -467,7 +483,8 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         EffectiveConfiguration configuration,
         ProviderInstance provider,
         ModelProfile model,
-        string runId
+        string runId,
+        RouteDefinition route
     )
     {
         string credential = provider.CredentialEnvironmentVariable is null
@@ -480,7 +497,8 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
             configuration.Limits.DefaultHttpTimeoutSeconds,
             configuration.Limits.MaximumDownloadBytes,
             configuration.Limits.MaximumDownloadBytes,
-            runId
+            runId,
+            route.RetryPolicy?.MaximumDelayMilliseconds ?? 0
         );
     }
 
@@ -800,6 +818,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
             semantic_request = generated.Request,
             request_sha256 = requestHash,
             prompt_sha256 = promptHash,
+            repository_state_sha256 = RepositoryStateHash(configuration, generated.ManifestPath, requestHash),
             effective_configuration_hash = configuration.EffectiveHash,
             contributing_file_hashes = configuration.FileHashes,
             estimated_cost_basis = plan.Targets.Select(target => new
@@ -839,7 +858,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
             item.Candidate.MediaType,
             item.Candidate.ProviderRequestId,
             item.Candidate.ActualCostUsd,
-            mechanical = item.Mechanical,
+            mechanical = MechanicalReceipt(item.Mechanical),
             semantic = item.Review,
         });
 
@@ -894,6 +913,44 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
             manifest_path = publication?.Published == true ? generated.ManifestPath : null,
         };
 
+    private static object MechanicalReceipt(MechanicalValidationResult result) =>
+        new
+        {
+            result.Passed,
+            result.MediaType,
+            result.Width,
+            result.Height,
+            result.HasAlpha,
+            result.Findings,
+            normalized_sha256 = Convert.ToHexStringLower(SHA256.HashData(result.NormalizedBytes)),
+            normalized_byte_length = result.NormalizedBytes.LongLength,
+            previews = result
+                .TargetPreviews.OrderBy(pair => pair.Key)
+                .Select(pair => new
+                {
+                    size = pair.Key,
+                    sha256 = Convert.ToHexStringLower(SHA256.HashData(pair.Value)),
+                    byte_length = pair.Value.LongLength,
+                }),
+        };
+
+    private static string RepositoryStateHash(
+        EffectiveConfiguration configuration,
+        string manifestPath,
+        string requestHash
+    )
+    {
+        string evidence = string.Join(
+            '\n',
+            configuration
+                .FileHashes.OrderBy(pair => pair.Key, StringComparer.Ordinal)
+                .Select(pair => $"{pair.Key}:{pair.Value}")
+                .Append($"manifest:{manifestPath}")
+                .Append($"request:{requestHash}")
+        );
+        return ConfigurationLoader.Hash(evidence);
+    }
+
     private static bool ShouldRetain(
         EffectiveConfiguration configuration,
         TargetOutcome outcome,
@@ -922,6 +979,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
             asset_id = manifest.Request.Id,
             semantic_request = manifest.Request,
             request_sha256 = requestHash,
+            repository_state_sha256 = RepositoryStateHash(configuration, manifest.ManifestPath, requestHash),
             effective_configuration_hash = configuration.EffectiveHash,
             contributing_file_hashes = configuration.FileHashes,
             estimated_cost_basis = plan?.Targets.Select(target => new
@@ -1178,10 +1236,16 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
             target.ProviderId
         ];
         global::AlterCourse.AssetCtl.Domain.DomainModels.ModelProfile model = provider.Models[target.ModelProfileId];
-        ProviderExecutionContext context = CreateContext(configuration, provider, model, Guid.NewGuid().ToString());
         StyleProfile style = configuration.Styles[request.StyleProfile];
         RouteDefinition route = configuration.ReviewRoutes.Single(route =>
             string.Equals(route.Id, target.RouteId, StringComparison.Ordinal)
+        );
+        ProviderExecutionContext context = CreateContext(
+            configuration,
+            provider,
+            model,
+            Guid.NewGuid().ToString(),
+            route
         );
         SemanticReviewResult result = await InvokeReviewWithRetry(
                 adapters.Reviewer(provider.AdapterId),
@@ -1411,7 +1475,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
                     item.Candidate.MediaType,
                     item.Candidate.ProviderRequestId,
                     item.Candidate.ActualCostUsd,
-                    mechanical = item.Mechanical,
+                    mechanical = MechanicalReceipt(item.Mechanical),
                     semantic = item.Review,
                     score = item.Review?.OverallScore,
                 }

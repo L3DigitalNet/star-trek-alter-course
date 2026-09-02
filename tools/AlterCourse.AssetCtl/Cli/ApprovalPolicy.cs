@@ -29,14 +29,15 @@ internal static class ApprovalPolicy
         QualityTier tier = configuration.QualityTiers[manifest.Request.QualityTier];
         if (string.Equals(tier.SemanticReview, "required", StringComparison.Ordinal))
         {
-            ValidateSemanticEvidence(configuration, manifest, tier);
+            ValidateSemanticEvidence(configuration, manifest, tier, mechanical.NormalizedBytes);
         }
     }
 
     private static void ValidateSemanticEvidence(
         EffectiveConfiguration configuration,
         AssetManifest manifest,
-        QualityTier tier
+        QualityTier tier,
+        byte[] normalizedBytes
     )
     {
         GenerationProvenance generation =
@@ -58,14 +59,17 @@ internal static class ApprovalPolicy
             || !reviewerModel.Capabilities.Contains(AssetCapability.ReviewSemantic)
             || string.Equals(reviewer.AdapterId, generation.Adapter, StringComparison.Ordinal)
             || !string.Equals(review.Independence, "different-provider-family", StringComparison.Ordinal)
+            || !ReviewEvidence.Verify(
+                manifest.Request,
+                normalizedBytes,
+                configuration.EffectiveHash,
+                review.ReviewerProvider,
+                review.ReviewerModelProfile,
+                review
+            )
         )
         {
             throw new AssetCtlException("Approval requires current independently verifiable semantic evidence.", 8);
-        }
-
-        if (review.EvidenceSha256.Length != 64)
-        {
-            throw new AssetCtlException("Approval semantic evidence is not a complete provenance digest.", 8);
         }
     }
 }

@@ -97,6 +97,7 @@ public sealed class SecurityRegressionTests
     [InlineData(0, 64, 1)]
     [InlineData(50_000, 50_000, 1)]
     [InlineData(64, 64, 0)]
+    [InlineData(64, 64, 4097)]
     [InlineData(64, 64, 50_000)]
     public void OutputContractBoundsDimensionsAndPreviewSizes(int width, int height, int preview)
     {
@@ -191,6 +192,45 @@ public sealed class SecurityRegressionTests
                 "pass",
                 "different-provider-family"
             ),
+        };
+        repository.WriteManifest(manifest);
+
+        Assert.Throws<AssetCtlException>(() => ApprovalPolicy.Validate(repository.Configuration, manifest));
+    }
+
+    /// <summary>Rejects a well-shaped but fabricated digest instead of trusting its length.</summary>
+    [Fact]
+    public void ApprovalRejectsFabricatedSemanticEvidenceDigest()
+    {
+        AssetRequest seed = TestData.Request() with
+        {
+            Lifecycle = AssetLifecycle.Candidate,
+            Output = TestData.Request().Output with { Path = "assets/asset.png" },
+            QualityTier = "production",
+        };
+        byte[] png = LocalPlaceholderGenerator.RenderPng(seed);
+        using var repository = new TemporaryRepository(png, semanticRequired: true);
+        SemanticReviewResult review = new(
+            true,
+            true,
+            true,
+            true,
+            1,
+            1,
+            [],
+            false,
+            false,
+            1,
+            "pass",
+            "different-provider-family",
+            new string('a', 64),
+            "reviewer",
+            "review-model"
+        );
+        AssetManifest manifest = repository.Manifest(mechanicalPassed: true) with
+        {
+            Generation = repository.Generation(),
+            SemanticReview = review,
         };
         repository.WriteManifest(manifest);
 

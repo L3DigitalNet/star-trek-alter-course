@@ -6,6 +6,42 @@ namespace AlterCourse.AssetCtl.Review;
 
 internal static class ReviewEvidence
 {
+    public static bool Verify(
+        AssetRequest request,
+        byte[] normalizedBytes,
+        string effectiveConfigSha256,
+        string reviewerProvider,
+        string reviewerModelProfile,
+        SemanticReviewResult review
+    )
+    {
+        if (review.EvidenceSha256 is null || review.EvidenceSha256.Length != 64)
+        {
+            return false;
+        }
+
+        byte[] supplied;
+        try
+        {
+            supplied = Convert.FromHexString(review.EvidenceSha256);
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+
+        string expectedHex = Compute(
+            request,
+            normalizedBytes,
+            effectiveConfigSha256,
+            reviewerProvider,
+            reviewerModelProfile,
+            review
+        );
+        byte[] expected = Convert.FromHexString(expectedHex);
+        return CryptographicOperations.FixedTimeEquals(supplied, expected);
+    }
+
     public static string Compute(
         AssetRequest request,
         byte[] normalizedBytes,

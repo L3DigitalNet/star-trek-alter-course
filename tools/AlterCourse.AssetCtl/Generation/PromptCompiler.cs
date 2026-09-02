@@ -40,28 +40,24 @@ internal static class PromptCompiler
         }
     }
 
-    public const string Version = "2";
+    public const string Version = "3";
 
     public static (string Prompt, string Hash) Compile(AssetRequest request, StyleProfile style)
     {
         var builder = new StringBuilder();
-        AppendLine(builder, $"Identity: {request.Id}");
-        AppendLine(builder, $"Purpose: {request.Purpose}");
-        AppendLine(builder, $"Visual kind: {request.Kind}");
-        AppendLine(builder, $"Output contract: {request.Output.Format.ToString().ToLowerInvariant()}");
-        AppendLine(builder, $"Resolved style summary: {style.Summary}");
+        AppendLine(builder, $"Asset role and semantic purpose: {request.Kind} {request.Id}; {request.Purpose}");
+        AppendLine(builder, $"Kind-specific composition guidance: compose a {request.Kind} for its stated role.");
+        AppendLine(builder, $"Resolved style-profile intent: {style.Summary}");
+        AppendLine(
+            builder,
+            $"Output and target-size requirements: exact {request.Output.Width}x{request.Output.Height} {request.Output.Format.ToString().ToLowerInvariant()}; transparency {(request.Output.TransparencyRequired ? "required" : "optional")}; target display sizes {string.Join(", ", request.Output.TargetDisplaySizes)} px; no external resources"
+        );
         AppendLine(builder, $"Required constraints: {string.Join("; ", style.Required.Concat(request.Required))}");
         AppendLine(builder, $"Prohibited content: {string.Join("; ", style.Prohibited.Concat(request.Prohibited))}");
-        AppendLine(builder, $"Dimensions: {request.Output.Width}x{request.Output.Height} px");
-        AppendLine(builder, $"Target display sizes: {string.Join(", ", request.Output.TargetDisplaySizes)} px");
         AppendLine(builder, $"Reference instructions: {ReferenceInstructions(request.References)}");
         AppendLine(
             builder,
-            $"Hard technical constraints: exact {request.Output.Width}x{request.Output.Height} {request.Output.Format.ToString().ToLowerInvariant()}; transparency {(request.Output.TransparencyRequired ? "required" : "optional")}; no external resources"
-        );
-        AppendLine(
-            builder,
-            $"Lifecycle reminder: {request.Lifecycle.ToString().ToLowerInvariant()} assets must remain functionally clear rather than polished."
+            $"Lifecycle reminder: {request.Lifecycle.ToString().ToLowerInvariant()} assets must remain functionally clear rather than polished at any cost."
         );
         builder.Append($"Prompt contract version: {Version}");
         string prompt = builder.ToString();

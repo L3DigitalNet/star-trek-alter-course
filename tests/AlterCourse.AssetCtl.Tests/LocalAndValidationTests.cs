@@ -254,6 +254,24 @@ public sealed class LocalAndValidationTests
         Assert.False(result.Passed);
     }
 
+    /// <summary>Accepts standard pixel dimensions and comma-separated view boxes.</summary>
+    [Theory]
+    [InlineData("64px", "64px", "0,0,64,64")]
+    [InlineData("64", "64", "0\t0 64\n64")]
+    public void SvgAcceptsSafeStandardDimensionForms(string width, string height, string viewBox)
+    {
+        string svg =
+            $"<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{height}' viewBox='{viewBox}'><path d='M0 0h64v64z'/></svg>";
+        MechanicalValidationResult result = MechanicalValidator.Validate(
+            TestData.Request(AssetFormat.Svg),
+            Encoding.UTF8.GetBytes(svg),
+            1_000_000,
+            1_000_000
+        );
+
+        Assert.True(result.Passed, string.Join("; ", result.Findings));
+    }
+
     /// <summary>Rejects an APNG after the decoder confirms that it contains multiple frames.</summary>
     [Fact]
     public void AnimatedPngFailsClosed()

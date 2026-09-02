@@ -3,7 +3,7 @@ namespace AlterCourse.AssetCtl.Validation;
 internal static class OutputContractPolicy
 {
     private const int MaximumPreviewCount = 32;
-    private const int MaximumPreviewDimension = 8_192;
+    public const int MaximumPreviewDimension = 4_096;
     private const int MaximumDimension = 16_384;
     private const long HardMaximumPixels = 16_777_216;
 
@@ -20,6 +20,7 @@ internal static class OutputContractPolicy
             || output.TargetDisplaySizes.Any(size =>
                 size <= 0 || size > MaximumPreviewDimension || (long)size * size > effectiveMaximum
             )
+            || output.TargetDisplaySizes.Distinct().Count() != output.TargetDisplaySizes.Count
         )
         {
             throw new AssetCtlException("output dimensions or target previews are outside safety bounds.", 2);

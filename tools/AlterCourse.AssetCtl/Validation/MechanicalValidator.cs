@@ -233,7 +233,8 @@ internal static class MechanicalValidator
 
     private static bool TryGetViewBox(XElement root, out double width, out double height)
     {
-        string[]? parts = root.Attribute("viewBox")?.Value?.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        string[]? parts = root.Attribute("viewBox")
+            ?.Value.Split([',', ' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
         if (parts is { Length: 4 })
         {
             return TryParseValidViewBox(parts, out width, out height);
@@ -436,16 +437,26 @@ internal static class MechanicalValidator
 
     private static int ParseDimension(string? value, string name)
     {
-        if (
-            value is null
-            || value.EndsWith('%')
-            || !int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out int result)
-        )
+        if (value is null || value.EndsWith('%'))
         {
-            throw new FormatException($"SVG {name} must be an integer pixel dimension.");
+            throw new FormatException($"SVG {name} must be an absolute pixel dimension.");
         }
 
-        return result;
+        ReadOnlySpan<char> numeric = value.EndsWith("px", StringComparison.OrdinalIgnoreCase)
+            ? value.AsSpan(0, value.Length - 2)
+            : value.AsSpan();
+        if (
+            !double.TryParse(numeric, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed)
+            || !double.IsFinite(parsed)
+            || parsed <= 0
+            || parsed != Math.Truncate(parsed)
+            || parsed > int.MaxValue
+        )
+        {
+            throw new FormatException($"SVG {name} must be a positive whole-pixel dimension.");
+        }
+
+        return (int)parsed;
     }
 
     private static Dictionary<int, byte[]> BuildPreviews(SKBitmap bitmap, IReadOnlyList<int> sizes)
@@ -453,7 +464,7 @@ internal static class MechanicalValidator
         var result = new Dictionary<int, byte[]>();
         foreach (int size in sizes.Distinct().Order())
         {
-            if (size <= 0 || size > 4096)
+            if (size <= 0 || size > OutputContractPolicy.MaximumPreviewDimension)
             {
                 throw new ArgumentException("Target display size is outside safety bounds.", nameof(sizes));
             }

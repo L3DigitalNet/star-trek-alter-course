@@ -44,6 +44,9 @@ public sealed class GenerationEndToEndTests
         Assert.Equal($"{published.Generation!.RunId}.json", Path.GetFileName(receiptPath));
         string receipt = await File.ReadAllTextAsync(Path.Combine(fixture.Root, receiptPath));
         AssertSuccessfulReceipt(receipt);
+        Assert.DoesNotContain("normalized_bytes", receipt, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("target_previews", receipt, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(Convert.ToBase64String(reviewer.LastRequest.Original), receipt, StringComparison.Ordinal);
 
         AssetManifest current = ManifestStore.Load(fixture.Configuration, fixture.Manifest.ManifestPath);
         AssertCurrentProvenance(fixture, current);
@@ -59,6 +62,38 @@ public sealed class GenerationEndToEndTests
         Assert.True(result.GetProperty("existing").GetBoolean());
         Assert.Equal(1, generator.Calls);
         Assert.Equal(1, reviewer.Calls);
+    }
+
+    /// <summary>Regenerates instead of reusing a manifest whose semantic digest was fabricated.</summary>
+    [Fact]
+    public async Task IdempotentReuseRejectsFabricatedSemanticEvidenceDigest()
+    {
+        var generator = new ScriptedGenerator("fake-generator", request => Success(request.Request));
+        var reviewer = new CapturingReviewer();
+        using var fixture = new GenerationFixture([generator, reviewer], semanticReview: "required");
+
+        await fixture.GenerateAsync();
+        AssetManifest current = ManifestStore.Load(fixture.Configuration, fixture.Manifest.ManifestPath);
+        AssetManifest fabricated = current with
+        {
+            SemanticReview = current.SemanticReview! with { EvidenceSha256 = new string('a', 64) },
+        };
+        await File.WriteAllTextAsync(
+            Path.Combine(fixture.Root, fabricated.ManifestPath),
+            ManifestStore.Serialize(fabricated)
+        );
+
+        await fixture.Orchestrator.GenerateAsync(
+            fixture.Configuration,
+            fabricated,
+            force: false,
+            dryRun: false,
+            offline: false,
+            CancellationToken.None
+        );
+
+        Assert.Equal(2, generator.Calls);
+        Assert.Equal(2, reviewer.Calls);
     }
 
     /// <summary>Rejects a same-family generator and required reviewer before either adapter can spend.</summary>
@@ -117,6 +152,8 @@ public sealed class GenerationEndToEndTests
         Assert.Contains("review-attempt", receipt, StringComparison.Ordinal);
         Assert.Contains("selected_sha256", receipt, StringComparison.Ordinal);
         Assert.Contains("\"rollback\": \"not-required\"", receipt, StringComparison.Ordinal);
+        Assert.Contains("\"repository_state_sha256\"", receipt, StringComparison.Ordinal);
+        Assert.Contains("\"arguments\"", receipt, StringComparison.Ordinal);
     }
 
     private static void AssertCurrentProvenance(GenerationFixture fixture, AssetManifest current)
@@ -183,6 +220,22 @@ public sealed class GenerationEndToEndTests
         string receipt = await File.ReadAllTextAsync(Path.Combine(fixture.Root, receiptPath));
         Assert.Contains("\"event_type\": \"retry\"", receipt, StringComparison.Ordinal);
         Assert.Contains("\"delay_milliseconds\": 0", receipt, StringComparison.Ordinal);
+    }
+
+    /// <summary>Passes the active route's retry ceiling into the provider HTTP boundary.</summary>
+    [Fact]
+    public async Task ProviderContextUsesConfiguredRetryAfterCeiling()
+    {
+        var generator = new ScriptedGenerator("retry-context", request => Success(request.Request));
+        using var fixture = new GenerationFixture(
+            [generator],
+            semanticReview: "disabled",
+            retry: new RouteRetryPolicy(1, 0, 123, 0, new HashSet<ProviderErrorCategory>())
+        );
+
+        await fixture.GenerateAsync();
+
+        Assert.Equal(123, generator.LastContext!.MaximumRetryAfterDelayMilliseconds);
     }
 
     /// <summary>Falls through only when the active route permits the observed provider category.</summary>
@@ -484,6 +537,8 @@ public sealed class GenerationEndToEndTests
 
         public int Calls { get; private set; }
 
+        public ProviderExecutionContext? LastContext { get; private set; }
+
         public IReadOnlySet<AssetCapability> SupportedCapabilities { get; } =
             new HashSet<AssetCapability>
             {
@@ -505,6 +560,7 @@ public sealed class GenerationEndToEndTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             Calls++;
+            LastContext = context;
             return Task.FromResult(invoke(request));
         }
     }

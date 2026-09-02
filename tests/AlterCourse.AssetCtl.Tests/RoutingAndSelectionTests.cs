@@ -419,17 +419,13 @@ public sealed class RoutingAndSelectionTests
         Assert.Equal(first, second);
         string[] ordered =
         [
-            "Identity:",
-            "Purpose:",
-            "Visual kind:",
-            "Output contract:",
-            "Resolved style summary:",
+            "Asset role and semantic purpose:",
+            "Kind-specific composition guidance:",
+            "Resolved style-profile intent:",
+            "Output and target-size requirements:",
             "Required constraints:",
             "Prohibited content:",
-            "Dimensions:",
-            "Target display sizes:",
             "Reference instructions:",
-            "Hard technical constraints:",
             "Lifecycle reminder:",
         ];
         int previous = -1;
@@ -447,7 +443,7 @@ public sealed class RoutingAndSelectionTests
         Assert.Contains("watermark", first.Prompt, StringComparison.Ordinal);
         Assert.Contains("transparency required", first.Prompt, StringComparison.Ordinal);
         Assert.EndsWith(
-            "Lifecycle reminder: placeholder assets must remain functionally clear rather than polished.\nPrompt contract version: 2",
+            "Lifecycle reminder: placeholder assets must remain functionally clear rather than polished at any cost.\nPrompt contract version: 3",
             first.Prompt,
             StringComparison.Ordinal
         );
