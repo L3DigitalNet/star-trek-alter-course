@@ -244,6 +244,14 @@ The milestone is successful when:
 
 ## Milestone 2 — Active World and Persistent Orders
 
+### Implementation outcome
+
+Feature #38 implements this milestone through Final PR #39. Ordinary `ShipState` values can own one durable `ShipOrder` with stable identity: one-shot `TravelTo`, bounded cyclic `PatrolRoute`, or time-only `HoldUntil`. Orders explain why a ship acts, strategic state remains the physical truth, and focused scheduled work defines the next deterministic boundary. Player travel and autonomous patrol progression share one targetable Core travel command, while exact order cancellation preserves an in-progress physical journey and removes only correlated hold work.
+
+The scheduler now jumps directly across strategic-only intervals, materializes repair state analytically at meaningful boundaries, and retains 100 ms integration for ships with active local tactical motion. Per-advancement ship-step and consequence budgets bound actual work and preserve candidate-before-commit atomicity. Player-facing advance-until semantics process hidden NPC activity offscreen but stop and report only for work targeting `PlayerShipId` until Milestone 3 defines actor knowledge.
+
+Typed bootstrap declarations construct a 03:00 proof world in which USS Sentinel has patrolled since 00:00 toward a 06:00 arrival and USS Vigilant independently holds until 09:00. Save schema V3 persists order state and the order allocator; explicit V1-to-V2-to-V3 and V2-to-V3 migrations retain historical rule identities and never infer an order from old travel state. Headless tests cover 72 simulated hours, save/load continuation, chunking, cancellation, insertion order, and hidden-event isolation without adding faction AI, pathfinding, randomness, a general entity hierarchy, ECS, or an event bus.
+
 ### Goal
 
 Prove that the universe is already in motion when the player begins and that autonomous activity progresses without requiring the player to enter a scene or observe it.
