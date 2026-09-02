@@ -20,3 +20,5 @@
 - The asset-pipeline specification is aligned with the repository ADRs and was merged through governed PR #15.
 - A legacy-named PR was auto-closed by branch enforcement; its content was recovered through Issue #14 and policy-compliant PR #15.
 - Local and remote topic branches are pruned; only permanent `dev` and `main` branches remain, with `origin/HEAD` at `dev`.
+- Project-local Godot/C# guidance is available as five byte-identical paired Claude/Codex skills with project-relative Codex registration and a canonical parity gate.
+- The skill set pins upstream `7110607ab816ece9669274bc84937857a8819796`, retaining Apache-2.0 and NOTICE obligations with provenance/update guidance.
