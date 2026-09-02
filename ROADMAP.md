@@ -27,9 +27,9 @@ The goal is not to predict the final shape of every future subsystem. The goal i
 
 ---
 
-# Strategic direction
+## Strategic direction
 
-## The universe is not player-centric
+### The universe is not player-centric
 
 From the next major gameplay work onward, ST:AC should be designed under the invariant that the player ship is one actor inside a larger world, not the object around which reality is created.
 
@@ -41,7 +41,7 @@ A useful recurring question for every major simulation feature is:
 
 If the answer is that the system never progresses, never has consequences, or only exists when the player enters a scene, the feature probably does not yet fit the intended world model.
 
-## Prefer risk-first vertical slices over subsystem construction
+### Prefer risk-first vertical slices over subsystem construction
 
 The roadmap intentionally does **not** say to finish sensors, then finish propulsion, then finish shields, then finish factions. That approach could create individually elaborate systems whose relationships were never proven.
 
@@ -56,7 +56,7 @@ Instead, each milestone should introduce one important architectural dimension a
 
 This keeps architecture grounded in gameplay while exposing bad assumptions early.
 
-## Define the joints, not the final catalog
+### Define the joints, not the final catalog
 
 The project does not need to define every possible ship system, faction rule, diplomatic action, weapon, mission, or canonical event before development can continue.
 
@@ -64,7 +64,7 @@ Early engineering work should prove that systems can have stable identity, runti
 
 Likewise, the first multi-actor work should justify plural ships and stable actor identity, not a universal entity hierarchy or ECS. The first autonomous behavior should justify goals, information, candidate actions, deterministic choice, and commands, not a general behavior-tree framework. New abstractions should appear because two or more concrete consumers need them, not because the project can imagine hypothetical future scale.
 
-## World truth, knowledge, and history are different things
+### World truth, knowledge, and history are different things
 
 The persistent simulation will ultimately need to distinguish at least three concepts:
 
@@ -74,7 +74,7 @@ The persistent simulation will ultimately need to distinguish at least three con
 
 Diagnostic logs are not a substitute for any of these. If a later simulation decision depends on a prior event, the relevant memory of that event belongs in authoritative domain state and save data.
 
-## Offscreen simulation is first-class, but not uniformly high frequency
+### Offscreen simulation is first-class, but not uniformly high frequency
 
 A living universe must not require every ship to run tactical updates every 100 ms.
 
@@ -82,7 +82,7 @@ The simulation should use the coarsest resolution that preserves intended behavi
 
 This is how the project can eventually support many autonomous actors without turning persistence into continuous frame-by-frame polling.
 
-## Canon supplies history; simulation supplies present activity and future divergence
+### Canon supplies history; simulation supplies present activity and future divergence
 
 ST:AC does not need Dwarf Fortress-style generation of centuries of fictional prehistory because Star Trek already supplies the broad historical and political context for a chosen starting era.
 
@@ -92,7 +92,7 @@ A later milestone will explicitly define how canonical future events interact wi
 
 ---
 
-# Milestone overview
+## Milestone overview
 
 | Order | Milestone | Primary architectural proof | Representative player-visible proof |
 | --- | --- | --- | --- |
@@ -110,27 +110,27 @@ The ordering expresses dependency and architectural risk, not an immutable relea
 
 ---
 
-# Milestone 1 — World State and Bootstrap Generalization
+## Milestone 1 — World State and Bootstrap Generalization
 
-## Goal
+### Goal
 
 Evolve the v0.1.0 single-player-ship walking skeleton into a world model that can contain multiple persistent ship instances without prematurely inventing a universal entity architecture.
 
 This milestone should pressure the assumptions currently embodied by player-specific state, player-specific strategic state, one ship definition, and scheduled work that only needs to distinguish the walking-skeleton event kinds.
 
-## Architectural question
+### Architectural question
 
 > Can the simulation represent several durable ships, their identities, positions or strategic activity, scheduled consequences, and save state while the player is simply identified as the ship currently under human command?
 
-## Gameplay proof
+### Gameplay proof
 
 A campaign starts with the player ship plus a small number of NPC ship instances. They are all valid world state with stable IDs and definitions. The player remains the only directly controlled ship, but NPC ships are no longer special-case presentation objects or encounter-local spawn data.
 
 The proof does not require sophisticated NPC behavior yet.
 
-## Candidate workstreams
+### Candidate workstreams
 
-### 1. Plural ship ownership
+#### 1. Plural ship ownership
 
 Evolve authoritative state toward a collection keyed by stable ship instance identity plus an explicit player-ship identity. The exact type and internal organization should follow current code evidence rather than a generic entity framework.
 
@@ -142,7 +142,7 @@ Important properties:
 - validators detect duplicates, missing definitions, broken player references, and invalid spatial state;
 - code does not add `EnemyShip`, `FriendlyShip`, `SecondShip`, or similar cardinality-specific roots.
 
-### 2. Definition, instance, and starting-condition separation
+#### 2. Definition, instance, and starting-condition separation
 
 Begin removing walking-skeleton scenario assumptions from reusable ship definitions.
 
@@ -154,13 +154,13 @@ The target conceptual boundary is:
 
 Only move fields when a concrete new consumer proves the distinction. Do not attempt to design every future ship-definition section in this milestone.
 
-### 3. Targetable scheduled work
+#### 3. Targetable scheduled work
 
 Extend scheduled work only as far as multiple actors require. The scheduler should be able to identify the intended target/owner and carry the bounded data needed to resolve a known future consequence safely.
 
 The design should retain ADR 0007's data-only, serializable, deterministic event semantics. Avoid delegates, generic workflow engines, event buses, reflection-dispatched arbitrary payloads, or a giant universal event hierarchy.
 
-### 4. World/scenario bootstrap boundary
+#### 4. World/scenario bootstrap boundary
 
 Replace growth of `FirstGameSetup` as a hardcoded universe constructor with a narrow bootstrap responsibility that can create a valid initial world from declared scenario inputs and content.
 
@@ -178,17 +178,17 @@ It should make room for later inputs such as:
 
 Do not build a mission DSL, narrative language, procedural galaxy framework, or full scenario editor.
 
-### 5. Persistence evolution
+#### 5. Persistence evolution
 
 Extend the explicit snapshot mapping so all authoritative ship instances and new scheduler targeting survive save/load. Preserve candidate-load validation and deterministic continuation.
 
 If the save schema changes, use the existing version/migration policy rather than silently changing serialized meaning.
 
-### 6. Core projections and Godot adaptation
+#### 6. Core projections and Godot adaptation
 
 Keep the player-facing projection narrow. Godot does not need unrestricted access to all world truth merely because Core now stores it. Expose only the minimum new information needed to prove multiple actors exist and to prepare for the next contact milestone.
 
-### 7. Tests and architecture protection
+#### 7. Tests and architecture protection
 
 Add coverage for:
 
@@ -201,7 +201,7 @@ Add coverage for:
 - insertion-order independence where applicable;
 - preservation of the Core/Godot dependency boundary.
 
-## Acceptance themes
+### Acceptance themes
 
 The milestone is successful when:
 
@@ -213,7 +213,7 @@ The milestone is successful when:
 - the existing walking-skeleton player loop still works;
 - no general entity/ECS/event-bus framework was introduced solely to obtain plural ships.
 
-## Deliberately deferred
+### Deliberately deferred
 
 - faction strategy;
 - sensor uncertainty;
@@ -224,7 +224,7 @@ The milestone is successful when:
 - procedural galaxy generation;
 - a general scenario scripting system.
 
-## Refinement questions before implementation
+### Refinement questions before implementation
 
 - What is the smallest state shape that replaces player-only ship ownership cleanly?
 - Which existing ship-definition fields are now proven to be starting-state rather than class capability?
@@ -234,27 +234,27 @@ The milestone is successful when:
 
 ---
 
-# Milestone 2 — Active World and Persistent Orders
+## Milestone 2 — Active World and Persistent Orders
 
-## Goal
+### Goal
 
 Prove that the universe is already in motion when the player begins and that autonomous activity progresses without requiring the player to enter a scene or observe it.
 
 This is the first direct implementation of the project's "lived-in universe" invariant.
 
-## Architectural question
+### Architectural question
 
 > Can an NPC ship possess a durable reason for what it is doing, carry out that activity on strategic simulation time, and continue correctly while the player ignores it?
 
-## Gameplay proof
+### Gameplay proof
 
 At campaign start, at least one NPC ship is already partway through a strategic journey under an existing order. Another NPC may be waiting for or executing a different scheduled activity. Advancing time causes their activities to progress and complete even if the player remains stationary or travels elsewhere.
 
 Saving and loading in the middle of those activities produces the same later outcome as uninterrupted simulation.
 
-## Candidate workstreams
+### Candidate workstreams
 
-### 1. Minimal persistent order/objective model
+#### 1. Minimal persistent order/objective model
 
 Represent enough intent to answer why an NPC ship is currently acting.
 
@@ -268,7 +268,7 @@ Examples of initially sufficient intent:
 
 Do not design the final mission system. The important property is that the actor's current activity has durable domain meaning and does not exist only as a pathing callback.
 
-### 2. Strategic activity execution
+#### 2. Strategic activity execution
 
 Allow NPC strategic activity to schedule meaningful boundaries rather than receive tactical-frequency updates. Travel should reuse or generalize the existing strategic travel semantics where practical.
 
@@ -279,21 +279,21 @@ NPC activity should be able to:
 - update authoritative location/activity state;
 - request a next decision or follow-on order through explicit Core behavior.
 
-### 3. Offscreen progression
+#### 3. Offscreen progression
 
 Create a headless scenario in which player and NPC paths do not intersect and verify that NPC progress still occurs.
 
 The player UI should not be the trigger that activates or advances the actor.
 
-### 4. Initial world activity
+#### 4. Initial world activity
 
 Extend bootstrap data just enough to express current in-progress NPC activity. Initially this may be directly authored or deterministically constructed; the later campaign-bootstrap milestone will generalize generation.
 
-### 5. Persistence and resumption
+#### 5. Persistence and resumption
 
 Persist order/activity identity and any consequential progress needed for deterministic continuation. Do not persist caches that can be reconstructed from authoritative order and time state.
 
-### 6. Minimal observability
+#### 6. Minimal observability
 
 Emit structured diagnostics or explanation data sufficient to trace:
 
@@ -304,7 +304,7 @@ Emit structured diagnostics or explanation data sufficient to trace:
 
 Logs remain diagnostic; required ongoing activity remains domain state.
 
-### 7. Long-horizon deterministic tests
+#### 7. Long-horizon deterministic tests
 
 Create small scenarios that advance several hours or days and assert:
 
@@ -315,7 +315,7 @@ Create small scenarios that advance several hours or days and assert:
 - NPC movement does not depend on Godot frame cadence;
 - removing/canceling an order leaves no invalid scheduled residue.
 
-## Acceptance themes
+### Acceptance themes
 
 The milestone is successful when a new campaign can truthfully say that other ships were already doing things before the player became relevant to them.
 
@@ -327,7 +327,7 @@ A strong acceptance scenario is:
 4. confirm that authoritative world state changed appropriately;
 5. repeat with a save/load in the middle and obtain the same semantic result.
 
-## Deliberately deferred
+### Deliberately deferred
 
 - deep mission generation;
 - faction-level assignment logic;
@@ -336,7 +336,7 @@ A strong acceptance scenario is:
 - actor knowledge/fog of war beyond what the next milestone requires;
 - hundreds of active ships.
 
-## Refinement questions before implementation
+### Refinement questions before implementation
 
 - Is "order", "assignment", "objective", or another term the narrowest useful domain concept for the first consumer?
 - What activity completion actually requires a new AI decision versus a deterministic next leg?
@@ -345,27 +345,27 @@ A strong acceptance scenario is:
 
 ---
 
-# Milestone 3 — Sensor Knowledge and First Contact
+## Milestone 3 — Sensor Knowledge and First Contact
 
-## Goal
+### Goal
 
 Make incomplete information a real simulation boundary and create the first autonomous multi-ship encounter that does not require combat.
 
 This milestone should establish that the same world truth can produce different knowledge for different actors and that AI decisions consume actor-appropriate information rather than unrestricted truth.
 
-## Architectural question
+### Architectural question
 
 > Can the player and an NPC observe one another imperfectly, update their own knowledge over time, make explainable decisions from that knowledge, and interact without either the UI or AI becoming omniscient?
 
-## Gameplay proof
+### Gameplay proof
 
 The player encounters an NPC ship whose exact identity, affiliation, capability, or intent is not initially known. Through distance, movement, sensor capability, scanning, and communication, the player can improve that knowledge.
 
 The player can maneuver, scan, hail, approach, avoid, or leave. The NPC uses one or two deterministic behaviors such as hold, approach, or withdraw according to its goal and what it knows. Weapons are not required.
 
-## Candidate workstreams
+### Candidate workstreams
 
-### 1. Truth-versus-knowledge model
+#### 1. Truth-versus-knowledge model
 
 Introduce a project-owned actor knowledge representation sufficient for ship contacts.
 
@@ -389,25 +389,25 @@ Actor knowledge
 
 The exact fields should be justified by the first playable contact. Do not build a universal intelligence database.
 
-### 2. Contact lifecycle
+#### 2. Contact lifecycle
 
 Define how a contact is first acquired, updated, becomes stale, is lost, and is correlated with a known ship when appropriate.
 
 Contact identity should not accidentally reveal true ship identity before the observing actor has earned that knowledge.
 
-### 3. Sensor capability integration
+#### 3. Sensor capability integration
 
 Use existing sensor condition as the first consumer, then make observation quality depend on actual domain factors required by the slice: range, condition, elapsed time, relative state, or another bounded model chosen during refinement.
 
 Do not attempt final Star Trek sensor physics. Build enough uncertainty to prove the knowledge boundary and create command decisions.
 
-### 4. Actor-appropriate projections
+#### 4. Actor-appropriate projections
 
 The player projection must expose what the player knows, not unrestricted world truth. Debug/test paths may inspect truth separately when clearly labeled.
 
 The same principle should apply to the NPC decision input.
 
-### 5. Minimal explainable ship AI
+#### 5. Minimal explainable ship AI
 
 Implement the smallest consequential autonomous decision pipeline consistent with ADR 0010:
 
@@ -422,15 +422,15 @@ Implement the smallest consequential autonomous decision pipeline consistent wit
 
 Do not introduce a behavior-tree foundation or universal state-machine framework.
 
-### 6. Communication/hailing seam
+#### 6. Communication/hailing seam
 
 Allow the player to hail or otherwise communicate at a minimal level sufficient to prove a non-combat response path. This can remain a small typed interaction rather than a branching narrative system.
 
-### 7. Encounter and tactical-space lifecycle
+#### 7. Encounter and tactical-space lifecycle
 
 Define the minimum relationship between strategic actor activity and local tactical presence. Entering tactical interaction should not create the NPC from nothing or erase its strategic identity when the encounter ends.
 
-### 8. Tests and diagnostics
+#### 8. Tests and diagnostics
 
 Important tests include:
 
@@ -442,13 +442,13 @@ Important tests include:
 - AI explanations identify goal, known information, candidates, constraints, and selected action;
 - encounter exit returns durable actors to appropriate world state rather than despawning them as encounter props.
 
-## Acceptance themes
+### Acceptance themes
 
 The milestone is successful when **fog of war is a simulation rule, not a rendering effect**.
 
 The player should be able to meet another ship, initially know less than Core truth contains, deliberately spend time/capability to learn more, and make a non-combat decision while the NPC does the same from its own bounded information.
 
-## Deliberately deferred
+### Deliberately deferred
 
 - final sensor formulas;
 - cloaking;
@@ -458,7 +458,7 @@ The player should be able to meet another ship, initially know less than Core tr
 - strategic faction planning;
 - large intelligence-sharing networks.
 
-## Refinement questions before implementation
+### Refinement questions before implementation
 
 - Which facts are uncertain in the first contact: exact position, class, affiliation, intent, or some smaller subset?
 - Is contact identity observer-local, globally correlated, or both through an explicit mapping?
@@ -468,27 +468,27 @@ The player should be able to meet another ship, initially know less than Core tr
 
 ---
 
-# Milestone 4 — Engineering Backbone and Degraded Operations
+## Milestone 4 — Engineering Backbone and Degraded Operations
 
-## Goal
+### Goal
 
 Establish the minimum ship-system structure needed for later engineering and combat depth, while deliberately avoiding a complete definition of every possible Star Trek subsystem.
 
 The milestone should make **power generation/distribution, sensors, and propulsion** interact with condition and repair strongly enough to prove that future systems can attach to the same domain relationships.
 
-## Architectural question
+### Architectural question
 
 > Can a ship contain distinct systems whose condition and resource allocation change what the ship can actually do, while each system retains domain-specific behavior and the model remains open to later shields, weapons, life support, computers, transporters, and other capabilities?
 
-## Gameplay proof
+### Gameplay proof
 
 The player operates a ship with degraded equipment and insufficient power to run propulsion and sensors at full capability simultaneously. The player can redistribute power, accept degraded sensing or maneuvering, begin or continue repairs, and see capability change as system condition and allocation change.
 
 A compact engineering crisis should be playable without becoming a bookkeeping simulator.
 
-## Candidate workstreams
+### Candidate workstreams
 
-### 1. Minimal ship-system ownership model
+#### 1. Minimal ship-system ownership model
 
 Define only the common state that two or more concrete systems actually share, likely including concepts such as:
 
@@ -501,7 +501,7 @@ Define only the common state that two or more concrete systems actually share, l
 
 Do not create one `IShipSystem` interface containing hypothetical fields such as heat, ammo, frequency, range, charge, coolant, or crew merely because some future system might need them.
 
-### 2. Power generation and allocation
+#### 2. Power generation and allocation
 
 Introduce the simplest authoritative relationship that proves:
 
@@ -513,17 +513,17 @@ Initial power can be deliberately abstract. The project does not need the final 
 
 The rules should nevertheless make conservation, bounds, allocation changes, and degraded generation mechanically testable.
 
-### 3. Sensors as an engineering consumer
+#### 3. Sensors as an engineering consumer
 
 Refactor sensor capability so it depends on system condition and allocated power rather than only a standalone integrity value. Connect the result to the knowledge/contact behavior from Milestone 3.
 
 This is the first proof that engineering choices change what the player and AI can know.
 
-### 4. Propulsion as an engineering consumer
+#### 4. Propulsion as an engineering consumer
 
 Make tactical or strategic propulsion capability depend on condition and allocated power to the degree justified by the slice. A damaged or underpowered propulsion system should limit available choices rather than merely subtract generic hit points.
 
-### 5. Damage, degradation, and repair
+#### 5. Damage, degradation, and repair
 
 Generalize repair beyond the walking-skeleton's one sensor repair only as much as multiple systems require.
 
@@ -537,11 +537,11 @@ Important semantics include:
 
 Crew staffing, spare parts, detailed maintenance logistics, and damage-control teams may remain deferred.
 
-### 6. Quantity and unit boundaries
+#### 6. Quantity and unit boundaries
 
 Apply ADR 0011 where the concrete power, distance, velocity, duration, or other physical quantities cross subsystem boundaries. Avoid false precision for fictional concepts such as integrity or sensor confidence.
 
-### 7. Engineering command projection/UI
+#### 7. Engineering command projection/UI
 
 Expose enough state for the player to understand the tradeoff:
 
@@ -553,7 +553,7 @@ Expose enough state for the player to understand the tradeoff:
 
 The UI must remain a command surface over Core state, not the owner of allocation or repair calculations.
 
-### 8. Cross-system tests
+#### 8. Cross-system tests
 
 Prioritize tests proving interactions rather than isolated setters:
 
@@ -567,7 +567,7 @@ Prioritize tests proving interactions rather than isolated setters:
 
 Property/model tests are appropriate for conservation and bounded-allocation invariants if the concrete implementation provides a useful independent model.
 
-## Acceptance themes
+### Acceptance themes
 
 The milestone is successful when engineering creates a real operational choice rather than a collection of unrelated percentage bars.
 
@@ -579,7 +579,7 @@ A representative loop is:
 4. repair progresses on simulation time;
 5. future capability changes are visible and persistent.
 
-## Deliberately deferred
+### Deliberately deferred
 
 - final catalog of ship systems;
 - shields and weapons until combat work;
@@ -590,7 +590,7 @@ A representative loop is:
 - inventory/spare-parts economy;
 - full damage-control procedures.
 
-## Refinement questions before implementation
+### Refinement questions before implementation
 
 - What is truly common among reactor/power, sensors, and propulsion, and what should remain system-specific?
 - Does power need explicit physical units immediately, or is a project-owned bounded fictional quantity the better first model?
@@ -600,25 +600,25 @@ A representative loop is:
 
 ---
 
-# Milestone 5 — Living Sector and Faction Autonomy
+## Milestone 5 — Living Sector and Faction Autonomy
 
-## Goal
+### Goal
 
 Scale the active-world proof from isolated NPC activity into a small regional simulation in which factions and ships pursue their own goals and create changes while the player is elsewhere.
 
 The objective is not to build the final grand strategy simulation. It is to prove the **causal chain from faction intent to autonomous ship activity to durable world change**.
 
-## Architectural question
+### Architectural question
 
 > Can a small number of factions and ships make deterministic, explainable strategic decisions from their own information and resources, execute those decisions over time, and produce a region whose state changes independently of the player?
 
-## Gameplay proof
+### Gameplay proof
 
 A small sector containing roughly 3–5 locations, 2 factions, and several NPC ships continues to evolve while the player travels or waits. Patrols move, assignments complete, one faction reacts to a known condition, and at least one NPC-NPC interaction occurs or alters a later decision without requiring the player to witness it.
 
-## Candidate workstreams
+### Candidate workstreams
 
-### 1. Minimal faction domain state
+#### 1. Minimal faction domain state
 
 Introduce only the faction state needed by the first autonomous decisions, potentially:
 
@@ -630,7 +630,7 @@ Introduce only the faction state needed by the first autonomous decisions, poten
 
 Do not build the full economy, government, diplomacy, territorial administration, or fleet hierarchy.
 
-### 2. Strategic goals and assignment generation
+#### 2. Strategic goals and assignment generation
 
 Create one or two faction-level decisions that can generate or alter ship assignments, such as:
 
@@ -642,33 +642,33 @@ Create one or two faction-level decisions that can generate or alter ship assign
 
 The strategic AI should follow ADR 0010's explicit information/candidate/constraint/choice/explanation pipeline.
 
-### 3. Scheduled strategic decision cadence
+#### 3. Scheduled strategic decision cadence
 
 Use simulation-time events and meaningful decision boundaries rather than evaluating every faction every tactical tick.
 
 Define bounded work budgets and stable tie-breaking. Detect and prevent pathological immediate rescheduling.
 
-### 4. NPC-NPC world interaction
+#### 4. NPC-NPC world interaction
 
 Prove that two non-player actors can affect one another without the player being the activation trigger. The first interaction can be intentionally simple: detection causing withdrawal, an intercepted route causing a changed order, or another non-combat response.
 
 Combat between NPCs may remain out of scope until the tactical combat milestone unless a tiny abstract consequence is necessary to prove the strategic flow.
 
-### 5. Knowledge propagation
+#### 5. Knowledge propagation
 
 Allow strategic decisions to use actor/faction knowledge rather than omniscient truth. Initially this may mean local reports, observed contacts, or explicit shared information between faction-aligned ships.
 
 Do not build a complete intelligence network. Prove only the information flow required by the first strategic decision.
 
-### 6. Persistence and historical continuity
+#### 6. Persistence and historical continuity
 
 Persist faction state, active assignments, relevant actor knowledge, strategic decision timing, and any world changes that determine future outcomes.
 
-### 7. Player-facing strategic clarity
+#### 7. Player-facing strategic clarity
 
 Expose enough map/status information for the player to understand that the sector is active without revealing hidden simulation truth. Examples may include known ship movements, stale reports, faction posture, recent known activity, or changed access.
 
-### 8. Long-running simulation tests
+#### 8. Long-running simulation tests
 
 This milestone should establish the first serious long-horizon world tests. Seeded runs should advance many hours/days and assert against:
 
@@ -683,7 +683,7 @@ This milestone should establish the first serious long-horizon world tests. Seed
 - save/load divergence;
 - nondeterminism caused by collection insertion order.
 
-## Acceptance themes
+### Acceptance themes
 
 A strong acceptance scenario is:
 
@@ -696,7 +696,7 @@ A strong acceptance scenario is:
 
 The world should no longer feel like a set of encounters waiting to be spawned.
 
-## Deliberately deferred
+### Deliberately deferred
 
 - full economic production and trade simulation;
 - large fleets and hundreds/thousands of actors;
@@ -706,7 +706,7 @@ The world should no longer feel like a set of encounters waiting to be spawned.
 - procedurally generated galaxy topology;
 - mission/narrative framework.
 
-## Refinement questions before implementation
+### Refinement questions before implementation
 
 - Which two factions and one strategic conflict best exercise autonomy without requiring lore breadth?
 - What single resource or capability is necessary to make the objective a decision rather than a script?
@@ -716,19 +716,19 @@ The world should no longer feel like a set of encounters waiting to be spawned.
 
 ---
 
-# Milestone 6 — Tactical Combat Foundation
+## Milestone 6 — Tactical Combat Foundation
 
-## Goal
+### Goal
 
 Introduce the first real starship combat only after the project already has multiple persistent actors, incomplete information, autonomous decisions, power tradeoffs, propulsion, damage/repair foundations, and offscreen world continuity.
 
 Combat should be a **composition of existing systems**, not a parallel minigame with generic hit points.
 
-## Architectural question
+### Architectural question
 
 > Can tactical combat emerge from ship capabilities and world rules already established elsewhere, produce subsystem-level operational consequences, and end with durable actors and political context still intact?
 
-## Gameplay proof
+### Gameplay proof
 
 A small engagement between the player and one NPC supports:
 
@@ -745,13 +745,13 @@ A small engagement between the player and one NPC supports:
 
 Destroying the opponent is not required to be the only successful outcome.
 
-## Candidate workstreams
+### Candidate workstreams
 
-### 1. Tactical targeting and fire-control knowledge
+#### 1. Tactical targeting and fire-control knowledge
 
 Targeting must depend on actor knowledge and sensor capability rather than unrestricted world truth. Define the minimum information required to fire or achieve effective fire.
 
-### 2. Shield foundation
+#### 2. Shield foundation
 
 Implement the smallest shield model that creates tactical and engineering decisions. Candidate concerns include:
 
@@ -763,7 +763,7 @@ Implement the smallest shield model that creates tactical and engineering decisi
 
 Do not define every shield frequency, modulation, regenerative edge case, or canonical variant.
 
-### 3. Weapon foundation
+#### 3. Weapon foundation
 
 Implement one bounded weapon family, likely a directed-energy weapon, with explicit:
 
@@ -776,29 +776,29 @@ Implement one bounded weapon family, likely a directed-energy weapon, with expli
 
 Torpedoes, ammunition logistics, special weapons, boarding, and advanced firing modes can wait.
 
-### 4. Damage and subsystem consequence resolution
+#### 4. Damage and subsystem consequence resolution
 
 Damage should change operational capability through the engineering model. Avoid reducing all outcomes to hull hit points.
 
 The first model may still include a structural survival concept, but meaningful damage should be able to degrade sensors, propulsion, shields, weapon capability, power generation, or another implemented system.
 
-### 5. Tactical AI
+#### 5. Tactical AI
 
 NPC tactical decisions should reuse the actor-information and typed-command boundaries. A small doctrine may choose among maneuver, fire, protect, or withdraw according to explicit constraints and scores.
 
 No behavior-tree foundation is required.
 
-### 6. Engagement/disengagement lifecycle
+#### 6. Engagement/disengagement lifecycle
 
 Combat should begin and end without creating or deleting actors solely because a scene changed. Surviving ships retain damage, position/strategic consequence, orders, and later memory as appropriate.
 
-### 7. Player command/UI surface
+#### 7. Player command/UI surface
 
 The tactical UI should emphasize command information: range, bearing, known target state, power tradeoffs, shield/system status, weapon readiness, and available responses.
 
 Visual spectacle remains secondary to player-visible clarity.
 
-### 8. Combat scenario/property tests
+#### 8. Combat scenario/property tests
 
 Coverage should include:
 
@@ -812,13 +812,13 @@ Coverage should include:
 - conservation/bounds properties where the chosen power/energy model supports them;
 - AI decisions using actor knowledge rather than hidden truth.
 
-## Acceptance themes
+### Acceptance themes
 
 The combat slice is successful when the player wins or survives by making **starship command tradeoffs** rather than merely depleting a health bar faster than the opponent.
 
 A damaged ship should often remain interestingly functional: perhaps able to maneuver but not scan well, protect itself but not fire effectively, or fire while sacrificing propulsion/sensor capability.
 
-## Deliberately deferred
+### Deliberately deferred
 
 - a large weapon catalog;
 - torpedo logistics unless chosen as the first weapon instead of directed energy;
@@ -830,7 +830,7 @@ A damaged ship should often remain interestingly functional: perhaps able to man
 - cinematic combat presentation;
 - final balance.
 
-## Refinement questions before implementation
+### Refinement questions before implementation
 
 - What is the smallest shield model that proves power + geometry + condition interaction?
 - Which single weapon best exercises targeting, power, and damage without adding unrelated logistics?
@@ -840,19 +840,19 @@ A damaged ship should often remain interestingly functional: perhaps able to man
 
 ---
 
-# Milestone 7 — Diplomacy, Incidents, and Durable Consequences
+## Milestone 7 — Diplomacy, Incidents, and Durable Consequences
 
-## Goal
+### Goal
 
 Give the persistent world memory: player and NPC actions should create durable political or relational meaning that can alter later decisions, access, communication, assistance, hostility, or trust.
 
 This milestone should also make non-combat responses more consequential so Star Trek problem-solving is not reduced to choosing whether to fire.
 
-## Architectural question
+### Architectural question
 
 > Can the simulation remember a consequential interaction, distinguish what different actors know about it, interpret it according to faction/domain rules, and allow that memory to change a later encounter?
 
-## Gameplay proof
+### Gameplay proof
 
 The player can create at least several distinct consequential outcomes, for example:
 
@@ -865,9 +865,9 @@ The player can create at least several distinct consequential outcomes, for exam
 
 A later ship or faction decision demonstrably changes because of one of those prior outcomes.
 
-## Candidate workstreams
+### Candidate workstreams
 
-### 1. Durable incident/event meaning
+#### 1. Durable incident/event meaning
 
 Introduce a domain representation for the minimum historical facts the simulation must remember. The design should distinguish authoritative historical meaning from diagnostics.
 
@@ -884,35 +884,35 @@ Potential first incident properties include:
 
 Do not create a universal event-sourcing architecture or persist every low-level simulation transition forever.
 
-### 2. Relationship/reputation consequence
+#### 2. Relationship/reputation consequence
 
 Add the smallest relationship state that can be affected by incidents and consumed by later AI/interaction rules. The exact scope may be faction-to-player, faction-to-faction, or ship/captain-specific only when the first gameplay proof requires it.
 
-### 3. Knowledge and report propagation
+#### 3. Knowledge and report propagation
 
 A faction should not react to an event it has no way to know occurred. Establish a bounded path by which incidents become known, reported, disputed, or remain uncertain.
 
 This is where world truth, actor knowledge, and political interpretation begin to diverge meaningfully.
 
-### 4. Non-combat communication actions
+#### 4. Non-combat communication actions
 
 Expand communication from the minimal hail seam into a small set of typed, rule-governed actions. Examples may include request aid, identify intent, warn, demand withdrawal, offer assistance, or accept a limited agreement.
 
 Keep simulation consequences in Core. Do not make dialogue text authoritative.
 
-### 5. Limited agreement/obligation seam
+#### 5. Limited agreement/obligation seam
 
 If required by the selected scenario, introduce one bounded durable obligation such as temporary access, stand-down, safe passage, or assistance owed. This can prove that consequences extend beyond scalar reputation without requiring a complete treaty framework.
 
-### 6. AI use of history
+#### 6. AI use of history
 
 Make at least one autonomous decision explicitly depend on relevant relationship/incident knowledge. The explanation should show the historical modifier or constraint that changed the choice.
 
-### 7. Persistence and player-facing history
+#### 7. Persistence and player-facing history
 
 Persist only history that future gameplay needs. Provide the player with an appropriate known-history or recent-incidents view without exposing hidden allegations/intelligence.
 
-### 8. Scenario tests
+#### 8. Scenario tests
 
 Tests should prove:
 
@@ -924,7 +924,7 @@ Tests should prove:
 - long-running history does not grow without an explicit retention/aggregation rule;
 - a non-combat action can create a later strategic effect.
 
-## Acceptance themes
+### Acceptance themes
 
 A representative proof is:
 
@@ -936,7 +936,7 @@ A representative proof is:
 
 The repercussion should arise from domain state, not a bespoke mission-script check.
 
-## Deliberately deferred
+### Deliberately deferred
 
 - a complete treaty language;
 - government/political simulation;
@@ -946,7 +946,7 @@ The repercussion should arise from domain state, not a bespoke mission-script ch
 - unbounded historical event logs;
 - narrative engine adoption unless a concrete branching authored feature now justifies ADR 0012's trigger.
 
-## Refinement questions before implementation
+### Refinement questions before implementation
 
 - What historical events are consequential enough to persist rather than summarize into relationship state?
 - Which actors/factions can know or dispute an incident, and how does information reach them?
@@ -956,19 +956,19 @@ The repercussion should arise from domain state, not a bespoke mission-script ch
 
 ---
 
-# Milestone 8 — Canon-Anchored Campaign Bootstrap and Divergent History
+## Milestone 8 — Canon-Anchored Campaign Bootstrap and Divergent History
 
-## Goal
+### Goal
 
 Turn the hand-authored active-world proof into a reproducible campaign start that is consistent with a chosen Star Trek epoch but populated with non-canonical local activity already in progress.
 
 This milestone is the project's bounded analogue to Dwarf Fortress world-history initialization: Star Trek canon supplies the broad historical state; deterministic generation and/or a short pre-start warm-up supplies the mundane living activity surrounding the player.
 
-## Architectural question
+### Architectural question
 
 > Can the game construct a canon-consistent starting world that already has momentum, while preserving deterministic generation and allowing later simulation outcomes to diverge from television history when the world state meaningfully changes?
 
-## Gameplay proof
+### Gameplay proof
 
 Starting a campaign for a chosen supported epoch produces:
 
@@ -982,9 +982,9 @@ Starting a campaign for a chosen supported epoch produces:
 
 Different seeds may change non-canonical local assignments/activity while preserving required canonical boundary conditions.
 
-## Candidate workstreams
+### Candidate workstreams
 
-### 1. Campaign/scenario definition
+#### 1. Campaign/scenario definition
 
 Define a narrow input contract for a campaign start. Candidate inputs include:
 
@@ -999,7 +999,7 @@ Define a narrow input contract for a campaign start. Candidate inputs include:
 
 Avoid encoding all Star Trek canon into one giant schema.
 
-### 2. Canon boundary policy
+#### 2. Canon boundary policy
 
 Before canonical future events become implementation dependencies, explicitly refine and document the policy for events that television history says should occur after campaign start.
 
@@ -1012,7 +1012,7 @@ Questions include:
 
 The roadmap's provisional preference is **canon as initial conditions and pressures, not an invisible correction mechanism**, but the implementation milestone should make this an explicit reviewed decision before content relies on it.
 
-### 3. Non-canonical activity generation
+#### 3. Non-canonical activity generation
 
 Generate the activity canon leaves unspecified:
 
@@ -1027,7 +1027,7 @@ Generate the activity canon leaves unspecified:
 
 Generated state must pass the same semantic validation as authored state.
 
-### 4. Optional bounded warm-up simulation
+#### 4. Optional bounded warm-up simulation
 
 Evaluate whether campaign quality improves if the bootstrap creates actors/orders at a pre-start time and then runs the **normal strategic simulation** forward for a bounded period before handing control to the player.
 
@@ -1035,21 +1035,21 @@ For example, a campaign could initialize several days before player control and 
 
 This is optional. If direct generation of valid in-progress state is simpler and equally convincing, do not add warm-up merely to imitate Dwarf Fortress.
 
-### 5. Random stream/version ownership
+#### 5. Random stream/version ownership
 
 Use ADR 0007's deterministic random model. World/bootstrap generation should have stable stream identity and versioning so a seed is diagnostically meaningful.
 
 Do not use Godot presentation noise as authoritative generation.
 
-### 6. Validation and failure handling
+#### 6. Validation and failure handling
 
 A generated campaign must fail closed if it creates broken references, impossible activities, contradictory canonical constraints, invalid schedules, duplicate identities, or unsupported combinations.
 
-### 7. Save identity and campaign metadata
+#### 7. Save identity and campaign metadata
 
 Persist the campaign/scenario identity, generation/rules versions, and any data required to interpret the world. Do not regenerate the current world from seed on every load; the save remains an authoritative snapshot of everything that has happened since start.
 
-### 8. Reproducibility and variation tests
+#### 8. Reproducibility and variation tests
 
 Test that:
 
@@ -1059,13 +1059,13 @@ Test that:
 - campaign generation is independent from Godot and ambient wall-clock time;
 - generated worlds can advance long enough to expose scheduling/AI pathologies before the player begins.
 
-## Acceptance themes
+### Acceptance themes
 
 A campaign should feel as though the player has entered a universe that already had a schedule that morning.
 
 The generated background does not need hundreds of years of fake history. It needs enough causally valid **current momentum** that ships have reasons to be where they are and the first several hours/days of activity are not all spawned in reaction to the player.
 
-## Deliberately deferred
+### Deliberately deferred
 
 - procedural generation of the entire galaxy;
 - generation of centuries of alternate history;
@@ -1075,7 +1075,7 @@ The generated background does not need hundreds of years of fake history. It nee
 - automatic ingestion of copyrighted third-party reference data;
 - user modding API.
 
-## Refinement questions before implementation
+### Refinement questions before implementation
 
 - Which canon epoch/region is the first supported campaign anchor?
 - What canon facts must be immutable at start, and which are merely background assumptions?
@@ -1085,19 +1085,19 @@ The generated background does not need hundreds of years of fake history. It nee
 
 ---
 
-# Milestone 9 — Persistent Regional Campaign Integration
+## Milestone 9 — Persistent Regional Campaign Integration
 
-## Goal
+### Goal
 
 Consolidate the preceding architecture into a durable regional campaign loop before expanding feature breadth substantially.
 
 This is an integration and hardening milestone as much as a feature milestone. Its purpose is to prove that the systems developed independently remain coherent when exercised together over meaningful game time.
 
-## Architectural question
+### Architectural question
 
 > Can a player operate in one small region for an extended period while travel, sensors, engineering, NPC orders, faction decisions, combat or avoidance, diplomacy, history, and save/load all remain one consistent simulation?
 
-## Gameplay proof
+### Gameplay proof
 
 A bounded campaign region contains enough activity for the player to spend meaningful time making command decisions without the universe becoming static between bespoke events.
 
@@ -1113,15 +1113,15 @@ A representative loop may include:
 8. observe later faction/NPC behavior that reflects earlier events;
 9. save/load at multiple points without changing future semantics.
 
-## Candidate workstreams
+### Candidate workstreams
 
-### 1. Cross-system scenario design
+#### 1. Cross-system scenario design
 
 Build a small but intentional regional scenario/content set that exercises the implemented systems rather than maximizing content quantity.
 
 A likely scale is still modest: several locations, a few factions, and enough ships to create overlapping activity without obscuring causality.
 
-### 2. Simulation invariant audit
+#### 2. Simulation invariant audit
 
 Review boundaries that have accumulated across milestones:
 
@@ -1136,7 +1136,7 @@ Review boundaries that have accumulated across milestones:
 
 Refactor only where integration reveals real duplication or unsafe coupling.
 
-### 3. Headless campaign endurance suite
+#### 3. Headless campaign endurance suite
 
 Advance representative seeded worlds through increasingly long horizons and collect reproducible failures. Add invariants around:
 
@@ -1150,13 +1150,13 @@ Advance representative seeded worlds through increasingly long horizons and coll
 - save/load divergence;
 - memory/performance regressions.
 
-### 4. Performance measurement
+#### 4. Performance measurement
 
 Measure actual representative workloads before adopting performance architecture. Identify whether event-driven strategic simulation remains comfortably within budget and which operations dominate runtime.
 
 Do not respond to hypothetical scale by introducing ECS, parallel mutation, databases, distributed services, or other foundational infrastructure without evidence.
 
-### 5. Player-visible clarity pass
+#### 5. Player-visible clarity pass
 
 Ensure the player can understand causal state without requiring developer knowledge. Improve the map/status surfaces for:
 
@@ -1170,21 +1170,21 @@ Ensure the player can understand causal state without requiring developer knowle
 
 This is clarity work, not final visual polish.
 
-### 6. Persistence/migration hardening
+#### 6. Persistence/migration hardening
 
 Exercise saves at deliberately difficult boundaries: mid-travel, mid-repair, mid-contact, active faction plans, tactical engagement, and recent historical incident.
 
 Add/retain migration fixtures according to the compatibility policy current at that release stage.
 
-### 7. Architecture conformance review
+#### 7. Architecture conformance review
 
 Add or strengthen ArchUnitNET/project checks for boundaries that have become durable through multiple consumers. Do not encode temporary folder structure as architecture.
 
-### 8. Release-readiness evidence for the integrated slice
+#### 8. Release-readiness evidence for the integrated slice
 
 Run canonical and appropriate deep validation, scenario testing, mutation analysis where useful, and manual playthroughs focused on causal consistency rather than content balance.
 
-## Acceptance themes
+### Acceptance themes
 
 This milestone is successful when the game has a **small but genuinely systemic campaign region** rather than a collection of isolated demonstrations.
 
@@ -1194,7 +1194,7 @@ The player should be able to tell stories of the form:
 
 The exact story need not be authored. The important part is that the causal chain is supported by reusable simulation rules.
 
-## Deliberately deferred
+### Deliberately deferred
 
 Unless integration evidence elevates one of them, continue to defer:
 
@@ -1210,7 +1210,7 @@ Unless integration evidence elevates one of them, continue to defer:
 - final art/audio polish;
 - speculative service/database infrastructure.
 
-## Refinement questions before implementation
+### Refinement questions before implementation
 
 - Which small regional scenario provides the highest interaction density with the fewest new systems?
 - What performance/invariant budgets are meaningful for the next development horizon?
@@ -1219,49 +1219,49 @@ Unless integration evidence elevates one of them, continue to defer:
 
 ---
 
-# Cross-milestone requirements
+## Cross-milestone requirements
 
 The following expectations apply throughout the roadmap.
 
-## 1. Player actions create durable consequences where the domain says they matter
+### 1. Player actions create durable consequences where the domain says they matter
 
 A meaningful state change should not disappear merely because the current UI closes or the actor leaves tactical range. Damage, repairs, orders, faction posture, knowledge, agreements, and historically consequential incidents should survive according to their actual domain lifetime.
 
 Not every action deserves permanent historical storage. Persist the minimum state required to preserve future meaning.
 
-## 2. Autonomous actors operate through normal Core rules
+### 2. Autonomous actors operate through normal Core rules
 
 Player, AI, and authored/system-generated actions should converge on validated domain commands where they produce the same kind of consequence. AI evaluation may use different decision machinery, but it must not receive a private mutation path that bypasses game rules.
 
-## 3. Actor knowledge is part of gameplay
+### 3. Actor knowledge is part of gameplay
 
 Player projections and AI decisions should receive information appropriate to the observer. Debug tools can expose truth deliberately, but convenience should not convert fog of war into cosmetic hiding.
 
-## 4. The player does not activate ordinary world simulation
+### 4. The player does not activate ordinary world simulation
 
 Entering a map, opening a panel, detecting a contact, or beginning a conversation should not be what makes unrelated actors start existing or pursuing their normal objectives.
 
-## 5. Strategic and tactical time share one authority, not one update rate
+### 5. Strategic and tactical time share one authority, not one update rate
 
 The scheduler and explicit simulation clock remain the common temporal foundation. Systems update at the coarsest meaningful resolution and can use fixed/bounded tactical integration only where necessary.
 
-## 6. Save state follows authoritative meaning
+### 6. Save state follows authoritative meaning
 
 Every milestone that adds durable state must extend explicit persistence mapping and validation in the same development slice. Do not postpone world persistence until after a feature has accumulated runtime-only assumptions.
 
-## 7. Long-running simulation tests grow with world autonomy
+### 7. Long-running simulation tests grow with world autonomy
 
 As more independent actors and systems are added, the test strategy must increasingly include seeded long-horizon scenarios. Important failure classes include starvation, oscillation, invalid references, event explosion, zero-time loops, nondeterministic iteration, impossible resource states, stale knowledge errors, and save/load divergence.
 
-## 8. Observability explains causality but does not own it
+### 8. Observability explains causality but does not own it
 
 Structured diagnostics should make it possible to explain why an AI acted, why an event executed, and which actor/system was affected. Gameplay history needed later must remain authoritative state rather than an assumption that logs will exist.
 
-## 9. Content breadth follows system proof
+### 9. Content breadth follows system proof
 
 One or two ship definitions, weapons, factions, scenarios, or incident types are usually enough to prove an architectural slice. Create more content only when variety itself is the feature or when another consumer is necessary to expose a bad abstraction.
 
-## 10. Every milestone revisits abstraction pressure
+### 10. Every milestone revisits abstraction pressure
 
 At milestone start and end, explicitly inspect which assumptions have become unsafe. Current examples include:
 
@@ -1277,7 +1277,7 @@ The purpose is not to refactor preemptively. It is to notice when a second or th
 
 ---
 
-# Explicit anti-goals for this roadmap horizon
+## Explicit anti-goals for this roadmap horizon
 
 The following are intentionally **not** near-term foundations unless a milestone uncovers concrete evidence that changes the decision:
 
@@ -1302,7 +1302,7 @@ These are not permanent bans. They are guardrails against solving scale and flex
 
 ---
 
-# Likely work after this roadmap horizon
+## Likely work after this roadmap horizon
 
 The order after Milestone 9 should be chosen from evidence produced by the integrated campaign rather than fixed now. Plausible next domains include:
 
@@ -1322,7 +1322,7 @@ The roadmap should be revised when those choices become concrete rather than all
 
 ---
 
-# Roadmap maintenance
+## Roadmap maintenance
 
 This document is a planning artifact, not an immutable specification.
 
