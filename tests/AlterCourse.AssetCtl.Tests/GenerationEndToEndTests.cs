@@ -238,6 +238,79 @@ public sealed class GenerationEndToEndTests
         Assert.Equal(123, generator.LastContext!.MaximumRetryAfterDelayMilliseconds);
     }
 
+    /// <summary>Prices only endpoint-less targets when an offline invocation builds its executable plan.</summary>
+    [Fact]
+    public async Task OfflineGenerationExcludesUnreachableExternalSpendBeforeBudgetChecks()
+    {
+        var external = new ScriptedGenerator("external", request => Success(request.Request));
+        var local = new LocalPlaceholderGenerator();
+        using var fixture = new GenerationFixture([external, local], semanticReview: "disabled");
+        var providers = fixture.Configuration.Providers.ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value,
+            StringComparer.Ordinal
+        );
+        ProviderInstance externalProvider = providers[external.AdapterId];
+        ModelProfile externalModel = externalProvider.Models["profile"] with { EstimatedCostPerOutput = 100m };
+        providers[external.AdapterId] = externalProvider with
+        {
+            Endpoint = new Uri("https://provider.example/v1"),
+            Models = new Dictionary<string, ModelProfile>(StringComparer.Ordinal)
+            {
+                [externalModel.Id] = externalModel,
+            },
+        };
+        EffectiveConfiguration configuration = fixture.Configuration with
+        {
+            Providers = EffectiveConfiguration.ReadOnly(providers),
+        };
+
+        object result = await fixture.Orchestrator.GenerateAsync(
+            configuration,
+            fixture.Manifest,
+            force: false,
+            dryRun: true,
+            offline: true,
+            CancellationToken.None
+        );
+
+        JsonElement plan = JsonDocument
+            .Parse(JsonSerializer.Serialize(result, JsonOptions.Stable))
+            .RootElement.GetProperty("plan");
+        Assert.Equal(0m, plan.GetProperty("estimated_maximum_cost").GetDecimal());
+        Assert.Equal(local.AdapterId, plan.GetProperty("selected_target").GetProperty("adapter_id").GetString());
+    }
+
+    /// <summary>Allows explicitly accepted unknown prices while retaining attempt and daily controls.</summary>
+    [Fact]
+    public async Task UnknownPriceAllowReachesGenerationInsteadOfFailingPlanConstruction()
+    {
+        var generator = new ScriptedGenerator("unknown-price", request => Success(request.Request));
+        using var fixture = new GenerationFixture([generator], semanticReview: "disabled");
+        ProviderInstance provider = fixture.Configuration.Providers[generator.AdapterId];
+        ModelProfile model = provider.Models["profile"] with { EstimatedCostPerOutput = null };
+        var providers = new Dictionary<string, ProviderInstance>(StringComparer.Ordinal)
+        {
+            [provider.Id] = provider with
+            {
+                Models = new Dictionary<string, ModelProfile>(StringComparer.Ordinal) { [model.Id] = model },
+            },
+        };
+        EffectiveConfiguration configuration = fixture.Configuration with
+        {
+            Policy = fixture.Configuration.Policy with { UnknownPricePolicy = "allow" },
+            Providers = EffectiveConfiguration.ReadOnly(providers),
+        };
+
+        object result = await fixture.GenerateAsync(configuration);
+
+        Assert.Equal(1, generator.Calls);
+        AssetManifest published = ManifestStore.Load(configuration, fixture.Manifest.ManifestPath);
+        Assert.Null(published.Generation!.EstimatedCostUsd);
+        JsonElement output = JsonDocument.Parse(JsonSerializer.Serialize(result, JsonOptions.Stable)).RootElement;
+        Assert.Equal(JsonValueKind.Null, output.GetProperty("estimated_cost_usd").ValueKind);
+    }
+
     /// <summary>Falls through only when the active route permits the observed provider category.</summary>
     [Fact]
     public async Task AllowedCategoryFallsBackToNextTarget()

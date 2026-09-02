@@ -133,7 +133,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
                 inputs.PromptHash,
                 inputs.RequestHash,
                 runId,
-                plan.EstimatedMaximumCost!.Value
+                plan.EstimatedMaximumCost
             );
         }
         catch (Exception exception) when (exception is AssetCtlException or ProviderException or IOException)
@@ -153,16 +153,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
 
     private GenerationPlan BuildPlan(EffectiveConfiguration configuration, AssetRequest request, bool offline)
     {
-        GenerationPlan plan = router.Plan(configuration, request);
-        if (offline)
-        {
-            plan = plan with
-            {
-                SelectedTarget = plan.Targets.FirstOrDefault(target =>
-                    target.Eligible && configuration.Providers[target.ProviderId].Endpoint is null
-                ),
-            };
-        }
+        GenerationPlan plan = router.Plan(configuration, request, offline);
 
         if (plan.SelectedTarget is null)
         {
@@ -603,7 +594,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         string promptHash,
         string requestHash,
         string runId,
-        decimal estimatedCostUsd
+        decimal? estimatedCostUsd
     )
     {
         (GeneratedCandidate Candidate, MechanicalValidationResult Mechanical, SemanticReviewResult? Review) selected =
@@ -769,7 +760,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         string promptHash,
         string requestHash,
         string runId,
-        decimal estimatedCostUsd
+        decimal? estimatedCostUsd
     ) =>
         manifest with
         {
@@ -1596,7 +1587,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
             godot_path = CliTypes.ToGodotPath(configuration, manifest.Request.Output.Path),
             lifecycle = manifest.Request.Lifecycle.ToString().ToLowerInvariant(),
             validation = manifest.MechanicalValidation?.Passed == false ? "fail" : "pass",
-            estimated_cost_usd = manifest.Generation?.EstimatedCostUsd ?? 0,
+            estimated_cost_usd = manifest.Generation?.EstimatedCostUsd,
             receipt_path = receipt,
             existing,
         };
