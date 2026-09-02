@@ -45,6 +45,13 @@ public sealed class GameSimulationTests
     {
         GameSimulation game = CreateGame();
         PlayerProjection initial = game.GetPlayerProjection();
+        var metadata = new GameSaveMetadata(
+            "travel-rejection",
+            "Travel Rejection",
+            DateTimeOffset.UnixEpoch,
+            DateTimeOffset.UnixEpoch
+        );
+        byte[] initialSnapshot = GamePersistence.Serialize(game, metadata);
         LocationId origin = initial.Strategic.CurrentLocation!.Id;
         LocationId connected = initial.Strategic.Routes.Single(route => route.Origin == origin).Destination;
         LocationId unconnected = initial
@@ -54,14 +61,17 @@ public sealed class GameSimulationTests
         Assert.Equal(TravelOutcome.SameLocation, game.RequestTravel(new TravelIntent(origin)).Outcome);
         Assert.Equal(TravelOutcome.RouteUnavailable, game.RequestTravel(new TravelIntent(unconnected)).Outcome);
         Assert.Equal(initial, game.GetPlayerProjection());
+        Assert.Equal(initialSnapshot, GamePersistence.Serialize(game, metadata));
 
         Assert.Equal(TravelOutcome.Accepted, game.RequestTravel(new TravelIntent(connected)).Outcome);
         PlayerProjection traveling = game.GetPlayerProjection();
+        byte[] travelingSnapshot = GamePersistence.Serialize(game, metadata);
         Assert.Equal(TravelOutcome.AlreadyTraveling, game.RequestTravel(new TravelIntent(unconnected)).Outcome);
         Assert.DoesNotContain(PlayerAction.Travel, traveling.AvailableActions);
         Assert.DoesNotContain(PlayerAction.SetTacticalCourse, traveling.AvailableActions);
         Assert.Contains(PlayerAction.AdvanceTime, traveling.AvailableActions);
         Assert.Equal(traveling, game.GetPlayerProjection());
+        Assert.Equal(travelingSnapshot, GamePersistence.Serialize(game, metadata));
     }
 
     /// <summary>Confirms travel remains explicit until its scheduled arrival boundary.</summary>

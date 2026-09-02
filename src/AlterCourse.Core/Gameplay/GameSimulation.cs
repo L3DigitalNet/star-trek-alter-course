@@ -33,42 +33,58 @@ public sealed class GameSimulation
     /// <summary>Validates and schedules persistent strategic travel for the player ship.</summary>
     public TravelRequestResult RequestTravel(TravelIntent intent)
     {
-        ShipState playerShip = _state.GetRequiredShip(_state.PlayerShipId);
-        if (playerShip.StrategicState is TravelingState)
+        var command = new ShipTravelCommand(_state.PlayerShipId, intent.Destination);
+        ShipTravelApplicationResult application = ApplyShipTravel(_state, command, _shipCatalog);
+        if (application.Outcome == TravelOutcome.Accepted)
         {
-            return new TravelRequestResult(TravelOutcome.AlreadyTraveling);
+            Commit(application.CandidateState);
         }
 
-        var atLocation = (AtLocationState)playerShip.StrategicState;
-        if (intent.Destination == atLocation.LocationId)
+        return new TravelRequestResult(application.Outcome);
+    }
+
+    private static ShipTravelApplicationResult ApplyShipTravel(
+        SimulationState state,
+        ShipTravelCommand command,
+        ShipDefinitionCatalog shipCatalog
+    )
+    {
+        ShipState targetShip = state.GetRequiredShip(command.TargetShipId);
+        if (targetShip.StrategicState is TravelingState)
         {
-            return new TravelRequestResult(TravelOutcome.SameLocation);
+            return new ShipTravelApplicationResult(TravelOutcome.AlreadyTraveling, state);
         }
 
-        StrategicRoute? route = _state.StrategicMap.FindRoute(atLocation.LocationId, intent.Destination);
+        var atLocation = (AtLocationState)targetShip.StrategicState;
+        if (command.Destination == atLocation.LocationId)
+        {
+            return new ShipTravelApplicationResult(TravelOutcome.SameLocation, state);
+        }
+
+        StrategicRoute? route = state.StrategicMap.FindRoute(atLocation.LocationId, command.Destination);
         if (route is null)
         {
-            return new TravelRequestResult(TravelOutcome.RouteUnavailable);
+            return new ShipTravelApplicationResult(TravelOutcome.RouteUnavailable, state);
         }
 
-        SimulationTime arrival = _state.Time.AdvanceBy(route.Duration);
-        (SimulationScheduler scheduler, ScheduledWork arrivalWork) = _state.Scheduler.Schedule(
+        SimulationTime arrival = state.Time.AdvanceBy(route.Duration);
+        (SimulationScheduler scheduler, ScheduledWork arrivalWork) = state.Scheduler.Schedule(
             arrival,
-            playerShip.InstanceId,
+            targetShip.InstanceId,
             ScheduledWorkKind.TravelArrival
         );
-        var travel = new TravelState(atLocation.LocationId, intent.Destination, _state.Time, arrival, arrivalWork.Id);
-        ShipState travelingShip = playerShip with
+        var travel = new TravelState(atLocation.LocationId, command.Destination, state.Time, arrival, arrivalWork.Id);
+        ShipState travelingShip = targetShip with
         {
             StrategicState = new TravelingState(travel),
             TacticalMotion = default,
         };
-        SimulationState candidate = _state.ReplaceShip(playerShip.InstanceId, travelingShip) with
+        SimulationState candidate = state.ReplaceShip(targetShip.InstanceId, travelingShip) with
         {
             Scheduler = scheduler,
         };
-        Commit(candidate);
-        return new TravelRequestResult(TravelOutcome.Accepted);
+        candidate.Validate(shipCatalog);
+        return new ShipTravelApplicationResult(TravelOutcome.Accepted, candidate);
     }
 
     /// <summary>Validates and changes only the player ship's local tactical motion.</summary>
