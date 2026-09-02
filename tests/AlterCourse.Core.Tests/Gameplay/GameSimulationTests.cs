@@ -7,6 +7,7 @@ using AlterCourse.Core.Quantities;
 using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
+using AlterCourse.Core.Tactical;
 
 namespace AlterCourse.Core.Tests.Gameplay;
 
@@ -336,6 +337,59 @@ public sealed class GameSimulationTests
         Assert.Contains("actual ship-step work budget", exception.Message, StringComparison.Ordinal);
         Assert.NotEqual(initial, moving);
         Assert.Equal(moving, GamePersistence.Serialize(game, metadata));
+    }
+
+    /// <summary>Confirms fixed-step work is charged only for ships that require tactical integration.</summary>
+    [Fact]
+    public void FixedStepWorkSkipsInactiveShipsAndMaterializesRepairsAtBoundaries()
+    {
+        const int shipCount = 256;
+        const int stepCount = 5_000;
+        var location = new StrategicLocation(new LocationId("shared-location"), "Shared Location", default);
+        ShipStart[] starts =
+        [
+            .. Enumerable
+                .Range(1, shipCount)
+                .Select(index =>
+                {
+                    bool isMover = index == 1;
+                    bool isRepairing = index == 2;
+                    return new ShipStart(
+                        new ShipInstanceId(index),
+                        new ShipDefinitionId("pathfinder"),
+                        $"USS Test {index}",
+                        isMover ? default : new TacticalPosition(index, -index),
+                        isMover ? new TacticalMotion(new HeadingDegrees(90), new SpeedKilometersPerSecond(1)) : default,
+                        new SensorIntegrity(isRepairing ? 0.4 : 1),
+                        new AtLocationStart(location.Id),
+                        isRepairing
+                            ? new SensorRepairStart(
+                                new SensorIntegrity(0.4),
+                                new SensorIntegrity(1),
+                                new SimulationTime(0)
+                            )
+                            : null
+                    );
+                }),
+        ];
+        GameSimulation game = new GameBootstrap(
+            new SimulationTime(0),
+            new StrategicMap([location], []),
+            new ShipInstanceId(1),
+            starts
+        ).CreateSimulation(CreateCatalog());
+        TacticalPosition inactivePosition = game.CaptureState()
+            .GetRequiredShip(new ShipInstanceId(shipCount))
+            .TacticalPosition;
+
+        SimulationAdvanceResult result = game.AdvanceFixedSteps(stepCount);
+        SimulationState final = game.CaptureState();
+
+        Assert.Equal(stepCount * 100, result.FinalTime.Milliseconds);
+        Assert.Equal(500, final.GetRequiredShip(new ShipInstanceId(1)).TacticalPosition.XKilometers, 8);
+        Assert.Equal(inactivePosition, final.GetRequiredShip(new ShipInstanceId(shipCount)).TacticalPosition);
+        Assert.Equal(1, final.GetRequiredShip(new ShipInstanceId(2)).SensorIntegrity.Value);
+        Assert.Null(final.GetRequiredShip(new ShipInstanceId(2)).SensorRepair);
     }
 
     /// <summary>Confirms bootstrap cannot admit scheduled work that persistence would reject for time exhaustion.</summary>

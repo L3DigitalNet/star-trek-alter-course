@@ -12,6 +12,8 @@ namespace AlterCourse.Core.Gameplay;
 /// <summary>Owns authoritative mutation and immutable definition content for the simulation.</summary>
 public sealed class GameSimulation
 {
+    // These budgets bound one candidate advancement operation. A rejected candidate never consumes
+    // capacity from a later request or commits partial time, ship, or scheduler state.
     private const int SameBoundaryExecutionBudget = 1024;
     private const int TotalConsequenceExecutionBudget = 10_000;
     private const long ShipStepWorkBudget = 1_000_000;
@@ -242,17 +244,23 @@ public sealed class GameSimulation
             throw new InvalidOperationException("Advancement boundaries must be monotonic and fixed-step aligned.");
         }
 
-        // With no local motion, repair integrity is the only step-derived state and is already a pure
-        // function of time, so materializing it at the boundary is fixed-step equivalent.
-        if (state.Ships.All(ship => ship.StrategicState is not AtLocationState || ship.TacticalMotion.Speed.Value == 0))
+        int[] movingShipIndexes =
+        [
+            .. state
+                .Ships.Select((ship, index) => (ship, index))
+                .Where(pair => pair.ship.StrategicState is AtLocationState && pair.ship.TacticalMotion.Speed.Value != 0)
+                .Select(pair => pair.index),
+        ];
+        if (movingShipIndexes.Length == 0)
         {
             return AdvanceStrategically(state, boundary);
         }
 
-        SimulationState current = state;
-        while (current.Time.Milliseconds < boundary.Milliseconds)
+        ShipState[] movingShips = [.. movingShipIndexes.Select(index => state.Ships[index])];
+        SimulationTime currentTime = state.Time;
+        while (currentTime.Milliseconds < boundary.Milliseconds)
         {
-            long attemptedShipSteps = checked(actualShipSteps + current.Ships.Length);
+            long attemptedShipSteps = checked(actualShipSteps + movingShips.Length);
             if (attemptedShipSteps > ShipStepWorkBudget)
             {
                 throw new InvalidOperationException(
@@ -261,35 +269,29 @@ public sealed class GameSimulation
             }
 
             actualShipSteps = attemptedShipSteps;
-            SimulationTime nextTime = current.Time.AdvanceBy(SimulationFixedStep.Duration);
-            var replacements = new ShipState[current.Ships.Length];
-            for (int index = 0; index < current.Ships.Length; index++)
+            currentTime = currentTime.AdvanceBy(SimulationFixedStep.Duration);
+            for (int index = 0; index < movingShips.Length; index++)
             {
-                ShipState ship = current.Ships[index];
-                ShipState advanced = ship;
-                if (ship.StrategicState is AtLocationState)
+                ShipState ship = movingShips[index];
+                movingShips[index] = ship with
                 {
-                    advanced = advanced with
-                    {
-                        TacticalPosition = ship.TacticalPosition.Advance(
-                            ship.TacticalMotion,
-                            SimulationFixedStep.Duration.Milliseconds / 1000.0
-                        ),
-                    };
-                }
-
-                if (ship.SensorRepair is SensorRepairState repair)
-                {
-                    advanced = advanced with { SensorIntegrity = repair.IntegrityAt(nextTime) };
-                }
-
-                replacements[index] = advanced;
+                    TacticalPosition = ship.TacticalPosition.Advance(
+                        ship.TacticalMotion,
+                        SimulationFixedStep.Duration.Milliseconds / 1000.0
+                    ),
+                };
             }
-
-            current = current.ReplaceShips(replacements) with { Time = nextTime };
         }
 
-        return current;
+        ShipState[] replacements = [.. state.Ships];
+        for (int index = 0; index < movingShipIndexes.Length; index++)
+        {
+            replacements[movingShipIndexes[index]] = movingShips[index];
+        }
+
+        // Repair integrity is an analytical function of time, so one boundary materialization preserves
+        // its fixed-step result without processing stationary or strategically traveling ships every tick.
+        return AdvanceStrategically(state.ReplaceShips(replacements), boundary);
     }
 
     private static SimulationState AdvanceStrategically(SimulationState state, SimulationTime boundary)
@@ -517,6 +519,8 @@ public sealed class GameSimulation
         );
     }
 
+    // Milestone 2 order rules never consult a random source; the trace records that contract explicitly
+    // so later randomized behavior cannot appear without changing observable diagnostic data.
     private static ScheduledConsequenceTrace Trace(
         SimulationState state,
         ScheduledWork work,
