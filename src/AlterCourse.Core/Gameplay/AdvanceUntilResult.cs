@@ -3,15 +3,15 @@ using AlterCourse.Core.Simulation;
 
 namespace AlterCourse.Core.Gameplay;
 
-/// <summary>Returns a typed scheduler-boundary stop and resulting player view.</summary>
+/// <summary>Returns the next player-relevant event boundary and resulting player view.</summary>
 public sealed record AdvanceUntilResult
 {
     internal AdvanceUntilResult(
         AdvanceUntilOutcome outcome,
         SimulationTime stoppedAt,
-        IReadOnlyList<ScheduledWorkKind> resolvedKinds,
+        IReadOnlyList<PlayerAdvanceEvent> resolvedEvents,
         PlayerProjection projection
-    ) => (Outcome, StoppedAt, ResolvedKinds, Projection) = (outcome, stoppedAt, resolvedKinds, projection);
+    ) => (Outcome, StoppedAt, ResolvedEvents, Projection) = (outcome, stoppedAt, resolvedEvents, projection);
 
     /// <summary>Gets the stop outcome.</summary>
     public AdvanceUntilOutcome Outcome { get; }
@@ -19,8 +19,8 @@ public sealed record AdvanceUntilResult
     /// <summary>Gets the exact stop time.</summary>
     public SimulationTime StoppedAt { get; }
 
-    /// <summary>Gets player-targeted consequences resolved through the stop boundary in stable order.</summary>
-    public IReadOnlyList<ScheduledWorkKind> ResolvedKinds { get; }
+    /// <summary>Gets player-visible consequences resolved through the stop boundary in stable order.</summary>
+    public IReadOnlyList<PlayerAdvanceEvent> ResolvedEvents { get; }
 
     /// <summary>Gets the fresh player view after resolution.</summary>
     public PlayerProjection Projection { get; }

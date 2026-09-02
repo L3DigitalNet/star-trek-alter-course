@@ -292,7 +292,7 @@ public sealed class OrderExecutionTests
         AdvanceUntilResult result = game.AdvanceUntilNextPlayerRelevantEvent();
 
         Assert.Equal(800, result.StoppedAt.Milliseconds);
-        Assert.Equal([ScheduledWorkKind.SensorRepairCompletion], result.ResolvedKinds);
+        Assert.Equal([PlayerAdvanceEvent.SensorRepairCompleted], result.ResolvedEvents);
         Assert.Null(game.CaptureState().GetRequiredShip(NpcId).ActiveOrder);
         Assert.Null(game.CaptureState().GetRequiredShip(PlayerId).SensorRepair);
 
@@ -301,7 +301,7 @@ public sealed class OrderExecutionTests
             Scheduler = SimulationScheduler.Restore(2, 1, [state.Scheduler.OutstandingWork[0]]),
         };
         var noPlayerBoundary = GameSimulation.RestoreState(hiddenOnly, catalog);
-        AdvanceUntilResult noEvent = noPlayerBoundary.AdvanceUntilNextScheduledEvent();
+        AdvanceUntilResult noEvent = noPlayerBoundary.AdvanceUntilNextPlayerRelevantEvent();
         Assert.Equal(AdvanceUntilOutcome.NoScheduledEvent, noEvent.Outcome);
         Assert.Equal(new SimulationTime(0), noEvent.StoppedAt);
         Assert.Equal(hiddenOnly, noPlayerBoundary.CaptureState());
@@ -317,7 +317,7 @@ public sealed class OrderExecutionTests
         AdvanceUntilResult result = game.AdvanceUntilNextPlayerRelevantEvent();
 
         Assert.Equal(new SimulationTime(1000), result.StoppedAt);
-        Assert.Equal([ScheduledWorkKind.SensorRepairCompletion], result.ResolvedKinds);
+        Assert.Equal([PlayerAdvanceEvent.SensorRepairCompleted], result.ResolvedEvents);
         Assert.Null(game.CaptureState().GetRequiredShip(PlayerId).SensorRepair);
         AssertPatrolLeg(game.CaptureState(), NpcId, new ShipOrderId(1), 2, Beta, Gamma);
     }

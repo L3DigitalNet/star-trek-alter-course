@@ -4,7 +4,7 @@ using AlterCourse.Core.Identity;
 namespace AlterCourse.Core.Simulation;
 
 /// <summary>Stores and orders immutable data-only scheduled simulation work.</summary>
-public sealed class SimulationScheduler
+internal sealed class SimulationScheduler
 {
     /// <summary>Gets the maximum number of outstanding consequences retained by one scheduler.</summary>
     public const int MaximumOutstandingWork = 4096;

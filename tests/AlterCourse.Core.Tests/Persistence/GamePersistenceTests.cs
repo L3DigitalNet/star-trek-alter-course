@@ -691,7 +691,7 @@ public sealed class GamePersistenceTests
             LoadedGameSave first = LoadV2(CreatePluralV2());
             GamePersistence.Save(path, first.Simulation, first.Metadata);
             byte[] prior = File.ReadAllBytes(path);
-            first.Simulation.AdvanceUntilNextScheduledEvent();
+            first.Simulation.AdvanceUntilNextPlayerRelevantEvent();
             GamePersistence.Save(path, first.Simulation, first.Metadata);
 
             Assert.NotEqual(prior, File.ReadAllBytes(path));
@@ -710,7 +710,7 @@ public sealed class GamePersistenceTests
 
     private static void ContinueWorld(GameSimulation simulation)
     {
-        simulation.AdvanceUntilNextScheduledEvent();
+        simulation.AdvanceUntilNextPlayerRelevantEvent();
         simulation.AdvanceFixedSteps(60);
         simulation.AdvanceFixedSteps(7);
     }

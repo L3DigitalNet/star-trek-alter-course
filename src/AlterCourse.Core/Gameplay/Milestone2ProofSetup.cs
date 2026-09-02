@@ -7,12 +7,12 @@ using AlterCourse.Core.Strategic;
 namespace AlterCourse.Core.Gameplay;
 
 /// <summary>Builds the headless Milestone 2 proof world with active NPC patrol and hold intent.</summary>
-public static class Milestone2ProofSetup
+internal static class Milestone2ProofSetup
 {
     private const long HourMilliseconds = 60 * 60 * 1000;
 
     /// <summary>Creates a 03:00 world whose patrol is halfway through its first six-hour leg.</summary>
-    public static GameSimulation Create(ShipDefinitionCatalog catalog)
+    internal static GameSimulation Create(ShipDefinitionCatalog catalog)
     {
         ArgumentNullException.ThrowIfNull(catalog);
         ShipDefinition definition = catalog.GetRequired(new ShipDefinitionId("pathfinder"));
