@@ -471,6 +471,10 @@ internal abstract class HttpProviderBase(HttpClient httpClient)
     {
         ProviderException exception = status switch
         {
+            HttpStatusCode.PaymentRequired => new ProviderException(
+                ProviderErrorCategory.InsufficientBalance,
+                "Provider reported insufficient balance."
+            ),
             HttpStatusCode.BadRequest => new ProviderException(
                 ProviderErrorCategory.InvalidRequest,
                 "Provider rejected the request."

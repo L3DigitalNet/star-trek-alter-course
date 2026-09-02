@@ -430,6 +430,35 @@ public sealed class ConfigurationContractTests
         }
     }
 
+    /// <summary>Rejects an external adapter before routing when either required network boundary is absent.</summary>
+    [Theory]
+    [InlineData("    endpoint: \"https://external.api.recraft.ai/v1\"\n", "endpoint")]
+    [InlineData(
+        "    credentials:\n      api_key:\n        source: \"environment\"\n        name: \"RECRAFT_API_TOKEN\"\n",
+        "credentials.environment_variable"
+    )]
+    public void NetworkAdapterRequiresEndpointAndCredentialReference(string removedBlock, string expected)
+    {
+        string root = CopyTrackedConfiguration();
+        try
+        {
+            string providers = Path.Combine(root, "config", "assets", "providers.yaml");
+            File.WriteAllText(
+                providers,
+                File.ReadAllText(providers).Replace(removedBlock, string.Empty, StringComparison.Ordinal)
+            );
+
+            AssetCtlException exception = Assert.Throws<AssetCtlException>(() => Loader().Load(root));
+
+            Assert.Equal(2, exception.ExitCode);
+            Assert.Contains(expected, exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     /// <summary>Rejects malformed scalar types through the configuration error contract.</summary>
     [Theory]
     [InlineData("providers.yaml", "effective_date: \"2026-09-01\"", "effective_date: yesterday", "effective_date")]
@@ -781,10 +810,10 @@ public sealed class ConfigurationContractTests
         ConfigurationTypes.IAdapterDescriptor[] descriptors =
         {
             new FakeDescriptor("local-placeholder", rejectLocalOptions),
-            new FakeDescriptor("recraft-images"),
-            new FakeDescriptor("openai-images"),
-            new FakeDescriptor("xai-images"),
-            new FakeDescriptor("openai-vision-review"),
+            new FakeDescriptor("recraft-images", requiresNetwork: true),
+            new FakeDescriptor("openai-images", requiresNetwork: true),
+            new FakeDescriptor("xai-images", requiresNetwork: true),
+            new FakeDescriptor("openai-vision-review", requiresNetwork: true),
         };
         return new ConfigurationLoader(descriptors.ToDictionary(value => value.AdapterId, StringComparer.Ordinal));
     }
@@ -837,10 +866,12 @@ public sealed class ConfigurationContractTests
         }
     }
 
-    private sealed class FakeDescriptor(string adapterId, bool rejectOptions = false)
+    private sealed class FakeDescriptor(string adapterId, bool rejectOptions = false, bool requiresNetwork = false)
         : ConfigurationTypes.IAdapterDescriptor
     {
         public string AdapterId { get; } = adapterId;
+
+        public bool RequiresNetwork { get; } = requiresNetwork;
 
         public IReadOnlySet<AssetCapability> SupportedCapabilities { get; } =
             Enum.GetValues<AssetCapability>().ToHashSet();

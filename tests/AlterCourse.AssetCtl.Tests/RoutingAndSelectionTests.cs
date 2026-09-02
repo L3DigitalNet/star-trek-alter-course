@@ -578,6 +578,88 @@ public sealed class RoutingAndSelectionTests
         Assert.Equal("profile", plan.Reviewer.ModelProfileId);
     }
 
+    /// <summary>Preserves configured review order while exposing pre-spend family rejection evidence.</summary>
+    [Fact]
+    public void PlanExposesOrderedReviewCandidatesAndSkipsGeneratorFamily()
+    {
+        GenerationPlan plan = ReviewFallbackPlan();
+
+        Assert.Equal(
+            ["same", "first", "discovered", "generator"],
+            plan.ReviewerCandidates.Select(value => value.ProviderId),
+            StringComparer.Ordinal
+        );
+        Assert.Contains(
+            "reviewer-family-conflict",
+            plan.ReviewerCandidates[0].RejectionReasons,
+            StringComparer.Ordinal
+        );
+        Assert.False(plan.ReviewerCandidates[0].Eligible);
+        Assert.Contains(
+            "model-capability-mismatch",
+            plan.ReviewerCandidates[^1].RejectionReasons,
+            StringComparer.Ordinal
+        );
+        Assert.Equal("first", plan.Reviewer!.ProviderId);
+    }
+
+    private static GenerationPlan ReviewFallbackPlan()
+    {
+        var generator = new FakeGenerator("openai-images");
+        var sameFamily = new FakeReviewer("openai-vision-review");
+        var firstIndependent = new FakeReviewer("recraft-review");
+        var discovered = new FakeReviewer("zeta-review");
+        var registry = new AdapterRegistry([generator, sameFamily, firstIndependent, discovered]);
+        AssetRequest request = TestData.Request();
+        ProviderInstance generationProvider = Provider(
+            "generator",
+            generator.AdapterId,
+            0m,
+            AssetCapability.RasterGenerate
+        );
+        ProviderInstance sameProvider = Provider("same", sameFamily.AdapterId, 0m, AssetCapability.ReviewSemantic);
+        ProviderInstance firstProvider = Provider(
+            "first",
+            firstIndependent.AdapterId,
+            0m,
+            AssetCapability.ReviewSemantic
+        );
+        ProviderInstance discoveredProvider = Provider(
+            "discovered",
+            discovered.AdapterId,
+            0m,
+            AssetCapability.ReviewSemantic
+        );
+        var providers = new Dictionary<string, ProviderInstance>(StringComparer.Ordinal)
+        {
+            [generationProvider.Id] = generationProvider,
+            [sameProvider.Id] = sameProvider,
+            [firstProvider.Id] = firstProvider,
+            [discoveredProvider.Id] = discoveredProvider,
+        };
+        var generationRoute = new RouteDefinition(
+            "generation",
+            100,
+            request.Lifecycle,
+            request.Output.Format,
+            AssetCapability.RasterGenerate,
+            [new RouteTarget(generationProvider.Id, "profile")],
+            0
+        );
+        var reviewRoute = new RouteDefinition(
+            "review",
+            100,
+            null,
+            null,
+            AssetCapability.ReviewSemantic,
+            [new RouteTarget(sameProvider.Id, "profile"), new RouteTarget(firstProvider.Id, "profile")],
+            0,
+            new RouteFallbackPolicy(true, new HashSet<ProviderErrorCategory>())
+        );
+
+        return new AssetRouter(registry).Plan(Configuration(providers, request, generationRoute, reviewRoute), request);
+    }
+
     /// <summary>Excludes a route whose declared operation is not required by the request.</summary>
     [Fact]
     public void RouteCapabilityParticipatesInRequestMatching()

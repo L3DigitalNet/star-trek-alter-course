@@ -399,6 +399,86 @@ public sealed class GenerationEndToEndTests
         Assert.Equal(0, fallback.Calls);
     }
 
+    /// <summary>Exhausts the first review target's retry policy before using an allowed review fallback.</summary>
+    [Fact]
+    public async Task ReviewRouteRetriesThenFallsBackToNextReviewer()
+    {
+        var generator = new ScriptedGenerator("generator", request => Success(request.Request));
+        var failed = new ScriptedReviewer(
+            "first-reviewer",
+            () => throw new ProviderException(ProviderErrorCategory.TransientNetwork, "network", retryable: true)
+        );
+        var fallback = new ScriptedReviewer("second-reviewer", PassingReview);
+        var retry = new RouteRetryPolicy(
+            2,
+            0,
+            0,
+            0,
+            new HashSet<ProviderErrorCategory> { ProviderErrorCategory.TransientNetwork }
+        );
+        using var fixture = new GenerationFixture(
+            [generator, failed, fallback],
+            "required",
+            reviewRetry: retry,
+            reviewFallbackCategories: new HashSet<ProviderErrorCategory> { ProviderErrorCategory.TransientNetwork }
+        );
+
+        await fixture.GenerateAsync();
+
+        Assert.Equal(2, failed.Calls);
+        Assert.Equal(1, fallback.Calls);
+    }
+
+    /// <summary>Fails closed when the review route does not allow fallback for the normalized category.</summary>
+    [Fact]
+    public async Task DisallowedReviewFailureStopsBeforeFallbackReviewer()
+    {
+        var generator = new ScriptedGenerator("generator", request => Success(request.Request));
+        var failed = new ScriptedReviewer(
+            "first-reviewer",
+            () => throw new ProviderException(ProviderErrorCategory.InvalidRequest, "invalid")
+        );
+        var fallback = new ScriptedReviewer("second-reviewer", PassingReview);
+        using var fixture = new GenerationFixture([generator, failed, fallback], "required");
+
+        await Assert.ThrowsAsync<ProviderException>(() => fixture.GenerateAsync());
+
+        Assert.Equal(1, failed.Calls);
+        Assert.Equal(0, fallback.Calls);
+    }
+
+    /// <summary>Applies one physical-attempt ceiling across generation, review retries, and review fallback.</summary>
+    [Fact]
+    public async Task AttemptLimitSpansGenerationAndEveryReviewer()
+    {
+        var generator = new ScriptedGenerator("generator", request => Success(request.Request));
+        var failed = new ScriptedReviewer(
+            "first-reviewer",
+            () => throw new ProviderException(ProviderErrorCategory.TransientNetwork, "network", retryable: true)
+        );
+        var fallback = new ScriptedReviewer("second-reviewer", PassingReview);
+        var retry = new RouteRetryPolicy(
+            2,
+            0,
+            0,
+            0,
+            new HashSet<ProviderErrorCategory> { ProviderErrorCategory.TransientNetwork }
+        );
+        using var fixture = new GenerationFixture(
+            [generator, failed, fallback],
+            "required",
+            maximumTotalAttempts: 3,
+            reviewRetry: retry,
+            reviewFallbackCategories: new HashSet<ProviderErrorCategory> { ProviderErrorCategory.TransientNetwork }
+        );
+
+        await Assert.ThrowsAsync<AssetCtlException>(() => fixture.GenerateAsync());
+
+        Assert.Equal(1, generator.Calls);
+        Assert.Equal(2, failed.Calls);
+        Assert.Equal(0, fallback.Calls);
+    }
+
     /// <summary>Retains only the selected candidate unless diagnostics retention is explicitly enabled.</summary>
     [Theory]
     [InlineData(false, 1)]
@@ -601,6 +681,9 @@ public sealed class GenerationEndToEndTests
             0m
         );
 
+    private static SemanticReviewResult PassingReview() =>
+        new(true, true, true, true, 0.95, 0.96, [], false, false, 0.95, "pass", "different-provider-family");
+
     private sealed class ScriptedGenerator(
         string adapterId,
         Func<NormalizedGenerationRequest, GenerationBatchResult> invoke
@@ -683,6 +766,30 @@ public sealed class GenerationEndToEndTests
         }
     }
 
+    private sealed class ScriptedReviewer(string adapterId, Func<SemanticReviewResult> invoke)
+        : AlterCourse.AssetCtl.Providers.ProviderContracts.IAssetReviewer
+    {
+        public string AdapterId => adapterId;
+
+        public int Calls { get; private set; }
+
+        public IReadOnlySet<AssetCapability> SupportedCapabilities { get; } =
+            new HashSet<AssetCapability> { AssetCapability.ReviewSemantic };
+
+        public void ValidateOptions(IReadOnlyDictionary<string, string> options) { }
+
+        public Task<SemanticReviewResult> ReviewAsync(
+            ProviderExecutionContext context,
+            SemanticReviewRequest request,
+            CancellationToken cancellationToken
+        )
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Calls++;
+            return Task.FromResult(invoke());
+        }
+    }
+
     private sealed class FailingReviewer : AlterCourse.AssetCtl.Providers.ProviderContracts.IAssetReviewer
     {
         public string AdapterId => "malformed-reviewer";
@@ -718,7 +825,9 @@ public sealed class GenerationEndToEndTests
             decimal modelCost = 0m,
             byte[]? referenceBytes = null,
             long maximumReferenceBytes = 1_000_000,
-            string godotAssetRoot = "src/AlterCourse.Godot/assets"
+            string godotAssetRoot = "src/AlterCourse.Godot/assets",
+            RouteRetryPolicy? reviewRetry = null,
+            IReadOnlySet<ProviderErrorCategory>? reviewFallbackCategories = null
         )
         {
             Root = Path.Combine(Path.GetTempPath(), "assetctl-e2e-" + Guid.NewGuid().ToString("N"));
@@ -729,7 +838,12 @@ public sealed class GenerationEndToEndTests
                 adapter => Provider(adapter, modelCost),
                 StringComparer.Ordinal
             );
-            (RouteDefinition generationRoute, RouteDefinition[] reviewRoutes) = Routes(adapters, retry);
+            (RouteDefinition generationRoute, RouteDefinition[] reviewRoutes) = Routes(
+                adapters,
+                retry,
+                reviewRetry,
+                reviewFallbackCategories
+            );
             Configuration = CreateConfiguration(
                 Root,
                 request,
@@ -786,7 +900,9 @@ public sealed class GenerationEndToEndTests
 
         private static (RouteDefinition Generation, RouteDefinition[] Review) Routes(
             IReadOnlyList<IAdapterDescriptor> adapters,
-            RouteRetryPolicy? retry
+            RouteRetryPolicy? retry,
+            RouteRetryPolicy? reviewRetry,
+            IReadOnlySet<ProviderErrorCategory>? reviewFallbackCategories
         )
         {
             string[] generatorIds = adapters
@@ -813,25 +929,30 @@ public sealed class GenerationEndToEndTests
                 ),
                 retry ?? new RouteRetryPolicy(1, 0, 0, 0, new HashSet<ProviderErrorCategory>())
             );
-            string? reviewerId = adapters
+            string[] reviewerIds = adapters
                 .Where(adapter => adapter is AlterCourse.AssetCtl.Providers.ProviderContracts.IAssetReviewer)
                 .Select(adapter => adapter.AdapterId)
-                .SingleOrDefault();
-            RouteDefinition[] review = reviewerId is null ? [] : [ReviewRoute(reviewerId)];
+                .ToArray();
+            RouteDefinition[] review =
+                reviewerIds.Length == 0 ? [] : [ReviewRoute(reviewerIds, reviewRetry, reviewFallbackCategories)];
             return (generation, review);
         }
 
-        private static RouteDefinition ReviewRoute(string reviewerId) =>
+        private static RouteDefinition ReviewRoute(
+            IReadOnlyList<string> reviewerIds,
+            RouteRetryPolicy? retry,
+            IReadOnlySet<ProviderErrorCategory>? fallbackCategories
+        ) =>
             new(
                 "review",
                 100,
                 null,
                 null,
                 AssetCapability.ReviewSemantic,
-                [new RouteTarget(reviewerId, "profile")],
+                reviewerIds.Select(id => new RouteTarget(id, "profile")).ToArray(),
                 0,
-                new RouteFallbackPolicy(true, new HashSet<ProviderErrorCategory>()),
-                new RouteRetryPolicy(1, 0, 0, 0, new HashSet<ProviderErrorCategory>())
+                new RouteFallbackPolicy(true, fallbackCategories ?? new HashSet<ProviderErrorCategory>()),
+                retry ?? new RouteRetryPolicy(1, 0, 0, 0, new HashSet<ProviderErrorCategory>())
             );
 
         private static EffectiveConfiguration CreateConfiguration(

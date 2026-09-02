@@ -17,6 +17,8 @@ internal static class ProviderAdapters
 
         public string AdapterId => "recraft-images";
 
+        public bool RequiresNetwork => true;
+
         public IReadOnlySet<AssetCapability> SupportedCapabilities => Capabilities;
 
         public void ValidateOptions(IReadOnlyDictionary<string, string> options) =>
@@ -134,6 +136,8 @@ internal static class ProviderAdapters
 
         public string AdapterId => "openai-images";
 
+        public bool RequiresNetwork => true;
+
         public IReadOnlySet<AssetCapability> SupportedCapabilities => Capabilities;
 
         public void ValidateOptions(IReadOnlyDictionary<string, string> options) =>
@@ -223,6 +227,8 @@ internal static class ProviderAdapters
         };
 
         public string AdapterId => "xai-images";
+
+        public bool RequiresNetwork => true;
 
         public IReadOnlySet<AssetCapability> SupportedCapabilities => Capabilities;
 

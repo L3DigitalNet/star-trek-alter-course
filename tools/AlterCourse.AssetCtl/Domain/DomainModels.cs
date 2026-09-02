@@ -303,6 +303,7 @@ internal static class DomainModels
         IReadOnlyList<PlannedTarget> Targets,
         PlannedTarget? SelectedTarget,
         PlannedTarget? Reviewer,
+        IReadOnlyList<PlannedTarget> ReviewerCandidates,
         int CandidateCount,
         int AttemptsPerRoute,
         decimal? EstimatedMaximumCost,

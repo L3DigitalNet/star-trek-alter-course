@@ -552,14 +552,14 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
             SemanticReviewResult? review = null;
             var failureEvidence = new ReceiptCandidateEvidence(candidate, mechanical, null);
             failureCandidates.Add(failureEvidence);
-            if (mechanical.Passed && plan.Reviewer is not null && !offline)
+            if (mechanical.Passed && plan.ReviewerCandidates.Any(target => target.Eligible) && !offline)
             {
                 try
                 {
-                    review = await Review(
+                    review = await ReviewWithFallback(
                             adapters,
                             configuration,
-                            plan.Reviewer,
+                            plan.ReviewerCandidates,
                             generatorAdapterId,
                             request,
                             mechanical,
@@ -581,6 +581,76 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         }
 
         return evaluated;
+    }
+
+    private static async Task<SemanticReviewResult> ReviewWithFallback(
+        AdapterRegistry adapters,
+        EffectiveConfiguration configuration,
+        IReadOnlyList<PlannedTarget> candidates,
+        string generatorAdapterId,
+        AssetRequest request,
+        MechanicalValidationResult mechanical,
+        SpendGuard spend,
+        AttemptBudget attemptBudget,
+        List<object> events,
+        CancellationToken cancellationToken
+    )
+    {
+        ProviderException? lastFailure = null;
+        foreach (PlannedTarget target in candidates.Where(candidate => candidate.Eligible))
+        {
+            RouteDefinition route = configuration.ReviewRoutes.Single(value =>
+                string.Equals(value.Id, target.RouteId, StringComparison.Ordinal)
+            );
+            try
+            {
+                return await Review(
+                        adapters,
+                        configuration,
+                        target,
+                        generatorAdapterId,
+                        request,
+                        mechanical,
+                        spend,
+                        attemptBudget,
+                        events,
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false);
+            }
+            catch (ProviderException exception)
+            {
+                lastFailure = exception;
+                events.Add(
+                    new
+                    {
+                        event_type = "review-target-failure",
+                        target.ProviderId,
+                        target.ModelProfileId,
+                        category = exception.Category,
+                        diagnostic = SanitizeReceiptDiagnostic(exception.Message),
+                    }
+                );
+                if (!AllowsFallback(route, exception.Category))
+                {
+                    throw;
+                }
+                events.Add(
+                    new
+                    {
+                        event_type = "review-fallback",
+                        route = route.Id,
+                        category = exception.Category,
+                    }
+                );
+            }
+        }
+
+        throw lastFailure
+            ?? new ProviderException(
+                ProviderErrorCategory.Validation,
+                "No eligible independent semantic reviewer was available."
+            );
     }
 
     private static object Publish(

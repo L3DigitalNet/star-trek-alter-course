@@ -46,6 +46,8 @@ internal sealed class OpenAiVisionReviewer(HttpClient client) : HttpProviderBase
 
     public string AdapterId => "openai-vision-review";
 
+    public bool RequiresNetwork => true;
+
     public IReadOnlySet<AssetCapability> SupportedCapabilities => Capabilities;
 
     public void ValidateOptions(IReadOnlyDictionary<string, string> options) =>

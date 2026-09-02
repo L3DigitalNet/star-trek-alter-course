@@ -318,6 +318,14 @@ internal static class ConfigurationTypes
             Uri? endpoint = ReadEndpoint(node.OptionalScalar("endpoint", path), endpointHosts, policy, path);
 
             string? credential = ReadCredential(node.OptionalMapping("credentials", path), path);
+            if (adapter.RequiresNetwork && (endpoint is null || credential is null))
+            {
+                throw new AssetCtlException(
+                    $"{path}: network adapters require both endpoint and credentials.environment_variable.",
+                    2
+                );
+            }
+
             HashSet<string> allowedHosts = ReadAllowedHosts(node.OptionalMapping("downloads", path), path);
             Dictionary<string, ModelProfile> models = ReadModels(node.Mapping("models", path), path, adapter);
             IReadOnlySet<AssetLifecycle> allowedLifecycles = ReadAllowedLifecycles(node, path);
@@ -997,6 +1005,8 @@ internal static class ConfigurationTypes
         public IReadOnlySet<AssetCapability> SupportedCapabilities { get; }
 
         public bool IsLocalFallback => false;
+
+        public bool RequiresNetwork => false;
 
         public string? OutputContractRejection(ModelProfile model, OutputContract? output) => null;
 

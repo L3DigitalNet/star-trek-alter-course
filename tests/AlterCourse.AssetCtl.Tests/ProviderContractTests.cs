@@ -10,6 +10,35 @@ namespace AlterCourse.AssetCtl.Tests;
 /// <summary>Verifies provider REST contracts exclusively through deterministic HTTP fixtures.</summary>
 public sealed class ProviderContractTests
 {
+    /// <summary>Maps HTTP payment failure to the stable balance category without retaining response content.</summary>
+    [Theory]
+    [InlineData("recraft")]
+    [InlineData("openai")]
+    [InlineData("xai")]
+    public async Task PaymentRequiredNormalizesToInsufficientBalanceWithoutResponseBody(string kind)
+    {
+        const string sensitiveBody = "insufficient balance for account secret-account-id";
+        var handler = new RecordingHandler(_ => Json(HttpStatusCode.PaymentRequired, sensitiveBody));
+        IAssetGenerator adapter = kind switch
+        {
+            "recraft" => new RecraftImageAdapter(new HttpClient(handler)),
+            "openai" => new OpenAiImageAdapter(new HttpClient(handler)),
+            "xai" => new XaiImageAdapter(new HttpClient(handler)),
+            _ => throw new InvalidOperationException(),
+        };
+
+        ProviderException exception = await Assert.ThrowsAsync<ProviderException>(() =>
+            adapter.GenerateAsync(
+                TestData.Context(adapter.AdapterId),
+                new NormalizedGenerationRequest(TestData.Request(), "prompt", 1, []),
+                CancellationToken.None
+            )
+        );
+
+        Assert.Equal(ProviderErrorCategory.InsufficientBalance, exception.Category);
+        Assert.DoesNotContain("secret-account-id", exception.Message, StringComparison.Ordinal);
+    }
+
     /// <summary>Preserves SVG media semantics for Recraft vector generation.</summary>
     [Fact]
     public async Task RecraftVectorResponseProducesSvgCandidate()
