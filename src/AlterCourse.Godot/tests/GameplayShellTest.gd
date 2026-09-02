@@ -542,6 +542,33 @@ func test_tactical_view_course_command_refreshes_continuous_movement() -> void:
 	assert_float(screen.get_meta("tactical_y", initial_y)).is_greater(initial_y)
 
 
+func test_tactical_plot_keeps_sustained_course_marker_and_direction_visible() -> void:
+	var screen := _create_screen()
+	var tactical_map := screen.get_node("%TacticalMap") as Control
+	tactical_map.size = Vector2(400, 300)
+	screen.call("ShowTacticalView")
+	screen.call("SetDemonstrationCourse")
+	screen.call("SetSimulationRate", 1.0)
+	for _step in range(100):
+		screen.call("ProcessSyntheticDelta", 0.6)
+
+	var x_kilometers: float = screen.get_meta("tactical_x", 0.0)
+	var y_kilometers: float = screen.get_meta("tactical_y", 0.0)
+	var heading_degrees: float = screen.get_meta("tactical_heading", 0.0)
+	var speed_kilometers_per_second: float = screen.get_meta("tactical_speed", 0.0)
+	var marker: Vector2 = screen.call("MapTacticalPosition", x_kilometers, y_kilometers)
+	var heading_radians := deg_to_rad(heading_degrees)
+	var direction_end := marker + Vector2(sin(heading_radians), -cos(heading_radians)) * (
+		24.0 + speed_kilometers_per_second * 3.0
+	)
+	var plot_bounds := Rect2(Vector2.ZERO, tactical_map.size)
+
+	assert_float(x_kilometers).is_greater(70.0)
+	assert_float(y_kilometers).is_greater(70.0)
+	assert_bool(plot_bounds.has_point(marker)).is_true()
+	assert_bool(plot_bounds.has_point(direction_end)).is_true()
+
+
 func test_tactical_transform_inverts_north_and_preserves_fractional_positions() -> void:
 	var screen := _create_screen()
 	var tactical_map := screen.get_node("%TacticalMap") as Control
