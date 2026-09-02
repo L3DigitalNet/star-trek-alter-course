@@ -171,6 +171,55 @@ public sealed class ConfigurationSafetyTests
         }
     }
 
+    /// <summary>Rejects a directory symlink escape through the configuration exit-code contract.</summary>
+    [Fact]
+    public void DirectorySymlinkEscapeHasConfigurationExitCode()
+    {
+        string root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        string outside = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        Directory.CreateDirectory(outside);
+        Directory.CreateSymbolicLink(Path.Combine(root, "escaped"), outside);
+        try
+        {
+            AssetCtlException exception = Assert.Throws<AssetCtlException>(() =>
+                PathPolicy.ResolveUnder(root, "escaped/config.yaml", "config path", allowMissing: true)
+            );
+
+            Assert.Equal(2, exception.ExitCode);
+            Assert.Contains("symlink", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+            Directory.Delete(outside, recursive: true);
+        }
+    }
+
+    /// <summary>Redacts unexpected diagnostics and maps them to the documented general-failure status.</summary>
+    [Fact]
+    public void UnexpectedFailureBoundaryIsStableAndRedacted()
+    {
+        using var error = new StringWriter();
+        TextWriter previous = Console.Error;
+        Console.SetError(error);
+        try
+        {
+            int exitCode = Program.ReportUnexpectedFailure(
+                new InvalidOperationException("Authorization: Bearer super-secret-value")
+            );
+
+            Assert.Equal(1, exitCode);
+            Assert.Contains("unexpected internal failure", error.ToString(), StringComparison.Ordinal);
+            Assert.DoesNotContain("super-secret-value", error.ToString(), StringComparison.Ordinal);
+            Assert.DoesNotContain(nameof(InvalidOperationException), error.ToString(), StringComparison.Ordinal);
+        }
+        finally
+        {
+            Console.SetError(previous);
+        }
+    }
+
     private static string TemporaryFile(string contents)
     {
         string path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".yaml");

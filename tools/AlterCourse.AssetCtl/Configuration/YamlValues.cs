@@ -222,6 +222,14 @@ internal static class YamlValues
         return node as YamlSequenceNode ?? throw new AssetCtlException($"{path}.{key}: expected sequence.", 2);
     }
 
+    public static YamlMappingNode AsMapping(this YamlNode node, string path) =>
+        node as YamlMappingNode ?? throw new AssetCtlException($"{path}: expected mapping.", 2);
+
+    public static string AsScalar(this YamlNode node, string path) =>
+        node is YamlScalarNode { Value: not null } scalar
+            ? scalar.Value
+            : throw new AssetCtlException($"{path}: expected scalar.", 2);
+
     public static bool Boolean(this YamlMappingNode mapping, string key, string path) =>
         bool.TryParse(mapping.Scalar(key, path), out bool result)
             ? result
@@ -246,6 +254,64 @@ internal static class YamlValues
         )
             ? result
             : throw new AssetCtlException($"{path}.{key}: expected decimal.", 2);
+
+    public static decimal? OptionalDecimal(this YamlMappingNode mapping, string key, string path)
+    {
+        string? value = mapping.OptionalScalar(key, path);
+        if (value is null)
+        {
+            return null;
+        }
+
+        return decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out decimal result)
+            ? result
+            : throw new AssetCtlException($"{path}.{key}: expected decimal.", 2);
+    }
+
+    public static double Double(this YamlMappingNode mapping, string key, string path) =>
+        double.TryParse(mapping.Scalar(key, path), NumberStyles.Float, CultureInfo.InvariantCulture, out double result)
+        && double.IsFinite(result)
+            ? result
+            : throw new AssetCtlException($"{path}.{key}: expected finite decimal.", 2);
+
+    public static double? OptionalDouble(this YamlMappingNode mapping, string key, string path)
+    {
+        string? value = mapping.OptionalScalar(key, path);
+        if (value is null)
+        {
+            return null;
+        }
+
+        return
+            double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out double result)
+            && double.IsFinite(result)
+            ? result
+            : throw new AssetCtlException($"{path}.{key}: expected finite decimal.", 2);
+    }
+
+    public static DateOnly Date(this YamlMappingNode mapping, string key, string path) =>
+        DateOnly.TryParseExact(
+            mapping.Scalar(key, path),
+            "yyyy-MM-dd",
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.None,
+            out DateOnly result
+        )
+            ? result
+            : throw new AssetCtlException($"{path}.{key}: expected date in yyyy-MM-dd format.", 2);
+
+    public static bool? OptionalBoolean(this YamlMappingNode mapping, string key, string path)
+    {
+        string? value = mapping.OptionalScalar(key, path);
+        if (value is null)
+        {
+            return null;
+        }
+
+        return bool.TryParse(value, out bool result)
+            ? result
+            : throw new AssetCtlException($"{path}.{key}: expected true or false.", 2);
+    }
 
     public static IReadOnlyList<string> Strings(YamlSequenceNode? sequence, string path)
     {

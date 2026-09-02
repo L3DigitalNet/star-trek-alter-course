@@ -13,11 +13,18 @@ internal static class Program
 {
     public static async Task<int> Main(string[] arguments)
     {
-        string? repository = TryFindRepository();
-        string? logRoot = TryLoadLogRoot(repository);
-        using ILoggerFactory loggerFactory = CreateLoggerFactory(repository, logRoot);
-        using var httpClient = new HttpClient(CreateProviderHandler());
-        return await RunAsync(arguments, loggerFactory, httpClient).ConfigureAwait(false);
+        try
+        {
+            string? repository = TryFindRepository();
+            string? logRoot = TryLoadLogRoot(repository);
+            using ILoggerFactory loggerFactory = CreateLoggerFactory(repository, logRoot);
+            using var httpClient = new HttpClient(CreateProviderHandler());
+            return await RunAsync(arguments, loggerFactory, httpClient).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (!IsProcessFatal(exception) && exception is not OperationCanceledException)
+        {
+            return ReportUnexpectedFailure(exception);
+        }
     }
 
     internal static SocketsHttpHandler CreateProviderHandler() =>
@@ -52,7 +59,7 @@ internal static class Program
                 .CreateLogger();
             return new Serilog.Extensions.Logging.SerilogLoggerFactory(Log.Logger, dispose: true);
         }
-        catch (Exception exception)
+        catch (Exception exception) when (!IsProcessFatal(exception) && exception is not OperationCanceledException)
         {
             // Diagnostics must never control routing or publication; a broken sink degrades to the safe stderr fallback.
             Console.Error.WriteLine(
@@ -64,6 +71,16 @@ internal static class Program
             return LoggerFactory.Create(builder => builder.AddProvider(new StderrLoggerProvider()));
         }
     }
+
+    internal static int ReportUnexpectedFailure(Exception exception)
+    {
+        _ = exception;
+        Console.Error.WriteLine("assetctl: unexpected internal failure.");
+        return 1;
+    }
+
+    private static bool IsProcessFatal(Exception exception) =>
+        exception is OutOfMemoryException or StackOverflowException or AccessViolationException;
 
     private static async Task<int> RunAsync(string[] arguments, ILoggerFactory loggerFactory, HttpClient httpClient)
     {

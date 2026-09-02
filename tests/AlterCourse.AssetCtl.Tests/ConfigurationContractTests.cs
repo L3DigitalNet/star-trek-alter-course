@@ -321,6 +321,149 @@ public sealed class ConfigurationContractTests
         }
     }
 
+    /// <summary>Converts malformed collection shapes into path-specific configuration errors.</summary>
+    [Theory]
+    [InlineData(
+        "providers.yaml",
+        "providers:\n  local-placeholder:\n    adapter:",
+        "providers:\n  local-placeholder: []\n  replacement-local-placeholder:\n    adapter:",
+        "providers.local-placeholder"
+    )]
+    [InlineData(
+        "providers.yaml",
+        "      default:\n        model:",
+        "      default: []\n      replacement-default:\n        model:",
+        "providers.local-placeholder.models.default"
+    )]
+    [InlineData("routing.yaml", "routes:\n  - id:", "routes:\n  - malformed\n  - id:", "routes[0]")]
+    [InlineData(
+        "quality-tiers.yaml",
+        "  disposable:\n    candidates:",
+        "  disposable: []\n  replacement-disposable:\n    candidates:",
+        "quality_tiers.disposable"
+    )]
+    public void ConfigurationCollectionsRejectWrongNodeKinds(
+        string relativePath,
+        string original,
+        string replacement,
+        string expectedPath
+    )
+    {
+        string root = CopyTrackedConfiguration();
+        try
+        {
+            string path = Path.Combine(root, "config", "assets", relativePath);
+            File.WriteAllText(path, File.ReadAllText(path).Replace(original, replacement, StringComparison.Ordinal));
+
+            AssetCtlException exception = Assert.Throws<AssetCtlException>(() => Loader().Load(root));
+
+            Assert.Equal(2, exception.ExitCode);
+            Assert.Contains(expectedPath, exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    /// <summary>Rejects structured provider options instead of leaking a node-cast exception.</summary>
+    [Fact]
+    public void ConfigurationLoadRejectsNestedProviderOption()
+    {
+        string root = CopyTrackedConfiguration();
+        try
+        {
+            string providers = Path.Combine(root, "config", "assets", "providers.yaml");
+            File.WriteAllText(
+                providers,
+                File.ReadAllText(providers)
+                    .Replace(
+                        "supported_sizes: \"none\"",
+                        "supported_sizes:\n            nested: \"value\"",
+                        StringComparison.Ordinal
+                    )
+            );
+
+            AssetCtlException exception = Assert.Throws<AssetCtlException>(() => Loader().Load(root));
+
+            Assert.Equal(2, exception.ExitCode);
+            Assert.Contains("options.supported_sizes", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    /// <summary>Rejects malformed scalar types through the configuration error contract.</summary>
+    [Theory]
+    [InlineData("providers.yaml", "effective_date: \"2026-09-01\"", "effective_date: yesterday", "effective_date")]
+    [InlineData(
+        "providers.yaml",
+        "estimated_cost_per_output: 0.00",
+        "estimated_cost_per_output: free",
+        "estimated_cost_per_output"
+    )]
+    [InlineData("routing.yaml", "jitter_ratio: 0.2", "jitter_ratio: sometimes", "jitter_ratio")]
+    [InlineData(
+        "quality-tiers.yaml",
+        "minimum_semantic_score: 0.70",
+        "minimum_semantic_score: high",
+        "minimum_semantic_score"
+    )]
+    public void ConfigurationScalarsRejectInvalidTypedValues(
+        string relativePath,
+        string original,
+        string replacement,
+        string expectedPath
+    )
+    {
+        string root = CopyTrackedConfiguration();
+        try
+        {
+            string path = Path.Combine(root, "config", "assets", relativePath);
+            File.WriteAllText(path, File.ReadAllText(path).Replace(original, replacement, StringComparison.Ordinal));
+
+            AssetCtlException exception = Assert.Throws<AssetCtlException>(() => Loader().Load(root));
+
+            Assert.Equal(2, exception.ExitCode);
+            Assert.Contains(expectedPath, exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    /// <summary>Rejects invalid local override scalars through the same configuration contract as tracked files.</summary>
+    [Theory]
+    [InlineData("external_generation_enabled: enabled", "local override.policy.external_generation_enabled")]
+    [InlineData(
+        "maximum_estimated_cost_per_asset_usd: unlimited",
+        "local override.spending.maximum_estimated_cost_per_asset_usd"
+    )]
+    public void LocalOverrideRejectsInvalidTypedValues(string setting, string expectedPath)
+    {
+        string root = CopyTrackedConfiguration();
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, ".assetctl"));
+            File.WriteAllText(
+                Path.Combine(root, ".assetctl", "config.local.yaml"),
+                $"schema_version: \"1\"\n{(setting.StartsWith("external", StringComparison.Ordinal) ? "policy" : "spending")}:\n  {setting}\n"
+            );
+
+            AssetCtlException exception = Assert.Throws<AssetCtlException>(() => Loader().Load(root));
+
+            Assert.Equal(2, exception.ExitCode);
+            Assert.Contains(expectedPath, exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     /// <summary>Rejects an unknown semantic-review value when loading the tracked tier document.</summary>
     [Fact]
     public void ConfigurationLoadRejectsUnknownSemanticReviewValue()

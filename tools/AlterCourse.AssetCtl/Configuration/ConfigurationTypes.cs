@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -224,14 +223,12 @@ internal static class ConfigurationTypes
             node.RequireOnly("local override.policy", "external_generation_enabled", "local_placeholder_fallback");
             return policy with
             {
-                ExternalGenerationEnabled = node.OptionalScalar("external_generation_enabled", "local override.policy")
-                    is { } enabled
-                    ? bool.Parse(enabled)
-                    : policy.ExternalGenerationEnabled,
-                LocalPlaceholderFallback = node.OptionalScalar("local_placeholder_fallback", "local override.policy")
-                    is { } fallback
-                    ? bool.Parse(fallback)
-                    : policy.LocalPlaceholderFallback,
+                ExternalGenerationEnabled =
+                    node.OptionalBoolean("external_generation_enabled", "local override.policy")
+                    ?? policy.ExternalGenerationEnabled,
+                LocalPlaceholderFallback =
+                    node.OptionalBoolean("local_placeholder_fallback", "local override.policy")
+                    ?? policy.LocalPlaceholderFallback,
             };
         }
 
@@ -259,8 +256,7 @@ internal static class ConfigurationTypes
 
         private static decimal OptionalDecimal(YamlMappingNode node, string key, decimal fallback)
         {
-            string? value = node.OptionalScalar(key, "local override.spending");
-            return value is null ? fallback : decimal.Parse(value, CultureInfo.InvariantCulture);
+            return node.OptionalDecimal(key, "local override.spending") ?? fallback;
         }
 
         private Dictionary<string, ProviderInstance> ReadProviders(
@@ -288,8 +284,8 @@ internal static class ConfigurationTypes
                 > pair in providersNode.Children
             )
             {
-                string id = ((YamlScalarNode)pair.Key).Value!;
-                if (!providers.TryAdd(id, ReadProvider(id, (YamlMappingNode)pair.Value, policy)))
+                string id = pair.Key.AsScalar("providers key");
+                if (!providers.TryAdd(id, ReadProvider(id, pair.Value.AsMapping($"providers.{id}"), policy)))
                 {
                     throw new AssetCtlException($"providers.{id}: duplicate provider.", 2);
                 }
@@ -363,7 +359,7 @@ internal static class ConfigurationTypes
             }
 
             var result = new HashSet<AssetLifecycle>();
-            foreach (string value in YamlValues.Strings(values, path))
+            foreach (string value in YamlValues.Strings(values, $"{path}.allowed_lifecycles"))
             {
                 AssetLifecycle lifecycle = ParseLifecycle(value, $"{path}.allowed_lifecycles")!.Value;
                 if (!result.Add(lifecycle))
@@ -429,7 +425,10 @@ internal static class ConfigurationTypes
             }
 
             downloads.RequireOnly($"{path}.downloads", "allowed_hosts");
-            result.UnionWith(YamlValues.Strings(downloads.Sequence("allowed_hosts", path), path));
+            string downloadsPath = $"{path}.downloads";
+            result.UnionWith(
+                YamlValues.Strings(downloads.Sequence("allowed_hosts", downloadsPath), $"{downloadsPath}.allowed_hosts")
+            );
             return result;
         }
 
@@ -442,8 +441,8 @@ internal static class ConfigurationTypes
             Dictionary<string, ModelProfile> result = new(StringComparer.Ordinal);
             foreach (KeyValuePair<YamlNode, YamlNode> pair in nodes.Children)
             {
-                string modelId = ((YamlScalarNode)pair.Key).Value!;
-                ModelProfile model = ReadModel(path, modelId, (YamlMappingNode)pair.Value);
+                string modelId = pair.Key.AsScalar($"{path}.models key");
+                ModelProfile model = ReadModel(path, modelId, pair.Value.AsMapping($"{path}.models.{modelId}"));
                 AssetCapability[] unsupported = model.Capabilities.Except(adapter.SupportedCapabilities).ToArray();
                 if (unsupported.Length != 0)
                 {
@@ -473,13 +472,13 @@ internal static class ConfigurationTypes
             string path = $"{providerPath}.models.{id}";
             node.RequireOnly(path, "model", "capabilities", "economics", "options");
             var capabilities = new HashSet<AssetCapability>();
-            foreach (string value in YamlValues.Strings(node.Sequence("capabilities", path), path))
+            foreach (string value in YamlValues.Strings(node.Sequence("capabilities", path), $"{path}.capabilities"))
             {
                 capabilities.Add(ParseCapability(value, $"{path}.capabilities"));
             }
 
             (decimal? cost, string pricingBasis) = ReadEconomics(node.Mapping("economics", path), path);
-            Dictionary<string, string> options = ReadOptions(node.OptionalMapping("options", path));
+            Dictionary<string, string> options = ReadOptions(node.OptionalMapping("options", path), path);
             return new ModelProfile(id, node.Scalar("model", path), capabilities, cost, pricingBasis, options);
         }
 
@@ -497,23 +496,17 @@ internal static class ConfigurationTypes
                 throw new AssetCtlException($"{path}.economics.currency: only USD is supported.", 2);
             }
 
-            _ = DateOnly.ParseExact(
-                economics.Scalar("effective_date", path),
-                "yyyy-MM-dd",
-                CultureInfo.InvariantCulture
-            );
-            decimal? cost = null;
-            string? costText = economics.OptionalScalar("estimated_cost_per_output", path);
-            if (costText is not null)
+            _ = economics.Date("effective_date", $"{path}.economics");
+            decimal? cost = economics.OptionalDecimal("estimated_cost_per_output", $"{path}.economics");
+            if (cost is not null)
             {
-                cost = decimal.Parse(costText, CultureInfo.InvariantCulture);
                 if (cost < 0)
                 {
                     throw new AssetCtlException($"{path}.economics.estimated_cost_per_output: cannot be negative.", 2);
                 }
             }
 
-            string pricingBasis = economics.OptionalScalar("pricing_basis", path) ?? "fixed-output";
+            string pricingBasis = economics.OptionalScalar("pricing_basis", $"{path}.economics") ?? "fixed-output";
             if (
                 pricingBasis
                 is not ("fixed-output" or "provider-calculated" or "quality-and-resolution" or "token-usage")
@@ -528,7 +521,7 @@ internal static class ConfigurationTypes
             return (cost, pricingBasis);
         }
 
-        private static Dictionary<string, string> ReadOptions(YamlMappingNode? optionNode)
+        private static Dictionary<string, string> ReadOptions(YamlMappingNode? optionNode, string modelPath)
         {
             var options = new Dictionary<string, string>(StringComparer.Ordinal);
             if (optionNode is not null)
@@ -540,7 +533,8 @@ internal static class ConfigurationTypes
                     > pair in optionNode.Children
                 )
                 {
-                    options.Add(((YamlScalarNode)pair.Key).Value!, ((YamlScalarNode)pair.Value).Value!);
+                    string key = pair.Key.AsScalar($"{modelPath}.options key");
+                    options.Add(key, pair.Value.AsScalar($"{modelPath}.options.{key}"));
                 }
             }
 
@@ -599,8 +593,8 @@ internal static class ConfigurationTypes
             var ids = new HashSet<string>(StringComparer.Ordinal);
             for (int index = 0; index < sequence.Children.Count; index++)
             {
-                var node = (YamlMappingNode)sequence.Children[index];
                 string path = review ? $"review_routes[{index}]" : $"routes[{index}]";
+                YamlMappingNode node = sequence.Children[index].AsMapping(path);
                 node.RequireOnly(
                     path,
                     "id",
@@ -664,7 +658,7 @@ internal static class ConfigurationTypes
             int attempts = node.Integer("maximum_attempts_per_target", retryPath);
             int initialDelay = node.Integer("initial_delay_milliseconds", retryPath);
             int maximumDelay = node.Integer("maximum_delay_milliseconds", retryPath);
-            double jitter = double.Parse(node.Scalar("jitter_ratio", retryPath), CultureInfo.InvariantCulture);
+            double jitter = node.Double("jitter_ratio", retryPath);
             if (
                 attempts < 1
                 || attempts > limits.MaximumTotalAttempts
@@ -742,9 +736,9 @@ internal static class ConfigurationTypes
                 > pair in document.Mapping("quality_tiers", "quality-tiers").Children
             )
             {
-                string id = ((YamlScalarNode)pair.Key).Value!;
-                var node = (YamlMappingNode)pair.Value;
+                string id = pair.Key.AsScalar("quality_tiers key");
                 string path = $"quality_tiers.{id}";
+                YamlMappingNode node = pair.Value.AsMapping(path);
                 node.RequireOnly(
                     path,
                     "candidates",
@@ -765,8 +759,7 @@ internal static class ConfigurationTypes
                     throw new AssetCtlException($"{path}: candidate or attempt count exceeds root limits.", 2);
                 }
 
-                string? scoreText = node.OptionalScalar("minimum_semantic_score", path);
-                double score = scoreText is null ? 0 : double.Parse(scoreText, CultureInfo.InvariantCulture);
+                double score = node.OptionalDouble("minimum_semantic_score", path) ?? 0;
                 if (score is < 0 or > 1)
                 {
                     throw new AssetCtlException($"{path}.minimum_semantic_score: expected 0..1.", 2);
