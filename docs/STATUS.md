@@ -22,6 +22,6 @@
 - Local and remote topic branches are pruned; only permanent `dev` and `main` branches remain, with `origin/HEAD` at `dev`.
 - Project-local Godot/C# guidance is available as five byte-identical paired Claude/Codex skills with project-relative Codex registration and a canonical parity gate.
 - The skill set pins upstream `7110607ab816ece9669274bc84937857a8819796`, retaining Apache-2.0 and NOTICE obligations with provenance/update guidance.
-- Feature #16 fully implements AssetCtl; draft PR #19 awaits governed admission and merge into `dev`.
+- Feature #16 fully implements AssetCtl and is merged into `dev` through governed PR #19.
 - AssetCtl has strict offline configuration, safe atomic publication, lifecycle approvals, provenance, and Godot import support.
 - AssetCtl credentials remain OpenBao-owned; tracked content contains only references and environment-variable names.
