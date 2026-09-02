@@ -5,7 +5,7 @@ namespace AlterCourse.Core.Simulation;
 
 /// <summary>Describes a persistable scheduled consequence without executable callbacks.</summary>
 [StructLayout(LayoutKind.Auto)]
-public readonly record struct ScheduledWork
+internal readonly record struct ScheduledWork
 {
     /// <summary>Initializes a scheduled-work item.</summary>
     /// <param name="id">The stable scheduled-work identity.</param>

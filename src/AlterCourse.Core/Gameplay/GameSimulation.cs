@@ -126,7 +126,7 @@ public sealed class GameSimulation
         Commit(advance.State);
         return new SimulationAdvanceResult(
             _state.Time,
-            PlayerVisibleKinds(advance.Traces, _state.PlayerShipId),
+            PlayerEvents(advance.Traces, _state.PlayerShipId),
             Project(_state)
         );
     }
@@ -141,9 +141,9 @@ public sealed class GameSimulation
         {
             PlayerProjection unchanged = Project(_state);
             return new AdvanceUntilResult(
-                AdvanceUntilOutcome.NoScheduledEvent,
+                AdvanceUntilOutcome.NoPlayerEvent,
                 _state.Time,
-                new ReadOnlyValueList<ScheduledWorkKind>([]),
+                new ReadOnlyValueList<PlayerAdvanceEvent>([]),
                 unchanged
             );
         }
@@ -152,15 +152,12 @@ public sealed class GameSimulation
         SimulationAdvanceTraceResult advance = AdvanceTo(_state, boundary, _shipCatalog);
         Commit(advance.State);
         return new AdvanceUntilResult(
-            AdvanceUntilOutcome.ScheduledEventResolved,
+            AdvanceUntilOutcome.PlayerEventResolved,
             _state.Time,
-            PlayerVisibleKinds(advance.Traces, _state.PlayerShipId),
+            PlayerEvents(advance.Traces, _state.PlayerShipId),
             Project(_state)
         );
     }
-
-    /// <summary>Advances safely to the next player-relevant scheduled consequence.</summary>
-    public AdvanceUntilResult AdvanceUntilNextScheduledEvent() => AdvanceUntilNextPlayerRelevantEvent();
 
     internal OrderCancellationResult CancelOrder(ShipOrderId orderId)
     {
@@ -530,13 +527,31 @@ public sealed class GameSimulation
         bool completed
     ) => new(work.Id, work.TargetShipId, work.Kind, state.Time, order?.Id, order?.Kind, rule, action, completed, false);
 
-    private static ReadOnlyValueList<ScheduledWorkKind> PlayerVisibleKinds(
+    private static ReadOnlyValueList<PlayerAdvanceEvent> PlayerEvents(
         IReadOnlyList<ScheduledConsequenceTrace> traces,
         ShipInstanceId playerShipId
-    ) =>
-        new ReadOnlyValueList<ScheduledWorkKind>(
-            traces.Where(trace => trace.TargetShipId == playerShipId).Select(trace => trace.WorkKind)
-        );
+    )
+    {
+        List<PlayerAdvanceEvent> events = [];
+        foreach (ScheduledConsequenceTrace trace in traces.Where(trace => trace.TargetShipId == playerShipId))
+        {
+            switch (trace.WorkKind)
+            {
+                case ScheduledWorkKind.TravelArrival:
+                    events.Add(PlayerAdvanceEvent.TravelArrived);
+                    break;
+                case ScheduledWorkKind.SensorRepairCompletion:
+                    events.Add(PlayerAdvanceEvent.SensorRepairCompleted);
+                    break;
+                case ScheduledWorkKind.OrderWake:
+                    break;
+                default:
+                    throw new InvalidOperationException("A resolved scheduled consequence has an unknown kind.");
+            }
+        }
+
+        return new ReadOnlyValueList<PlayerAdvanceEvent>(events);
+    }
 
     private static PlayerProjection Project(SimulationState state)
     {

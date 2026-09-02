@@ -1,7 +1,7 @@
 namespace AlterCourse.Core.Simulation;
 
 /// <summary>Identifies the currently supported data-only scheduled consequences.</summary>
-public enum ScheduledWorkKind
+internal enum ScheduledWorkKind
 {
     /// <summary>Completes travel at a destination.</summary>
     TravelArrival = 1,

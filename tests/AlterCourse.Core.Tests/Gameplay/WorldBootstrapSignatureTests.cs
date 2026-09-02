@@ -137,20 +137,20 @@ public sealed class WorldBootstrapSignatureTests
         Assert.Equal("traveling", atFourSeconds[2]!["strategicState"]!["kind"]!.GetValue<string>());
         Assert.Equal(6, atFourSeconds[2]!["tacticalPosition"]!["xKilometers"]!.GetValue<double>());
 
-        AdvanceUntilResult repairs = game.AdvanceUntilNextScheduledEvent();
+        AdvanceUntilResult repairs = game.AdvanceUntilNextPlayerRelevantEvent();
         Assert.Equal(8000, repairs.StoppedAt.Milliseconds);
-        Assert.Equal([ScheduledWorkKind.SensorRepairCompletion], repairs.ResolvedKinds);
+        Assert.Equal([PlayerAdvanceEvent.SensorRepairCompleted], repairs.ResolvedEvents);
         JsonArray afterRepairs = Ships(Parse(game));
         Assert.Null(afterRepairs[0]!["sensorRepair"]);
         Assert.Null(afterRepairs[1]!["sensorRepair"]);
         Assert.Equal("traveling", afterRepairs[2]!["strategicState"]!["kind"]!.GetValue<string>());
 
-        AdvanceUntilResult noPlayerEvent = game.AdvanceUntilNextScheduledEvent();
-        Assert.Equal(AdvanceUntilOutcome.NoScheduledEvent, noPlayerEvent.Outcome);
+        AdvanceUntilResult noPlayerEvent = game.AdvanceUntilNextPlayerRelevantEvent();
+        Assert.Equal(AdvanceUntilOutcome.NoPlayerEvent, noPlayerEvent.Outcome);
         Assert.Equal(8000, noPlayerEvent.StoppedAt.Milliseconds);
-        Assert.Empty(noPlayerEvent.ResolvedKinds);
+        Assert.Empty(noPlayerEvent.ResolvedEvents);
         SimulationAdvanceResult hiddenArrival = game.AdvanceFixedSteps(60);
-        Assert.Empty(hiddenArrival.ResolvedKinds);
+        Assert.Empty(hiddenArrival.ResolvedEvents);
         JsonArray complete = Ships(Parse(game));
         Assert.Equal("dawn-anchor", complete[0]!["strategicState"]!["locationId"]!.GetValue<string>());
         Assert.Equal("vesper-reach", complete[1]!["strategicState"]!["locationId"]!.GetValue<string>());
@@ -220,14 +220,14 @@ public sealed class WorldBootstrapSignatureTests
         byte[] partway = GamePersistence.Serialize(uninterrupted, Metadata);
         GameSimulation restored = GamePersistence.Deserialize(partway, catalog, "bootstrap-signature.json").Simulation;
 
-        AdvanceUntilResult first = uninterrupted.AdvanceUntilNextScheduledEvent();
-        AdvanceUntilResult restoredFirst = restored.AdvanceUntilNextScheduledEvent();
+        AdvanceUntilResult first = uninterrupted.AdvanceUntilNextPlayerRelevantEvent();
+        AdvanceUntilResult restoredFirst = restored.AdvanceUntilNextPlayerRelevantEvent();
         Assert.Equal(first, restoredFirst);
         Assert.Equal(uninterrupted.GetPlayerProjection(), restored.GetPlayerProjection());
         Assert.Equal(GamePersistence.Serialize(uninterrupted, Metadata), GamePersistence.Serialize(restored, Metadata));
 
-        AdvanceUntilResult second = uninterrupted.AdvanceUntilNextScheduledEvent();
-        AdvanceUntilResult restoredSecond = restored.AdvanceUntilNextScheduledEvent();
+        AdvanceUntilResult second = uninterrupted.AdvanceUntilNextPlayerRelevantEvent();
+        AdvanceUntilResult restoredSecond = restored.AdvanceUntilNextPlayerRelevantEvent();
         Assert.Equal(second, restoredSecond);
         Assert.Equal(uninterrupted.GetPlayerProjection(), restored.GetPlayerProjection());
         Assert.Equal(GamePersistence.Serialize(uninterrupted, Metadata), GamePersistence.Serialize(restored, Metadata));

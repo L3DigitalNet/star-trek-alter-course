@@ -2,10 +2,11 @@
 
 ## Current snapshot
 
-- Feature #36 completed Milestone 1 through merged Final PR #37 (`eb3c976`); manual gameplay testing is the next release-facing step.
-- Feature #38 completed Milestone 2 through merged Final PR #39 (`fba9b438`) on `dev`.
+- Features #36 and #38 completed Milestones 1 and 2 through merged Final PRs #37 (`eb3c976`) and #39 (`fba9b438`) on `dev`.
+- Task #40 consolidates their gameplay shell in draft Final PR #41 targeting `dev`; owner review and manual gameplay testing remain in progress.
 - Version 0.1.0 remains the first source-only release. No packaged gameplay artifact is published.
 - The shell retains strategic travel, local tactical movement, sensor repair, deterministic time controls, player-relevant advance-until, and quick save/load.
+- The tracked launch script restores and builds before Godot starts, preventing stale local Debug content after branch changes.
 - The proof world has three vessels: USS Pathfinder at Dawn Anchor, USS Wayfarer repairing at Vesper Reach, and USS Horizon traveling to Meridian Drift.
 - Core owns an immutable ship-definition catalog and plural ordinary `ShipState`; `PlayerShipId` selects one ship for commands and projection.
 - Strategic, tactical, sensor, repair, and scheduled consequence state is ship-owned. Targeted same-kind work cannot cross ship identities.
@@ -18,11 +19,12 @@
 - Ship-definition schema V2 separates reusable capability from vessel names and starting sensor condition.
 - The proof world reuses one validated Pathfinder-class definition for three vessel instances.
 - Save schema V3 persists bounded plural world state, definition references, active orders, and the order allocator; authored definitions remain external.
-- Adjacent V1-to-V2-to-V3 and V2-to-V3 migrations preserve historical rule identities. Old travel remains orderless because migration does not invent autonomous intent.
+- Historical `first-playable-v1` is validated at its source schema. V2-to-V3 writes current `active-world-orders-v1`, and old travel remains orderless.
 - The generic quick-save slot is `user://quick-save.json`. Only the unchanged default path may discover the legacy `user://quick-save-v1.json` file when the generic slot is absent.
 - World admission is capped at 256 ships. Each advancement allows 1,000,000 moving-ship steps and 10,000 scheduled consequences.
 - Strategic-only intervals jump event-to-event and update repairs analytically; ships with active local tactical motion retain deterministic 100 ms integration.
 - Godot projects player-visible state and adapts coordinates, input, and elapsed presentation time; it neither owns authoritative ships nor exposes unrestricted NPC truth.
+- The tactical plot is player-centered and local, keeping legitimate sustained movement visible while numeric Core coordinates remain status truth.
 - The solution uses a one-way Godot-to-Core project reference, exact .NET SDK 10.0.111, C# 12, Godot 4.7.2 .NET, .NET 8 runtime support, Node 24, xUnit, and GdUnit4 6.2.0.
 - `scripts/verify.sh` is the canonical read-only gate for formatting, analysis, policy, builds, tests, Godot integration, security, and smoke checks.
 - AssetCtl remains an isolated .NET 10 tool with bounded inputs, offline-first defaults, safe publication, provenance, and Godot import validation.

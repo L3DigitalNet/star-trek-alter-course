@@ -16,9 +16,18 @@ public partial class TacticalMapView : Control
         QueueRedraw();
     }
 
-    /// <summary>Maps a Core position through the same centralized transform used for drawing.</summary>
-    public Vector2 MapPosition(double xKilometers, double yKilometers) =>
-        TacticalMapTransform.ToScreen(xKilometers, yKilometers, Size / 2, PixelsPerKilometer);
+    /// <summary>Maps a Core position relative to the current ship-centered local plot.</summary>
+    public Vector2 MapPosition(double xKilometers, double yKilometers)
+    {
+        double cameraXKilometers = _projection?.Position.XKilometers ?? 0;
+        double cameraYKilometers = _projection?.Position.YKilometers ?? 0;
+        return TacticalMapTransform.ToScreen(
+            xKilometers - cameraXKilometers,
+            yKilometers - cameraYKilometers,
+            Size / 2,
+            PixelsPerKilometer
+        );
+    }
 
     /// <inheritdoc />
     public override void _Draw()

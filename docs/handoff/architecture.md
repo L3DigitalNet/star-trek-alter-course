@@ -12,17 +12,20 @@
 - Ship iteration is stable. Each advancement is capped at 1,000,000 moving-ship steps and 10,000 scheduled consequences.
 - Finite-long numeric exhaustion fails atomically; it is an explicit limitation rather than an indefinite-successor promise.
 - V3 persistence bounds world state, definition references, scheduler data, active orders, and the order allocator.
-- Loading resolves references through the supplied immutable catalog. Adjacent V1-to-V2-to-V3 and V2-to-V3 migrations preserve rule identities.
+- Loading resolves references through the supplied immutable catalog. Historical `first-playable-v1` validates at source schema; V2-to-V3 writes `active-world-orders-v1`.
 - Definitions are not serialized. V1 migration creates one ship, targets old work to the player, and uses its design label for the missing vessel name.
 - World construction and persistence admit at most 256 ships to bound untrusted input and fixed-step work; this is not a final capacity target.
 - Authored strategic-map order remains observable.
 - Ship collections and scheduled work are insertion-order independent and canonically ordered.
 - Godot projects player-visible state without NPC omniscience.
+- The tactical plot is player-centered and local, so legitimate sustained movement keeps marker and direction visible while numeric Core coordinates remain status truth.
 - Ordinary ships may have one optional stable `ShipOrder`: `TravelTo`, `PatrolRoute`, or `HoldUntil`; old travel remains orderless.
 - Order execution shares the internal travel application with player travel. Cancellation removes only the identified order and its exact hold wake.
 - Strategic-only intervals jump event-to-event. Only at-location ships with nonzero tactical motion take fixed steps; repairs materialize analytically.
 - Player-relevant advance processes hidden NPC work but reports and stops only on `PlayerShipId`; Godot results stay filtered.
-- `CancelOrder` and complete consequence traces are internal M2 surfaces until a real command or diagnostic consumer exists.
+- Public advancement outcomes use player-semantic event names at the Godot boundary; scheduler consequences and proof traces remain internal surfaces.
+- The Godot command shell owns stable player controls and projections, while `GameSimulation` remains the command and state authority.
+- `scripts/launch-game.sh` is the safe direct-launch boundary: it restores and builds the Godot project before starting the editor.
 
 ## Standing backlog
 

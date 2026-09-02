@@ -14,6 +14,35 @@ namespace AlterCourse.Core.Tests.Gameplay;
 /// <summary>Verifies the deterministic headless gameplay aggregate and its player contract.</summary>
 public sealed class GameSimulationTests
 {
+    /// <summary>Confirms the public advancement contract contains only player-semantic event vocabulary.</summary>
+    [Fact]
+    public void AdvancementApiExposesOnlyPlayerSemanticEvents()
+    {
+        Assert.Equal(
+            typeof(IReadOnlyList<PlayerAdvanceEvent>),
+            typeof(SimulationAdvanceResult).GetProperty(nameof(SimulationAdvanceResult.ResolvedEvents))!.PropertyType
+        );
+        Assert.Equal(
+            typeof(IReadOnlyList<PlayerAdvanceEvent>),
+            typeof(AdvanceUntilResult).GetProperty(nameof(AdvanceUntilResult.ResolvedEvents))!.PropertyType
+        );
+        Assert.DoesNotContain(
+            typeof(GameSimulation).GetMembers().Concat(typeof(SimulationAdvanceResult).GetMembers()),
+            member => member.Name.Contains("Scheduled", StringComparison.Ordinal)
+        );
+        Assert.DoesNotContain(
+            typeof(AdvanceUntilResult).GetMembers(),
+            member => member.Name.Contains("Scheduled", StringComparison.Ordinal)
+        );
+        Assert.Equal(["PlayerEventResolved", "NoPlayerEvent"], Enum.GetNames<AdvanceUntilOutcome>());
+        Assert.DoesNotContain(
+            Enum.GetNames<AdvanceUntilOutcome>(),
+            name => name.Contains("Scheduled", StringComparison.Ordinal)
+        );
+        Assert.Null(typeof(GameSimulation).GetMethod("AdvanceUntilNextScheduledEvent"));
+        Assert.False(typeof(Milestone2ProofSetup).IsPublic);
+    }
+
     /// <summary>Confirms setup is deterministic, damaged, repairing, and projected read-only.</summary>
     [Fact]
     public void FirstSetupIsDeterministicDamagedAndReadOnly()
@@ -218,9 +247,9 @@ public sealed class GameSimulationTests
         Assert.NotNull(complete.Strategic.Travel);
     }
 
-    /// <summary>Confirms scheduler-boundary advancement matches ordinary fixed-step consequences.</summary>
+    /// <summary>Confirms player-event advancement matches ordinary fixed-step consequences.</summary>
     [Fact]
-    public void AdvanceUntilUsesSchedulerBoundariesAndMatchesOrdinaryAdvance()
+    public void AdvanceUntilUsesPlayerEventBoundariesAndMatchesOrdinaryAdvance()
     {
         GameSimulation until = CreateGame();
         GameSimulation ordinary = CreateGame();
@@ -228,39 +257,39 @@ public sealed class GameSimulationTests
         until.RequestTravel(new TravelIntent(destination));
         ordinary.RequestTravel(new TravelIntent(destination));
 
-        AdvanceUntilResult repair = until.AdvanceUntilNextScheduledEvent();
-        AdvanceUntilResult arrival = until.AdvanceUntilNextScheduledEvent();
+        AdvanceUntilResult repair = until.AdvanceUntilNextPlayerRelevantEvent();
+        AdvanceUntilResult arrival = until.AdvanceUntilNextPlayerRelevantEvent();
         SimulationAdvanceResult ordinaryAdvance = ordinary.AdvanceFixedSteps(120);
 
-        Assert.Equal(AdvanceUntilOutcome.ScheduledEventResolved, repair.Outcome);
+        Assert.Equal(AdvanceUntilOutcome.PlayerEventResolved, repair.Outcome);
         Assert.Equal(8000, repair.StoppedAt.Milliseconds);
-        Assert.Equal([ScheduledWorkKind.SensorRepairCompletion], repair.ResolvedKinds);
+        Assert.Equal([PlayerAdvanceEvent.SensorRepairCompleted], repair.ResolvedEvents);
         Assert.NotNull(repair.Projection.Strategic.Travel);
         Assert.Equal(12000, arrival.StoppedAt.Milliseconds);
-        Assert.Equal([ScheduledWorkKind.TravelArrival], arrival.ResolvedKinds);
+        Assert.Equal([PlayerAdvanceEvent.TravelArrived], arrival.ResolvedEvents);
         Assert.Equal(12000, ordinaryAdvance.FinalTime.Milliseconds);
         Assert.Equal(
-            [ScheduledWorkKind.SensorRepairCompletion, ScheduledWorkKind.TravelArrival],
-            ordinaryAdvance.ResolvedKinds
+            [PlayerAdvanceEvent.SensorRepairCompleted, PlayerAdvanceEvent.TravelArrived],
+            ordinaryAdvance.ResolvedEvents
         );
         Assert.Equal(ordinary.GetPlayerProjection(), ordinaryAdvance.Projection);
         Assert.Equal(until.GetPlayerProjection(), ordinary.GetPlayerProjection());
     }
 
-    /// <summary>Confirms advance-until is a no-op once no scheduled boundary remains.</summary>
+    /// <summary>Confirms advance-until is a no-op once no player-relevant event remains.</summary>
     [Fact]
-    public void AdvanceUntilWithoutScheduledWorkDoesNotAdvance()
+    public void AdvanceUntilWithoutPlayerEventsDoesNotAdvance()
     {
         GameSimulation game = CreateGame();
         game.RequestTravel(new TravelIntent(ConnectedDestination(game)));
         game.AdvanceFixedSteps(140);
         PlayerProjection before = game.GetPlayerProjection();
 
-        AdvanceUntilResult result = game.AdvanceUntilNextScheduledEvent();
+        AdvanceUntilResult result = game.AdvanceUntilNextPlayerRelevantEvent();
 
-        Assert.Equal(AdvanceUntilOutcome.NoScheduledEvent, result.Outcome);
+        Assert.Equal(AdvanceUntilOutcome.NoPlayerEvent, result.Outcome);
         Assert.Equal(before.SimulationTime, result.StoppedAt);
-        Assert.Empty(result.ResolvedKinds);
+        Assert.Empty(result.ResolvedEvents);
         Assert.Equal(before, result.Projection);
         Assert.Equal(before, game.GetPlayerProjection());
     }

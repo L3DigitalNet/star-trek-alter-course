@@ -10,7 +10,7 @@ The repository provides a first executable gameplay walking skeleton alongside t
 
 The command screen proves a small, persistent, deterministic slice of play: a captain selects a connected destination on an open strategic map, begins travel, and sees the ship's damaged sensors repair as simulation time passes. Arrival is scheduled rather than immediate. A separate local tactical view displays continuous position and accepts a demonstration course command; neither map is governed by square or hex movement.
 
-The current development line also establishes the Milestone 1 world foundation. Core owns three persistent ship instances, identifies one of them as the player ship, and advances each ship's strategic, tactical, repair, and scheduled state independently. The Godot shell remains deliberately player-oriented; the other ships prove authoritative world behavior without exposing omniscient NPC truth or adding AI and orders prematurely.
+The current development line establishes the Milestone 1 and 2 world foundation. Core owns three persistent ship instances, identifies one of them as the player ship, and advances each ship's strategic, tactical, repair, scheduled, and order state independently. Authoritative NPC ships can carry durable `TravelTo`, `PatrolRoute`, and `HoldUntil` orders. The Godot shell remains deliberately player-oriented: it does not expose hidden NPC truth.
 
 The design centers on a persistent simulation in which the player commands one starship inside a changing political and strategic world. Planned areas include:
 
@@ -46,28 +46,31 @@ See [Development quality](docs/development-quality.md) for the complete setup, v
 
 ## Run the gameplay slice
 
-After setup, launch the Godot project from the repository root:
+After setup, launch the gameplay slice from the repository root:
 
 ```bash
-godot_bin="$(./scripts/resolve-godot.sh)"
-"${godot_bin}" --path src/AlterCourse.Godot
+./scripts/launch-game.sh
 ```
 
-The map-first command screen starts at the `Dawn Anchor` strategic location. Select a connected destination from the map or the status-panel buttons, then choose **ENGAGE TRAVEL**. Travel remains active until its scheduled arrival, while the visible sensor repair progresses on the same simulation timeline.
+The launcher resolves the pinned .NET SDK, performs a locked restore, builds the Debug Godot assembly with warnings treated as errors, then resolves Godot and launches only if every preceding step succeeds. Pass Godot arguments after the command when needed.
 
-Use the **Pause**, **0.5x**, **1x**, **2x**, and **4x** controls to choose how quickly presentation elapsed time requests deterministic 100 ms Core steps. Pause leaves rendering active but submits no Core advancement. **ADVANCE UNTIL NEXT EVENT** follows the same scheduler path and stops at the earliest current repair or travel event.
+The map-first command screen starts at the `Dawn Anchor` strategic location. Select a connected destination from the map or the destination buttons in the contextual command panel, then choose **ENGAGE TRAVEL**. Travel remains active until its scheduled arrival, while the visible sensor repair progresses on the same simulation timeline.
+
+Use the **Pause**, **0.5x**, **1x**, **2x**, and **4x** controls to choose how quickly presentation elapsed time requests deterministic 100 ms Core steps. Pause leaves rendering active but submits no Core advancement. **ADVANCE TO EVENT** follows the same scheduler path and stops at the next player-relevant repair completion or travel arrival, not an arbitrary scheduler event.
+
+The command shell keeps its header, status panel, workspace, bottom controls, and feedback message in a stable layout. The layout is tested at 1024×640 and 1440×900; 1024×640 is the practical minimum. Shortcuts are **1** strategic view, **2** tactical view, **Space** pause/resume, **R** cycle time rate, **U** advance to a player-relevant event, **Ctrl+S** quick-save, **Ctrl+L** quick-load, **E** engage selected travel, and **C** set the demonstration tactical course.
 
 Switch to **TACTICAL** to view the local continuous reference frame. **SET COURSE 045° / 2 km/s** submits the first tactical movement intent. Core tactical coordinates use kilometers with positive Y toward tactical north; the Godot map adapter performs the presentation Y-axis conversion.
 
-**SAVE** and **LOAD** use one V2 quick-save slot at `user://quick-save.json`. The default load path discovers the legacy `user://quick-save-v1.json` slot only when the generic slot does not exist; custom paths never use that fallback. A V2 save includes every ship, player identity, per-ship strategic and tactical state, repairs, targeted scheduled work, allocator state, and deterministic scheduler order. Loading validates a complete candidate simulation before replacing the running one, so a failed load leaves the active game unchanged.
+**SAVE** and **LOAD** use one V3 quick-save slot at `user://quick-save.json`. The default load path discovers the legacy `user://quick-save-v1.json` slot only when the generic slot does not exist; custom paths never use that fallback. A V3 save identifies the `active-world-orders-v1` simulation rules and includes every ship, player identity, per-ship strategic and tactical state, repairs, durable active orders and their targets, targeted scheduled work, ship and order allocators, and deterministic scheduler order. Loading validates a complete candidate simulation before replacing the running one, so a failed load leaves the active game unchanged.
 
-The loader accepts V1 saves through a deterministic pre-1.0 migration: it creates a one-ship V2 world, keeps the original player identity and state, moves strategic state onto that ship, and targets legacy scheduled work to it. Because V1 had no vessel name, migration uses the referenced definition's design label once; V2 then persists the resulting vessel name. This narrow migration is not a promise to retain every pre-1.0 save format indefinitely.
+The loader accepts V1 saves through deterministic V1→V2→V3 migration. V1 becomes a one-ship V2 world, retaining the player identity and state, moving strategic state to that ship, and targeting legacy scheduled work to it. Because V1 had no vessel name, the migration uses the referenced definition's design label once; V2 then persists that name. The adjacent V2→V3 migration retains the world and targeted scheduled work, initializes the order allocator, and leaves `ActiveOrder` absent for every historical ship: historical travel does not invent an order. This narrow migration is not a promise to retain every pre-1.0 save format indefinitely.
 
 The runtime loads the validated ship-definition catalog from [`src/AlterCourse.Godot/content/ships/pathfinder.json`](src/AlterCourse.Godot/content/ships/pathfinder.json), using the adjacent V2 JSON schema. The first proof world reuses that one immutable design definition for three separately named vessels; definition identity is stored in saves, while authored definition content remains external. This is game-domain content, separate from the AssetCtl visual-asset catalog.
 
 ## Architecture at a glance
 
-`AlterCourse.Core` owns explicit simulation time, an immutable ship-definition catalog, plural `ShipState`, per-ship strategic and tactical state, targeted scheduled work, sensor repair, and V2 snapshot mapping with V1 migration. `PlayerShipId` selects the ordinary ship controlled by player-facing commands and projections; it does not make that ship a separate kind of world object. `AlterCourse.Godot` owns scenes, input, rendering, presentation-time accumulation, and the coordinate projection into Godot screen space; it does not become simulation authority or receive unrestricted plural-world truth.
+`AlterCourse.Core` owns explicit simulation time, an immutable ship-definition catalog, plural `ShipState`, per-ship strategic and tactical state, targeted scheduled work, sensor repair, durable orders, and V3 snapshot mapping with V1→V2→V3 migration. It persists ship and order allocators, order targets, and the `active-world-orders-v1` rules identity. `PlayerShipId` selects the ordinary ship controlled by player-facing commands and projections; it does not make that ship a separate kind of world object. `AlterCourse.Godot` owns scenes, input, rendering, presentation-time accumulation, and the coordinate projection into Godot screen space; it does not become simulation authority or receive unrestricted plural-world truth.
 
 ## Asset pipeline
 
