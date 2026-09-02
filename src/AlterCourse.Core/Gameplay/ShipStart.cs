@@ -13,5 +13,6 @@ public sealed record ShipStart(
     TacticalMotion TacticalMotion,
     SensorIntegrity SensorIntegrity,
     ShipStrategicStart Strategic,
-    SensorRepairStart? SensorRepair = null
+    SensorRepairStart? SensorRepair = null,
+    ShipOrderStart? ActiveOrder = null
 );
