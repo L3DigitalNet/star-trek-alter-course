@@ -1,0 +1,83 @@
+schema_version: "1"
+id: "tactical.briefing.unknown-contact"
+lifecycle: "placeholder"
+quality_tier: "disposable"
+kind: "illustration"
+revision: 2
+purpose: "Placeholder briefing art for an unidentified vessel contact on the tactical screen."
+output:
+  path: "src/AlterCourse.Godot/assets/tactical/unknown-contact-briefing.png"
+  format: "png"
+  width: 1024
+  height: 1024
+  transparency: "optional"
+  target_display_sizes:
+    - "256"
+    - "512"
+visual:
+  style_profile: "global"
+  importance: "secondary"
+  tags:
+    - "tactical"
+    - "contact"
+    - "briefing"
+constraints:
+  required:
+    - "single unidentified starship silhouette"
+    - "high contrast against a dark space background"
+    - "clear focal subject with room for interface overlays"
+  prohibited:
+    - "text"
+    - "watermark"
+    - "recognizable franchise insignia"
+    - "recognizable canon starship design"
+references: []
+rights:
+  classification: "unreviewed-generated-placeholder"
+  license: null
+  attribution: null
+  source: null
+  notes: "Disposable generated placeholder; not approved for release."
+generation:
+  source_type: "generated"
+  generated_at: "2026-09-02T09:48:42.0782371+00:00"
+  run_id: "6b214b09-5ff2-412b-a3d4-59fbfc783077"
+  route: "raster-placeholder"
+  provider: "recraft-primary"
+  adapter: "recraft-images"
+  adapter_version: "1"
+  provenance_schema_version: "1"
+  model_profile: "raster"
+  model: "recraftv4_1"
+  quality_tier: "disposable"
+  final_prompt: |-
+    Asset role and semantic purpose: illustration tactical.briefing.unknown-contact; Placeholder briefing art for an unidentified vessel contact on the tactical screen.
+    Kind-specific composition guidance: compose a illustration for its stated role.
+    Resolved style-profile intent: Readable LCARS-adjacent visuals with restrained geometry and no embedded text.
+    Output and target-size requirements: exact 1024x1024 png; transparency optional; target display sizes 256, 512 px; no external resources
+    Required constraints: clear silhouette; readable at target size; single unidentified starship silhouette; high contrast against a dark space background; clear focal subject with room for interface overlays
+    Prohibited content: watermark; photorealistic trademarked insignia; text; watermark; recognizable franchise insignia; recognizable canon starship design
+    Reference instructions: none
+    Lifecycle reminder: placeholder assets must remain functionally clear rather than polished at any cost.
+    Prompt contract version: 3
+  prompt_sha256: "ebcc2da6f7186e1d6c8ad9ffbd9d16da162440fbef771667e00afcbc38b5b211"
+  request_sha256: "5359fa6d3aca324376d0206dda7806a5d3955fb1f07f4003db3d44247395874c"
+  effective_config_sha256: "004df19bd995374cb37c3e57a8f16569d7b0f57c9807796220a9b9aaab3f14a0"
+  provider_request_id: null
+  estimated_cost_usd: 0.08
+  actual_cost_usd: null
+validation:
+  mechanical_status: "pass"
+  mechanical_validator_version: "1"
+  mechanical_findings: []
+  semantic_status: "not-run"
+integrity:
+  sha256: "522d41d4c81904aeca3d65a6a2121b1eb5dc0e3b26f6b569bea485c55e3f0b9f"
+  byte_length: 321612
+  media_type: "image/png"
+approval:
+  approved_by: null
+  approved_at: null
+  approval_note: null
+deprecation: null
+supersedes: null

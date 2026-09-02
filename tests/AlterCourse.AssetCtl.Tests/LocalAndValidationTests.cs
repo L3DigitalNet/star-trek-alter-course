@@ -236,6 +236,27 @@ public sealed class LocalAndValidationTests
         Assert.False(result.Passed);
     }
 
+    /// <summary>Normalizes a supported provider WebP raster into the catalog's canonical PNG output.</summary>
+    [Fact]
+    public void WebpRasterNormalizesToPng()
+    {
+        using var bitmap = new SkiaSharp.SKBitmap(64, 64);
+        bitmap.Erase(new SkiaSharp.SKColor(40, 80, 160, 128));
+        using var image = SkiaSharp.SKImage.FromBitmap(bitmap);
+        using SkiaSharp.SKData encoded = image.Encode(SkiaSharp.SKEncodedImageFormat.Webp, 100);
+
+        MechanicalValidationResult result = MechanicalValidator.Validate(
+            TestData.Request(),
+            encoded.ToArray(),
+            1_000_000,
+            1_000_000
+        );
+
+        Assert.True(result.Passed, string.Join("; ", result.Findings));
+        Assert.Equal("image/png", result.MediaType);
+        Assert.True(result.NormalizedBytes.AsSpan().StartsWith(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }));
+    }
+
     /// <summary>Rejects non-finite, zero-area, and malformed SVG view boxes.</summary>
     [Theory]
     [InlineData("0 0 0 64")]

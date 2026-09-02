@@ -468,7 +468,7 @@ public sealed class RoutingAndSelectionTests
         Assert.Contains("watermark", first.Prompt, StringComparison.Ordinal);
         Assert.Contains("transparency required", first.Prompt, StringComparison.Ordinal);
         Assert.EndsWith(
-            "Lifecycle reminder: placeholder assets must remain functionally clear rather than polished at any cost.\nPrompt contract version: 3",
+            "Lifecycle reminder: placeholder assets must remain functionally clear rather than polished at any cost.\nPrompt contract version: 4",
             first.Prompt,
             StringComparison.Ordinal
         );
@@ -480,6 +480,24 @@ public sealed class RoutingAndSelectionTests
                 .Select(line => ordered.Single(heading => line.StartsWith(heading, StringComparison.Ordinal))),
             StringComparer.Ordinal
         );
+    }
+
+    /// <summary>Deduplicates inherited constraints and emits grammatical kind guidance.</summary>
+    [Fact]
+    public void PromptMergesDuplicateConstraintsOnce()
+    {
+        var style = new StyleProfile("style", "summary", ["simple silhouette"], ["watermark"]);
+        (string prompt, string _) = PromptCompiler.Compile(TestData.Request(), style);
+
+        Assert.Equal(
+            prompt.IndexOf("simple silhouette", StringComparison.Ordinal),
+            prompt.LastIndexOf("simple silhouette", StringComparison.Ordinal)
+        );
+        Assert.Equal(
+            prompt.IndexOf("watermark", StringComparison.Ordinal),
+            prompt.LastIndexOf("watermark", StringComparison.Ordinal)
+        );
+        Assert.Contains("compose the icon", prompt, StringComparison.Ordinal);
     }
 
     /// <summary>Uses canonical LF bytes for prompts even when the host platform newline differs.</summary>

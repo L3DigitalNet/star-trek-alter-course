@@ -61,6 +61,34 @@ public sealed class ProviderContractTests
         Assert.Equal("image/svg+xml", Assert.Single(result.Candidates).MediaType);
     }
 
+    /// <summary>Accepts Recraft raster encodings that the mechanical boundary normalizes to committed PNG.</summary>
+    [Fact]
+    public async Task RecraftRasterResponsePreservesWebpMediaForNormalization()
+    {
+        using var bitmap = new SkiaSharp.SKBitmap(64, 64);
+        bitmap.Erase(SkiaSharp.SKColors.CornflowerBlue);
+        using var image = SkiaSharp.SKImage.FromBitmap(bitmap);
+        using SkiaSharp.SKData encoded = image.Encode(SkiaSharp.SKEncodedImageFormat.Webp, 100);
+        byte[] webp = encoded.ToArray();
+        var handler = new RecordingHandler(_ =>
+            Json(
+                HttpStatusCode.OK,
+                JsonSerializer.Serialize(new { data = new[] { new { b64_json = Convert.ToBase64String(webp) } } })
+            )
+        );
+        var adapter = new RecraftImageAdapter(new HttpClient(handler));
+
+        GenerationBatchResult result = await adapter.GenerateAsync(
+            TestData.Context(adapter.AdapterId),
+            new NormalizedGenerationRequest(TestData.Request(), "raster", 1, []),
+            CancellationToken.None
+        );
+
+        GeneratedCandidate candidate = Assert.Single(result.Candidates);
+        Assert.Equal("image/webp", candidate.MediaType);
+        Assert.Equal(webp, candidate.Bytes);
+    }
+
     /// <summary>Uses configured endpoints, models, candidate counts, and bearer authentication.</summary>
     [Theory]
     [InlineData("recraft", "recraft-images", "/v1/images/generations")]
@@ -135,6 +163,71 @@ public sealed class ProviderContractTests
         );
 
         Assert.Contains("\"size\":\"1024x1024\"", handler.Body, StringComparison.Ordinal);
+    }
+
+    /// <summary>Transmits the low-cost OpenAI profile and the manifest's required transparent background.</summary>
+    [Fact]
+    public async Task OpenAiTransmitsConfiguredQualityAndRequiredTransparency()
+    {
+        byte[] png = LocalPlaceholderGenerator.RenderPng(TestData.Request());
+        var handler = new RecordingHandler(_ =>
+            Json(HttpStatusCode.OK, $"{{\"data\":[{{\"b64_json\":\"{Convert.ToBase64String(png)}\"}}]}}")
+        );
+        var adapter = new OpenAiImageAdapter(new HttpClient(handler));
+        ProviderExecutionContext context = TestData.Context(adapter.AdapterId) with
+        {
+            Model = TestData.Context(adapter.AdapterId).Model with
+            {
+                Options = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["quality"] = "low",
+                    ["supported_sizes"] = "64x64",
+                },
+            },
+        };
+
+        _ = await adapter.GenerateAsync(
+            context,
+            new NormalizedGenerationRequest(TestData.Request(), "prompt", 1, []),
+            CancellationToken.None
+        );
+
+        Assert.Contains("\"quality\":\"low\"", handler.Body, StringComparison.Ordinal);
+        Assert.Contains("\"background\":\"transparent\"", handler.Body, StringComparison.Ordinal);
+        Assert.Contains("\"output_format\":\"png\"", handler.Body, StringComparison.Ordinal);
+    }
+
+    /// <summary>Transmits xAI's resolution and quality controls with the output contract's aspect ratio.</summary>
+    [Fact]
+    public async Task XaiTransmitsConfiguredResolutionQualityAndAspectRatio()
+    {
+        byte[] png = LocalPlaceholderGenerator.RenderPng(TestData.Request());
+        var handler = new RecordingHandler(_ =>
+            Json(HttpStatusCode.OK, $"{{\"data\":[{{\"b64_json\":\"{Convert.ToBase64String(png)}\"}}]}}")
+        );
+        var adapter = new XaiImageAdapter(new HttpClient(handler));
+        ProviderExecutionContext context = TestData.Context(adapter.AdapterId) with
+        {
+            Model = TestData.Context(adapter.AdapterId).Model with
+            {
+                Options = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["quality"] = "low",
+                    ["resolution"] = "1k",
+                    ["supported_sizes"] = "64x64",
+                },
+            },
+        };
+
+        _ = await adapter.GenerateAsync(
+            context,
+            new NormalizedGenerationRequest(TestData.Request(), "prompt", 1, []),
+            CancellationToken.None
+        );
+
+        Assert.Contains("\"quality\":\"low\"", handler.Body, StringComparison.Ordinal);
+        Assert.Contains("\"resolution\":\"1k\"", handler.Body, StringComparison.Ordinal);
+        Assert.Contains("\"aspect_ratio\":\"1:1\"", handler.Body, StringComparison.Ordinal);
     }
 
     /// <summary>Refuses an exact output contract that the provider protocol cannot guarantee before sending.</summary>
