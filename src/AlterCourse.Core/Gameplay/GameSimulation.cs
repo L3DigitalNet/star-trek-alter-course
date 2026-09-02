@@ -82,14 +82,15 @@ public sealed class GameSimulation
         return new SetTacticalCourseResult(SetTacticalCourseOutcome.Accepted);
     }
 
-    /// <summary>Advances by an explicit number of authoritative one-hundred-millisecond steps.</summary>
-    public void AdvanceFixedSteps(int stepCount)
+    /// <summary>Advances by explicit one-hundred-millisecond steps and returns resolved consequences.</summary>
+    public SimulationAdvanceResult AdvanceFixedSteps(int stepCount)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(stepCount);
         int milliseconds = checked(stepCount * checked((int)SimulationFixedStep.Duration.Milliseconds));
         SimulationTime target = _state.Time.AdvanceBy(new SimulationDuration(milliseconds));
-        (SimulationState candidate, _) = AdvanceTo(_state, target);
+        (SimulationState candidate, IReadOnlyList<ScheduledWorkKind> resolvedKinds) = AdvanceTo(_state, target);
         Commit(candidate);
+        return new SimulationAdvanceResult(_state.Time, resolvedKinds, Project(_state));
     }
 
     /// <summary>Advances through the ordinary scheduler path to the earliest current event boundary.</summary>

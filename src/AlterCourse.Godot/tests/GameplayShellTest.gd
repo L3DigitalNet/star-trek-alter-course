@@ -148,11 +148,7 @@ func test_pause_repeated_processing_never_advances_core_time() -> void:
 
 func test_connected_destination_submits_travel_and_refreshes_visible_state() -> void:
 	var screen := _create_screen()
-	var destination_button: Button
-	for child in screen.get_node("%DestinationButtons").get_children():
-		if child is Button and child.text == "Vesper Reach":
-			destination_button = child
-			break
+	var destination_button := _find_destination_button(screen, "Vesper Reach")
 
 	assert_object(destination_button).is_not_null()
 	destination_button.emit_signal("pressed")
@@ -165,6 +161,20 @@ func test_connected_destination_submits_travel_and_refreshes_visible_state() -> 
 	assert_str(screen.get_meta("travel_destination", "")).is_equal("vesper-reach")
 	assert_int(screen.get_meta("travel_eta_milliseconds", -1)).is_equal(12000)
 	assert_str(screen.get_node("%TravelStatus").text).contains("Dawn Anchor → Vesper Reach")
+
+
+func test_time_driven_arrival_refreshes_connected_destination_buttons() -> void:
+	var screen := _create_screen()
+	screen.call("SelectDestination", "vesper-reach")
+	screen.call("RequestSelectedTravel")
+
+	for _step in range(20):
+		assert_int(screen.call("ProcessSyntheticDelta", 0.6)).is_equal(6)
+
+	assert_bool(screen.get_meta("travel_active", true)).is_false()
+	assert_str(screen.get_node("%TravelStatus").text).contains("Vesper Reach")
+	assert_bool(_find_destination_button(screen, "Vesper Reach").disabled).is_true()
+	assert_bool(_find_destination_button(screen, "Meridian Drift").disabled).is_false()
 
 
 func test_advance_until_stops_at_repair_before_arrival() -> void:
@@ -221,6 +231,13 @@ func _create_screen() -> Node:
 	add_child(screen)
 	screen.set_process(false)
 	return screen
+
+
+func _find_destination_button(screen: Node, display_name: String) -> Button:
+	for child in screen.get_node("%DestinationButtons").get_children():
+		if child is Button and child.text == display_name:
+			return child
+	return null
 
 
 func _remove_test_quick_save() -> void:

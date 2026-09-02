@@ -25,4 +25,20 @@ public static class TacticalMapTransform
         return viewportCenter
             + new Vector2((float)(xKilometers * pixelsPerKilometer), (float)(-yKilometers * pixelsPerKilometer));
     }
+
+    /// <summary>Converts a clockwise-from-north Core heading into a Godot screen direction.</summary>
+    public static Vector2 HeadingToScreenDirection(double headingDegrees)
+    {
+        if (!double.IsFinite(headingDegrees))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(headingDegrees),
+                headingDegrees,
+                "Tactical heading must be finite."
+            );
+        }
+
+        double headingRadians = headingDegrees * Math.PI / 180;
+        return new Vector2((float)Math.Sin(headingRadians), (float)-Math.Cos(headingRadians));
+    }
 }

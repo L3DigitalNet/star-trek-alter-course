@@ -4,6 +4,7 @@ using AlterCourse.Core.Persistence;
 using AlterCourse.Core.Player;
 using AlterCourse.Core.Quantities;
 using AlterCourse.Core.Ships;
+using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
 using Godot;
 using GodotFile = Godot.FileAccess;
@@ -101,8 +102,13 @@ public partial class GameScreen : Control
             return 0;
         }
 
-        _simulation.AdvanceFixedSteps(steps);
+        SimulationAdvanceResult result = _simulation.AdvanceFixedSteps(steps);
         RefreshProjection();
+        if (result.ResolvedKinds.Contains(ScheduledWorkKind.TravelArrival))
+        {
+            BuildDestinationButtons();
+        }
+
         return steps;
     }
 

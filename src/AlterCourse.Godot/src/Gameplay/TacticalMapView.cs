@@ -32,8 +32,7 @@ public partial class TacticalMapView : Control
         }
 
         Vector2 ship = MapPosition(_projection.Position.XKilometers, _projection.Position.YKilometers);
-        double headingRadians = (_projection.HeadingDegrees - 90) * Math.PI / 180;
-        var direction = new Vector2((float)Math.Cos(headingRadians), (float)Math.Sin(headingRadians));
+        Vector2 direction = TacticalMapTransform.HeadingToScreenDirection(_projection.HeadingDegrees);
         DrawCircle(ship, 9, new Color("d6b75e"));
         DrawLine(
             ship,

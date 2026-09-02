@@ -78,7 +78,7 @@ public sealed class ShipDefinitionCatalogLoader
         using (document)
         {
             ValidateSchema(document.RootElement, content.SourceIdentity);
-            AuthoredShipDefinitionV1 authored = ReadAuthoredModel(document.RootElement);
+            AuthoredShipDefinitionV1 authored = ReadAuthoredModel(document.RootElement, content.SourceIdentity);
             return ValidateSemantics(authored, content.SourceIdentity);
         }
     }
@@ -186,14 +186,67 @@ public sealed class ShipDefinitionCatalogLoader
 
     private static string Location(string pointer) => string.IsNullOrEmpty(pointer) ? "#" : "#" + pointer;
 
-    private static AuthoredShipDefinitionV1 ReadAuthoredModel(JsonElement root) =>
+    private static AuthoredShipDefinitionV1 ReadAuthoredModel(JsonElement root, string sourceIdentity) =>
         new(
-            root.GetProperty("schemaVersion").GetInt32(),
+            ReadInt32(root, "schemaVersion", sourceIdentity),
             root.GetProperty("id").GetString()!,
             root.GetProperty("displayName").GetString()!,
             root.GetProperty("maximumTacticalSpeedKilometersPerSecond").GetDouble(),
             root.GetProperty("initialSensorIntegrity").GetDouble(),
-            root.GetProperty("sensorRepairDurationMilliseconds").GetInt64()
+            ReadInt64(root, "sensorRepairDurationMilliseconds", sourceIdentity)
+        );
+
+    private static int ReadInt32(JsonElement root, string propertyName, string sourceIdentity)
+    {
+        JsonElement value = root.GetProperty(propertyName);
+        if (value.TryGetInt32(out int integer))
+        {
+            return integer;
+        }
+
+        if (
+            value.TryGetDecimal(out decimal numeric)
+            && decimal.Truncate(numeric) == numeric
+            && numeric is >= int.MinValue and <= int.MaxValue
+        )
+        {
+            return decimal.ToInt32(numeric);
+        }
+
+        throw UnmappableInteger(propertyName, sourceIdentity, "a 32-bit integer");
+    }
+
+    private static long ReadInt64(JsonElement root, string propertyName, string sourceIdentity)
+    {
+        JsonElement value = root.GetProperty(propertyName);
+        if (value.TryGetInt64(out long integer))
+        {
+            return integer;
+        }
+
+        if (
+            value.TryGetDecimal(out decimal numeric)
+            && decimal.Truncate(numeric) == numeric
+            && numeric is >= long.MinValue and <= long.MaxValue
+        )
+        {
+            return decimal.ToInt64(numeric);
+        }
+
+        throw UnmappableInteger(propertyName, sourceIdentity, "a 64-bit integer");
+    }
+
+    private static ShipContentValidationException UnmappableInteger(
+        string propertyName,
+        string sourceIdentity,
+        string expectedType
+    ) =>
+        Failure(
+            "semantic.invalid-value",
+            sourceIdentity,
+            $"#/{propertyName}",
+            string.Empty,
+            $"'{propertyName}' must be representable as {expectedType}."
         );
 
     private static ShipDefinition ValidateSemantics(AuthoredShipDefinitionV1 authored, string sourceIdentity)

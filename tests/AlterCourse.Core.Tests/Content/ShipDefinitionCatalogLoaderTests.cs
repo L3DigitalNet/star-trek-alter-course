@@ -38,6 +38,42 @@ public sealed class ShipDefinitionCatalogLoaderTests
         Assert.Equal(8000, fromText.SensorRepairDuration.Milliseconds);
     }
 
+    /// <summary>Confirms schema-valid integral numeric forms map to the authored integer contract.</summary>
+    [Fact]
+    public void LoadsSchemaValidIntegralNumericForms()
+    {
+        string json = ValidDefinition
+            .Replace("\"schemaVersion\": 1", "\"schemaVersion\": 1.0", StringComparison.Ordinal)
+            .Replace(
+                "\"sensorRepairDurationMilliseconds\": 8000",
+                "\"sensorRepairDurationMilliseconds\": 8e3",
+                StringComparison.Ordinal
+            );
+
+        ShipDefinition definition = CreateLoader().LoadText(json, "integral-forms.json");
+
+        Assert.Equal(8000, definition.SensorRepairDuration.Milliseconds);
+    }
+
+    /// <summary>Confirms an integral JSON number outside the runtime range fails with a typed diagnostic.</summary>
+    [Fact]
+    public void RejectsUnmappableIntegralNumberWithSourceAwareDiagnostic()
+    {
+        string json = ValidDefinition.Replace(
+            "\"sensorRepairDurationMilliseconds\": 8000",
+            "\"sensorRepairDurationMilliseconds\": 1e100",
+            StringComparison.Ordinal
+        );
+
+        ShipContentValidationException exception = Assert.Throws<ShipContentValidationException>(() =>
+            CreateLoader().LoadText(json, "integral-range.json")
+        );
+
+        Assert.Contains("semantic", exception.Diagnostics[0].Code, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("integral-range.json", exception.Diagnostics[0].SourceIdentity);
+        Assert.Equal("#/sensorRepairDurationMilliseconds", exception.Diagnostics[0].InstanceLocation);
+    }
+
     /// <summary>Confirms the repository's canonical schema and ship definition remain load-compatible.</summary>
     [Fact]
     public void LoadsCanonicalPlayerShipDefinition()

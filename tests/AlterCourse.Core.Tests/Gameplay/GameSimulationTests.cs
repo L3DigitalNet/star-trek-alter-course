@@ -215,7 +215,7 @@ public sealed class GameSimulationTests
 
         AdvanceUntilResult repair = until.AdvanceUntilNextScheduledEvent();
         AdvanceUntilResult arrival = until.AdvanceUntilNextScheduledEvent();
-        ordinary.AdvanceFixedSteps(120);
+        SimulationAdvanceResult ordinaryAdvance = ordinary.AdvanceFixedSteps(120);
 
         Assert.Equal(AdvanceUntilOutcome.ScheduledEventResolved, repair.Outcome);
         Assert.Equal(8000, repair.StoppedAt.Milliseconds);
@@ -223,6 +223,12 @@ public sealed class GameSimulationTests
         Assert.NotNull(repair.Projection.Strategic.Travel);
         Assert.Equal(12000, arrival.StoppedAt.Milliseconds);
         Assert.Equal([ScheduledWorkKind.TravelArrival], arrival.ResolvedKinds);
+        Assert.Equal(12000, ordinaryAdvance.FinalTime.Milliseconds);
+        Assert.Equal(
+            [ScheduledWorkKind.SensorRepairCompletion, ScheduledWorkKind.TravelArrival],
+            ordinaryAdvance.ResolvedKinds
+        );
+        Assert.Equal(ordinary.GetPlayerProjection(), ordinaryAdvance.Projection);
         Assert.Equal(until.GetPlayerProjection(), ordinary.GetPlayerProjection());
     }
 

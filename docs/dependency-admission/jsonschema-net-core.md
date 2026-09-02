@@ -63,7 +63,7 @@ Schema construction and evaluation run wholly in headless Core tests. The loader
 
 Malformed schemas, malformed JSON, duplicate members, structural violations, and semantic violations fail closed with source-aware diagnostics before a definition can enter the catalog. If the package cannot restore, load, or evaluate, content loading fails rather than substituting a permissive parser; locked restore and the canonical verification gate make that failure visible before a release candidate is accepted.
 
-All direct package API use is confined to `AlterCourse.Core/Content/ShipDefinitionCatalogLoader.cs`. Replacing or removing the dependency means replacing schema construction and evaluation behind that loader while retaining the project-owned content input, semantic checks, catalog, runtime definitions, and save contract. No save JSON or authored ship definition serializes package types, so the replacement does not itself require a save-format migration.
+All direct Core package API use is confined to `AlterCourse.Core/Content/ShipDefinitionCatalogLoader.cs`. Replacing or removing the dependency means replacing schema construction and evaluation behind that loader while retaining the project-owned content input, semantic checks, catalog, runtime definitions, and save contract. No save JSON or authored ship definition serializes package types, so the replacement does not itself require a save-format migration.
 
 ## Review result
 
