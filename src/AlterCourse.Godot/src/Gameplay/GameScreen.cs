@@ -104,7 +104,18 @@ public partial class GameScreen : Control
             return 0;
         }
 
-        SimulationAdvanceResult result = _simulation.AdvanceFixedSteps(steps);
+        SimulationAdvanceResult result;
+        try
+        {
+            result = _simulation.AdvanceFixedSteps(steps);
+        }
+        catch (InvalidOperationException)
+        {
+            ReportAdvanceFailure();
+            return 0;
+        }
+
+        SetMeta("advance_status", "advanced");
         RefreshProjection();
         if (result.ResolvedKinds.Contains(ScheduledWorkKind.TravelArrival))
         {
@@ -217,10 +228,21 @@ public partial class GameScreen : Control
             return;
         }
 
-        AdvanceUntilResult result = _simulation.AdvanceUntilNextPlayerRelevantEvent();
+        AdvanceUntilResult result;
+        try
+        {
+            result = _simulation.AdvanceUntilNextPlayerRelevantEvent();
+        }
+        catch (InvalidOperationException)
+        {
+            ReportAdvanceFailure();
+            return;
+        }
+
         string resolved =
             result.ResolvedKinds.Count == 0 ? result.Outcome.ToString() : string.Join(", ", result.ResolvedKinds);
         _messageLabel.Text = $"Advanced to next player event: {resolved}";
+        SetMeta("advance_status", "advanced");
         SetMeta("last_advance_event", resolved);
         RefreshProjection();
         if (result.ResolvedKinds.Contains(ScheduledWorkKind.TravelArrival))
@@ -474,5 +496,11 @@ public partial class GameScreen : Control
     {
         _messageLabel.Text = $"{operation} failed: {exception.Message}";
         SetMeta("quick_save_status", status);
+    }
+
+    private void ReportAdvanceFailure()
+    {
+        _messageLabel.Text = "Simulation advance failed.";
+        SetMeta("advance_status", "failed");
     }
 }

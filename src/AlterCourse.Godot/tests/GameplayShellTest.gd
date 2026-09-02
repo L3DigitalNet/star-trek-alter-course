@@ -248,6 +248,7 @@ func test_synthetic_rates_fractional_carry_and_catch_up_cap() -> void:
 	assert_int(quad_rate.call("ProcessSyntheticDelta", 0.1)).is_equal(4)
 	assert_int(quad_rate.call("ProcessSyntheticDelta", 30.0)).is_equal(6)
 	assert_int(quad_rate.get_meta("simulation_time_milliseconds", -1)).is_equal(1000)
+	assert_str(quad_rate.get_meta("advance_status", "")).is_equal("advanced")
 
 
 func test_pause_repeated_processing_never_advances_core_time() -> void:
@@ -330,6 +331,7 @@ func test_advance_until_stops_at_repair_before_arrival() -> void:
 	screen.call("AdvanceUntilNextPlayerRelevantEvent")
 
 	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(8000)
+	assert_str(screen.get_meta("advance_status", "")).is_equal("advanced")
 	assert_str(screen.get_meta("last_advance_event", "")).contains("SensorRepairCompletion")
 	assert_bool(screen.get_meta("travel_active", false)).is_true()
 	assert_float(screen.get_meta("sensor_integrity", 0.0)).is_equal_approx(1.0, 0.0001)
