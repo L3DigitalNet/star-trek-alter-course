@@ -42,6 +42,13 @@ git -C "${fixture}" commit -qm 'docs: initialize fixture'
 base="$(git -C "${fixture}" rev-parse HEAD)"
 git -C "${fixture}" update-ref refs/remotes/origin/main "${base}"
 
+mkdir -p "${fixture}/docs/adr"
+printf 'branch governance\n' > "${fixture}/docs/adr/0013-use-dev-for-development-and-main-for-releases.md"
+git -C "${fixture}" add docs/adr/0013-use-dev-for-development-and-main-for-releases.md
+git -C "${fixture}" commit -qm 'docs: adopt branch governance'
+baseline="$(git -C "${fixture}" rev-parse HEAD)"
+git -C "${fixture}" reset -q --hard "${base}"
+
 cd "${fixture}"
 
 expect_pass "${policy}" branch task/9-branch-release-governance
@@ -49,6 +56,10 @@ expect_fail "${policy}" branch feature/no-issue
 expect_pass "${policy}" pull-request dev task/9-branch-release-governance 'chore: enforce branch policy'
 expect_pass "${policy}" pull-request main dev 'chore(release): v0.1.0'
 expect_fail "${policy}" pull-request main dev 'chore(release): v0.1.0-rc.1'
+expect_pass "${policy}" pull-request main dev 'chore(baseline): establish main baseline' "${base}" "${baseline}" L3DigitalNet/star-trek-alter-course L3DigitalNet/star-trek-alter-course "${baseline}"
+expect_fail "${policy}" pull-request main dev 'chore(baseline): establish main baseline'
+expect_fail "${policy}" pull-request main dev 'chore(baseline): establish main baseline' "${baseline}" "${baseline}" L3DigitalNet/star-trek-alter-course L3DigitalNet/star-trek-alter-course "${baseline}"
+expect_fail "${policy}" pull-request main dev 'chore(baseline): establish main baseline' "${base}" "${baseline}" L3DigitalNet/star-trek-alter-course example/fork "${baseline}"
 expect_pass "${policy}" pull-request main hotfix/9-release-fix 'fix(release): correct package'
 expect_pass "${policy}" pull-request dev main 'chore(sync): merge main into dev'
 expect_fail "${policy}" pull-request main task/9-branch-release-governance 'chore: bypass release flow'

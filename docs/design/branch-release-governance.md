@@ -36,11 +36,11 @@ license: 'MIT'
 - Owner: project owner
 - Created: 2026-09-01
 - Last revised: 2026-09-01
-- Revision: initial
+- Revision: baseline promotion amendment
 - Prior design brief: none
 - Prior brief SHA-256: not applicable
-- Reopened decisions: none
-- Revision reason: not applicable
+- Reopened decisions: tag-led immutable releases, for a bounded pre-release baseline exception
+- Revision reason: the project owner requested one baseline on `main` before game files exist, without representing it as a release
 - Working-state source: conversation-only discovery; the fallback state path was not Git-ignored
 
 The project owner approved the integrated design on 2026-09-01 after separately approving the admission boundary, merge history, protection model, branch conventions, and release contract.
@@ -107,11 +107,11 @@ GitHub can require pull requests, checks, and protected refs and can grant bypas
 
 `dev` is the permanent default and integration branch. Significant work begins from current `dev` on a short-lived issue branch and returns through a draft pull request governed by an issue. Small PR-based maintenance may declare `Standalone`. Direct admission to `dev` is limited to T0 prose changes and Agent Handoff state under `docs/handoff/**`, `docs/STATUS.md`, or `docs/TODO.md`; each direct commit carries its admission trailer. Handoff admission deliberately overrides `github-workflow` 1.8's two-class admission rule for these paths only. The package continues to govern issues, pull requests, T0 classification, and lifecycle actions everywhere else.
 
-Topic pull requests squash into `dev`, producing one admitted commit per pull request. A release uses a Final pull request from `dev` to `main` and a merge commit, preserving the development ancestry. A hotfix branches from `main`, squash-merges back to `main`, receives a patch release, and is then synchronized into `dev` through a merge-commit pull request. Rebase merging is disabled. Short-lived branches are deleted after merge; `dev` is never deleted.
+Topic pull requests squash into `dev`, producing one admitted commit per pull request. Before the first game release, one governed baseline pull request may merge `dev` into `main` without a tag or GitHub Release. Its exact `chore(baseline): establish main baseline` title is accepted only when the base lacks ADR 0013 and the head contains it, making the path self-expiring. A release uses a Final pull request from `dev` to `main` and a merge commit, preserving the development ancestry. A hotfix branches from `main`, squash-merges back to `main`, receives a patch release, and is then synchronized into `dev` through a merge-commit pull request. Rebase merging is disabled. Short-lived branches are deleted after merge; `dev` is never deleted.
 
 GitHub protects both long-lived branches with strict checks, resolved conversations, and force-push and deletion blocks. `main` has no routine bypass. The owner can bypass `dev` protection for direct handoff or T0 pushes, while tracked hooks check commit messages, changed paths, mechanical T0 limits, and protected targets. Pull-request CI checks branch topology, naming, and titles. These controls make the normal toolchain fail closed but cannot prevent an owner from deliberately bypassing both GitHub and local enforcement.
 
-Releases use `vMAJOR.MINOR.PATCH` tags and remain in `0.x` until an explicit 1.0 decision. Every post-policy merge to `main` promptly receives an immutable GitHub Release. The tag is the initial version source of truth, and GitHub Release notes are the initial changelog.
+Releases use `vMAJOR.MINOR.PATCH` tags and remain in `0.x` until an explicit 1.0 decision. Every merge to `main` after the one-time baseline promptly receives an immutable GitHub Release. The tag is the initial version source of truth, and GitHub Release notes are the initial changelog.
 
 ## Consequential decisions
 
@@ -156,7 +156,7 @@ Releases use `vMAJOR.MINOR.PATCH` tags and remain in `0.x` until an explicit 1.0
 - Agent recommendation: Avoid a redundant version file and artifact contract until consumers exist.
 - User disposition: Approved.
 - Rationale: The repository currently has neither an embedded product version nor distributable artifacts.
-- Long-term consequences: Release creation must promptly follow every post-policy `main` merge.
+- Long-term consequences: Release creation must promptly follow every post-baseline `main` merge.
 - Reversibility: Easy to add an embedded version later; published immutable releases remain historical records.
 - Reopen when: Runtime display, packaging, update checks, or distribution needs a version inside repository content.
 

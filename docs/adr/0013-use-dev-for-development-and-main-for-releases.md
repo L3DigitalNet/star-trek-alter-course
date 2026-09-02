@@ -87,8 +87,9 @@ Slugs use lowercase letters, digits, and hyphens. The issue number is required. 
 
 A major feature normally uses one `feature/` branch and a Final pull request. An Initiative may use that feature branch as a temporary integration target for Supporting pull requests only when its parts cannot land independently on `dev`. This does not create another permanent branch.
 
-`main` is release-only. Its accepted sources are:
+After initial baseline adoption, `main` is release-only. Its accepted sources are:
 
+- `dev` for the one-time pre-release baseline promotion described below;
 - `dev` for a planned release;
 - `hotfix/<issue>-<slug>` for an urgent patch;
 - no direct local push in the routine workflow.
@@ -114,7 +115,7 @@ Commit subjects and squash-merge titles use Conventional Commit form. The accept
 
 Topic pull requests into `dev` use squash merge. The squash title becomes the admitted commit subject.
 
-A release pull request from `dev` to `main` uses a merge commit and the title `chore(release): vMAJOR.MINOR.PATCH`. A hotfix pull request into `main` uses squash merge and a `fix` title. The required synchronization pull request from `main` back to `dev` uses a merge commit and the title `chore(sync): merge main into dev`.
+A one-time pre-release baseline pull request from `dev` to `main` uses a merge commit and the title `chore(baseline): establish main baseline`. Enforcement admits this exception only when the base lacks this ADR and the head contains it, so it expires when the baseline merges. A release pull request from `dev` to `main` uses a merge commit and the title `chore(release): vMAJOR.MINOR.PATCH`. A hotfix pull request into `main` uses squash merge and a `fix` title. The required synchronization pull request from `main` back to `dev` uses a merge commit and the title `chore(sync): merge main into dev`.
 
 Rebase merging is disabled. Merge commits remain enabled only for release promotion, hotfix synchronization, and an explicitly governed feature integration case.
 
@@ -141,13 +142,13 @@ A planned release follows this sequence:
 
 Versions remain in `0.x` until an explicit decision declares 1.0 readiness. The Git tag is the version source of truth until the game or a release artifact needs an embedded version. GitHub Release notes are the changelog until a consumer requires a repository `CHANGELOG.md`.
 
-Every post-policy merge to `main`, including a hotfix, must promptly receive a corresponding tag and immutable GitHub Release. No downloadable artifact is promised until a separately governed export and packaging pipeline exists.
+Every post-baseline merge to `main`, including a hotfix, must promptly receive a corresponding tag and immutable GitHub Release. The one-time baseline promotion is not a release and receives no tag or GitHub Release. No downloadable artifact is promised until a separately governed export and packaging pipeline exists.
 
 A hotfix begins from current `main`, uses a `hotfix/` branch and governed pull request, and increments the patch version. After release publication, `main` must merge back into `dev` through the required synchronization pull request before ordinary development resumes.
 
 ### Migration and rollback
 
-Adoption creates `dev` at the current `main` commit, makes it default, and then applies repository enforcement through a governed pull request to `dev`. Existing history receives no retroactive tag.
+Adoption creates `dev` at the current `main` commit, makes it default, and then applies repository enforcement through a governed pull request to `dev`. Before the first game release, the owner may merge one governed baseline promotion from `dev` to `main` without a tag or GitHub Release. The exact title and ADR-presence check above make this a one-time migration path. Existing history receives no retroactive tag.
 
 If a protection setting blocks legitimate recovery, the owner may temporarily change only the setting proven to cause the failure using the OpenBao-backed administrative credential. The owner records the reason, completes the narrow recovery, restores the approved setting, and verifies live configuration. This recovery process does not authorize bypassing the issue and pull-request workflow for ordinary development.
 
@@ -170,7 +171,7 @@ Conformance is confirmed by all of the following:
 - `./scripts/verify.sh` passes through `rexec`;
 - pull requests pass the `Branch policy` and `Canonical verification` checks;
 - GitHub reports `dev` as default, approved merge methods, automatic topic deletion, and matching branch and tag protections;
-- release receipts show a SemVer tag and immutable GitHub Release for every post-policy `main` merge.
+- release receipts show a SemVer tag and immutable GitHub Release for every post-baseline `main` merge.
 
 ## Pros and Cons of the Options
 
