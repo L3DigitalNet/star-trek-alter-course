@@ -1,0 +1,84 @@
+schema_version: "1"
+id: "strategic.background.unexplored-sector"
+lifecycle: "placeholder"
+quality_tier: "disposable"
+kind: "background"
+revision: 1
+purpose: "Placeholder strategic-map backdrop for an unexplored sector."
+output:
+  path: "src/AlterCourse.Godot/assets/backgrounds/strategic/unexplored-sector.png"
+  format: "png"
+  width: 1024
+  height: 1024
+  transparency: "optional"
+  target_display_sizes:
+    - "256"
+    - "512"
+    - "1024"
+visual:
+  style_profile: "global"
+  importance: "secondary"
+  tags:
+    - "strategic"
+    - "sector"
+    - "background"
+constraints:
+  required:
+    - "dark sparse star field"
+    - "subtle unexplored nebula haze"
+    - "low visual noise for map overlays"
+  prohibited:
+    - "text"
+    - "watermark"
+    - "recognizable franchise insignia"
+    - "recognizable canon starship design"
+references: []
+rights:
+  classification: "unreviewed-generated-placeholder"
+  license: null
+  attribution: null
+  source: null
+  notes: "Disposable generated placeholder; not approved for release."
+generation:
+  source_type: "generated"
+  generated_at: "2026-09-02T09:58:41.9098896+00:00"
+  run_id: "84a00026-bc07-42fb-b00e-9bb4c577c78b"
+  route: "raster-placeholder"
+  provider: "xai-primary"
+  adapter: "xai-images"
+  adapter_version: "1"
+  provenance_schema_version: "1"
+  model_profile: "image"
+  model: "grok-imagine-image-2.0"
+  quality_tier: "disposable"
+  final_prompt: |-
+    Asset role and semantic purpose: background strategic.background.unexplored-sector; Placeholder strategic-map backdrop for an unexplored sector.
+    Kind-specific composition guidance: compose a background for its stated role.
+    Resolved style-profile intent: Readable LCARS-adjacent visuals with restrained geometry and no embedded text.
+    Output and target-size requirements: exact 1024x1024 png; transparency optional; target display sizes 256, 512, 1024 px; no external resources
+    Required constraints: clear silhouette; readable at target size; dark sparse star field; subtle unexplored nebula haze; low visual noise for map overlays
+    Prohibited content: watermark; photorealistic trademarked insignia; text; watermark; recognizable franchise insignia; recognizable canon starship design
+    Reference instructions: none
+    Lifecycle reminder: placeholder assets must remain functionally clear rather than polished at any cost.
+    Prompt contract version: 3
+  prompt_sha256: "9164ee3f6f1f8aa18709b116dcc553ca093eebfc99850c1ec63e7d60605fbdb2"
+  request_sha256: "21cb1b679de7d8119b4d7fd9d181d10e9c97e5d8a2243af2002a662bb969ea72"
+  effective_config_sha256: "ac7f64d26f57ee96c9efe330fd88c3f8b6c11e5ca94f9a54f438ec411f16e9e3"
+  provider_request_id: null
+  estimated_cost_usd: 0.08
+  actual_cost_usd: null
+validation:
+  mechanical_status: "pass"
+  mechanical_validator_version: "1"
+  mechanical_findings: []
+  semantic_status: "not-run"
+integrity:
+  sha256: "e4b45f1ca53a9d5686cc93bfeb76351f4769e578b76c34e1d57093ad111d31f1"
+  byte_length: 761247
+  media_type: "image/png"
+approval:
+  approved_by: null
+  approved_at: null
+  approval_note: null
+deprecation: null
+supersedes: null

@@ -8,15 +8,15 @@ public sealed record SimulationAdvanceResult
 {
     internal SimulationAdvanceResult(
         SimulationTime finalTime,
-        IReadOnlyList<ScheduledWorkKind> resolvedKinds,
+        IReadOnlyList<PlayerAdvanceEvent> resolvedEvents,
         PlayerProjection projection
-    ) => (FinalTime, ResolvedKinds, Projection) = (finalTime, resolvedKinds, projection);
+    ) => (FinalTime, ResolvedEvents, Projection) = (finalTime, resolvedEvents, projection);
 
     /// <summary>Gets the final authoritative simulation time.</summary>
     public SimulationTime FinalTime { get; }
 
-    /// <summary>Gets consequences resolved during advancement in deterministic execution order.</summary>
-    public IReadOnlyList<ScheduledWorkKind> ResolvedKinds { get; }
+    /// <summary>Gets player-visible consequences resolved during advancement in deterministic execution order.</summary>
+    public IReadOnlyList<PlayerAdvanceEvent> ResolvedEvents { get; }
 
     /// <summary>Gets the fresh player view after all requested steps and consequences resolve.</summary>
     public PlayerProjection Projection { get; }

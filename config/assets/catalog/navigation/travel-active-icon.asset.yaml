@@ -1,0 +1,85 @@
+schema_version: "1"
+id: "navigation.icon.travel-active"
+lifecycle: "placeholder"
+quality_tier: "disposable"
+kind: "icon"
+revision: 1
+purpose: "Placeholder status icon showing that the player ship is actively traveling."
+output:
+  path: "src/AlterCourse.Godot/assets/icons/navigation/travel-active.png"
+  format: "png"
+  width: 1024
+  height: 1024
+  transparency: "required"
+  target_display_sizes:
+    - "16"
+    - "24"
+    - "32"
+    - "64"
+visual:
+  style_profile: "global"
+  importance: "primary"
+  tags:
+    - "navigation"
+    - "travel"
+    - "status"
+constraints:
+  required:
+    - "simple forward motion silhouette"
+    - "clear direction of travel"
+    - "recognizable at 16 pixels"
+  prohibited:
+    - "text"
+    - "watermark"
+    - "recognizable franchise insignia"
+    - "recognizable canon starship design"
+references: []
+rights:
+  classification: "unreviewed-generated-placeholder"
+  license: null
+  attribution: null
+  source: null
+  notes: "Disposable generated placeholder; not approved for release."
+generation:
+  source_type: "generated"
+  generated_at: "2026-09-02T09:59:25.0246013+00:00"
+  run_id: "4662750b-c9b5-4eba-9683-3537ea8352ac"
+  route: "raster-placeholder"
+  provider: "openai-primary"
+  adapter: "openai-images"
+  adapter_version: "1"
+  provenance_schema_version: "1"
+  model_profile: "image"
+  model: "gpt-image-2"
+  quality_tier: "disposable"
+  final_prompt: |-
+    Asset role and semantic purpose: icon navigation.icon.travel-active; Placeholder status icon showing that the player ship is actively traveling.
+    Kind-specific composition guidance: compose a icon for its stated role.
+    Resolved style-profile intent: Readable LCARS-adjacent visuals with restrained geometry and no embedded text.
+    Output and target-size requirements: exact 1024x1024 png; transparency required; target display sizes 16, 24, 32, 64 px; no external resources
+    Required constraints: clear silhouette; readable at target size; simple forward motion silhouette; clear direction of travel; recognizable at 16 pixels
+    Prohibited content: watermark; photorealistic trademarked insignia; text; watermark; recognizable franchise insignia; recognizable canon starship design
+    Reference instructions: none
+    Lifecycle reminder: placeholder assets must remain functionally clear rather than polished at any cost.
+    Prompt contract version: 3
+  prompt_sha256: "5cc667210cf78cdb48ee702032bc6ac3fdc46943d2983b04458eb7539940bb7a"
+  request_sha256: "bdce388748d2425aebe84b367d9bb34e7e826f20776f8f8aed9fc997108a420d"
+  effective_config_sha256: "ac7f64d26f57ee96c9efe330fd88c3f8b6c11e5ca94f9a54f438ec411f16e9e3"
+  provider_request_id: null
+  estimated_cost_usd: 0.02
+  actual_cost_usd: null
+validation:
+  mechanical_status: "pass"
+  mechanical_validator_version: "1"
+  mechanical_findings: []
+  semantic_status: "not-run"
+integrity:
+  sha256: "21c05232f9ed5c4616a9cf7683f65db7ec964716bf04483f9f1e20c4b76b6c17"
+  byte_length: 1024337
+  media_type: "image/png"
+approval:
+  approved_by: null
+  approved_at: null
+  approval_note: null
+deprecation: null
+supersedes: null

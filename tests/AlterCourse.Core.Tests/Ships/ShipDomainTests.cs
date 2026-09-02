@@ -38,7 +38,6 @@ public sealed class ShipDomainTests
                 new ShipDefinitionId("ship"),
                 " ",
                 new SpeedKilometersPerSecond(1),
-                new SensorIntegrity(0.5),
                 new SimulationDuration(8000)
             )
         );
@@ -47,9 +46,21 @@ public sealed class ShipDomainTests
                 new ShipDefinitionId("ship"),
                 "Ship",
                 new SpeedKilometersPerSecond(1),
-                new SensorIntegrity(0.5),
                 new SimulationDuration(8050)
             )
         );
+    }
+
+    /// <summary>Confirms durable ship-definition identities use the compact ASCII wire alphabet.</summary>
+    [Theory]
+    [InlineData("non ascii")]
+    [InlineData("non/ascii")]
+    [InlineData("non:ascii")]
+    [InlineData("nonéascii")]
+    [InlineData("non\u0001ascii")]
+    public void ShipDefinitionIdentityRejectsCharactersOutsideDurableAlphabet(string identity)
+    {
+        Assert.Throws<ArgumentException>(() => new ShipDefinitionId(identity));
+        Assert.Equal("AZaz09-_.", new ShipDefinitionId("AZaz09-_.").Value);
     }
 }

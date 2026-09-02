@@ -4,16 +4,15 @@ using AlterCourse.Core.Ships;
 
 namespace AlterCourse.Core.Tests.Content;
 
-/// <summary>Verifies strict, versioned admission of authored player-ship definitions.</summary>
+/// <summary>Verifies strict, versioned admission of authored ship definitions.</summary>
 public sealed class ShipDefinitionCatalogLoaderTests
 {
     private const string ValidDefinition = """
         {
-          "schemaVersion": 1,
+          "schemaVersion": 2,
           "id": "pathfinder",
-          "displayName": "Pathfinder",
+          "designDisplayName": "Pathfinder class",
           "maximumTacticalSpeedKilometersPerSecond": 10,
-          "initialSensorIntegrity": 0.4,
           "sensorRepairDurationMilliseconds": 8000
         }
         """;
@@ -32,9 +31,8 @@ public sealed class ShipDefinitionCatalogLoaderTests
         Assert.Equal(fromText, fromBytes);
         Assert.Equal(fromText, fromStream);
         Assert.Equal(new ShipDefinitionId("pathfinder"), fromText.Id);
-        Assert.Equal("Pathfinder", fromText.DisplayName);
+        Assert.Equal("Pathfinder class", fromText.DesignDisplayName);
         Assert.Equal(10, fromText.MaximumTacticalSpeed.Value);
-        Assert.Equal(0.4, fromText.InitialSensorIntegrity.Value);
         Assert.Equal(8000, fromText.SensorRepairDuration.Milliseconds);
     }
 
@@ -43,7 +41,7 @@ public sealed class ShipDefinitionCatalogLoaderTests
     public void LoadsSchemaValidIntegralNumericForms()
     {
         string json = ValidDefinition
-            .Replace("\"schemaVersion\": 1", "\"schemaVersion\": 1.0", StringComparison.Ordinal)
+            .Replace("\"schemaVersion\": 2", "\"schemaVersion\": 2.0", StringComparison.Ordinal)
             .Replace(
                 "\"sensorRepairDurationMilliseconds\": 8000",
                 "\"sensorRepairDurationMilliseconds\": 8e3",
@@ -82,7 +80,7 @@ public sealed class ShipDefinitionCatalogLoaderTests
     {
         string root = FindRepositoryRoot();
         string schema = File.ReadAllText(
-            Path.Combine(root, "src/AlterCourse.Godot/content/schemas/ship-definition-v1.schema.json")
+            Path.Combine(root, "src/AlterCourse.Godot/content/schemas/ship-definition-v2.schema.json")
         );
         string definition = File.ReadAllText(Path.Combine(root, "src/AlterCourse.Godot/content/ships/pathfinder.json"));
 
@@ -92,13 +90,46 @@ public sealed class ShipDefinitionCatalogLoaderTests
         );
 
         Assert.Equal(new ShipDefinitionId("pathfinder"), ship.Id);
-        Assert.Equal("USS Pathfinder", ship.DisplayName);
+        Assert.Equal("Pathfinder class", ship.DesignDisplayName);
+    }
+
+    /// <summary>Confirms the domain and canonical schema share the exact persisted identity boundary.</summary>
+    [Fact]
+    public void EnforcesShipDefinitionIdentityLengthAcrossDomainAndContent()
+    {
+        string maximumId = new('i', ShipDefinitionId.MaximumLength);
+        string maximum = DefinitionWithId(maximumId);
+
+        ShipDefinition loaded = CreateLoader().LoadText(maximum, "maximum-id.json");
+
+        Assert.Equal(maximumId, loaded.Id.Value);
+        Assert.Throws<ArgumentException>(() =>
+            new ShipDefinitionId(new string('i', ShipDefinitionId.MaximumLength + 1))
+        );
+        Assert.Throws<ShipContentValidationException>(() =>
+            CreateLoader()
+                .LoadText(DefinitionWithId(new string('i', ShipDefinitionId.MaximumLength + 1)), "oversized-id.json")
+        );
+    }
+
+    /// <summary>Confirms the canonical schema rejects identities outside the durable ASCII alphabet.</summary>
+    [Theory]
+    [InlineData("invalid id")]
+    [InlineData("invalid/id")]
+    [InlineData("invalid:id")]
+    [InlineData("invalidéid")]
+    [InlineData("invalid\\u0001id")]
+    public void RejectsShipDefinitionIdentityOutsideDurableAlphabet(string identity)
+    {
+        Assert.Throws<ShipContentValidationException>(() =>
+            CreateLoader().LoadText(DefinitionWithId(identity), "invalid-id.json")
+        );
     }
 
     /// <summary>Confirms malformed and truncated JSON fail closed with source-aware diagnostics.</summary>
     [Theory]
-    [InlineData("{\"schemaVersion\":1")]
-    [InlineData("{\"schemaVersion\":1} trailing")]
+    [InlineData("{\"schemaVersion\":2")]
+    [InlineData("{\"schemaVersion\":2} trailing")]
     public void RejectsMalformedJson(string json)
     {
         ShipContentValidationException exception = Assert.Throws<ShipContentValidationException>(() =>
@@ -114,8 +145,8 @@ public sealed class ShipDefinitionCatalogLoaderTests
     public void RejectsDuplicateObjectMembers()
     {
         string json = ValidDefinition.Replace(
-            "\"displayName\": \"Pathfinder\",",
-            "\"displayName\": \"Pathfinder\",\n  \"displayName\": \"Duplicate\",",
+            "\"designDisplayName\": \"Pathfinder class\",",
+            "\"designDisplayName\": \"Pathfinder class\",\n  \"designDisplayName\": \"Duplicate\",",
             StringComparison.Ordinal
         );
 
@@ -123,7 +154,7 @@ public sealed class ShipDefinitionCatalogLoaderTests
             CreateLoader().LoadText(json, "duplicate.json")
         );
 
-        Assert.Contains("duplicate JSON member 'displayName'", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("duplicate JSON member 'designDisplayName'", exception.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("schema", exception.Diagnostics[0].Code, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -132,8 +163,8 @@ public sealed class ShipDefinitionCatalogLoaderTests
     public void RejectsUnknownMembers()
     {
         string json = ValidDefinition.Replace(
-            "\"schemaVersion\": 1,",
-            "\"schemaVersion\": 1,\n  \"unconsumed\": true,",
+            "\"schemaVersion\": 2,",
+            "\"schemaVersion\": 2,\n  \"unconsumed\": true,",
             StringComparison.Ordinal
         );
 
@@ -146,8 +177,9 @@ public sealed class ShipDefinitionCatalogLoaderTests
 
     /// <summary>Confirms missing and unsupported schema versions are structural failures.</summary>
     [Theory]
-    [InlineData("\"schemaVersion\": 1,", "")]
-    [InlineData("\"schemaVersion\": 1", "\"schemaVersion\": 2")]
+    [InlineData("\"schemaVersion\": 2,", "")]
+    [InlineData("\"schemaVersion\": 2", "\"schemaVersion\": 1")]
+    [InlineData("\"schemaVersion\": 2", "\"schemaVersion\": 3")]
     public void RejectsWrongOrMissingSchemaVersion(string original, string replacement)
     {
         string json = ValidDefinition.Replace(original, replacement, StringComparison.Ordinal);
@@ -156,6 +188,24 @@ public sealed class ShipDefinitionCatalogLoaderTests
             CreateLoader().LoadText(json, "version.json")
         );
 
+        Assert.Contains("schema", exception.Diagnostics[0].Code, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Confirms the removed instance starting condition cannot enter reusable design content.</summary>
+    [Fact]
+    public void RejectsRemovedInitialSensorIntegrity()
+    {
+        string json = ValidDefinition.Replace(
+            "\"sensorRepairDurationMilliseconds\": 8000",
+            "\"initialSensorIntegrity\": 0.4,\n  \"sensorRepairDurationMilliseconds\": 8000",
+            StringComparison.Ordinal
+        );
+
+        ShipContentValidationException exception = Assert.Throws<ShipContentValidationException>(() =>
+            CreateLoader().LoadText(json, "removed-field.json")
+        );
+
+        Assert.Contains("initialSensorIntegrity", exception.Message, StringComparison.Ordinal);
         Assert.Contains("schema", exception.Diagnostics[0].Code, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -178,12 +228,11 @@ public sealed class ShipDefinitionCatalogLoaderTests
 
     /// <summary>Confirms game-rule invariants remain a semantic validation stage after schema validation.</summary>
     [Theory]
-    [InlineData("\"displayName\": \"Pathfinder\"", "\"displayName\": \"   \"")]
+    [InlineData("\"designDisplayName\": \"Pathfinder class\"", "\"designDisplayName\": \"   \"")]
     [InlineData(
         "\"maximumTacticalSpeedKilometersPerSecond\": 10",
         "\"maximumTacticalSpeedKilometersPerSecond\": 1e400"
     )]
-    [InlineData("\"initialSensorIntegrity\": 0.4", "\"initialSensorIntegrity\": 1")]
     [InlineData("\"sensorRepairDurationMilliseconds\": 8000", "\"sensorRepairDurationMilliseconds\": 8050")]
     public void RejectsSemanticallyInvalidDefinition(string original, string replacement)
     {
@@ -213,6 +262,33 @@ public sealed class ShipDefinitionCatalogLoaderTests
         Assert.Contains("pathfinder", exception.Message, StringComparison.Ordinal);
         Assert.Contains("first.json", exception.Message, StringComparison.Ordinal);
         Assert.Contains("second.json", exception.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>Confirms catalog admission is finite and accepts the documented maximum.</summary>
+    [Fact]
+    public void BoundsCatalogDefinitionMaterialization()
+    {
+        ShipDefinitionContent[] maximum =
+        [
+            .. Enumerable
+                .Range(0, ShipDefinitionCatalogLoader.MaximumDefinitions)
+                .Select(index =>
+                    ShipDefinitionContent.FromText($"ship-{index}.json", DefinitionWithId($"ship-{index}"))
+                ),
+        ];
+
+        ShipDefinitionCatalog catalog = CreateLoader().LoadCatalog(maximum);
+
+        Assert.Equal(ShipDefinitionCatalogLoader.MaximumDefinitions, catalog.Definitions.Count);
+        Assert.Throws<ArgumentException>(() =>
+            CreateLoader()
+                .LoadCatalog(
+                    OverflowAfter(
+                        ShipDefinitionContent.FromText("overflow.json", ValidDefinition),
+                        ShipDefinitionCatalogLoader.MaximumDefinitions + 1
+                    )
+                )
+        );
     }
 
     /// <summary>Confirms diagnostics are stable, source-aware, and carry instance/schema locations.</summary>
@@ -291,10 +367,23 @@ public sealed class ShipDefinitionCatalogLoaderTests
             File.ReadAllText(
                 Path.Combine(
                     FindRepositoryRoot(),
-                    "src/AlterCourse.Godot/content/schemas/ship-definition-v1.schema.json"
+                    "src/AlterCourse.Godot/content/schemas/ship-definition-v2.schema.json"
                 )
             )
         );
+
+    private static string DefinitionWithId(string id) =>
+        ValidDefinition.Replace("\"id\": \"pathfinder\"", $"\"id\": \"{id}\"", StringComparison.Ordinal);
+
+    private static IEnumerable<T> OverflowAfter<T>(T value, int yieldedCount)
+    {
+        for (int index = 0; index < yieldedCount; index++)
+        {
+            yield return value;
+        }
+
+        throw new InvalidOperationException("The bounded consumer enumerated past its rejection threshold.");
+    }
 
     private static string FindRepositoryRoot()
     {

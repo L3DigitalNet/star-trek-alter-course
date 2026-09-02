@@ -191,16 +191,7 @@ internal static class ProviderAdapters
             }
             else
             {
-                message.Content = JsonContent.Create(
-                    new
-                    {
-                        model = context.Model.VendorModel,
-                        prompt = request.Prompt,
-                        n = request.CandidateCount,
-                        size = RecraftImageAdapter.ExactSize(request.Request.Output),
-                        output_format = "png",
-                    }
-                );
+                message.Content = JsonContent.Create(GenerationPayload(context, request));
             }
 
             ProviderContracts.ImageResponse response = await SendJsonAsync<ProviderContracts.ImageResponse>(
@@ -214,6 +205,44 @@ internal static class ProviderAdapters
                 ProviderRequestIdPolicy.Sanitize(response.Id, context.Credential),
                 null
             );
+        }
+
+        private static Dictionary<string, object?> GenerationPayload(
+            ProviderExecutionContext context,
+            NormalizedGenerationRequest request
+        )
+        {
+            Dictionary<string, object?> payload = new(7, StringComparer.Ordinal)
+            {
+                ["model"] = context.Model.VendorModel,
+                ["prompt"] = request.Prompt,
+                ["n"] = request.CandidateCount,
+                ["size"] = RecraftImageAdapter.ExactSize(request.Request.Output),
+                ["output_format"] = "png",
+            };
+            CopyOption(context.Model.Options, payload, "quality");
+            if (request.Request.Output.TransparencyRequired)
+            {
+                payload["background"] = "transparent";
+            }
+            else
+            {
+                CopyOption(context.Model.Options, payload, "background");
+            }
+
+            return payload;
+        }
+
+        private static void CopyOption(
+            IReadOnlyDictionary<string, string> options,
+            Dictionary<string, object?> payload,
+            string key
+        )
+        {
+            if (options.TryGetValue(key, out string? value))
+            {
+                payload[key] = value;
+            }
         }
     }
 
@@ -233,7 +262,7 @@ internal static class ProviderAdapters
         public IReadOnlySet<AssetCapability> SupportedCapabilities => Capabilities;
 
         public void ValidateOptions(IReadOnlyDictionary<string, string> options) =>
-            RecraftImageAdapter.ValidateKnown(options, "aspect_ratio", "resolution", "supported_sizes");
+            RecraftImageAdapter.ValidateKnown(options, "aspect_ratio", "resolution", "quality", "supported_sizes");
 
         public string? OutputContractRejection(ModelProfile model, OutputContract? output) =>
             RecraftImageAdapter.ExactSizeRejection(model, output);
@@ -254,6 +283,16 @@ internal static class ProviderAdapters
                 ["response_format"] = "b64_json",
                 ["aspect_ratio"] = AspectRatio(request.Request.Output),
             };
+            if (context.Model.Options.TryGetValue("resolution", out string? resolution))
+            {
+                payload["resolution"] = resolution;
+            }
+
+            if (context.Model.Options.TryGetValue("quality", out string? quality))
+            {
+                payload["quality"] = quality;
+            }
+
             if (request.References.Count != 0)
             {
                 payload["image"] = request

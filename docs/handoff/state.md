@@ -2,8 +2,8 @@
 
 ## Current focus
 
-- Record only active work that should survive into the next session.
+- Draft Final PR #41 for Task #40 targets `dev`; current work is owner review and manual gameplay testing of the consolidated M1/M2 shell.
 
 ## Active incidents
 
-- Record unresolved incidents; remove resolved items after routing durable lessons to a bug record.
+- None.

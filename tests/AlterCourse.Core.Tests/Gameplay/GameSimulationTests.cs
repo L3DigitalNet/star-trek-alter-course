@@ -1,15 +1,48 @@
+using AlterCourse.Core.Content;
 using AlterCourse.Core.Gameplay;
+using AlterCourse.Core.Identity;
+using AlterCourse.Core.Persistence;
 using AlterCourse.Core.Player;
 using AlterCourse.Core.Quantities;
 using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
+using AlterCourse.Core.Tactical;
 
 namespace AlterCourse.Core.Tests.Gameplay;
 
 /// <summary>Verifies the deterministic headless gameplay aggregate and its player contract.</summary>
 public sealed class GameSimulationTests
 {
+    /// <summary>Confirms the public advancement contract contains only player-semantic event vocabulary.</summary>
+    [Fact]
+    public void AdvancementApiExposesOnlyPlayerSemanticEvents()
+    {
+        Assert.Equal(
+            typeof(IReadOnlyList<PlayerAdvanceEvent>),
+            typeof(SimulationAdvanceResult).GetProperty(nameof(SimulationAdvanceResult.ResolvedEvents))!.PropertyType
+        );
+        Assert.Equal(
+            typeof(IReadOnlyList<PlayerAdvanceEvent>),
+            typeof(AdvanceUntilResult).GetProperty(nameof(AdvanceUntilResult.ResolvedEvents))!.PropertyType
+        );
+        Assert.DoesNotContain(
+            typeof(GameSimulation).GetMembers().Concat(typeof(SimulationAdvanceResult).GetMembers()),
+            member => member.Name.Contains("Scheduled", StringComparison.Ordinal)
+        );
+        Assert.DoesNotContain(
+            typeof(AdvanceUntilResult).GetMembers(),
+            member => member.Name.Contains("Scheduled", StringComparison.Ordinal)
+        );
+        Assert.Equal(["PlayerEventResolved", "NoPlayerEvent"], Enum.GetNames<AdvanceUntilOutcome>());
+        Assert.DoesNotContain(
+            Enum.GetNames<AdvanceUntilOutcome>(),
+            name => name.Contains("Scheduled", StringComparison.Ordinal)
+        );
+        Assert.Null(typeof(GameSimulation).GetMethod("AdvanceUntilNextScheduledEvent"));
+        Assert.False(typeof(Milestone2ProofSetup).IsPublic);
+    }
+
     /// <summary>Confirms setup is deterministic, damaged, repairing, and projected read-only.</summary>
     [Fact]
     public void FirstSetupIsDeterministicDamagedAndReadOnly()
@@ -20,6 +53,7 @@ public sealed class GameSimulationTests
         PlayerProjection projection = first.GetPlayerProjection();
 
         Assert.Equal(1, projection.Ship.InstanceId.Value);
+        Assert.Equal("USS Pathfinder", projection.Ship.DisplayName);
         Assert.Equal(projection, second.GetPlayerProjection());
         Assert.Equal(3, projection.Strategic.Locations.Count);
         Assert.Equal(2, projection.Strategic.Routes.Count);
@@ -41,6 +75,13 @@ public sealed class GameSimulationTests
     {
         GameSimulation game = CreateGame();
         PlayerProjection initial = game.GetPlayerProjection();
+        var metadata = new GameSaveMetadata(
+            "travel-rejection",
+            "Travel Rejection",
+            DateTimeOffset.UnixEpoch,
+            DateTimeOffset.UnixEpoch
+        );
+        byte[] initialSnapshot = GamePersistence.Serialize(game, metadata);
         LocationId origin = initial.Strategic.CurrentLocation!.Id;
         LocationId connected = initial.Strategic.Routes.Single(route => route.Origin == origin).Destination;
         LocationId unconnected = initial
@@ -50,14 +91,17 @@ public sealed class GameSimulationTests
         Assert.Equal(TravelOutcome.SameLocation, game.RequestTravel(new TravelIntent(origin)).Outcome);
         Assert.Equal(TravelOutcome.RouteUnavailable, game.RequestTravel(new TravelIntent(unconnected)).Outcome);
         Assert.Equal(initial, game.GetPlayerProjection());
+        Assert.Equal(initialSnapshot, GamePersistence.Serialize(game, metadata));
 
         Assert.Equal(TravelOutcome.Accepted, game.RequestTravel(new TravelIntent(connected)).Outcome);
         PlayerProjection traveling = game.GetPlayerProjection();
+        byte[] travelingSnapshot = GamePersistence.Serialize(game, metadata);
         Assert.Equal(TravelOutcome.AlreadyTraveling, game.RequestTravel(new TravelIntent(unconnected)).Outcome);
         Assert.DoesNotContain(PlayerAction.Travel, traveling.AvailableActions);
         Assert.DoesNotContain(PlayerAction.SetTacticalCourse, traveling.AvailableActions);
         Assert.Contains(PlayerAction.AdvanceTime, traveling.AvailableActions);
         Assert.Equal(traveling, game.GetPlayerProjection());
+        Assert.Equal(travelingSnapshot, GamePersistence.Serialize(game, metadata));
     }
 
     /// <summary>Confirms travel remains explicit until its scheduled arrival boundary.</summary>
@@ -203,9 +247,9 @@ public sealed class GameSimulationTests
         Assert.NotNull(complete.Strategic.Travel);
     }
 
-    /// <summary>Confirms scheduler-boundary advancement matches ordinary fixed-step consequences.</summary>
+    /// <summary>Confirms player-event advancement matches ordinary fixed-step consequences.</summary>
     [Fact]
-    public void AdvanceUntilUsesSchedulerBoundariesAndMatchesOrdinaryAdvance()
+    public void AdvanceUntilUsesPlayerEventBoundariesAndMatchesOrdinaryAdvance()
     {
         GameSimulation until = CreateGame();
         GameSimulation ordinary = CreateGame();
@@ -213,39 +257,39 @@ public sealed class GameSimulationTests
         until.RequestTravel(new TravelIntent(destination));
         ordinary.RequestTravel(new TravelIntent(destination));
 
-        AdvanceUntilResult repair = until.AdvanceUntilNextScheduledEvent();
-        AdvanceUntilResult arrival = until.AdvanceUntilNextScheduledEvent();
+        AdvanceUntilResult repair = until.AdvanceUntilNextPlayerRelevantEvent();
+        AdvanceUntilResult arrival = until.AdvanceUntilNextPlayerRelevantEvent();
         SimulationAdvanceResult ordinaryAdvance = ordinary.AdvanceFixedSteps(120);
 
-        Assert.Equal(AdvanceUntilOutcome.ScheduledEventResolved, repair.Outcome);
+        Assert.Equal(AdvanceUntilOutcome.PlayerEventResolved, repair.Outcome);
         Assert.Equal(8000, repair.StoppedAt.Milliseconds);
-        Assert.Equal([ScheduledWorkKind.SensorRepairCompletion], repair.ResolvedKinds);
+        Assert.Equal([PlayerAdvanceEvent.SensorRepairCompleted], repair.ResolvedEvents);
         Assert.NotNull(repair.Projection.Strategic.Travel);
         Assert.Equal(12000, arrival.StoppedAt.Milliseconds);
-        Assert.Equal([ScheduledWorkKind.TravelArrival], arrival.ResolvedKinds);
+        Assert.Equal([PlayerAdvanceEvent.TravelArrived], arrival.ResolvedEvents);
         Assert.Equal(12000, ordinaryAdvance.FinalTime.Milliseconds);
         Assert.Equal(
-            [ScheduledWorkKind.SensorRepairCompletion, ScheduledWorkKind.TravelArrival],
-            ordinaryAdvance.ResolvedKinds
+            [PlayerAdvanceEvent.SensorRepairCompleted, PlayerAdvanceEvent.TravelArrived],
+            ordinaryAdvance.ResolvedEvents
         );
         Assert.Equal(ordinary.GetPlayerProjection(), ordinaryAdvance.Projection);
         Assert.Equal(until.GetPlayerProjection(), ordinary.GetPlayerProjection());
     }
 
-    /// <summary>Confirms advance-until is a no-op once no scheduled boundary remains.</summary>
+    /// <summary>Confirms advance-until is a no-op once no player-relevant event remains.</summary>
     [Fact]
-    public void AdvanceUntilWithoutScheduledWorkDoesNotAdvance()
+    public void AdvanceUntilWithoutPlayerEventsDoesNotAdvance()
     {
         GameSimulation game = CreateGame();
         game.RequestTravel(new TravelIntent(ConnectedDestination(game)));
-        game.AdvanceFixedSteps(120);
+        game.AdvanceFixedSteps(140);
         PlayerProjection before = game.GetPlayerProjection();
 
-        AdvanceUntilResult result = game.AdvanceUntilNextScheduledEvent();
+        AdvanceUntilResult result = game.AdvanceUntilNextPlayerRelevantEvent();
 
-        Assert.Equal(AdvanceUntilOutcome.NoScheduledEvent, result.Outcome);
+        Assert.Equal(AdvanceUntilOutcome.NoPlayerEvent, result.Outcome);
         Assert.Equal(before.SimulationTime, result.StoppedAt);
-        Assert.Empty(result.ResolvedKinds);
+        Assert.Empty(result.ResolvedEvents);
         Assert.Equal(before, result.Projection);
         Assert.Equal(before, game.GetPlayerProjection());
     }
@@ -300,16 +344,151 @@ public sealed class GameSimulationTests
         Assert.Equal(initial, game.GetPlayerProjection());
     }
 
-    private static GameSimulation CreateGame() =>
-        FirstGameSetup.Create(
-            new ShipDefinition(
-                new ShipDefinitionId("pathfinder"),
-                "USS Pathfinder",
-                new SpeedKilometersPerSecond(10),
-                new SensorIntegrity(0.4),
-                new SimulationDuration(8000)
-            )
+    /// <summary>Confirms oversized catch-up work is rejected before any ship or clock mutation.</summary>
+    [Fact]
+    public void AdvanceRejectsShipStepWorkOverBudgetWithoutMutation()
+    {
+        GameSimulation game = CreateGame();
+        var metadata = new GameSaveMetadata(
+            "work-budget",
+            "Work Budget",
+            DateTimeOffset.UnixEpoch,
+            DateTimeOffset.UnixEpoch
         );
+        byte[] initial = GamePersistence.Serialize(game, metadata);
+        game.SetTacticalCourse(new SetTacticalCourseIntent(new HeadingDegrees(90), new SpeedKilometersPerSecond(1)));
+        byte[] moving = GamePersistence.Serialize(game, metadata);
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            game.AdvanceFixedSteps(1_000_001)
+        );
+
+        Assert.Contains("actual ship-step work budget", exception.Message, StringComparison.Ordinal);
+        Assert.NotEqual(initial, moving);
+        Assert.Equal(moving, GamePersistence.Serialize(game, metadata));
+    }
+
+    /// <summary>Confirms fixed-step work is charged only for ships that require tactical integration.</summary>
+    [Fact]
+    public void FixedStepWorkSkipsInactiveShipsAndMaterializesRepairsAtBoundaries()
+    {
+        const int shipCount = 256;
+        const int stepCount = 5_000;
+        var location = new StrategicLocation(new LocationId("shared-location"), "Shared Location", default);
+        ShipStart[] starts =
+        [
+            .. Enumerable
+                .Range(1, shipCount)
+                .Select(index =>
+                {
+                    bool isMover = index == 1;
+                    bool isRepairing = index == 2;
+                    return new ShipStart(
+                        new ShipInstanceId(index),
+                        new ShipDefinitionId("pathfinder"),
+                        $"USS Test {index}",
+                        isMover ? default : new TacticalPosition(index, -index),
+                        isMover ? new TacticalMotion(new HeadingDegrees(90), new SpeedKilometersPerSecond(1)) : default,
+                        new SensorIntegrity(isRepairing ? 0.4 : 1),
+                        new AtLocationStart(location.Id),
+                        isRepairing
+                            ? new SensorRepairStart(
+                                new SensorIntegrity(0.4),
+                                new SensorIntegrity(1),
+                                new SimulationTime(0)
+                            )
+                            : null
+                    );
+                }),
+        ];
+        GameSimulation game = new GameBootstrap(
+            new SimulationTime(0),
+            new StrategicMap([location], []),
+            new ShipInstanceId(1),
+            starts
+        ).CreateSimulation(CreateCatalog());
+        TacticalPosition inactivePosition = game.CaptureState()
+            .GetRequiredShip(new ShipInstanceId(shipCount))
+            .TacticalPosition;
+
+        SimulationAdvanceResult result = game.AdvanceFixedSteps(stepCount);
+        SimulationState final = game.CaptureState();
+
+        Assert.Equal(stepCount * 100, result.FinalTime.Milliseconds);
+        Assert.Equal(500, final.GetRequiredShip(new ShipInstanceId(1)).TacticalPosition.XKilometers, 8);
+        Assert.Equal(inactivePosition, final.GetRequiredShip(new ShipInstanceId(shipCount)).TacticalPosition);
+        Assert.Equal(1, final.GetRequiredShip(new ShipInstanceId(2)).SensorIntegrity.Value);
+        Assert.Null(final.GetRequiredShip(new ShipInstanceId(2)).SensorRepair);
+    }
+
+    /// <summary>Confirms bootstrap cannot admit scheduled work that persistence would reject for time exhaustion.</summary>
+    [Fact]
+    public void BootstrapRejectsScheduledDueTimeWithoutContinuationHeadroom()
+    {
+        var origin = new StrategicLocation(new LocationId("origin"), "Origin", default);
+        var destination = new StrategicLocation(new LocationId("destination"), "Destination", default);
+        var map = new StrategicMap(
+            [origin, destination],
+            [new StrategicRoute(origin.Id, destination.Id, new SimulationDuration(9223372036854775800))]
+        );
+        var start = new ShipStart(
+            new ShipInstanceId(1),
+            new ShipDefinitionId("pathfinder"),
+            "USS Boundary",
+            default,
+            default,
+            new SensorIntegrity(1),
+            new TravelingStart(origin.Id, destination.Id, new SimulationTime(0))
+        );
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            new GameBootstrap(new SimulationTime(0), map, start.InstanceId, [start]).CreateSimulation(CreateCatalog())
+        );
+
+        Assert.Contains("continuation headroom", exception.Message, StringComparison.Ordinal);
+    }
+
+    private static GameSimulation CreateGame()
+    {
+        return FirstGameSetup.Create(CreateCatalog());
+    }
+
+    private static ShipDefinitionCatalog CreateCatalog()
+    {
+        const string definition = """
+            {
+              "schemaVersion": 2,
+              "id": "pathfinder",
+              "designDisplayName": "Pathfinder class",
+              "maximumTacticalSpeedKilometersPerSecond": 10,
+              "sensorRepairDurationMilliseconds": 8000
+            }
+            """;
+        string schema = File.ReadAllText(
+            Path.Combine(FindRepositoryRoot(), "src/AlterCourse.Godot/content/schemas/ship-definition-v2.schema.json")
+        );
+        ShipDefinitionCatalog catalog = new ShipDefinitionCatalogLoader(schema).LoadCatalog([
+            ShipDefinitionContent.FromText("pathfinder.json", definition),
+        ]);
+        return catalog;
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        for (
+            var directory = new DirectoryInfo(AppContext.BaseDirectory);
+            directory is not null;
+            directory = directory.Parent
+        )
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "AlterCourse.sln")))
+            {
+                return directory.FullName;
+            }
+        }
+
+        throw new DirectoryNotFoundException("Could not locate the repository root from the test output directory.");
+    }
 
     private static LocationId ConnectedDestination(GameSimulation game)
     {

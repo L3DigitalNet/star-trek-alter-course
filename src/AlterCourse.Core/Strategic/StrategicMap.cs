@@ -5,13 +5,29 @@ namespace AlterCourse.Core.Strategic;
 /// <summary>Owns validated strategic locations and explicit connections.</summary>
 public sealed class StrategicMap
 {
+    internal const int MaximumLocations = 256;
+    internal const int MaximumRoutes = 1024;
+
     /// <summary>Initializes a strategic map with unique locations and routes.</summary>
     public StrategicMap(IEnumerable<StrategicLocation> locations, IEnumerable<StrategicRoute> routes)
     {
         ArgumentNullException.ThrowIfNull(locations);
         ArgumentNullException.ThrowIfNull(routes);
-        ImmutableArray<StrategicLocation> locationArray = [.. locations];
-        ImmutableArray<StrategicRoute> routeArray = [.. routes];
+        ImmutableArray<StrategicLocation> locationArray = [.. locations.Take(MaximumLocations + 1)];
+        ImmutableArray<StrategicRoute> routeArray = [.. routes.Take(MaximumRoutes + 1)];
+
+        if (locationArray.Length > MaximumLocations)
+        {
+            throw new ArgumentException(
+                $"A strategic map supports at most {MaximumLocations} locations.",
+                nameof(locations)
+            );
+        }
+
+        if (routeArray.Length > MaximumRoutes)
+        {
+            throw new ArgumentException($"A strategic map supports at most {MaximumRoutes} routes.", nameof(routes));
+        }
 
         if (locationArray.IsDefaultOrEmpty)
         {

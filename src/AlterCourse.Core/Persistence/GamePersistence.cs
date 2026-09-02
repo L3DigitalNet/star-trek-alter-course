@@ -3,47 +3,63 @@ using System.Text.Json.Serialization;
 using AlterCourse.Core.Content;
 using AlterCourse.Core.Gameplay;
 using AlterCourse.Core.Identity;
+using AlterCourse.Core.Orders;
 using AlterCourse.Core.Quantities;
 using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
 using AlterCourse.Core.Tactical;
 using FiniteDoubleJsonConverter = AlterCourse.Core.Persistence.SaveModelsV1.FiniteDoubleJsonConverter;
+using HoldUntilOrderSnapshotV3 = AlterCourse.Core.Persistence.SaveModelsV3.HoldUntilOrderSnapshotV3;
+using PatrolRouteOrderSnapshotV3 = AlterCourse.Core.Persistence.SaveModelsV3.PatrolRouteOrderSnapshotV3;
 using PlayerShipSnapshotV1 = AlterCourse.Core.Persistence.SaveModelsV1.PlayerShipSnapshotV1;
 using SaveEnvelopeV1 = AlterCourse.Core.Persistence.SaveModelsV1.SaveEnvelopeV1;
-using SaveMetadataV1 = AlterCourse.Core.Persistence.SaveModelsV1.SaveMetadataV1;
-using ScheduledWorkSnapshotV1 = AlterCourse.Core.Persistence.SaveModelsV1.ScheduledWorkSnapshotV1;
+using SaveEnvelopeV2 = AlterCourse.Core.Persistence.SaveModelsV2.SaveEnvelopeV2;
+using SaveEnvelopeV3 = AlterCourse.Core.Persistence.SaveModelsV3.SaveEnvelopeV3;
+using SaveMetadataV2 = AlterCourse.Core.Persistence.SaveModelsV2.SaveMetadataV2;
+using ScheduledWorkSnapshotV2 = AlterCourse.Core.Persistence.SaveModelsV2.ScheduledWorkSnapshotV2;
 using SchedulerSnapshotV1 = AlterCourse.Core.Persistence.SaveModelsV1.SchedulerSnapshotV1;
+using SchedulerSnapshotV2 = AlterCourse.Core.Persistence.SaveModelsV2.SchedulerSnapshotV2;
 using SensorRepairSnapshotV1 = AlterCourse.Core.Persistence.SaveModelsV1.SensorRepairSnapshotV1;
+using SensorRepairSnapshotV2 = AlterCourse.Core.Persistence.SaveModelsV2.SensorRepairSnapshotV2;
+using ShipOrderSnapshotV3 = AlterCourse.Core.Persistence.SaveModelsV3.ShipOrderSnapshotV3;
+using ShipSnapshotV2 = AlterCourse.Core.Persistence.SaveModelsV2.ShipSnapshotV2;
+using ShipSnapshotV3 = AlterCourse.Core.Persistence.SaveModelsV3.ShipSnapshotV3;
 using SimulationSnapshotV1 = AlterCourse.Core.Persistence.SaveModelsV1.SimulationSnapshotV1;
-using StrategicLocationSnapshotV1 = AlterCourse.Core.Persistence.SaveModelsV1.StrategicLocationSnapshotV1;
+using SimulationSnapshotV2 = AlterCourse.Core.Persistence.SaveModelsV2.SimulationSnapshotV2;
+using SimulationSnapshotV3 = AlterCourse.Core.Persistence.SaveModelsV3.SimulationSnapshotV3;
+using StrategicLocationSnapshotV2 = AlterCourse.Core.Persistence.SaveModelsV2.StrategicLocationSnapshotV2;
 using StrategicMapSnapshotV1 = AlterCourse.Core.Persistence.SaveModelsV1.StrategicMapSnapshotV1;
-using StrategicPositionSnapshotV1 = AlterCourse.Core.Persistence.SaveModelsV1.StrategicPositionSnapshotV1;
-using StrategicRouteSnapshotV1 = AlterCourse.Core.Persistence.SaveModelsV1.StrategicRouteSnapshotV1;
+using StrategicMapSnapshotV2 = AlterCourse.Core.Persistence.SaveModelsV2.StrategicMapSnapshotV2;
+using StrategicPositionSnapshotV2 = AlterCourse.Core.Persistence.SaveModelsV2.StrategicPositionSnapshotV2;
+using StrategicRouteSnapshotV2 = AlterCourse.Core.Persistence.SaveModelsV2.StrategicRouteSnapshotV2;
 using StrategicStateSnapshotV1 = AlterCourse.Core.Persistence.SaveModelsV1.StrategicStateSnapshotV1;
+using StrategicStateSnapshotV2 = AlterCourse.Core.Persistence.SaveModelsV2.StrategicStateSnapshotV2;
 using TacticalMotionSnapshotV1 = AlterCourse.Core.Persistence.SaveModelsV1.TacticalMotionSnapshotV1;
+using TacticalMotionSnapshotV2 = AlterCourse.Core.Persistence.SaveModelsV2.TacticalMotionSnapshotV2;
 using TacticalPositionSnapshotV1 = AlterCourse.Core.Persistence.SaveModelsV1.TacticalPositionSnapshotV1;
-using TravelSnapshotV1 = AlterCourse.Core.Persistence.SaveModelsV1.TravelSnapshotV1;
+using TacticalPositionSnapshotV2 = AlterCourse.Core.Persistence.SaveModelsV2.TacticalPositionSnapshotV2;
+using TravelSnapshotV2 = AlterCourse.Core.Persistence.SaveModelsV2.TravelSnapshotV2;
+using TravelToOrderSnapshotV3 = AlterCourse.Core.Persistence.SaveModelsV3.TravelToOrderSnapshotV3;
 
 namespace AlterCourse.Core.Persistence;
 
 /// <summary>Maps the authoritative simulation to and from the strict explicit JSON save contract.</summary>
 public static class GamePersistence
 {
-    private const int CurrentSchemaVersion = 1;
-    private const string CurrentSimulationRulesVersion = "first-playable-v1";
+    private const int V1SchemaVersion = 1;
+    private const int V2SchemaVersion = 2;
+    private const int CurrentSchemaVersion = 3;
+    private const string HistoricalSimulationRulesVersion = "first-playable-v1";
+    private const string CurrentSimulationRulesVersion = "active-world-orders-v1";
     private const string TravelArrivalKind = "travelArrival";
     private const string SensorRepairCompletionKind = "sensorRepairCompletion";
+    private const string OrderWakeKind = "orderWake";
     private const string AtLocationKind = "atLocation";
     private const string TravelingKind = "traveling";
     private const int MaximumSaveBytes = 1024 * 1024;
     private const int MaximumJsonDepth = 32;
     private const int MaximumMetadataTextLength = 128;
-    private const int MaximumIdentityLength = 128;
-    private const int MaximumDisplayNameLength = 256;
-    private const int MaximumLocations = 256;
-    private const int MaximumRoutes = 1024;
-    private const int MaximumOutstandingWork = 4096;
 
     private static readonly JsonSerializerOptions SerializerOptions = CreateSerializerOptions();
     private static readonly JsonDocumentOptions DocumentOptions = new()
@@ -53,18 +69,18 @@ public static class GamePersistence
         MaxDepth = MaximumJsonDepth,
     };
 
-    /// <summary>Serializes a validated simulation and caller-supplied organization metadata as V1 UTF-8 JSON.</summary>
+    /// <summary>Serializes a validated simulation and caller-supplied organization metadata as V3 UTF-8 JSON.</summary>
     public static byte[] Serialize(GameSimulation simulation, GameSaveMetadata metadata)
     {
         ArgumentNullException.ThrowIfNull(simulation);
         ArgumentNullException.ThrowIfNull(metadata);
         ValidateMetadata(metadata);
 
-        SaveEnvelopeV1 envelope = CaptureV1(simulation.CaptureState(), metadata);
+        SaveEnvelopeV3 envelope = CaptureV3(simulation.CaptureState(), metadata);
         byte[] json = JsonSerializer.SerializeToUtf8Bytes(envelope, SerializerOptions);
         if (json.Length > MaximumSaveBytes)
         {
-            throw new InvalidOperationException($"The V1 save exceeds the {MaximumSaveBytes}-byte contract limit.");
+            throw new InvalidOperationException($"The V3 save exceeds the {MaximumSaveBytes}-byte contract limit.");
         }
 
         return json;
@@ -95,11 +111,11 @@ public static class GamePersistence
             RejectDuplicateMembers(document.RootElement, sourceIdentity, "$", 0);
             int version = ReadSchemaVersion(document.RootElement, sourceIdentity);
 
-            // Each supported version enters through one explicit branch. V2 can add a new mapper or
-            // a V1-to-V2 migration here without permitting version fallback or live-state mutation.
             return version switch
             {
-                CurrentSchemaVersion => LoadV1(documentBytes, catalog, sourceIdentity),
+                V1SchemaVersion => LoadV1(documentBytes, catalog, sourceIdentity),
+                V2SchemaVersion => LoadV2(documentBytes, catalog, sourceIdentity),
+                CurrentSchemaVersion => LoadV3(documentBytes, catalog, sourceIdentity),
                 _ => throw Failure(
                     GamePersistenceFailure.UnsupportedVersion,
                     sourceIdentity,
@@ -227,61 +243,67 @@ public static class GamePersistence
         }
     }
 
-    private static SaveEnvelopeV1 CaptureV1(SimulationState state, GameSaveMetadata metadata) =>
-        new()
+    private static SaveEnvelopeV3 CaptureV3(SimulationState state, GameSaveMetadata metadata)
+    {
+        if (state.Ships.Length > SimulationState.MaximumShips)
+        {
+            throw new InvalidOperationException(
+                $"V3 persistence supports at most {SimulationState.MaximumShips} ships."
+            );
+        }
+
+        return new SaveEnvelopeV3
         {
             SchemaVersion = CurrentSchemaVersion,
             SimulationRulesVersion = CurrentSimulationRulesVersion,
-            Metadata = new SaveMetadataV1
+            Metadata = new SaveMetadataV2
             {
                 SaveId = metadata.SaveId,
                 DisplayName = metadata.DisplayName,
                 CreatedAtUtc = metadata.CreatedAtUtc,
                 SavedAtUtc = metadata.SavedAtUtc,
             },
-            Simulation = new SimulationSnapshotV1
+            Simulation = new SimulationSnapshotV3
             {
                 TimeMilliseconds = state.Time.Milliseconds,
                 ShipAllocatorNextId = state.ShipIdAllocator.NextId,
-                Scheduler = CaptureScheduler(state.Scheduler),
-                StrategicMap = CaptureStrategicMap(state.StrategicMap),
-                StrategicState = CaptureStrategicState(state.StrategicState),
-                PlayerShip = CapturePlayerShip(state.PlayerShip),
+                OrderAllocatorNextId = state.OrderIdAllocator.NextId,
+                PlayerShipId = state.PlayerShipId.Value,
+                Scheduler = CaptureSchedulerV2(state.Scheduler),
+                StrategicMap = CaptureStrategicMapV2(state.StrategicMap),
+                Ships = [.. state.Ships.OrderBy(ship => ship.InstanceId.Value).Select(CaptureShipV3)],
             },
         };
+    }
 
-    private static SchedulerSnapshotV1 CaptureScheduler(SimulationScheduler scheduler) =>
+    private static SchedulerSnapshotV2 CaptureSchedulerV2(SimulationScheduler scheduler) =>
         new()
         {
             NextWorkId = scheduler.NextWorkId,
             NextSequence = scheduler.NextSequence,
             OutstandingWork =
             [
-                .. scheduler.OutstandingWork.Select(work => new ScheduledWorkSnapshotV1
+                .. scheduler.OutstandingWork.Select(work => new ScheduledWorkSnapshotV2
                 {
                     Id = work.Id.Value,
                     DueTimeMilliseconds = work.DueTime.Milliseconds,
                     Sequence = work.Sequence,
-                    Kind = work.Kind switch
-                    {
-                        ScheduledWorkKind.TravelArrival => TravelArrivalKind,
-                        ScheduledWorkKind.SensorRepairCompletion => SensorRepairCompletionKind,
-                        _ => throw new InvalidOperationException("Cannot persist an unknown scheduled work kind."),
-                    },
+                    Kind = CaptureWorkKind(work.Kind),
+                    TargetShipId = work.TargetShipId.Value,
                 }),
             ],
         };
 
-    private static StrategicMapSnapshotV1 CaptureStrategicMap(StrategicMap map) =>
+    private static StrategicMapSnapshotV2 CaptureStrategicMapV2(StrategicMap map) =>
         new()
         {
             Locations =
             [
-                .. map.Locations.Select(location => new StrategicLocationSnapshotV1
+                .. map.Locations.Select(location => new StrategicLocationSnapshotV2
                 {
                     Id = location.Id.Value,
                     DisplayName = location.DisplayName,
-                    Position = new StrategicPositionSnapshotV1
+                    Position = new StrategicPositionSnapshotV2
                     {
                         XUnitless = location.Position.X,
                         YUnitless = location.Position.Y,
@@ -290,7 +312,7 @@ public static class GamePersistence
             ],
             Routes =
             [
-                .. map.Routes.Select(route => new StrategicRouteSnapshotV1
+                .. map.Routes.Select(route => new StrategicRouteSnapshotV2
                 {
                     Origin = route.Origin.Value,
                     Destination = route.Destination.Value,
@@ -299,20 +321,75 @@ public static class GamePersistence
             ],
         };
 
-    private static StrategicStateSnapshotV1 CaptureStrategicState(PlayerStrategicState state) =>
+    private static ShipSnapshotV3 CaptureShipV3(ShipState ship) =>
+        new()
+        {
+            InstanceId = ship.InstanceId.Value,
+            DefinitionId = ship.DefinitionId.Value,
+            DisplayName = ship.VesselDisplayName,
+            TacticalPosition = new TacticalPositionSnapshotV2
+            {
+                XKilometers = ship.TacticalPosition.XKilometers,
+                YKilometers = ship.TacticalPosition.YKilometers,
+            },
+            TacticalMotion = new TacticalMotionSnapshotV2
+            {
+                HeadingDegrees = ship.TacticalMotion.Heading.Value,
+                SpeedKilometersPerSecond = ship.TacticalMotion.Speed.Value,
+            },
+            SensorIntegrity = ship.SensorIntegrity.Value,
+            SensorRepair = ship.SensorRepair is null
+                ? null
+                : new SensorRepairSnapshotV2
+                {
+                    StartingIntegrity = ship.SensorRepair.StartingIntegrity.Value,
+                    TargetIntegrity = ship.SensorRepair.TargetIntegrity.Value,
+                    StartedAtMilliseconds = ship.SensorRepair.StartedAt.Milliseconds,
+                    ExpectedCompletionMilliseconds = ship.SensorRepair.ExpectedCompletion.Milliseconds,
+                    ScheduledCompletionId = ship.SensorRepair.ScheduledCompletionId.Value,
+                },
+            StrategicState = CaptureStrategicStateV2(ship.StrategicState),
+            ActiveOrder = CaptureOrderV3(ship.ActiveOrder),
+        };
+
+    private static ShipOrderSnapshotV3? CaptureOrderV3(ShipOrder? order) =>
+        order switch
+        {
+            null => null,
+            TravelToOrder travel => new TravelToOrderSnapshotV3
+            {
+                Id = travel.Id.Value,
+                Destination = travel.Destination.Value,
+            },
+            PatrolRouteOrder patrol => new PatrolRouteOrderSnapshotV3
+            {
+                Id = patrol.Id.Value,
+                Waypoints = [.. patrol.Waypoints.Select(waypoint => waypoint.Value)],
+                NextWaypointIndex = patrol.NextWaypointIndex,
+            },
+            HoldUntilOrder hold => new HoldUntilOrderSnapshotV3
+            {
+                Id = hold.Id.Value,
+                UntilMilliseconds = hold.Until.Milliseconds,
+                ScheduledWakeId = hold.ScheduledWakeId.Value,
+            },
+            _ => throw new InvalidOperationException("Cannot persist an unknown ship order kind."),
+        };
+
+    private static StrategicStateSnapshotV2 CaptureStrategicStateV2(ShipStrategicState state) =>
         state switch
         {
-            AtLocationState atLocation => new StrategicStateSnapshotV1
+            AtLocationState atLocation => new StrategicStateSnapshotV2
             {
                 Kind = AtLocationKind,
                 LocationId = atLocation.LocationId.Value,
                 Travel = null,
             },
-            TravelingState traveling => new StrategicStateSnapshotV1
+            TravelingState traveling => new StrategicStateSnapshotV2
             {
                 Kind = TravelingKind,
                 LocationId = null,
-                Travel = new TravelSnapshotV1
+                Travel = new TravelSnapshotV2
                 {
                     Origin = traveling.Travel.Origin.Value,
                     Destination = traveling.Travel.Destination.Value,
@@ -324,32 +401,13 @@ public static class GamePersistence
             _ => throw new InvalidOperationException("Cannot persist an unknown strategic state kind."),
         };
 
-    private static PlayerShipSnapshotV1 CapturePlayerShip(PlayerShipState ship) =>
-        new()
+    private static string CaptureWorkKind(ScheduledWorkKind kind) =>
+        kind switch
         {
-            InstanceId = ship.InstanceId.Value,
-            DefinitionId = ship.DefinitionId.Value,
-            TacticalPosition = new TacticalPositionSnapshotV1
-            {
-                XKilometers = ship.TacticalPosition.XKilometers,
-                YKilometers = ship.TacticalPosition.YKilometers,
-            },
-            TacticalMotion = new TacticalMotionSnapshotV1
-            {
-                HeadingDegrees = ship.TacticalMotion.Heading.Value,
-                SpeedKilometersPerSecond = ship.TacticalMotion.Speed.Value,
-            },
-            SensorIntegrity = ship.SensorIntegrity.Value,
-            SensorRepair = ship.SensorRepair is null
-                ? null
-                : new SensorRepairSnapshotV1
-                {
-                    StartingIntegrity = ship.SensorRepair.StartingIntegrity.Value,
-                    TargetIntegrity = ship.SensorRepair.TargetIntegrity.Value,
-                    StartedAtMilliseconds = ship.SensorRepair.StartedAt.Milliseconds,
-                    ExpectedCompletionMilliseconds = ship.SensorRepair.ExpectedCompletion.Milliseconds,
-                    ScheduledCompletionId = ship.SensorRepair.ScheduledCompletionId.Value,
-                },
+            ScheduledWorkKind.TravelArrival => TravelArrivalKind,
+            ScheduledWorkKind.SensorRepairCompletion => SensorRepairCompletionKind,
+            ScheduledWorkKind.OrderWake => OrderWakeKind,
+            _ => throw new InvalidOperationException("Cannot persist an unknown scheduled work kind."),
         };
 
     private static LoadedGameSave LoadV1(byte[] json, ShipDefinitionCatalog catalog, string sourceIdentity)
@@ -360,9 +418,9 @@ public static class GamePersistence
                 JsonSerializer.Deserialize<SaveEnvelopeV1>(json, SerializerOptions)
                 ?? throw new JsonException("The save root must be an object.");
             ValidateEnvelopeV1(envelope);
-            GameSaveMetadata metadata = RestoreMetadata(envelope.Metadata);
-            GameSimulation simulation = RestoreSimulation(envelope.Simulation, catalog);
-            return new LoadedGameSave(metadata, simulation);
+            SaveEnvelopeV2 migrated = MigrateV1ToV2(envelope, catalog);
+            ValidateCandidateV2(migrated, catalog);
+            return RestoreV3(MigrateV2ToV3(migrated), catalog);
         }
         catch (GamePersistenceException)
         {
@@ -389,14 +447,306 @@ public static class GamePersistence
         }
     }
 
+    private static LoadedGameSave LoadV2(byte[] json, ShipDefinitionCatalog catalog, string sourceIdentity)
+    {
+        try
+        {
+            SaveEnvelopeV2 envelope =
+                JsonSerializer.Deserialize<SaveEnvelopeV2>(json, SerializerOptions)
+                ?? throw new JsonException("The save root must be an object.");
+            ValidateCandidateV2(envelope, catalog);
+            return RestoreV3(MigrateV2ToV3(envelope), catalog);
+        }
+        catch (GamePersistenceException)
+        {
+            throw;
+        }
+        catch (JsonException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+            when (exception
+                    is ArgumentException
+                        or InvalidOperationException
+                        or KeyNotFoundException
+                        or OverflowException
+            )
+        {
+            throw Failure(
+                GamePersistenceFailure.InvalidData,
+                sourceIdentity,
+                $"violates the V2 semantic contract: {exception.Message}",
+                exception
+            );
+        }
+    }
+
+    private static LoadedGameSave LoadV3(byte[] json, ShipDefinitionCatalog catalog, string sourceIdentity)
+    {
+        try
+        {
+            SaveEnvelopeV3 envelope =
+                JsonSerializer.Deserialize<SaveEnvelopeV3>(json, SerializerOptions)
+                ?? throw new JsonException("The save root must be an object.");
+            return RestoreV3(envelope, catalog);
+        }
+        catch (GamePersistenceException)
+        {
+            throw;
+        }
+        catch (JsonException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+            when (exception
+                    is ArgumentException
+                        or InvalidOperationException
+                        or KeyNotFoundException
+                        or OverflowException
+            )
+        {
+            throw Failure(
+                GamePersistenceFailure.InvalidData,
+                sourceIdentity,
+                $"violates the V3 semantic contract: {exception.Message}",
+                exception
+            );
+        }
+    }
+
+    private static SaveEnvelopeV2 MigrateV1ToV2(SaveEnvelopeV1 envelope, ShipDefinitionCatalog catalog)
+    {
+        SimulationSnapshotV1 source = envelope.Simulation;
+        if (
+            source.Scheduler is null
+            || source.StrategicMap is null
+            || source.StrategicState is null
+            || source.PlayerShip is null
+        )
+        {
+            throw new InvalidOperationException("Required V1 simulation members cannot be null.");
+        }
+
+        PlayerShipSnapshotV1 player = source.PlayerShip;
+        ValidateText(player.DefinitionId, "Ship definition identity", ShipDefinitionId.MaximumLength);
+        ShipDefinition definition = catalog.GetRequired(new ShipDefinitionId(player.DefinitionId));
+
+        // V1 predates runtime vessel names. During pre-1.0 migration only, the authored design label
+        // supplies the missing value deterministically; V2 persists it and never repeats this fallback.
+        return new SaveEnvelopeV2
+        {
+            SchemaVersion = V2SchemaVersion,
+            SimulationRulesVersion = envelope.SimulationRulesVersion,
+            Metadata = new SaveMetadataV2
+            {
+                SaveId = envelope.Metadata.SaveId,
+                DisplayName = envelope.Metadata.DisplayName,
+                CreatedAtUtc = envelope.Metadata.CreatedAtUtc,
+                SavedAtUtc = envelope.Metadata.SavedAtUtc,
+            },
+            Simulation = new SimulationSnapshotV2
+            {
+                TimeMilliseconds = source.TimeMilliseconds,
+                ShipAllocatorNextId = source.ShipAllocatorNextId,
+                PlayerShipId = player.InstanceId,
+                Scheduler = MigrateSchedulerV1(source.Scheduler, player.InstanceId),
+                StrategicMap = MigrateMapV1(source.StrategicMap),
+                Ships =
+                [
+                    new ShipSnapshotV2
+                    {
+                        InstanceId = player.InstanceId,
+                        DefinitionId = player.DefinitionId,
+                        DisplayName = definition.DesignDisplayName,
+                        TacticalPosition = MigrateTacticalPositionV1(player.TacticalPosition),
+                        TacticalMotion = MigrateTacticalMotionV1(player.TacticalMotion),
+                        SensorIntegrity = player.SensorIntegrity,
+                        SensorRepair = MigrateSensorRepairV1(player.SensorRepair),
+                        StrategicState = MigrateStrategicStateV1(source.StrategicState),
+                    },
+                ],
+            },
+        };
+    }
+
+    private static SaveEnvelopeV3 MigrateV2ToV3(SaveEnvelopeV2 envelope) =>
+        new()
+        {
+            SchemaVersion = CurrentSchemaVersion,
+            SimulationRulesVersion = CurrentSimulationRulesVersion,
+            Metadata = envelope.Metadata,
+            Simulation = new SimulationSnapshotV3
+            {
+                TimeMilliseconds = envelope.Simulation.TimeMilliseconds,
+                ShipAllocatorNextId = envelope.Simulation.ShipAllocatorNextId,
+                OrderAllocatorNextId = ShipOrderIdAllocator.Create().NextId,
+                PlayerShipId = envelope.Simulation.PlayerShipId,
+                Scheduler = envelope.Simulation.Scheduler,
+                StrategicMap = envelope.Simulation.StrategicMap,
+                Ships =
+                [
+                    .. envelope.Simulation.Ships.Select(ship => new ShipSnapshotV3
+                    {
+                        InstanceId = ship.InstanceId,
+                        DefinitionId = ship.DefinitionId,
+                        DisplayName = ship.DisplayName,
+                        TacticalPosition = ship.TacticalPosition,
+                        TacticalMotion = ship.TacticalMotion,
+                        SensorIntegrity = ship.SensorIntegrity,
+                        SensorRepair = ship.SensorRepair,
+                        StrategicState = ship.StrategicState,
+                        ActiveOrder = null,
+                    }),
+                ],
+            },
+        };
+
+    private static SchedulerSnapshotV2 MigrateSchedulerV1(SchedulerSnapshotV1 source, long targetShipId)
+    {
+        if (source.OutstandingWork is null)
+        {
+            throw new InvalidOperationException("V1 outstanding scheduler work is required.");
+        }
+
+        return new SchedulerSnapshotV2
+        {
+            NextWorkId = source.NextWorkId,
+            NextSequence = source.NextSequence,
+            OutstandingWork =
+            [
+                .. source.OutstandingWork.Select(item =>
+                {
+                    if (item is null)
+                    {
+                        throw new InvalidOperationException("V1 scheduler work items cannot be null.");
+                    }
+
+                    return new ScheduledWorkSnapshotV2
+                    {
+                        Id = item.Id,
+                        DueTimeMilliseconds = item.DueTimeMilliseconds,
+                        Sequence = item.Sequence,
+                        Kind = item.Kind,
+                        TargetShipId = targetShipId,
+                    };
+                }),
+            ],
+        };
+    }
+
+    private static StrategicMapSnapshotV2 MigrateMapV1(StrategicMapSnapshotV1 source)
+    {
+        if (source.Locations is null || source.Routes is null)
+        {
+            throw new InvalidOperationException("V1 strategic map collections are required.");
+        }
+
+        return new StrategicMapSnapshotV2
+        {
+            Locations =
+            [
+                .. source.Locations.Select(location =>
+                {
+                    if (location is null || location.Position is null)
+                    {
+                        throw new InvalidOperationException("V1 strategic location data cannot be null.");
+                    }
+
+                    return new StrategicLocationSnapshotV2
+                    {
+                        Id = location.Id,
+                        DisplayName = location.DisplayName,
+                        Position = new StrategicPositionSnapshotV2
+                        {
+                            XUnitless = location.Position.XUnitless,
+                            YUnitless = location.Position.YUnitless,
+                        },
+                    };
+                }),
+            ],
+            Routes =
+            [
+                .. source.Routes.Select(route =>
+                {
+                    if (route is null)
+                    {
+                        throw new InvalidOperationException("V1 strategic route data cannot be null.");
+                    }
+
+                    return new StrategicRouteSnapshotV2
+                    {
+                        Origin = route.Origin,
+                        Destination = route.Destination,
+                        DurationMilliseconds = route.DurationMilliseconds,
+                    };
+                }),
+            ],
+        };
+    }
+
+    private static TacticalPositionSnapshotV2 MigrateTacticalPositionV1(TacticalPositionSnapshotV1? source)
+    {
+        if (source is null)
+        {
+            throw new InvalidOperationException("V1 tactical position is required.");
+        }
+
+        return new TacticalPositionSnapshotV2 { XKilometers = source.XKilometers, YKilometers = source.YKilometers };
+    }
+
+    private static TacticalMotionSnapshotV2 MigrateTacticalMotionV1(TacticalMotionSnapshotV1? source)
+    {
+        if (source is null)
+        {
+            throw new InvalidOperationException("V1 tactical motion is required.");
+        }
+
+        return new TacticalMotionSnapshotV2
+        {
+            HeadingDegrees = source.HeadingDegrees,
+            SpeedKilometersPerSecond = source.SpeedKilometersPerSecond,
+        };
+    }
+
+    private static SensorRepairSnapshotV2? MigrateSensorRepairV1(SensorRepairSnapshotV1? source) =>
+        source is null
+            ? null
+            : new SensorRepairSnapshotV2
+            {
+                StartingIntegrity = source.StartingIntegrity,
+                TargetIntegrity = source.TargetIntegrity,
+                StartedAtMilliseconds = source.StartedAtMilliseconds,
+                ExpectedCompletionMilliseconds = source.ExpectedCompletionMilliseconds,
+                ScheduledCompletionId = source.ScheduledCompletionId,
+            };
+
+    private static StrategicStateSnapshotV2 MigrateStrategicStateV1(StrategicStateSnapshotV1 source) =>
+        new()
+        {
+            Kind = source.Kind,
+            LocationId = source.LocationId,
+            Travel = source.Travel is null
+                ? null
+                : new TravelSnapshotV2
+                {
+                    Origin = source.Travel.Origin,
+                    Destination = source.Travel.Destination,
+                    DepartureMilliseconds = source.Travel.DepartureMilliseconds,
+                    ExpectedArrivalMilliseconds = source.Travel.ExpectedArrivalMilliseconds,
+                    ScheduledArrivalId = source.Travel.ScheduledArrivalId,
+                },
+        };
+
     private static void ValidateEnvelopeV1(SaveEnvelopeV1 envelope)
     {
-        if (envelope.SchemaVersion != CurrentSchemaVersion)
+        if (envelope.SchemaVersion != V1SchemaVersion)
         {
             throw new InvalidOperationException("The V1 mapper received a different schema version.");
         }
 
-        if (!string.Equals(envelope.SimulationRulesVersion, CurrentSimulationRulesVersion, StringComparison.Ordinal))
+        if (!string.Equals(envelope.SimulationRulesVersion, HistoricalSimulationRulesVersion, StringComparison.Ordinal))
         {
             throw new InvalidOperationException(
                 $"Simulation rules version '{envelope.SimulationRulesVersion}' is unsupported."
@@ -409,346 +759,792 @@ public static class GamePersistence
         }
     }
 
-    private static GameSaveMetadata RestoreMetadata(SaveMetadataV1 metadata)
+    private static LoadedGameSave RestoreV3(SaveEnvelopeV3 envelope, ShipDefinitionCatalog catalog)
     {
-        var restored = new GameSaveMetadata(
-            metadata.SaveId,
-            metadata.DisplayName,
-            metadata.CreatedAtUtc,
-            metadata.SavedAtUtc
-        );
-        ValidateMetadata(restored);
-        return restored;
-    }
-
-    private static GameSimulation RestoreSimulation(SimulationSnapshotV1 snapshot, ShipDefinitionCatalog catalog)
-    {
-        if (
-            snapshot.Scheduler is null
-            || snapshot.StrategicMap is null
-            || snapshot.StrategicState is null
-            || snapshot.PlayerShip is null
-        )
-        {
-            throw new InvalidOperationException("Required simulation members cannot be null.");
-        }
-
+        ValidateCandidateV3(envelope, catalog);
+        SimulationSnapshotV3 snapshot = envelope.Simulation;
         var time = new SimulationTime(snapshot.TimeMilliseconds);
-        EnsureFixedStep(time.Milliseconds, "Current simulation time");
-        var allocator = ShipInstanceIdAllocator.Restore(snapshot.ShipAllocatorNextId);
-        SimulationScheduler scheduler = RestoreScheduler(snapshot.Scheduler);
-        StrategicMap map = RestoreMap(snapshot.StrategicMap);
-        PlayerStrategicState strategicState = RestoreStrategicState(snapshot.StrategicState, map, time);
-        PlayerShipState playerShip = RestorePlayerShip(snapshot.PlayerShip, time);
-        ShipDefinition definition = catalog.GetRequired(playerShip.DefinitionId);
-        if (playerShip.TacticalMotion.Speed.Value > definition.MaximumTacticalSpeed.Value)
-        {
-            throw new InvalidOperationException("Player tactical speed exceeds its authored definition maximum.");
-        }
-
-        if (strategicState is TravelingState && playerShip.TacticalMotion != default)
-        {
-            throw new InvalidOperationException("Active strategic travel requires cleared local tactical motion.");
-        }
-
-        ValidateOutstandingTravel(scheduler, strategicState);
-        ValidateOutstandingRepair(scheduler, playerShip.SensorRepair);
-        var state = new SimulationState(time, scheduler, allocator, map, strategicState, definition, playerShip);
-        return GameSimulation.RestoreState(state);
+        StrategicMap map = RestoreMapV2(snapshot.StrategicMap);
+        ShipState[] ships = [.. snapshot.Ships.Select(RestoreShipV3)];
+        SimulationScheduler scheduler = RestoreSchedulerV2(snapshot.Scheduler);
+        var state = new SimulationState(
+            time,
+            scheduler,
+            ShipInstanceIdAllocator.Restore(snapshot.ShipAllocatorNextId),
+            map,
+            new ShipInstanceId(snapshot.PlayerShipId),
+            ships,
+            ShipOrderIdAllocator.Restore(snapshot.OrderAllocatorNextId)
+        );
+        var metadata = new GameSaveMetadata(
+            envelope.Metadata.SaveId,
+            envelope.Metadata.DisplayName,
+            envelope.Metadata.CreatedAtUtc,
+            envelope.Metadata.SavedAtUtc
+        );
+        return new LoadedGameSave(metadata, GameSimulation.RestoreState(state, catalog));
     }
 
-    private static SimulationScheduler RestoreScheduler(SchedulerSnapshotV1 snapshot)
+    private static void ValidateCandidateV2(SaveEnvelopeV2 envelope, ShipDefinitionCatalog catalog)
     {
-        if (snapshot.OutstandingWork is null)
+        if (envelope.SchemaVersion != V2SchemaVersion)
         {
-            throw new InvalidOperationException("Outstanding scheduler work is required.");
+            throw new InvalidOperationException("The V2 mapper received a different schema version.");
         }
 
-        EnsureCount(snapshot.OutstandingWork.Length, MaximumOutstandingWork, "scheduler work");
-        if (snapshot.NextWorkId == long.MaxValue || snapshot.NextSequence == long.MaxValue)
+        if (!string.Equals(envelope.SimulationRulesVersion, HistoricalSimulationRulesVersion, StringComparison.Ordinal))
         {
             throw new InvalidOperationException(
-                "Scheduler counters must retain headroom for deterministic continuation."
+                $"Simulation rules version '{envelope.SimulationRulesVersion}' is unsupported."
             );
         }
 
-        var identities = new HashSet<long>();
-        var sequences = new HashSet<long>();
-        var work = new ScheduledWork[snapshot.OutstandingWork.Length];
-        long previousDue = -1;
-        long previousSequence = -1;
-        for (int index = 0; index < snapshot.OutstandingWork.Length; index++)
+        if (envelope.Metadata is null || envelope.Simulation is null)
         {
-            ScheduledWorkSnapshotV1 item =
-                snapshot.OutstandingWork[index]
-                ?? throw new InvalidOperationException("Scheduler work items cannot be null.");
-            work[index] = RestoreScheduledWork(item, index, previousDue, previousSequence, identities, sequences);
-            previousDue = item.DueTimeMilliseconds;
-            previousSequence = item.Sequence;
+            throw new InvalidOperationException("Required V2 envelope members cannot be null.");
         }
 
-        return SimulationScheduler.Restore(snapshot.NextWorkId, snapshot.NextSequence, work);
+        ValidateMetadata(
+            new GameSaveMetadata(
+                envelope.Metadata.SaveId,
+                envelope.Metadata.DisplayName,
+                envelope.Metadata.CreatedAtUtc,
+                envelope.Metadata.SavedAtUtc
+            )
+        );
+
+        ValidateSimulationCandidateV2(envelope.Simulation, catalog);
     }
 
-    private static ScheduledWork RestoreScheduledWork(
-        ScheduledWorkSnapshotV1 item,
-        int index,
-        long previousDue,
-        long previousSequence,
-        HashSet<long> identities,
-        HashSet<long> sequences
+    private static void ValidateCandidateV3(SaveEnvelopeV3 envelope, ShipDefinitionCatalog catalog)
+    {
+        if (envelope.SchemaVersion != CurrentSchemaVersion)
+        {
+            throw new InvalidOperationException("The V3 mapper received a different schema version.");
+        }
+
+        if (!string.Equals(envelope.SimulationRulesVersion, CurrentSimulationRulesVersion, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Simulation rules version '{envelope.SimulationRulesVersion}' is unsupported."
+            );
+        }
+
+        if (envelope.Metadata is null || envelope.Simulation is null)
+        {
+            throw new InvalidOperationException("Required V3 envelope members cannot be null.");
+        }
+
+        ValidateMetadata(
+            new GameSaveMetadata(
+                envelope.Metadata.SaveId,
+                envelope.Metadata.DisplayName,
+                envelope.Metadata.CreatedAtUtc,
+                envelope.Metadata.SavedAtUtc
+            )
+        );
+
+        SimulationSnapshotV3 snapshot = envelope.Simulation;
+        if (snapshot.Ships is null)
+        {
+            throw new InvalidOperationException("Required V3 simulation members cannot be null.");
+        }
+
+        ValidateSimulationCandidateV2(ToBaseSnapshotV2(snapshot), catalog, allowOrderWake: true);
+        ValidateOrderCandidatesV3(snapshot);
+    }
+
+    private static SimulationSnapshotV2 ToBaseSnapshotV2(SimulationSnapshotV3 snapshot) =>
+        new()
+        {
+            TimeMilliseconds = snapshot.TimeMilliseconds,
+            ShipAllocatorNextId = snapshot.ShipAllocatorNextId,
+            PlayerShipId = snapshot.PlayerShipId,
+            Scheduler = snapshot.Scheduler,
+            StrategicMap = snapshot.StrategicMap,
+            Ships =
+            [
+                .. snapshot.Ships.Select(ship =>
+                    ship is null
+                        ? null!
+                        : new ShipSnapshotV2
+                        {
+                            InstanceId = ship.InstanceId,
+                            DefinitionId = ship.DefinitionId,
+                            DisplayName = ship.DisplayName,
+                            TacticalPosition = ship.TacticalPosition,
+                            TacticalMotion = ship.TacticalMotion,
+                            SensorIntegrity = ship.SensorIntegrity,
+                            SensorRepair = ship.SensorRepair,
+                            StrategicState = ship.StrategicState,
+                        }
+                ),
+            ],
+        };
+
+    private static void ValidateOrderCandidatesV3(SimulationSnapshotV3 snapshot)
+    {
+        if (snapshot.OrderAllocatorNextId <= 0 || snapshot.OrderAllocatorNextId == long.MaxValue)
+        {
+            throw new InvalidOperationException("Order allocator must be positive and retain continuation headroom.");
+        }
+
+        var orderIds = new HashSet<long>();
+        long greatestOrderId = 0;
+        foreach (ShipSnapshotV3 ship in snapshot.Ships)
+        {
+            if (ship.ActiveOrder is null)
+            {
+                continue;
+            }
+
+            if (ship.InstanceId == snapshot.PlayerShipId)
+            {
+                throw new InvalidOperationException("The player ship cannot have an autonomous order.");
+            }
+
+            if (ship.ActiveOrder.Id <= 0 || !orderIds.Add(ship.ActiveOrder.Id))
+            {
+                throw new InvalidOperationException("Active ship order identities must be positive and unique.");
+            }
+
+            greatestOrderId = Math.Max(greatestOrderId, ship.ActiveOrder.Id);
+            ValidateOrderCandidateV3(ship.ActiveOrder);
+        }
+
+        if (snapshot.OrderAllocatorNextId <= greatestOrderId)
+        {
+            throw new InvalidOperationException("Order allocator must follow every active order identity.");
+        }
+    }
+
+    private static void ValidateOrderCandidateV3(ShipOrderSnapshotV3 order)
+    {
+        switch (order)
+        {
+            case TravelToOrderSnapshotV3 travel:
+                ValidateText(travel.Destination, "TravelTo destination", LocationId.MaximumLength);
+                break;
+            case PatrolRouteOrderSnapshotV3 patrol:
+                if (patrol.Waypoints is null)
+                {
+                    throw new InvalidOperationException("Patrol waypoints are required.");
+                }
+
+                EnsureCount(patrol.Waypoints.Length, PatrolRouteOrder.MaximumWaypointCount, "patrol waypoints");
+                foreach (string waypoint in patrol.Waypoints)
+                {
+                    ValidateText(waypoint, "Patrol waypoint", LocationId.MaximumLength);
+                }
+
+                break;
+            case HoldUntilOrderSnapshotV3 hold:
+                if (hold.ScheduledWakeId <= 0)
+                {
+                    throw new InvalidOperationException("HoldUntil scheduled wake identity must be positive.");
+                }
+
+                break;
+            default:
+                throw new InvalidOperationException("Active ship order kind is unknown.");
+        }
+    }
+
+    private static void ValidateSimulationCandidateV2(
+        SimulationSnapshotV2 snapshot,
+        ShipDefinitionCatalog catalog,
+        bool allowOrderWake = false
     )
     {
-        EnsureFixedStep(item.DueTimeMilliseconds, "Scheduled due time");
-        if (!identities.Add(item.Id))
+        if (snapshot.Scheduler is null || snapshot.StrategicMap is null || snapshot.Ships is null)
         {
-            throw new InvalidOperationException("Scheduler contains a duplicate work identity.");
+            throw new InvalidOperationException("Required V2 simulation members cannot be null.");
         }
 
-        if (!sequences.Add(item.Sequence))
+        if (snapshot.TimeMilliseconds < 0)
         {
-            throw new InvalidOperationException("Scheduler contains a duplicate work sequence.");
+            throw new InvalidOperationException("Current simulation time cannot be negative.");
         }
 
-        if (
-            index > 0
-            && (
-                item.DueTimeMilliseconds < previousDue
-                || (item.DueTimeMilliseconds == previousDue && item.Sequence <= previousSequence)
-            )
-        )
+        if (snapshot.TimeMilliseconds > long.MaxValue - SimulationFixedStep.Duration.Milliseconds)
         {
             throw new InvalidOperationException(
-                "Outstanding scheduler work is not in stable due-time and sequence order."
+                "Current simulation time lacks one fixed-step of continuation headroom."
             );
         }
 
-        return new ScheduledWork(
-            new ScheduledWorkId(item.Id),
-            new SimulationTime(item.DueTimeMilliseconds),
-            item.Sequence,
-            item.Kind switch
-            {
-                TravelArrivalKind => ScheduledWorkKind.TravelArrival,
-                SensorRepairCompletionKind => ScheduledWorkKind.SensorRepairCompletion,
-                _ => throw new InvalidOperationException("Scheduled work kind is unknown."),
-            }
+        EnsureFixedStep(snapshot.TimeMilliseconds, "Current simulation time");
+        ValidateMapCandidateV2(snapshot.StrategicMap);
+
+        (HashSet<long> shipIds, Dictionary<long, ShipDefinition> definitions) = ValidateShipIdentitiesV2(
+            snapshot.Ships,
+            catalog
         );
+
+        if (snapshot.PlayerShipId <= 0 || !shipIds.Contains(snapshot.PlayerShipId))
+        {
+            throw new InvalidOperationException("Player ship identity must resolve exactly once.");
+        }
+
+        long maximumShipId = shipIds.Max();
+        if (snapshot.ShipAllocatorNextId <= maximumShipId || snapshot.ShipAllocatorNextId == long.MaxValue)
+        {
+            throw new InvalidOperationException(
+                "Ship allocator must follow every ship identity and retain continuation headroom."
+            );
+        }
+
+        ValidateSchedulerCandidateV2(snapshot.Scheduler, snapshot.TimeMilliseconds, shipIds, allowOrderWake);
+        foreach (ShipSnapshotV2 ship in snapshot.Ships)
+        {
+            ValidateShipCandidateV2(
+                ship,
+                definitions[ship.InstanceId],
+                snapshot.StrategicMap,
+                snapshot.Scheduler,
+                snapshot.TimeMilliseconds
+            );
+        }
     }
 
-    private static StrategicMap RestoreMap(StrategicMapSnapshotV1 snapshot)
+    private static (HashSet<long> Ids, Dictionary<long, ShipDefinition> Definitions) ValidateShipIdentitiesV2(
+        ShipSnapshotV2[] ships,
+        ShipDefinitionCatalog catalog
+    )
     {
-        if (snapshot.Locations is null || snapshot.Routes is null)
+        if (ships.Length == 0)
+        {
+            throw new InvalidOperationException("The save must contain at least one ship.");
+        }
+
+        EnsureCount(ships.Length, SimulationState.MaximumShips, "ships");
+        var shipIds = new HashSet<long>();
+        var definitions = new Dictionary<long, ShipDefinition>();
+        foreach (ShipSnapshotV2? ship in ships)
+        {
+            if (ship is null)
+            {
+                throw new InvalidOperationException("Ship snapshots cannot be null.");
+            }
+
+            if (ship.InstanceId <= 0 || !shipIds.Add(ship.InstanceId))
+            {
+                throw new InvalidOperationException("Ship identities must be positive and unique.");
+            }
+
+            ValidateText(ship.DefinitionId, "Ship definition identity", ShipDefinitionId.MaximumLength);
+            ValidateText(ship.DisplayName, "Ship display name", ShipState.MaximumVesselDisplayNameLength);
+            definitions.Add(ship.InstanceId, catalog.GetRequired(new ShipDefinitionId(ship.DefinitionId)));
+        }
+
+        return (shipIds, definitions);
+    }
+
+    private static void ValidateMapCandidateV2(StrategicMapSnapshotV2 map)
+    {
+        if (map.Locations is null || map.Routes is null)
         {
             throw new InvalidOperationException("Strategic map collections are required.");
         }
 
-        EnsureCount(snapshot.Locations.Length, MaximumLocations, "strategic locations");
-        EnsureCount(snapshot.Routes.Length, MaximumRoutes, "strategic routes");
-        StrategicLocation[] locations =
-        [
-            .. snapshot.Locations.Select(location =>
-            {
-                if (location is null || location.Position is null)
-                {
-                    throw new InvalidOperationException("Strategic location data cannot be null.");
-                }
+        if (map.Locations.Length == 0)
+        {
+            throw new InvalidOperationException("A strategic map requires at least one location.");
+        }
 
-                ValidateText(location.Id, "Location identity", MaximumIdentityLength);
-                ValidateText(location.DisplayName, "Location display name", MaximumDisplayNameLength);
-                return new StrategicLocation(
-                    new LocationId(location.Id),
-                    location.DisplayName,
-                    new StrategicMapPosition(location.Position.XUnitless, location.Position.YUnitless)
-                );
-            }),
-        ];
-        StrategicRoute[] routes =
-        [
-            .. snapshot.Routes.Select(route =>
+        EnsureCount(map.Locations.Length, StrategicMap.MaximumLocations, "strategic locations");
+        EnsureCount(map.Routes.Length, StrategicMap.MaximumRoutes, "strategic routes");
+        var locationIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (StrategicLocationSnapshotV2? location in map.Locations)
+        {
+            if (location is null || location.Position is null)
             {
-                if (route is null)
-                {
-                    throw new InvalidOperationException("Strategic route data cannot be null.");
-                }
+                throw new InvalidOperationException("Strategic location data cannot be null.");
+            }
 
-                ValidateText(route.Origin, "Route origin", MaximumIdentityLength);
-                ValidateText(route.Destination, "Route destination", MaximumIdentityLength);
-                return new StrategicRoute(
-                    new LocationId(route.Origin),
-                    new LocationId(route.Destination),
-                    new SimulationDuration(route.DurationMilliseconds)
-                );
-            }),
-        ];
-        return new StrategicMap(locations, routes);
+            ValidateText(location.Id, "Location identity", LocationId.MaximumLength);
+            ValidateText(location.DisplayName, "Location display name", StrategicLocation.MaximumDisplayNameLength);
+            if (!locationIds.Add(location.Id))
+            {
+                throw new InvalidOperationException("Strategic location identities must be unique.");
+            }
+
+            EnsureFinite(location.Position.XUnitless, "Strategic location X position");
+            EnsureFinite(location.Position.YUnitless, "Strategic location Y position");
+        }
+
+        ValidateRouteCandidatesV2(map.Routes, locationIds);
     }
 
-    private static PlayerStrategicState RestoreStrategicState(
-        StrategicStateSnapshotV1 snapshot,
-        StrategicMap map,
-        SimulationTime currentTime
-    ) =>
-        snapshot.Kind switch
-        {
-            AtLocationKind => RestoreAtLocation(snapshot, map),
-            TravelingKind => RestoreTraveling(snapshot, map, currentTime),
-            _ => throw new InvalidOperationException("Strategic state kind is unknown."),
-        };
-
-    private static AtLocationState RestoreAtLocation(StrategicStateSnapshotV1 snapshot, StrategicMap map)
+    private static void ValidateRouteCandidatesV2(StrategicRouteSnapshotV2[] routes, HashSet<string> locationIds)
     {
-        if (snapshot.Travel is not null)
+        var connections = new HashSet<string>(StringComparer.Ordinal);
+        foreach (StrategicRouteSnapshotV2? route in routes)
+        {
+            if (route is null)
+            {
+                throw new InvalidOperationException("Strategic route data cannot be null.");
+            }
+
+            ValidateText(route.Origin, "Route origin", LocationId.MaximumLength);
+            ValidateText(route.Destination, "Route destination", LocationId.MaximumLength);
+            if (!locationIds.Contains(route.Origin) || !locationIds.Contains(route.Destination))
+            {
+                throw new InvalidOperationException("Every route endpoint must exist in the strategic map.");
+            }
+
+            if (route.DurationMilliseconds <= 0)
+            {
+                throw new InvalidOperationException("Strategic route duration must be positive.");
+            }
+
+            EnsureFixedStep(route.DurationMilliseconds, "Strategic route duration");
+            bool originFirst = string.CompareOrdinal(route.Origin, route.Destination) <= 0;
+            string first = originFirst ? route.Origin : route.Destination;
+            string second = originFirst ? route.Destination : route.Origin;
+            if (!connections.Add($"{first}\0{second}"))
+            {
+                throw new InvalidOperationException("A strategic connection may be declared only once.");
+            }
+        }
+    }
+
+    private static void ValidateSchedulerCandidateV2(
+        SchedulerSnapshotV2 scheduler,
+        long currentTime,
+        HashSet<long> shipIds,
+        bool allowOrderWake
+    )
+    {
+        if (scheduler.OutstandingWork is null)
+        {
+            throw new InvalidOperationException("Outstanding scheduler work is required.");
+        }
+
+        EnsureCount(scheduler.OutstandingWork.Length, SimulationScheduler.MaximumOutstandingWork, "scheduler work");
+        if (!SimulationScheduler.AreCountersWithinPersistedRange(scheduler.NextWorkId, scheduler.NextSequence))
+        {
+            throw new InvalidOperationException("Scheduler counters are outside the persisted range.");
+        }
+
+        var identities = new HashSet<long>();
+        var sequences = new HashSet<long>();
+        long previousDue = -1;
+        long previousSequence = -1;
+        for (int index = 0; index < scheduler.OutstandingWork.Length; index++)
+        {
+            ScheduledWorkSnapshotV2 work = ValidateScheduledWorkCandidateV2(
+                scheduler.OutstandingWork[index],
+                scheduler,
+                currentTime,
+                shipIds,
+                identities,
+                sequences,
+                allowOrderWake
+            );
+            if (
+                index > 0
+                && (
+                    work.DueTimeMilliseconds < previousDue
+                    || (work.DueTimeMilliseconds == previousDue && work.Sequence <= previousSequence)
+                )
+            )
+            {
+                throw new InvalidOperationException(
+                    "Outstanding scheduler work is not in stable due-time and sequence order."
+                );
+            }
+
+            previousDue = work.DueTimeMilliseconds;
+            previousSequence = work.Sequence;
+        }
+    }
+
+    private static ScheduledWorkSnapshotV2 ValidateScheduledWorkCandidateV2(
+        ScheduledWorkSnapshotV2? work,
+        SchedulerSnapshotV2 scheduler,
+        long currentTime,
+        HashSet<long> shipIds,
+        HashSet<long> identities,
+        HashSet<long> sequences,
+        bool allowOrderWake
+    )
+    {
+        if (work is null)
+        {
+            throw new InvalidOperationException("Scheduler work items cannot be null.");
+        }
+
+        if (work.Id <= 0 || work.Id >= scheduler.NextWorkId || !identities.Add(work.Id))
+        {
+            throw new InvalidOperationException(
+                "Scheduler work identities must be positive, unique, and below the next counter."
+            );
+        }
+
+        if (work.Sequence < 0 || work.Sequence >= scheduler.NextSequence || !sequences.Add(work.Sequence))
+        {
+            throw new InvalidOperationException(
+                "Scheduler work sequences must be nonnegative, unique, and below the next counter."
+            );
+        }
+
+        EnsureFixedStep(work.DueTimeMilliseconds, "Scheduled due time");
+        if (work.DueTimeMilliseconds < currentTime)
+        {
+            throw new InvalidOperationException("Scheduled work cannot be overdue.");
+        }
+
+        if (!shipIds.Contains(work.TargetShipId))
+        {
+            throw new InvalidOperationException("Scheduled work target ship does not exist.");
+        }
+
+        ParseWorkKind(work.Kind, allowOrderWake);
+        return work;
+    }
+
+    private static void ValidateShipCandidateV2(
+        ShipSnapshotV2 ship,
+        ShipDefinition definition,
+        StrategicMapSnapshotV2 map,
+        SchedulerSnapshotV2 scheduler,
+        long currentTime
+    )
+    {
+        if (ship.TacticalPosition is null || ship.TacticalMotion is null || ship.StrategicState is null)
+        {
+            throw new InvalidOperationException("Ship tactical and strategic state is required.");
+        }
+
+        EnsureFinite(ship.TacticalPosition.XKilometers, "Ship tactical X position");
+        EnsureFinite(ship.TacticalPosition.YKilometers, "Ship tactical Y position");
+        EnsureFinite(ship.TacticalMotion.HeadingDegrees, "Ship tactical heading");
+        EnsureFinite(ship.TacticalMotion.SpeedKilometersPerSecond, "Ship tactical speed");
+        if (
+            ship.TacticalMotion.SpeedKilometersPerSecond < 0
+            || ship.TacticalMotion.SpeedKilometersPerSecond > definition.MaximumTacticalSpeed.Value
+        )
+        {
+            throw new InvalidOperationException("Ship tactical speed is outside its definition bounds.");
+        }
+
+        EnsureUnitInterval(ship.SensorIntegrity, "Ship sensor integrity");
+        ValidateStrategicCandidateV2(ship, map, scheduler, currentTime);
+        ValidateRepairCandidateV2(ship, definition, scheduler, currentTime);
+    }
+
+    private static void ValidateStrategicCandidateV2(
+        ShipSnapshotV2 ship,
+        StrategicMapSnapshotV2 map,
+        SchedulerSnapshotV2 scheduler,
+        long currentTime
+    )
+    {
+        StrategicStateSnapshotV2 strategic = ship.StrategicState;
+        if (string.Equals(strategic.Kind, AtLocationKind, StringComparison.Ordinal))
+        {
+            ValidateAtLocationCandidateV2(ship, map, scheduler);
+            return;
+        }
+
+        if (!string.Equals(strategic.Kind, TravelingKind, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("Ship strategic state kind is unknown.");
+        }
+
+        ValidateTravelingCandidateV2(ship, map, scheduler, currentTime);
+    }
+
+    private static void ValidateAtLocationCandidateV2(
+        ShipSnapshotV2 ship,
+        StrategicMapSnapshotV2 map,
+        SchedulerSnapshotV2 scheduler
+    )
+    {
+        StrategicStateSnapshotV2 strategic = ship.StrategicState;
+        if (strategic.Travel is not null)
         {
             throw new InvalidOperationException("At-location state cannot contain active travel.");
         }
 
-        ValidateText(snapshot.LocationId, "Current location identity", MaximumIdentityLength);
-        var locationId = new LocationId(snapshot.LocationId!);
-        map.GetLocation(locationId);
-        return new AtLocationState(locationId);
+        ValidateText(strategic.LocationId, "Current location identity", LocationId.MaximumLength);
+        if (!map.Locations.Any(location => string.Equals(location.Id, strategic.LocationId, StringComparison.Ordinal)))
+        {
+            throw new InvalidOperationException("Current location does not exist in the strategic map.");
+        }
+
+        if (
+            scheduler.OutstandingWork.Any(work =>
+                work.TargetShipId == ship.InstanceId
+                && string.Equals(work.Kind, TravelArrivalKind, StringComparison.Ordinal)
+            )
+        )
+        {
+            throw new InvalidOperationException("Scheduled arrival work has no correlated active travel.");
+        }
     }
 
-    private static TravelingState RestoreTraveling(
-        StrategicStateSnapshotV1 snapshot,
-        StrategicMap map,
-        SimulationTime currentTime
+    private static void ValidateTravelingCandidateV2(
+        ShipSnapshotV2 ship,
+        StrategicMapSnapshotV2 map,
+        SchedulerSnapshotV2 scheduler,
+        long currentTime
     )
     {
-        if (snapshot.LocationId is not null || snapshot.Travel is null)
+        StrategicStateSnapshotV2 strategic = ship.StrategicState;
+        if (strategic.LocationId is not null || strategic.Travel is null)
         {
             throw new InvalidOperationException("Traveling state requires only the explicit active travel member.");
         }
 
-        TravelSnapshotV1 persisted = snapshot.Travel;
-        ValidateText(persisted.Origin, "Travel origin", MaximumIdentityLength);
-        ValidateText(persisted.Destination, "Travel destination", MaximumIdentityLength);
-        var origin = new LocationId(persisted.Origin);
-        var destination = new LocationId(persisted.Destination);
-        SimulationTime departure = new(persisted.DepartureMilliseconds);
-        SimulationTime arrival = new(persisted.ExpectedArrivalMilliseconds);
-        EnsureFixedStep(departure.Milliseconds, "Travel departure");
-        EnsureFixedStep(arrival.Milliseconds, "Travel arrival");
-        if (currentTime.Milliseconds < departure.Milliseconds || currentTime.Milliseconds >= arrival.Milliseconds)
+        TravelSnapshotV2 travel = strategic.Travel;
+        ValidateText(travel.Origin, "Travel origin", LocationId.MaximumLength);
+        ValidateText(travel.Destination, "Travel destination", LocationId.MaximumLength);
+        StrategicRouteSnapshotV2? route = map.Routes.FirstOrDefault(candidate =>
+            (
+                string.Equals(candidate.Origin, travel.Origin, StringComparison.Ordinal)
+                && string.Equals(candidate.Destination, travel.Destination, StringComparison.Ordinal)
+            )
+            || (
+                string.Equals(candidate.Origin, travel.Destination, StringComparison.Ordinal)
+                && string.Equals(candidate.Destination, travel.Origin, StringComparison.Ordinal)
+            )
+        );
+        if (route is null)
         {
-            throw new InvalidOperationException("Active travel does not contain the current simulation time.");
+            throw new InvalidOperationException("Active travel does not follow a strategic map route.");
         }
 
-        StrategicRoute route =
-            map.FindRoute(origin, destination)
-            ?? throw new InvalidOperationException("Active travel does not follow a map route.");
-        if (arrival.Milliseconds - departure.Milliseconds != route.Duration.Milliseconds)
+        EnsureFixedStep(travel.DepartureMilliseconds, "Travel departure");
+        EnsureFixedStep(travel.ExpectedArrivalMilliseconds, "Travel arrival");
+        if (
+            currentTime < travel.DepartureMilliseconds
+            || currentTime >= travel.ExpectedArrivalMilliseconds
+            || travel.ExpectedArrivalMilliseconds - travel.DepartureMilliseconds != route.DurationMilliseconds
+        )
         {
-            throw new InvalidOperationException("Active travel duration does not match its strategic route.");
+            throw new InvalidOperationException("Active travel time is outside its route and current-time contract.");
         }
 
-        return new TravelingState(
-            new TravelState(origin, destination, departure, arrival, new ScheduledWorkId(persisted.ScheduledArrivalId))
+        if (ship.TacticalMotion.HeadingDegrees != 0 || ship.TacticalMotion.SpeedKilometersPerSecond != 0)
+        {
+            throw new InvalidOperationException("Active strategic travel requires cleared local tactical motion.");
+        }
+
+        EnsureExactlyCorrelatedV2(
+            scheduler,
+            ship.InstanceId,
+            travel.ScheduledArrivalId,
+            travel.ExpectedArrivalMilliseconds,
+            TravelArrivalKind,
+            "travel"
         );
     }
 
-    private static PlayerShipState RestorePlayerShip(PlayerShipSnapshotV1 snapshot, SimulationTime currentTime)
+    private static void ValidateRepairCandidateV2(
+        ShipSnapshotV2 ship,
+        ShipDefinition definition,
+        SchedulerSnapshotV2 scheduler,
+        long currentTime
+    )
     {
-        if (snapshot.TacticalPosition is null || snapshot.TacticalMotion is null)
+        if (ship.SensorRepair is null)
         {
-            throw new InvalidOperationException("Player tactical state is required.");
+            if (
+                scheduler.OutstandingWork.Any(work =>
+                    work.TargetShipId == ship.InstanceId
+                    && string.Equals(work.Kind, SensorRepairCompletionKind, StringComparison.Ordinal)
+                )
+            )
+            {
+                throw new InvalidOperationException("Scheduled sensor completion has no correlated active repair.");
+            }
+
+            return;
         }
 
-        ValidateText(snapshot.DefinitionId, "Ship definition identity", MaximumIdentityLength);
-        SensorRepairState? repair = RestoreSensorRepair(snapshot.SensorRepair, currentTime);
-        var integrity = new SensorIntegrity(snapshot.SensorIntegrity);
-        if (repair is not null && integrity != repair.IntegrityAt(currentTime))
+        SensorRepairSnapshotV2 repair = ship.SensorRepair;
+        EnsureUnitInterval(repair.StartingIntegrity, "Sensor repair starting integrity");
+        EnsureUnitInterval(repair.TargetIntegrity, "Sensor repair target integrity");
+        if (repair.TargetIntegrity <= repair.StartingIntegrity)
+        {
+            throw new InvalidOperationException("Sensor repair target must exceed its starting integrity.");
+        }
+
+        EnsureFixedStep(repair.StartedAtMilliseconds, "Sensor repair start");
+        EnsureFixedStep(repair.ExpectedCompletionMilliseconds, "Sensor repair completion");
+        if (currentTime < repair.StartedAtMilliseconds || currentTime >= repair.ExpectedCompletionMilliseconds)
+        {
+            throw new InvalidOperationException("Active sensor repair does not contain the current simulation time.");
+        }
+
+        if (
+            repair.ExpectedCompletionMilliseconds - repair.StartedAtMilliseconds
+            != definition.SensorRepairDuration.Milliseconds
+        )
+        {
+            throw new InvalidOperationException("Sensor repair duration does not match its ship definition.");
+        }
+
+        double progress =
+            (double)(currentTime - repair.StartedAtMilliseconds)
+            / (repair.ExpectedCompletionMilliseconds - repair.StartedAtMilliseconds);
+        double expectedIntegrity =
+            repair.StartingIntegrity + ((repair.TargetIntegrity - repair.StartingIntegrity) * progress);
+        if (ship.SensorIntegrity != expectedIntegrity)
         {
             throw new InvalidOperationException(
                 "Sensor integrity does not match the active repair at the current time."
             );
         }
 
-        return new PlayerShipState(
+        EnsureExactlyCorrelatedV2(
+            scheduler,
+            ship.InstanceId,
+            repair.ScheduledCompletionId,
+            repair.ExpectedCompletionMilliseconds,
+            SensorRepairCompletionKind,
+            "sensor repair"
+        );
+    }
+
+    private static void EnsureExactlyCorrelatedV2(
+        SchedulerSnapshotV2 scheduler,
+        long targetShipId,
+        long workId,
+        long dueTime,
+        string kind,
+        string operation
+    )
+    {
+        int count = scheduler.OutstandingWork.Count(work =>
+            work.TargetShipId == targetShipId
+            && work.Id == workId
+            && work.DueTimeMilliseconds == dueTime
+            && string.Equals(work.Kind, kind, StringComparison.Ordinal)
+        );
+        if (count != 1)
+        {
+            throw new InvalidOperationException(
+                $"Active {operation} must have exactly one same-target correlated scheduled work item."
+            );
+        }
+    }
+
+    private static StrategicMap RestoreMapV2(StrategicMapSnapshotV2 snapshot) =>
+        new(
+            snapshot.Locations.Select(location => new StrategicLocation(
+                new LocationId(location.Id),
+                location.DisplayName,
+                new StrategicMapPosition(location.Position.XUnitless, location.Position.YUnitless)
+            )),
+            snapshot.Routes.Select(route => new StrategicRoute(
+                new LocationId(route.Origin),
+                new LocationId(route.Destination),
+                new SimulationDuration(route.DurationMilliseconds)
+            ))
+        );
+
+    private static SimulationScheduler RestoreSchedulerV2(SchedulerSnapshotV2 snapshot) =>
+        SimulationScheduler.Restore(
+            snapshot.NextWorkId,
+            snapshot.NextSequence,
+            snapshot.OutstandingWork.Select(work => new ScheduledWork(
+                new ScheduledWorkId(work.Id),
+                new SimulationTime(work.DueTimeMilliseconds),
+                work.Sequence,
+                new ShipInstanceId(work.TargetShipId),
+                ParseWorkKind(work.Kind)
+            ))
+        );
+
+    private static ShipState RestoreShipV3(ShipSnapshotV3 snapshot) =>
+        new(
             new ShipInstanceId(snapshot.InstanceId),
             new ShipDefinitionId(snapshot.DefinitionId),
+            snapshot.DisplayName,
             new TacticalPosition(snapshot.TacticalPosition.XKilometers, snapshot.TacticalPosition.YKilometers),
             new TacticalMotion(
                 new HeadingDegrees(snapshot.TacticalMotion.HeadingDegrees),
                 new SpeedKilometersPerSecond(snapshot.TacticalMotion.SpeedKilometersPerSecond)
             ),
-            integrity,
-            repair
+            new SensorIntegrity(snapshot.SensorIntegrity),
+            RestoreSensorRepairV2(snapshot.SensorRepair),
+            RestoreStrategicStateV2(snapshot.StrategicState),
+            RestoreOrderV3(snapshot.ActiveOrder)
         );
+
+    private static ShipOrder? RestoreOrderV3(ShipOrderSnapshotV3? snapshot) =>
+        snapshot switch
+        {
+            null => null,
+            TravelToOrderSnapshotV3 travel => new TravelToOrder(
+                new ShipOrderId(travel.Id),
+                new LocationId(travel.Destination)
+            ),
+            PatrolRouteOrderSnapshotV3 patrol => new PatrolRouteOrder(
+                new ShipOrderId(patrol.Id),
+                patrol.Waypoints.Select(waypoint => new LocationId(waypoint)),
+                patrol.NextWaypointIndex
+            ),
+            HoldUntilOrderSnapshotV3 hold => new HoldUntilOrder(
+                new ShipOrderId(hold.Id),
+                new SimulationTime(hold.UntilMilliseconds),
+                new ScheduledWorkId(hold.ScheduledWakeId)
+            ),
+            _ => throw new InvalidOperationException("Active ship order kind is unknown."),
+        };
+
+    private static SensorRepairState? RestoreSensorRepairV2(SensorRepairSnapshotV2? snapshot) =>
+        snapshot is null
+            ? null
+            : new SensorRepairState(
+                new SensorIntegrity(snapshot.StartingIntegrity),
+                new SensorIntegrity(snapshot.TargetIntegrity),
+                new SimulationTime(snapshot.StartedAtMilliseconds),
+                new SimulationTime(snapshot.ExpectedCompletionMilliseconds),
+                new ScheduledWorkId(snapshot.ScheduledCompletionId)
+            );
+
+    private static ShipStrategicState RestoreStrategicStateV2(StrategicStateSnapshotV2 snapshot) =>
+        snapshot.Kind switch
+        {
+            AtLocationKind => new AtLocationState(new LocationId(snapshot.LocationId!)),
+            TravelingKind => new TravelingState(
+                new TravelState(
+                    new LocationId(snapshot.Travel!.Origin),
+                    new LocationId(snapshot.Travel.Destination),
+                    new SimulationTime(snapshot.Travel.DepartureMilliseconds),
+                    new SimulationTime(snapshot.Travel.ExpectedArrivalMilliseconds),
+                    new ScheduledWorkId(snapshot.Travel.ScheduledArrivalId)
+                )
+            ),
+            _ => throw new InvalidOperationException("Ship strategic state kind is unknown."),
+        };
+
+    private static ScheduledWorkKind ParseWorkKind(string? kind, bool allowOrderWake = true) =>
+        kind switch
+        {
+            TravelArrivalKind => ScheduledWorkKind.TravelArrival,
+            SensorRepairCompletionKind => ScheduledWorkKind.SensorRepairCompletion,
+            OrderWakeKind when allowOrderWake => ScheduledWorkKind.OrderWake,
+            _ => throw new InvalidOperationException("Scheduled work kind is unknown."),
+        };
+
+    private static void EnsureFinite(double value, string label)
+    {
+        if (!double.IsFinite(value))
+        {
+            throw new InvalidOperationException($"{label} must be finite.");
+        }
     }
 
-    private static SensorRepairState? RestoreSensorRepair(SensorRepairSnapshotV1? snapshot, SimulationTime currentTime)
+    private static void EnsureUnitInterval(double value, string label)
     {
-        if (snapshot is null)
+        if (!double.IsFinite(value) || value is < 0 or > 1)
         {
-            return null;
-        }
-
-        SimulationTime startedAt = new(snapshot.StartedAtMilliseconds);
-        SimulationTime completion = new(snapshot.ExpectedCompletionMilliseconds);
-        EnsureFixedStep(startedAt.Milliseconds, "Sensor repair start");
-        EnsureFixedStep(completion.Milliseconds, "Sensor repair completion");
-        if (currentTime.Milliseconds < startedAt.Milliseconds || currentTime.Milliseconds >= completion.Milliseconds)
-        {
-            throw new InvalidOperationException("Active sensor repair does not contain the current simulation time.");
-        }
-
-        return new SensorRepairState(
-            new SensorIntegrity(snapshot.StartingIntegrity),
-            new SensorIntegrity(snapshot.TargetIntegrity),
-            startedAt,
-            completion,
-            new ScheduledWorkId(snapshot.ScheduledCompletionId)
-        );
-    }
-
-    private static void ValidateOutstandingTravel(SimulationScheduler scheduler, PlayerStrategicState strategicState)
-    {
-        ScheduledWork[] arrivals =
-        [
-            .. scheduler.OutstandingWork.Where(work => work.Kind == ScheduledWorkKind.TravelArrival),
-        ];
-        if (strategicState is TravelingState traveling)
-        {
-            if (
-                arrivals.Length != 1
-                || arrivals[0].Id != traveling.Travel.ScheduledArrivalId
-                || arrivals[0].DueTime != traveling.Travel.ExpectedArrival
-            )
-            {
-                throw new InvalidOperationException(
-                    "Active travel must have exactly one correlated scheduled arrival."
-                );
-            }
-        }
-        else if (arrivals.Length != 0)
-        {
-            throw new InvalidOperationException("Scheduled arrival work has no correlated active travel.");
-        }
-    }
-
-    private static void ValidateOutstandingRepair(SimulationScheduler scheduler, SensorRepairState? repair)
-    {
-        ScheduledWork[] repairs =
-        [
-            .. scheduler.OutstandingWork.Where(work => work.Kind == ScheduledWorkKind.SensorRepairCompletion),
-        ];
-        if (repair is not null)
-        {
-            if (
-                repairs.Length != 1
-                || repairs[0].Id != repair.ScheduledCompletionId
-                || repairs[0].DueTime != repair.ExpectedCompletion
-            )
-            {
-                throw new InvalidOperationException(
-                    "Active sensor repair must have exactly one correlated scheduled completion."
-                );
-            }
-        }
-        else if (repairs.Length != 0)
-        {
-            throw new InvalidOperationException("Scheduled sensor completion has no correlated active repair.");
+            throw new InvalidOperationException($"{label} must be finite and between zero and one.");
         }
     }
 

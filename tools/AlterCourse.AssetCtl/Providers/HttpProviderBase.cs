@@ -216,9 +216,11 @@ internal abstract class HttpProviderBase(HttpClient httpClient)
             throw new ProviderException(ProviderErrorCategory.MalformedResponse, "Provider returned no candidates.");
         }
 
-        foreach (GeneratedCandidate value in candidates)
+        for (int candidateIndex = 0; candidateIndex < candidates.Count; candidateIndex++)
         {
-            ValidateCandidateMedia(value.Bytes, expectedMediaType);
+            GeneratedCandidate value = candidates[candidateIndex];
+            string actualMediaType = ValidateCandidateMedia(value.Bytes, expectedMediaType);
+            candidates[candidateIndex] = value with { MediaType = actualMediaType };
         }
 
         return candidates;
@@ -286,19 +288,33 @@ internal abstract class HttpProviderBase(HttpClient httpClient)
         }
     }
 
-    private static void ValidateCandidateMedia(byte[] bytes, string expectedMediaType)
+    private static string ValidateCandidateMedia(byte[] bytes, string expectedMediaType)
     {
         string? actualMediaType =
             bytes.AsSpan().StartsWith(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }) ? "image/png"
+            : bytes.AsSpan().StartsWith(new byte[] { 255, 216, 255 }) ? "image/jpeg"
+            : bytes.Length >= 12
+            && bytes.AsSpan(0, 4).SequenceEqual("RIFF"u8)
+            && bytes.AsSpan(8, 4).SequenceEqual("WEBP"u8)
+                ? "image/webp"
             : LooksLikeSvg(bytes) ? "image/svg+xml"
             : null;
-        if (!string.Equals(actualMediaType, expectedMediaType, StringComparison.Ordinal))
+        if (
+            actualMediaType is null
+            || !string.Equals(actualMediaType, expectedMediaType, StringComparison.Ordinal)
+                && !(
+                    string.Equals(expectedMediaType, "image/png", StringComparison.Ordinal)
+                    && actualMediaType is "image/jpeg" or "image/webp"
+                )
+        )
         {
             throw new ProviderException(
                 ProviderErrorCategory.MalformedResponse,
                 "Provider candidate media does not match the requested output format."
             );
         }
+
+        return actualMediaType;
     }
 
     private static bool LooksLikeSvg(byte[] bytes)
