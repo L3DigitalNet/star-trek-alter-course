@@ -1,8 +1,8 @@
 [project_standards]
 schema_version = "1.0"
 catalog = "5"
-release = "5.28.0"
-digest = "sha256:2aff82f3ac95c2d4c83639a5c1854c7aaeddba10b0441f6b568bfae10e912b40"
+release = "5.29.0"
+digest = "sha256:0c5d933bf61fd25de917f5eb906b0bbf600f432fb901f537ab625245a8a3b5fa"
 
 [standards.adr]
 status = "active"
@@ -42,8 +42,8 @@ payload_digest = "sha256:12b9490be7cf3284bfb7f510b03b2cd555ab7c57f0a7628c9f95c65
 
 [standards.agent-handoff]
 status = "active"
-available = ["1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15", "1.16"]
-default = "1.16"
+available = ["1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15", "1.16", "1.17"]
+default = "1.17"
 candidates = []
 
 [standards.agent-handoff.versions."1.1"]
@@ -122,9 +122,14 @@ availability = "consumer"
 payload_digest = "sha256:96a8ed59dbbc870fd6d1335d557f48798ff3d63544cab673b4bcd789a2d5e8d3"
 
 [standards.agent-handoff.versions."1.16"]
-channel = "stable"
+channel = "retained"
 availability = "consumer"
 payload_digest = "sha256:c5740e1c40ae3643f3df67014ac1458a78e9d5f1682cdcaa1adcfc2f259d28ff"
+
+[standards.agent-handoff.versions."1.17"]
+channel = "stable"
+availability = "consumer"
+payload_digest = "sha256:d70b2ef33c5de487f36fba445b33f7bb51196cb2770cd96cb1eff08d558007e8"
 
 [standards.cli-documentation]
 status = "active"
@@ -164,8 +169,8 @@ payload_digest = "sha256:7c6e609bdccdf526cb1426b817b26efcc5622552138ac5e826d917a
 
 [standards.github-workflow]
 status = "active"
-available = ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9"]
-default = "1.9"
+available = ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10"]
+default = "1.10"
 candidates = []
 
 [standards.github-workflow.versions."1.0"]
@@ -214,9 +219,14 @@ availability = "consumer"
 payload_digest = "sha256:f98d80968f74cacec42711b82265f692368917130365097fe72c29ed0e6356a4"
 
 [standards.github-workflow.versions."1.9"]
-channel = "stable"
+channel = "retained"
 availability = "consumer"
 payload_digest = "sha256:2c9de8845e32bf93804b40867dc7f2bdb92ab17f596750e468befe663b40e5e3"
+
+[standards.github-workflow.versions."1.10"]
+channel = "stable"
+availability = "consumer"
+payload_digest = "sha256:93c2d40b83875ea82f98cec17567c667eca5327e68b81006a661e3cfa4ad2b99"
 
 [standards.markdown-frontmatter]
 status = "active"
