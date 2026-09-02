@@ -1,4 +1,3 @@
-
 namespace AlterCourse.Core.Player;
 
 /// <summary>Projects continuous tactical position, heading, and speed.</summary>
@@ -8,9 +7,7 @@ public sealed record TacticalProjection
         TacticalPositionProjection position,
         double headingDegrees,
         double speedKilometersPerSecond
-    ) =>
-        (Position, HeadingDegrees, SpeedKilometersPerSecond) =
-            (position, headingDegrees, speedKilometersPerSecond);
+    ) => (Position, HeadingDegrees, SpeedKilometersPerSecond) = (position, headingDegrees, speedKilometersPerSecond);
 
     /// <summary>Gets tactical position in kilometers.</summary>
     public TacticalPositionProjection Position { get; }

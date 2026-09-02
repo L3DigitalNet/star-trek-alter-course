@@ -1,4 +1,3 @@
-
 using AlterCourse.Core.Identity;
 using AlterCourse.Core.Ships;
 
@@ -14,8 +13,13 @@ public sealed record PlayerShipProjection
         TacticalProjection tactical,
         SensorProjection sensors
     ) =>
-        (InstanceId, DefinitionId, DisplayName, Tactical, Sensors) =
-            (instanceId, definitionId, displayName, tactical, sensors);
+        (InstanceId, DefinitionId, DisplayName, Tactical, Sensors) = (
+            instanceId,
+            definitionId,
+            displayName,
+            tactical,
+            sensors
+        );
 
     /// <summary>Gets deterministic runtime identity.</summary>
     public ShipInstanceId InstanceId { get; }

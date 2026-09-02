@@ -1,4 +1,3 @@
-
 using AlterCourse.Core.Simulation;
 
 namespace AlterCourse.Core.Strategic;
@@ -16,10 +15,7 @@ public sealed record StrategicRoute
 
         if (string.IsNullOrWhiteSpace(destination.Value))
         {
-            throw new ArgumentException(
-                "Route destination requires an initialized identity.",
-                nameof(destination)
-            );
+            throw new ArgumentException("Route destination requires an initialized identity.", nameof(destination));
         }
 
         if (origin == destination)

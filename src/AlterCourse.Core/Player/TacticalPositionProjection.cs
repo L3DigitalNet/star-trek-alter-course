@@ -1,4 +1,3 @@
-
 namespace AlterCourse.Core.Player;
 
 /// <summary>Projects continuous tactical coordinates in kilometers.</summary>

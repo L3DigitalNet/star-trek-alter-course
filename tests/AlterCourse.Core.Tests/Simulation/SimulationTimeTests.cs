@@ -30,12 +30,8 @@ public sealed class SimulationTimeTests
     [Fact]
     public void TimeAndDurationAdvancementRejectOverflow()
     {
-        Assert.Throws<OverflowException>(() =>
-            new SimulationTime(long.MaxValue).AdvanceBy(new SimulationDuration(1))
-        );
-        Assert.Throws<OverflowException>(() =>
-            new SimulationDuration(long.MaxValue).Add(new SimulationDuration(1))
-        );
+        Assert.Throws<OverflowException>(() => new SimulationTime(long.MaxValue).AdvanceBy(new SimulationDuration(1)));
+        Assert.Throws<OverflowException>(() => new SimulationDuration(long.MaxValue).Add(new SimulationDuration(1)));
     }
 
     /// <summary>Confirms the authoritative tactical quantum is one hundred milliseconds.</summary>

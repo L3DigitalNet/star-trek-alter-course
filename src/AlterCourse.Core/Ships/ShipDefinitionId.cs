@@ -1,4 +1,3 @@
-
 namespace AlterCourse.Core.Ships;
 
 /// <summary>Identifies a stable ship definition independently from runtime instances.</summary>

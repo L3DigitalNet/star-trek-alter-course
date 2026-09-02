@@ -1,4 +1,3 @@
-
 namespace AlterCourse.Core.Strategic;
 
 /// <summary>Defines one neutral strategic location.</summary>

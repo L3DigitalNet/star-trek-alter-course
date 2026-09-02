@@ -33,25 +33,23 @@ public sealed class ShipDomainTests
     public void ShipDefinitionRejectsInvalidIdentityAndUnalignedRepairDuration()
     {
         Assert.Throws<ArgumentException>(() => new ShipDefinitionId(""));
-        Assert.Throws<ArgumentException>(
-            () =>
-                new ShipDefinition(
-                    new ShipDefinitionId("ship"),
-                    " ",
-                    new SpeedKilometersPerSecond(1),
-                    new SensorIntegrity(0.5),
-                    new SimulationDuration(8000)
-                )
+        Assert.Throws<ArgumentException>(() =>
+            new ShipDefinition(
+                new ShipDefinitionId("ship"),
+                " ",
+                new SpeedKilometersPerSecond(1),
+                new SensorIntegrity(0.5),
+                new SimulationDuration(8000)
+            )
         );
-        Assert.Throws<ArgumentException>(
-            () =>
-                new ShipDefinition(
-                    new ShipDefinitionId("ship"),
-                    "Ship",
-                    new SpeedKilometersPerSecond(1),
-                    new SensorIntegrity(0.5),
-                    new SimulationDuration(8050)
-                )
+        Assert.Throws<ArgumentException>(() =>
+            new ShipDefinition(
+                new ShipDefinitionId("ship"),
+                "Ship",
+                new SpeedKilometersPerSecond(1),
+                new SensorIntegrity(0.5),
+                new SimulationDuration(8050)
+            )
         );
     }
 }

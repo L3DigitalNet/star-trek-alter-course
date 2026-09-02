@@ -1,4 +1,3 @@
-
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
 
@@ -14,8 +13,13 @@ public sealed record TravelProjection
         SimulationTime expectedArrival,
         bool isActive
     ) =>
-        (Origin, Destination, Departure, ExpectedArrival, IsActive) =
-            (origin, destination, departure, expectedArrival, isActive);
+        (Origin, Destination, Departure, ExpectedArrival, IsActive) = (
+            origin,
+            destination,
+            departure,
+            expectedArrival,
+            isActive
+        );
 
     /// <summary>Gets the departed location.</summary>
     public LocationId Origin { get; }

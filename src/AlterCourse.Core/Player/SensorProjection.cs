@@ -1,4 +1,3 @@
-
 namespace AlterCourse.Core.Player;
 
 /// <summary>Projects sensor integrity and repair state derived at projection time.</summary>

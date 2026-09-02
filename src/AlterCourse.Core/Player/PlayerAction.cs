@@ -1,4 +1,3 @@
-
 namespace AlterCourse.Core.Player;
 
 /// <summary>Identifies actions currently suggested by the player-known simulation slice.</summary>

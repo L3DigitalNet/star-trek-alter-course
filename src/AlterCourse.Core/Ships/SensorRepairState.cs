@@ -1,4 +1,3 @@
-
 using AlterCourse.Core.Identity;
 using AlterCourse.Core.Simulation;
 

@@ -1,4 +1,3 @@
-
 using System.Runtime.InteropServices;
 
 namespace AlterCourse.Core.Tactical;

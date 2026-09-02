@@ -10,6 +10,7 @@ namespace AlterCourse.Core.Gameplay;
 public sealed class GameSimulation
 {
     private const int SameBoundaryExecutionBudget = 1024;
+
     // Local arrival frames currently use one non-origin offset so the walking slice visibly proves
     // that tactical positions are continuous values, not a hidden grid or strategic-map projection.
     private static readonly TacticalPosition ArrivalPosition = new(0.25, -0.75);
@@ -38,10 +39,7 @@ public sealed class GameSimulation
             return new TravelRequestResult(TravelOutcome.SameLocation);
         }
 
-        StrategicRoute? route = _state.StrategicMap.FindRoute(
-            atLocation.LocationId,
-            intent.Destination
-        );
+        StrategicRoute? route = _state.StrategicMap.FindRoute(atLocation.LocationId, intent.Destination);
         if (route is null)
         {
             return new TravelRequestResult(TravelOutcome.RouteUnavailable);
@@ -52,13 +50,7 @@ public sealed class GameSimulation
             arrival,
             ScheduledWorkKind.TravelArrival
         );
-        var travel = new TravelState(
-            atLocation.LocationId,
-            intent.Destination,
-            _state.Time,
-            arrival,
-            arrivalWork.Id
-        );
+        var travel = new TravelState(atLocation.LocationId, intent.Destination, _state.Time, arrival, arrivalWork.Id);
         SimulationState candidate = _state with
         {
             Scheduler = scheduler,
@@ -74,9 +66,7 @@ public sealed class GameSimulation
     {
         if (_state.StrategicState is TravelingState)
         {
-            return new SetTacticalCourseResult(
-                SetTacticalCourseOutcome.UnavailableWhileTraveling
-            );
+            return new SetTacticalCourseResult(SetTacticalCourseOutcome.UnavailableWhileTraveling);
         }
 
         if (intent.Speed.Value > _state.PlayerShipDefinition.MaximumTacticalSpeed.Value)
@@ -86,10 +76,7 @@ public sealed class GameSimulation
 
         SimulationState candidate = _state with
         {
-            PlayerShip = _state.PlayerShip with
-            {
-                TacticalMotion = new TacticalMotion(intent.Heading, intent.Speed),
-            },
+            PlayerShip = _state.PlayerShip with { TacticalMotion = new TacticalMotion(intent.Heading, intent.Speed) },
         };
         Commit(candidate);
         return new SetTacticalCourseResult(SetTacticalCourseOutcome.Accepted);
@@ -99,9 +86,7 @@ public sealed class GameSimulation
     public void AdvanceFixedSteps(int stepCount)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(stepCount);
-        int milliseconds = checked(
-            stepCount * checked((int)SimulationFixedStep.Duration.Milliseconds)
-        );
+        int milliseconds = checked(stepCount * checked((int)SimulationFixedStep.Duration.Milliseconds));
         SimulationTime target = _state.Time.AdvanceBy(new SimulationDuration(milliseconds));
         (SimulationState candidate, _) = AdvanceTo(_state, target);
         Commit(candidate);
@@ -122,10 +107,7 @@ public sealed class GameSimulation
         }
 
         SimulationTime boundary = _state.Scheduler.OutstandingWork[0].DueTime;
-        (SimulationState candidate, IReadOnlyList<ScheduledWorkKind> resolvedKinds) = AdvanceTo(
-            _state,
-            boundary
-        );
+        (SimulationState candidate, IReadOnlyList<ScheduledWorkKind> resolvedKinds) = AdvanceTo(_state, boundary);
         Commit(candidate);
         return new AdvanceUntilResult(
             AdvanceUntilOutcome.ScheduledEventResolved,
@@ -139,8 +121,7 @@ public sealed class GameSimulation
     // snapshot models without gaining a second public mutation path into live simulation state.
     internal SimulationState CaptureState() => _state;
 
-    internal static GameSimulation RestoreState(SimulationState restoredState) =>
-        new(restoredState);
+    internal static GameSimulation RestoreState(SimulationState restoredState) => new(restoredState);
 
     private static (SimulationState State, IReadOnlyList<ScheduledWorkKind> ResolvedKinds) AdvanceTo(
         SimulationState initial,
@@ -156,8 +137,7 @@ public sealed class GameSimulation
             SimulationTime boundary = target;
             if (
                 !current.Scheduler.OutstandingWork.IsDefaultOrEmpty
-                && current.Scheduler.OutstandingWork[0].DueTime.Milliseconds
-                    <= target.Milliseconds
+                && current.Scheduler.OutstandingWork[0].DueTime.Milliseconds <= target.Milliseconds
             )
             {
                 boundary = current.Scheduler.OutstandingWork[0].DueTime;
@@ -176,9 +156,7 @@ public sealed class GameSimulation
         long elapsed = boundary.Milliseconds - state.Time.Milliseconds;
         if (elapsed < 0 || elapsed % SimulationFixedStep.Duration.Milliseconds != 0)
         {
-            throw new InvalidOperationException(
-                "Advancement boundaries must be monotonic and fixed-step aligned."
-            );
+            throw new InvalidOperationException("Advancement boundaries must be monotonic and fixed-step aligned.");
         }
 
         if (state.StrategicState is TravelingState)
@@ -214,7 +192,11 @@ public sealed class GameSimulation
             ship = ship with { SensorIntegrity = repair.IntegrityAt(time) };
         }
 
-        return state with { Time = time, PlayerShip = ship };
+        return state with
+        {
+            Time = time,
+            PlayerShip = ship,
+        };
     }
 
     private static SimulationState ResolveDueAtCurrentBoundary(
@@ -229,8 +211,9 @@ public sealed class GameSimulation
         // work later without silently leaving it overdue; the budget prevents an infinite cycle.
         while (true)
         {
-            (SimulationScheduler scheduler, IReadOnlyList<ScheduledWork> dueWork) =
-                current.Scheduler.DequeueDue(current.Time);
+            (SimulationScheduler scheduler, IReadOnlyList<ScheduledWork> dueWork) = current.Scheduler.DequeueDue(
+                current.Time
+            );
             if (dueWork.Count == 0)
             {
                 return current;
@@ -253,10 +236,7 @@ public sealed class GameSimulation
         }
     }
 
-    private static SimulationState ResolveScheduledWork(
-        SimulationState state,
-        ScheduledWork work
-    ) =>
+    private static SimulationState ResolveScheduledWork(SimulationState state, ScheduledWork work) =>
         work.Kind switch
         {
             ScheduledWorkKind.SensorRepairCompletion => CompleteSensorRepair(state, work),
@@ -264,10 +244,7 @@ public sealed class GameSimulation
             _ => throw new InvalidOperationException("Scheduled work kind is unsupported."),
         };
 
-    private static SimulationState CompleteSensorRepair(
-        SimulationState state,
-        ScheduledWork work
-    )
+    private static SimulationState CompleteSensorRepair(SimulationState state, ScheduledWork work)
     {
         SensorRepairState? repair = state.PlayerShip.SensorRepair;
         if (repair is null || repair.ScheduledCompletionId != work.Id)
@@ -277,20 +254,13 @@ public sealed class GameSimulation
 
         return state with
         {
-            PlayerShip = state.PlayerShip with
-            {
-                SensorIntegrity = repair.TargetIntegrity,
-                SensorRepair = null,
-            },
+            PlayerShip = state.PlayerShip with { SensorIntegrity = repair.TargetIntegrity, SensorRepair = null },
         };
     }
 
     private static SimulationState CompleteTravel(SimulationState state, ScheduledWork work)
     {
-        if (
-            state.StrategicState is not TravelingState traveling
-            || traveling.Travel.ScheduledArrivalId != work.Id
-        )
+        if (state.StrategicState is not TravelingState traveling || traveling.Travel.ScheduledArrivalId != work.Id)
         {
             throw new InvalidOperationException("Arrival lacks matching active travel.");
         }
@@ -298,11 +268,7 @@ public sealed class GameSimulation
         return state with
         {
             StrategicState = new AtLocationState(traveling.Travel.Destination),
-            PlayerShip = state.PlayerShip with
-            {
-                TacticalPosition = ArrivalPosition,
-                TacticalMotion = default,
-            },
+            PlayerShip = state.PlayerShip with { TacticalPosition = ArrivalPosition, TacticalMotion = default },
         };
     }
 
@@ -320,15 +286,19 @@ public sealed class GameSimulation
     {
         StrategicLocationProjection[] locations =
         [
-            .. state.StrategicMap.Locations.Select(location =>
-                new StrategicLocationProjection(location.Id, location.DisplayName, location.Position)
-            ),
+            .. state.StrategicMap.Locations.Select(location => new StrategicLocationProjection(
+                location.Id,
+                location.DisplayName,
+                location.Position
+            )),
         ];
         StrategicRouteProjection[] routes =
         [
-            .. state.StrategicMap.Routes.Select(route =>
-                new StrategicRouteProjection(route.Origin, route.Destination, route.Duration)
-            ),
+            .. state.StrategicMap.Routes.Select(route => new StrategicRouteProjection(
+                route.Origin,
+                route.Destination,
+                route.Duration
+            )),
         ];
 
         StrategicLocationProjection? currentLocation = null;
@@ -336,11 +306,7 @@ public sealed class GameSimulation
         if (state.StrategicState is AtLocationState atLocation)
         {
             StrategicLocation location = state.StrategicMap.GetLocation(atLocation.LocationId);
-            currentLocation = new StrategicLocationProjection(
-                location.Id,
-                location.DisplayName,
-                location.Position
-            );
+            currentLocation = new StrategicLocationProjection(location.Id, location.DisplayName, location.Position);
         }
         else if (state.StrategicState is TravelingState traveling)
         {

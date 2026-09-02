@@ -1,4 +1,3 @@
-
 using AlterCourse.Core.Quantities;
 using AlterCourse.Core.Simulation;
 
@@ -29,7 +28,10 @@ public sealed record ShipDefinition
 
         if (sensorRepairDuration.Milliseconds % SimulationFixedStep.Duration.Milliseconds != 0)
         {
-            throw new ArgumentException("Repair duration must align to the fixed simulation step.", nameof(sensorRepairDuration));
+            throw new ArgumentException(
+                "Repair duration must align to the fixed simulation step.",
+                nameof(sensorRepairDuration)
+            );
         }
 
         Id = id;

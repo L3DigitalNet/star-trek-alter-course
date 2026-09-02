@@ -1,4 +1,3 @@
-
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
 
@@ -7,11 +6,8 @@ namespace AlterCourse.Core.Player;
 /// <summary>Projects one player-known strategic connection.</summary>
 public sealed record StrategicRouteProjection
 {
-    internal StrategicRouteProjection(
-        LocationId origin,
-        LocationId destination,
-        SimulationDuration duration
-    ) => (Origin, Destination, Duration) = (origin, destination, duration);
+    internal StrategicRouteProjection(LocationId origin, LocationId destination, SimulationDuration duration) =>
+        (Origin, Destination, Duration) = (origin, destination, duration);
 
     /// <summary>Gets one route endpoint.</summary>
     public LocationId Origin { get; }

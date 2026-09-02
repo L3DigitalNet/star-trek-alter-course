@@ -1,4 +1,3 @@
-
 namespace AlterCourse.Core.Player;
 
 /// <summary>Projects strategic map knowledge and the player's current strategic state.</summary>

@@ -6,11 +6,7 @@ namespace AlterCourse.Core.Simulation;
 /// <summary>Stores and orders immutable data-only scheduled simulation work.</summary>
 public sealed class SimulationScheduler
 {
-    private SimulationScheduler(
-        long nextWorkId,
-        long nextSequence,
-        ImmutableArray<ScheduledWork> outstandingWork
-    )
+    private SimulationScheduler(long nextWorkId, long nextSequence, ImmutableArray<ScheduledWork> outstandingWork)
     {
         NextWorkId = nextWorkId;
         NextSequence = nextSequence;
@@ -60,18 +56,13 @@ public sealed class SimulationScheduler
 
         foreach (ScheduledWork item in work)
         {
-            ValidateRestoredItem(
-                item,
-                nextWorkId,
-                nextSequence,
-                identities,
-                sequences,
-                nameof(outstandingWork)
-            );
+            ValidateRestoredItem(item, nextWorkId, nextSequence, identities, sequences, nameof(outstandingWork));
         }
 
         ImmutableArray<ScheduledWork> ordered =
-            [.. work.OrderBy(item => item.DueTime.Milliseconds).ThenBy(item => item.Sequence)];
+        [
+            .. work.OrderBy(item => item.DueTime.Milliseconds).ThenBy(item => item.Sequence),
+        ];
         return new SimulationScheduler(nextWorkId, nextSequence, ordered);
     }
 
@@ -81,10 +72,7 @@ public sealed class SimulationScheduler
     /// <returns>The following scheduler state and scheduled work item.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="kind"/> is unknown.</exception>
     /// <exception cref="OverflowException">A following identity or sequence cannot be represented.</exception>
-    public (SimulationScheduler Scheduler, ScheduledWork Work) Schedule(
-        SimulationTime dueTime,
-        ScheduledWorkKind kind
-    )
+    public (SimulationScheduler Scheduler, ScheduledWork Work) Schedule(SimulationTime dueTime, ScheduledWorkKind kind)
     {
         ScheduledWork.ValidateKind(kind);
         long followingWorkId = checked(NextWorkId + 1);
@@ -100,14 +88,11 @@ public sealed class SimulationScheduler
     /// </summary>
     /// <param name="through">The inclusive simulation-time boundary.</param>
     /// <returns>The following scheduler state and due work in stable order.</returns>
-    public (SimulationScheduler Scheduler, IReadOnlyList<ScheduledWork> DueWork) DequeueDue(
-        SimulationTime through
-    )
+    public (SimulationScheduler Scheduler, IReadOnlyList<ScheduledWork> DueWork) DequeueDue(SimulationTime through)
     {
         int dueCount = 0;
         while (
-            dueCount < OutstandingWork.Length
-            && OutstandingWork[dueCount].DueTime.Milliseconds <= through.Milliseconds
+            dueCount < OutstandingWork.Length && OutstandingWork[dueCount].DueTime.Milliseconds <= through.Milliseconds
         )
         {
             dueCount++;
@@ -184,7 +169,6 @@ public sealed class SimulationScheduler
             );
         }
 
-        ArgumentException InvalidOutstandingWork(string message) =>
-            new(message, outstandingWorkParameterName);
+        ArgumentException InvalidOutstandingWork(string message) => new(message, outstandingWorkParameterName);
     }
 }

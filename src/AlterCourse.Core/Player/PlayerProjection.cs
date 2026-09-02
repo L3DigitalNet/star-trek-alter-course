@@ -1,4 +1,3 @@
-
 using AlterCourse.Core.Simulation;
 
 namespace AlterCourse.Core.Player;
@@ -11,9 +10,7 @@ public sealed record PlayerProjection
         StrategicProjection strategic,
         PlayerShipProjection ship,
         IReadOnlyList<PlayerAction> availableActions
-    ) =>
-        (SimulationTime, Strategic, Ship, AvailableActions) =
-            (simulationTime, strategic, ship, availableActions);
+    ) => (SimulationTime, Strategic, Ship, AvailableActions) = (simulationTime, strategic, ship, availableActions);
 
     /// <summary>Gets authoritative simulation time.</summary>
     public SimulationTime SimulationTime { get; }

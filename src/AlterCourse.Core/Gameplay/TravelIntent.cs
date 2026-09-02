@@ -1,4 +1,3 @@
-
 using AlterCourse.Core.Strategic;
 
 namespace AlterCourse.Core.Gameplay;

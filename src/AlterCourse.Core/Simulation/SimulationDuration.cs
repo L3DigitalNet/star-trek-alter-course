@@ -21,6 +21,5 @@ public readonly record struct SimulationDuration
     /// <param name="other">The duration to add.</param>
     /// <returns>The combined duration.</returns>
     /// <exception cref="OverflowException">The combined duration exceeds the supported range.</exception>
-    public SimulationDuration Add(SimulationDuration other) =>
-        new(checked(Milliseconds + other.Milliseconds));
+    public SimulationDuration Add(SimulationDuration other) => new(checked(Milliseconds + other.Milliseconds));
 }

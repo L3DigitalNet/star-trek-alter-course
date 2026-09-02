@@ -1,4 +1,3 @@
-
 namespace AlterCourse.Core.Gameplay;
 
 /// <summary>Describes why advance-until-next-event stopped.</summary>

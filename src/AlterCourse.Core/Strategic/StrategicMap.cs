@@ -1,4 +1,3 @@
-
 using System.Collections.Immutable;
 
 namespace AlterCourse.Core.Strategic;
@@ -7,10 +6,7 @@ namespace AlterCourse.Core.Strategic;
 public sealed class StrategicMap
 {
     /// <summary>Initializes a strategic map with unique locations and routes.</summary>
-    public StrategicMap(
-        IEnumerable<StrategicLocation> locations,
-        IEnumerable<StrategicRoute> routes
-    )
+    public StrategicMap(IEnumerable<StrategicLocation> locations, IEnumerable<StrategicRoute> routes)
     {
         ArgumentNullException.ThrowIfNull(locations);
         ArgumentNullException.ThrowIfNull(routes);

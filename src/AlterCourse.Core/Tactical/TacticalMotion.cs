@@ -1,4 +1,3 @@
-
 using System.Runtime.InteropServices;
 using AlterCourse.Core.Quantities;
 

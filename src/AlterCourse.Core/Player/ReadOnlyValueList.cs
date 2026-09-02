@@ -18,8 +18,7 @@ internal sealed class ReadOnlyValueList<T> : IReadOnlyList<T>, IEquatable<ReadOn
 
     public T this[int index] => _items[index];
 
-    public bool Equals(ReadOnlyValueList<T>? other) =>
-        other is not null && _items.SequenceEqual(other._items);
+    public bool Equals(ReadOnlyValueList<T>? other) => other is not null && _items.SequenceEqual(other._items);
 
     public override bool Equals(object? obj) => Equals(obj as ReadOnlyValueList<T>);
 

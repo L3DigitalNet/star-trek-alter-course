@@ -1,4 +1,3 @@
-
 using AlterCourse.Core.Player;
 using AlterCourse.Core.Simulation;
 
@@ -12,9 +11,7 @@ public sealed record AdvanceUntilResult
         SimulationTime stoppedAt,
         IReadOnlyList<ScheduledWorkKind> resolvedKinds,
         PlayerProjection projection
-    ) =>
-        (Outcome, StoppedAt, ResolvedKinds, Projection) =
-            (outcome, stoppedAt, resolvedKinds, projection);
+    ) => (Outcome, StoppedAt, ResolvedKinds, Projection) = (outcome, stoppedAt, resolvedKinds, projection);
 
     /// <summary>Gets the stop outcome.</summary>
     public AdvanceUntilOutcome Outcome { get; }

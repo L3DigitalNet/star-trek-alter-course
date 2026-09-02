@@ -1,4 +1,3 @@
-
 namespace AlterCourse.Core.Ships;
 
 /// <summary>Represents bounded ship-system integrity.</summary>

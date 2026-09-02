@@ -171,8 +171,7 @@ public static class GamePersistence
                 {
                     File.Delete(temporaryPath);
                 }
-                catch (Exception exception)
-                    when (exception is IOException or UnauthorizedAccessException)
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
                 {
                     // Cleanup is secondary to the typed write failure already in flight. The
                     // isolated candidate may remain, but it must never replace that primary error.
@@ -483,14 +482,7 @@ public static class GamePersistence
             ScheduledWorkSnapshotV1 item =
                 snapshot.OutstandingWork[index]
                 ?? throw new InvalidOperationException("Scheduler work items cannot be null.");
-            work[index] = RestoreScheduledWork(
-                item,
-                index,
-                previousDue,
-                previousSequence,
-                identities,
-                sequences
-            );
+            work[index] = RestoreScheduledWork(item, index, previousDue, previousSequence, identities, sequences);
             previousDue = item.DueTimeMilliseconds;
             previousSequence = item.Sequence;
         }
@@ -879,9 +871,7 @@ public static class GamePersistence
 
         if (milliseconds > long.MaxValue - SimulationFixedStep.Duration.Milliseconds)
         {
-            throw new InvalidOperationException(
-                $"{label} must retain one fixed step of continuation headroom."
-            );
+            throw new InvalidOperationException($"{label} must retain one fixed step of continuation headroom.");
         }
     }
 

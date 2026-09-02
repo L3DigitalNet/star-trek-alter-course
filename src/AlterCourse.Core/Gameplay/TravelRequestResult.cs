@@ -1,4 +1,3 @@
-
 namespace AlterCourse.Core.Gameplay;
 
 /// <summary>Returns the typed result of requesting travel.</summary>

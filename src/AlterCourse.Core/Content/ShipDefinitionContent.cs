@@ -72,15 +72,13 @@ public sealed class ShipDefinitionContent
     }
 
     private static ShipContentValidationException TooLarge(string sourceIdentity) =>
-        new(
-            [
-                new ShipContentDiagnostic(
-                    "content.size-limit",
-                    sourceIdentity,
-                    "#",
-                    string.Empty,
-                    $"Ship definition exceeds the {MaximumDocumentBytes}-byte document limit."
-                ),
-            ]
-        );
+        new([
+            new ShipContentDiagnostic(
+                "content.size-limit",
+                sourceIdentity,
+                "#",
+                string.Empty,
+                $"Ship definition exceeds the {MaximumDocumentBytes}-byte document limit."
+            ),
+        ]);
 }

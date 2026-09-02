@@ -1,4 +1,3 @@
-
 namespace AlterCourse.Core.Gameplay;
 
 /// <summary>Describes the validated result of a tactical-course request.</summary>

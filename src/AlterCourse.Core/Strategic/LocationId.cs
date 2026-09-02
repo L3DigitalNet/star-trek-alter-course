@@ -1,4 +1,3 @@
-
 namespace AlterCourse.Core.Strategic;
 
 /// <summary>Identifies one stable strategic-map location.</summary>

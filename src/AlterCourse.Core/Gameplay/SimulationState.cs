@@ -31,23 +31,17 @@ internal sealed record SimulationState(
 
         if (PlayerShip.InstanceId.Value <= 0 || PlayerShip.DefinitionId != PlayerShipDefinition.Id)
         {
-            throw new InvalidOperationException(
-                "Player ship identity or definition correlation is invalid."
-            );
+            throw new InvalidOperationException("Player ship identity or definition correlation is invalid.");
         }
 
         if (ShipIdAllocator.NextId <= PlayerShip.InstanceId.Value)
         {
-            throw new InvalidOperationException(
-                "Ship allocator must follow the allocated player identity."
-            );
+            throw new InvalidOperationException("Ship allocator must follow the allocated player identity.");
         }
 
         if (Scheduler.OutstandingWork.Any(work => work.DueTime.Milliseconds < Time.Milliseconds))
         {
-            throw new InvalidOperationException(
-                "Scheduled work cannot be overdue in a restorable state."
-            );
+            throw new InvalidOperationException("Scheduled work cannot be overdue in a restorable state.");
         }
 
         if (
@@ -57,9 +51,7 @@ internal sealed record SimulationState(
             )
         )
         {
-            throw new InvalidOperationException(
-                "Simulation time and scheduled work must be fixed-step aligned."
-            );
+            throw new InvalidOperationException("Simulation time and scheduled work must be fixed-step aligned.");
         }
 
         ValidateStrategicState();
@@ -102,21 +94,11 @@ internal sealed record SimulationState(
         }
     }
 
-    private void EnsureCorrelated(
-        ScheduledWorkId id,
-        SimulationTime dueTime,
-        ScheduledWorkKind kind
-    )
+    private void EnsureCorrelated(ScheduledWorkId id, SimulationTime dueTime, ScheduledWorkKind kind)
     {
-        if (
-            !Scheduler.OutstandingWork.Any(work =>
-                work.Id == id && work.DueTime == dueTime && work.Kind == kind
-            )
-        )
+        if (!Scheduler.OutstandingWork.Any(work => work.Id == id && work.DueTime == dueTime && work.Kind == kind))
         {
-            throw new InvalidOperationException(
-                "Runtime state lacks its correlated scheduled work."
-            );
+            throw new InvalidOperationException("Runtime state lacks its correlated scheduled work.");
         }
     }
 
@@ -124,9 +106,7 @@ internal sealed record SimulationState(
     {
         if (Scheduler.OutstandingWork.Any(work => work.Kind == kind))
         {
-            throw new InvalidOperationException(
-                "Scheduled work has no correlated runtime state."
-            );
+            throw new InvalidOperationException("Scheduled work has no correlated runtime state.");
         }
     }
 }

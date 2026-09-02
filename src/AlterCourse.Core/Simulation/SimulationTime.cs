@@ -21,8 +21,7 @@ public readonly record struct SimulationTime
     /// <param name="duration">The nonnegative duration to advance.</param>
     /// <returns>The advanced time.</returns>
     /// <exception cref="OverflowException">The advanced time exceeds the supported range.</exception>
-    public SimulationTime AdvanceBy(SimulationDuration duration) =>
-        new(checked(Milliseconds + duration.Milliseconds));
+    public SimulationTime AdvanceBy(SimulationDuration duration) => new(checked(Milliseconds + duration.Milliseconds));
 
     /// <summary>Advances to an explicit monotonic target.</summary>
     /// <param name="target">The target simulation time.</param>

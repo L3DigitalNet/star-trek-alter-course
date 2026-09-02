@@ -1,4 +1,3 @@
-
 using AlterCourse.Core.Identity;
 using AlterCourse.Core.Simulation;
 
@@ -17,18 +16,12 @@ public sealed record TravelState
     {
         if (string.IsNullOrWhiteSpace(origin.Value))
         {
-            throw new ArgumentException(
-                "Travel origin requires an initialized identity.",
-                nameof(origin)
-            );
+            throw new ArgumentException("Travel origin requires an initialized identity.", nameof(origin));
         }
 
         if (string.IsNullOrWhiteSpace(destination.Value))
         {
-            throw new ArgumentException(
-                "Travel destination requires an initialized identity.",
-                nameof(destination)
-            );
+            throw new ArgumentException("Travel destination requires an initialized identity.", nameof(destination));
         }
 
         if (origin == destination)

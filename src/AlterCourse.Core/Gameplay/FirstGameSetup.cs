@@ -22,16 +22,12 @@ public static class FirstGameSetup
             );
         }
 
-        (StrategicMap map, LocationId startingLocation) = CreateMap(
-            playerShipDefinition.SensorRepairDuration
-        );
+        (StrategicMap map, LocationId startingLocation) = CreateMap(playerShipDefinition.SensorRepairDuration);
 
         var initialTime = new SimulationTime(0);
         var allocator = ShipInstanceIdAllocator.Create();
         (ShipInstanceIdAllocator followingAllocator, ShipInstanceId playerId) = allocator.Allocate();
-        SimulationTime repairCompletion = initialTime.AdvanceBy(
-            playerShipDefinition.SensorRepairDuration
-        );
+        SimulationTime repairCompletion = initialTime.AdvanceBy(playerShipDefinition.SensorRepairDuration);
         (SimulationScheduler scheduler, ScheduledWork repairWork) = SimulationScheduler
             .Create()
             .Schedule(repairCompletion, ScheduledWorkKind.SensorRepairCompletion);
@@ -62,9 +58,7 @@ public static class FirstGameSetup
         return GameSimulation.RestoreState(state);
     }
 
-    private static (StrategicMap Map, LocationId StartingLocation) CreateMap(
-        SimulationDuration repairDuration
-    )
+    private static (StrategicMap Map, LocationId StartingLocation) CreateMap(SimulationDuration repairDuration)
     {
         var dawn = new StrategicLocation(
             new LocationId("dawn-anchor"),
@@ -84,16 +78,8 @@ public static class FirstGameSetup
         var map = new StrategicMap(
             [dawn, vesper, meridian],
             [
-                new StrategicRoute(
-                    dawn.Id,
-                    vesper.Id,
-                    repairDuration.Add(new SimulationDuration(4000))
-                ),
-                new StrategicRoute(
-                    vesper.Id,
-                    meridian.Id,
-                    repairDuration.Add(new SimulationDuration(6000))
-                ),
+                new StrategicRoute(dawn.Id, vesper.Id, repairDuration.Add(new SimulationDuration(4000))),
+                new StrategicRoute(vesper.Id, meridian.Id, repairDuration.Add(new SimulationDuration(6000))),
             ]
         );
 
