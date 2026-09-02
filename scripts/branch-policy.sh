@@ -14,6 +14,7 @@ readonly zero_sha='0000000000000000000000000000000000000000'
 readonly topic_pattern='^(feature|fix|task|docs|hotfix)/[1-9][0-9]*-[a-z0-9]+(-[a-z0-9]+)*$'
 readonly conventional_pattern='^(feat|fix|docs|chore|refactor|test|build|ci|perf|revert)(\([a-z0-9][a-z0-9._/-]*\))?!?:[[:space:]][^[:space:]].*$'
 readonly semver_pattern='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+readonly branch_governance_marker='docs/adr/0013-use-dev-for-development-and-main-for-releases.md'
 
 fail() {
   printf 'Branch policy: %s\n' "$1" >&2
@@ -39,6 +40,16 @@ validate_commit_message_file() {
   local subject
   IFS= read -r subject < "${message_file}" || true
   validate_conventional_subject "${subject}"
+}
+
+is_initial_baseline_promotion() {
+  local base_sha=$1
+  local head_sha=$2
+
+  # The governance ADR is the adoption boundary: requiring it only on the head
+  # makes this exception self-expire after the first baseline reaches main.
+  ! git cat-file -e "${base_sha}:${branch_governance_marker}" 2> /dev/null &&
+    git cat-file -e "${head_sha}:${branch_governance_marker}" 2> /dev/null
 }
 
 validate_pull_request() {
@@ -68,9 +79,16 @@ validate_pull_request() {
       ;;
     main)
       if [[ "${head}" == 'dev' ]]; then
-        release_version="${title#'chore(release): '}"
-        [[ "${title}" == "chore(release): ${release_version}" && "${release_version}" =~ ${semver_pattern} ]] ||
-          fail "dev-to-main releases must use title 'chore(release): vMAJOR.MINOR.PATCH'."
+        if [[ "${title}" == 'chore(baseline): establish main baseline' ]]; then
+          [[ -n "${base_sha}" && -n "${head_sha}" ]] ||
+            fail 'the initial baseline promotion requires base and head SHAs.'
+          is_initial_baseline_promotion "${base_sha}" "${head_sha}" ||
+            fail 'the initial baseline promotion is permitted only while main predates the branch-governance ADR.'
+        else
+          release_version="${title#'chore(release): '}"
+          [[ "${title}" == "chore(release): ${release_version}" && "${release_version}" =~ ${semver_pattern} ]] ||
+            fail "dev-to-main promotions must use the initial baseline title or 'chore(release): vMAJOR.MINOR.PATCH'."
+        fi
       elif [[ "${head}" =~ ^hotfix/ ]]; then
         [[ "${title}" =~ ^fix(\([a-z0-9][a-z0-9._/-]*\))?!?: ]] ||
           fail 'hotfix pull requests must use a fix Conventional Commit title.'
