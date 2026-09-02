@@ -60,10 +60,20 @@ public sealed class GamePersistenceV3OrderTests
         Assert.Equal(3, ships[3]!["activeOrder"]!["scheduledWakeId"]!.GetValue<long>());
         Assert.Equal("orderWake", simulation["scheduler"]!["outstandingWork"]![0]!["kind"]!.GetValue<string>());
 
-        uninterrupted.Simulation.AdvanceUntilNextScheduledEvent();
-        resumed.Simulation.AdvanceUntilNextScheduledEvent();
-        uninterrupted.Simulation.AdvanceUntilNextScheduledEvent();
-        resumed.Simulation.AdvanceUntilNextScheduledEvent();
+        uninterrupted.Simulation.AdvanceFixedSteps(60);
+        resumed.Simulation.AdvanceFixedSteps(60);
+        JsonArray continuedShips = Parse(GamePersistence.Serialize(resumed.Simulation, resumed.Metadata))[
+            "simulation"
+        ]!["ships"]!.AsArray();
+
+        Assert.Null(continuedShips[1]!["activeOrder"]);
+        Assert.Equal("atLocation", continuedShips[1]!["strategicState"]!["kind"]!.GetValue<string>());
+        Assert.Equal("beta", continuedShips[1]!["strategicState"]!["locationId"]!.GetValue<string>());
+        Assert.Equal("patrolRoute", continuedShips[2]!["activeOrder"]!["kind"]!.GetValue<string>());
+        Assert.Equal("traveling", continuedShips[2]!["strategicState"]!["kind"]!.GetValue<string>());
+        Assert.Equal("gamma", continuedShips[2]!["strategicState"]!["travel"]!["destination"]!.GetValue<string>());
+        Assert.Null(continuedShips[3]!["activeOrder"]);
+        Assert.Equal("atLocation", continuedShips[3]!["strategicState"]!["kind"]!.GetValue<string>());
         Assert.Equal(
             GamePersistence.Serialize(uninterrupted.Simulation, uninterrupted.Metadata),
             GamePersistence.Serialize(resumed.Simulation, resumed.Metadata)
