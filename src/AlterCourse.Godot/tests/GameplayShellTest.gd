@@ -21,6 +21,8 @@ func test_main_scene_constructs_gameplay_shell() -> void:
 	assert_object(screen.get_node_or_null("Shell/MapPanel")).is_not_null()
 	assert_object(screen.get_node_or_null("Shell/StatusPanel")).is_not_null()
 	assert_int(screen.get_node("%RateControls").get_child_count()).is_equal(5)
+	assert_str(screen.get_node("%AdvanceUntilButton").text).is_equal("ADVANCE UNTIL NEXT PLAYER EVENT")
+	assert_str(screen.get_node("%AdvanceUntilButton").tooltip_text).contains("player ship")
 	assert_str(screen.get_meta("load_error", "")).is_empty()
 
 
@@ -163,8 +165,8 @@ func test_quick_save_load_restores_active_operations_and_continues_scheduler() -
 	screen.get_node("%QuickSaveButton").emit_signal("pressed")
 	assert_str(screen.get_meta("quick_save_created_at_utc", "")).is_equal(created_at_utc)
 
-	screen.call("AdvanceUntilNextEvent")
-	screen.call("AdvanceUntilNextEvent")
+	screen.call("AdvanceUntilNextPlayerRelevantEvent")
+	screen.call("AdvanceUntilNextPlayerRelevantEvent")
 	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(12000)
 	assert_bool(screen.get_meta("travel_active", true)).is_false()
 
@@ -187,11 +189,11 @@ func test_quick_save_load_restores_active_operations_and_continues_scheduler() -
 	assert_int(screen.call("ProcessSyntheticDelta", 0.1)).is_equal(1)
 	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(3100)
 
-	screen.call("AdvanceUntilNextEvent")
+	screen.call("AdvanceUntilNextPlayerRelevantEvent")
 	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(8000)
 	assert_str(screen.get_meta("last_advance_event", "")).contains("SensorRepairCompletion")
 	assert_bool(screen.get_meta("travel_active", false)).is_true()
-	screen.call("AdvanceUntilNextEvent")
+	screen.call("AdvanceUntilNextPlayerRelevantEvent")
 	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(12000)
 	assert_str(screen.get_meta("last_advance_event", "")).contains("TravelArrival")
 	assert_bool(screen.get_meta("travel_active", true)).is_false()
@@ -291,14 +293,14 @@ func test_advance_until_stops_at_repair_before_arrival() -> void:
 	var screen := _create_screen()
 	screen.call("SelectDestination", "vesper-reach")
 	screen.call("RequestSelectedTravel")
-	screen.call("AdvanceUntilNextEvent")
+	screen.call("AdvanceUntilNextPlayerRelevantEvent")
 
 	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(8000)
 	assert_str(screen.get_meta("last_advance_event", "")).contains("SensorRepairCompletion")
 	assert_bool(screen.get_meta("travel_active", false)).is_true()
 	assert_float(screen.get_meta("sensor_integrity", 0.0)).is_equal_approx(1.0, 0.0001)
 
-	screen.call("AdvanceUntilNextEvent")
+	screen.call("AdvanceUntilNextPlayerRelevantEvent")
 	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(12000)
 	assert_str(screen.get_meta("last_advance_event", "")).contains("TravelArrival")
 	assert_bool(screen.get_meta("travel_active", true)).is_false()

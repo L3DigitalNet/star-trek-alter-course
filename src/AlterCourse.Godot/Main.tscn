@@ -178,8 +178,8 @@ tooltip_text = "Submit a typed tactical course command"
 unique_name_in_owner = true
 layout_mode = 2
 focus_mode = 2
-text = "ADVANCE UNTIL NEXT EVENT"
-tooltip_text = "Stop at the earliest scheduled repair or travel event"
+text = "ADVANCE UNTIL NEXT PLAYER EVENT"
+tooltip_text = "Stop at the next repair or travel event for the player ship"
 
 [node name="PersistenceControls" type="HBoxContainer" parent="Shell/StatusPanel/StatusMargin/Status"]
 layout_mode = 2

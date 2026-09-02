@@ -209,21 +209,24 @@ public partial class GameScreen : Control
         BuildDestinationButtons();
     }
 
-    /// <summary>Advances through Core to the earliest scheduled event boundary.</summary>
-    public void AdvanceUntilNextEvent()
+    /// <summary>Advances through Core to the next player-relevant event boundary.</summary>
+    public void AdvanceUntilNextPlayerRelevantEvent()
     {
         if (_simulation is null)
         {
             return;
         }
 
-        AdvanceUntilResult result = _simulation.AdvanceUntilNextScheduledEvent();
+        AdvanceUntilResult result = _simulation.AdvanceUntilNextPlayerRelevantEvent();
         string resolved =
             result.ResolvedKinds.Count == 0 ? result.Outcome.ToString() : string.Join(", ", result.ResolvedKinds);
-        _messageLabel.Text = $"Advanced to next event: {resolved}";
+        _messageLabel.Text = $"Advanced to next player event: {resolved}";
         SetMeta("last_advance_event", resolved);
         RefreshProjection();
-        BuildDestinationButtons();
+        if (result.ResolvedKinds.Contains(ScheduledWorkKind.TravelArrival))
+        {
+            BuildDestinationButtons();
+        }
     }
 
     /// <summary>Submits a visible north-east tactical course through the typed Core command.</summary>
@@ -286,7 +289,7 @@ public partial class GameScreen : Control
         _strategicMap.DestinationSelected = OnDestinationSelected;
         _travelButton.Pressed += RequestSelectedTravel;
         _courseButton.Pressed += SetDemonstrationCourse;
-        GetNode<Button>("%AdvanceUntilButton").Pressed += AdvanceUntilNextEvent;
+        GetNode<Button>("%AdvanceUntilButton").Pressed += AdvanceUntilNextPlayerRelevantEvent;
         _strategicButton.Pressed += ShowStrategicView;
         _tacticalButton.Pressed += ShowTacticalView;
         _quickSaveButton.Pressed += QuickSave;
