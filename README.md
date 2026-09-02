@@ -18,7 +18,7 @@ The design centers on a persistent simulation in which the player commands one s
 - progression through lasting consequences rather than captain levels;
 - a deterministic simulation core that can be tested without Godot.
 
-These are design goals, not claims about currently playable features. The architecture decisions under [`docs/adr/`](docs/adr/) record the approved technical direction.
+These are design goals, not claims about currently playable features. The architecture decisions under [`docs/adr/`](docs/adr/) record the approved technical direction. The near- and mid-term sequence of major development slices is tracked in [`ROADMAP.md`](ROADMAP.md).
 
 ## Technology
 
