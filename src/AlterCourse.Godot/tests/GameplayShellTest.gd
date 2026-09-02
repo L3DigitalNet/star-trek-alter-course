@@ -285,6 +285,30 @@ func test_time_driven_arrival_refreshes_connected_destination_buttons() -> void:
 
 	assert_bool(screen.get_meta("travel_active", true)).is_false()
 	assert_str(screen.get_node("%TravelStatus").text).contains("Vesper Reach")
+
+	screen.call("AdvanceUntilNextPlayerRelevantEvent")
+	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(12000)
+	assert_str(screen.get_meta("last_advance_event", "")).is_equal("NoScheduledEvent")
+	assert_str(screen.get_node("%Message").text).not_contains("TravelArrival")
+	assert_str(screen.get_node("%Message").text).not_contains("14000")
+	assert_str(screen.get_meta("last_advance_event", "")).not_contains("TravelArrival")
+
+
+func test_fixed_rate_hidden_horizon_arrival_does_not_masquerade_as_player_arrival() -> void:
+	var screen := _create_screen()
+	var initial_button_count := screen.get_node("%DestinationButtons").get_child_count()
+
+	for _step in range(23):
+		assert_int(screen.call("ProcessSyntheticDelta", 0.6)).is_equal(6)
+	assert_int(screen.call("ProcessSyntheticDelta", 0.2)).is_equal(2)
+
+	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(14000)
+	assert_bool(screen.get_meta("travel_active", true)).is_false()
+	assert_str(screen.get_meta("travel_origin", "")).is_empty()
+	assert_str(screen.get_meta("travel_destination", "")).is_empty()
+	assert_int(screen.get_meta("travel_eta_milliseconds", -1)).is_equal(-1)
+	assert_int(screen.get_node("%DestinationButtons").get_child_count()).is_equal(initial_button_count)
+	assert_str(screen.get_node("%TravelStatus").text).contains("AT LOCATION")
 	assert_bool(_find_destination_button(screen, "Vesper Reach").disabled).is_true()
 	assert_bool(_find_destination_button(screen, "Meridian Drift").disabled).is_false()
 
