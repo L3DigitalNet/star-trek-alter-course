@@ -1,0 +1,84 @@
+schema_version: "1"
+id: "engineering.icon.damaged-sensors"
+lifecycle: "placeholder"
+quality_tier: "disposable"
+kind: "icon"
+revision: 1
+purpose: "Placeholder engineering status icon for damaged or degraded sensor systems."
+output:
+  path: "src/AlterCourse.Godot/assets/icons/engineering/damaged-sensors.png"
+  format: "png"
+  width: 1024
+  height: 1024
+  transparency: "required"
+  target_display_sizes:
+    - "16"
+    - "24"
+    - "32"
+    - "64"
+visual:
+  style_profile: "engineering-icons"
+  importance: "primary"
+  tags:
+    - "engineering"
+    - "sensors"
+    - "damage"
+constraints:
+  required:
+    - "sensor dish or scanning-wave silhouette"
+    - "visible damage interruption"
+    - "recognizable at 16 pixels"
+  prohibited:
+    - "text"
+    - "watermark"
+    - "recognizable franchise insignia"
+references: []
+rights:
+  classification: "unreviewed-generated-placeholder"
+  license: null
+  attribution: null
+  source: null
+  notes: "Disposable generated placeholder; not approved for release."
+generation:
+  source_type: "generated"
+  generated_at: "2026-09-02T09:49:10.0379876+00:00"
+  run_id: "115427d8-26fe-4be3-9f3e-a9377d0b7789"
+  route: "raster-placeholder"
+  provider: "recraft-primary"
+  adapter: "recraft-images"
+  adapter_version: "1"
+  provenance_schema_version: "1"
+  model_profile: "raster"
+  model: "recraftv4_1"
+  quality_tier: "disposable"
+  final_prompt: |-
+    Asset role and semantic purpose: icon engineering.icon.damaged-sensors; Placeholder engineering status icon for damaged or degraded sensor systems.
+    Kind-specific composition guidance: compose a icon for its stated role.
+    Resolved style-profile intent: Compact engineering-system glyphs with transparent backgrounds.
+    Output and target-size requirements: exact 1024x1024 png; transparency required; target display sizes 16, 24, 32, 64 px; no external resources
+    Required constraints: recognizable at 16 pixels; sensor dish or scanning-wave silhouette; visible damage interruption; recognizable at 16 pixels
+    Prohibited content: text; text; watermark; recognizable franchise insignia
+    Reference instructions: none
+    Lifecycle reminder: placeholder assets must remain functionally clear rather than polished at any cost.
+    Prompt contract version: 3
+  prompt_sha256: "7fefca66ec42cdf95682163d7fe7b02fc3e906939d9bad7c87d4c4d0891dcd60"
+  request_sha256: "f9a38b9b0cf176be9720f4ea370ce8bac446ef35cb0cfbf20ec2dfefc376a40f"
+  effective_config_sha256: "004df19bd995374cb37c3e57a8f16569d7b0f57c9807796220a9b9aaab3f14a0"
+  provider_request_id: null
+  estimated_cost_usd: 0.08
+  actual_cost_usd: null
+validation:
+  mechanical_status: "pass"
+  mechanical_validator_version: "1"
+  mechanical_findings: []
+  semantic_status: "not-run"
+integrity:
+  sha256: "10ab41de78a6b9343d858271b00d2ae0bbc3e5706f8735775d9517ca6855f7a4"
+  byte_length: 247499
+  media_type: "image/png"
+approval:
+  approved_by: null
+  approved_at: null
+  approval_note: null
+deprecation: null
+supersedes: null

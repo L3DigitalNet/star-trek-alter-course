@@ -79,7 +79,7 @@ internal static class MechanicalValidator
         try
         {
             using var codec = SKCodec.Create(new SKMemoryStream(bytes));
-            string? codecFinding = ValidatePngCodec(codec, bytes);
+            string? codecFinding = ValidateRasterCodec(codec, bytes);
             if (codecFinding is not null)
             {
                 return Failure(codecFinding);
@@ -95,7 +95,7 @@ internal static class MechanicalValidator
             using var bitmap = new SKBitmap(decodeInfo);
             if (codec.GetPixels(decodeInfo, bitmap.GetPixels()) is not SKCodecResult.Success)
             {
-                return Failure("full PNG decode failed");
+                return Failure("full raster decode failed");
             }
 
             bool hasTransparentPixel = false;
@@ -132,18 +132,26 @@ internal static class MechanicalValidator
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
         {
-            return Failure($"PNG decode failed: {exception.Message}");
+            return Failure($"raster decode failed: {exception.Message}");
         }
     }
 
-    private static string? ValidatePngCodec(SKCodec? codec, byte[] bytes)
+    private static string? ValidateRasterCodec(SKCodec? codec, byte[] bytes)
     {
-        if (codec is null || codec.EncodedFormat != SKEncodedImageFormat.Png)
+        if (
+            codec is null
+            || codec.EncodedFormat
+                is not (SKEncodedImageFormat.Png or SKEncodedImageFormat.Jpeg or SKEncodedImageFormat.Webp)
+        )
         {
-            return "file is not a decodable PNG";
+            return "file is not a decodable PNG, JPEG, or WebP raster";
         }
 
-        return codec.FrameCount > 1 || ContainsPngAnimationControl(bytes) ? "animated PNG output is prohibited" : null;
+        return
+            codec.EncodedFormat == SKEncodedImageFormat.Png
+            && (codec.FrameCount > 1 || ContainsPngAnimationControl(bytes))
+            ? "animated PNG output is prohibited"
+            : null;
     }
 
     private static bool ContainsPngAnimationControl(byte[] bytes)

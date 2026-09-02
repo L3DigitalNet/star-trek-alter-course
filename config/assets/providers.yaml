@@ -77,9 +77,11 @@ providers:
           - "image.transparent-output"
         economics:
           currency: "USD"
-          pricing_basis: "provider-calculated"
-          effective_date: "2026-09-01"
+          estimated_cost_per_output: 0.01
+          pricing_basis: "quality-and-resolution"
+          effective_date: "2026-09-02"
         options:
+          quality: "low"
           supported_sizes: "1024x1024,1536x1024,1024x1536"
   xai-primary:
     adapter: "xai-images"
@@ -103,10 +105,13 @@ providers:
           - "image.reference-input"
         economics:
           currency: "USD"
-          estimated_cost_per_output: 0.02
-          effective_date: "2026-09-01"
+          estimated_cost_per_output: 0.04
+          pricing_basis: "quality-and-resolution"
+          effective_date: "2026-09-02"
         options:
-          supported_sizes: "none"
+          quality: "low"
+          resolution: "1k"
+          supported_sizes: "1024x1024"
   openai-reviewer:
     adapter: "openai-vision-review"
     enabled: true

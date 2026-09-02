@@ -49,20 +49,20 @@ internal static class PromptCompiler
         }
     }
 
-    public const string Version = "3";
+    public const string Version = "4";
 
     public static (string Prompt, string Hash) Compile(AssetRequest request, StyleProfile style)
     {
         var builder = new StringBuilder();
         AppendLine(builder, $"Asset role and semantic purpose: {request.Kind} {request.Id}; {request.Purpose}");
-        AppendLine(builder, $"Kind-specific composition guidance: compose a {request.Kind} for its stated role.");
+        AppendLine(builder, $"Kind-specific composition guidance: compose the {request.Kind} for its stated role.");
         AppendLine(builder, $"Resolved style-profile intent: {style.Summary}");
         AppendLine(
             builder,
             $"Output and target-size requirements: exact {request.Output.Width}x{request.Output.Height} {request.Output.Format.ToString().ToLowerInvariant()}; transparency {(request.Output.TransparencyRequired ? "required" : "optional")}; target display sizes {string.Join(", ", request.Output.TargetDisplaySizes)} px; no external resources"
         );
-        AppendLine(builder, $"Required constraints: {string.Join("; ", style.Required.Concat(request.Required))}");
-        AppendLine(builder, $"Prohibited content: {string.Join("; ", style.Prohibited.Concat(request.Prohibited))}");
+        AppendLine(builder, $"Required constraints: {Constraints(style.Required, request.Required)}");
+        AppendLine(builder, $"Prohibited content: {Constraints(style.Prohibited, request.Prohibited)}");
         AppendLine(builder, $"Reference instructions: {ReferenceInstructions(request.References)}");
         AppendLine(
             builder,
@@ -74,6 +74,9 @@ internal static class PromptCompiler
     }
 
     private static void AppendLine(StringBuilder builder, string value) => builder.Append(value).Append('\n');
+
+    private static string Constraints(IEnumerable<string> styleValues, IEnumerable<string> requestValues) =>
+        string.Join("; ", styleValues.Concat(requestValues).Distinct(StringComparer.Ordinal));
 
     private static string ReferenceInstructions(IReadOnlyList<AssetReference> references) =>
         references.Count == 0
