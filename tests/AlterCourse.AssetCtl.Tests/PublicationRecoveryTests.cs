@@ -129,6 +129,51 @@ public sealed class PublicationRecoveryTests : IDisposable
         }
     }
 
+    /// <summary>Fails closed when the transaction directory is replaced after its descriptor is opened.</summary>
+    [Fact]
+    public void PublicationTransactionSubstitutionCannotRedirectStagedWrites()
+    {
+        EffectiveConfiguration configuration = Configuration();
+        string external = Path.Combine(
+            Path.GetTempPath(),
+            "assetctl-transaction-race-external-" + Guid.NewGuid().ToString("N")
+        );
+        Directory.CreateDirectory(external);
+        byte[] bytes = "first-asset"u8.ToArray();
+        AssetManifest manifest = Manifest(bytes, revision: 1);
+        File.WriteAllText(
+            Path.Combine(root, manifest.ManifestPath),
+            ManifestStore.Serialize(manifest with { Integrity = null })
+        );
+        string? displaced = null;
+        try
+        {
+            Assert.Throws<AssetCtlException>(() =>
+                AtomicPublisher.Publish(
+                    configuration,
+                    manifest.Request.Output.Path,
+                    bytes,
+                    manifest.ManifestPath,
+                    ManifestStore.Serialize(manifest),
+                    new AtomicPublisher.PublicationTestHooks(BeforeWorkFilesWritten: transactionRoot =>
+                    {
+                        displaced = transactionRoot + ".displaced";
+                        Directory.Move(transactionRoot, displaced);
+                        Directory.CreateSymbolicLink(transactionRoot, external);
+                    })
+                )
+            );
+
+            Assert.Empty(Directory.EnumerateFileSystemEntries(external));
+            Assert.NotNull(displaced);
+            Assert.Empty(Directory.EnumerateFileSystemEntries(displaced));
+        }
+        finally
+        {
+            Directory.Delete(external, recursive: true);
+        }
+    }
+
     /// <summary>Publishes the first generated output over its authoritative manifest-only request.</summary>
     [Fact]
     public void FirstGenerationPublishesOverManifestOnlyRequest()
@@ -587,6 +632,46 @@ public sealed class PublicationRecoveryTests : IDisposable
             Assert.Throws<AssetCtlException>(() => AtomicPublisher.RecoverPending(configuration));
             Assert.True(File.Exists(journal));
             Assert.Empty(Directory.EnumerateFileSystemEntries(external));
+        }
+        finally
+        {
+            Directory.Delete(external, recursive: true);
+        }
+    }
+
+    /// <summary>Keeps a quarantine move bound to its opened directory when its pathname is replaced.</summary>
+    [Fact]
+    public void PublicationQuarantineSubstitutionCannotRedirectJournalMove()
+    {
+        EffectiveConfiguration configuration = Configuration();
+        string journalRoot = Path.Combine(root, ".assetctl", "state", "publish-transactions");
+        string external = Path.Combine(
+            Path.GetTempPath(),
+            "assetctl-quarantine-race-external-" + Guid.NewGuid().ToString("N")
+        );
+        Directory.CreateDirectory(journalRoot);
+        Directory.CreateDirectory(external);
+        string journal = Path.Combine(journalRoot, "invalid.json");
+        File.WriteAllText(journal, "not-json");
+        string? displaced = null;
+        try
+        {
+            Assert.Throws<AssetCtlException>(() =>
+                AtomicPublisher.RecoverPending(
+                    configuration,
+                    new AtomicPublisher.PublicationTestHooks(BeforeQuarantineMove: quarantineRoot =>
+                    {
+                        displaced = quarantineRoot + ".displaced";
+                        Directory.Move(quarantineRoot, displaced);
+                        Directory.CreateSymbolicLink(quarantineRoot, external);
+                    })
+                )
+            );
+
+            Assert.Empty(Directory.EnumerateFileSystemEntries(external));
+            Assert.False(File.Exists(journal));
+            Assert.NotNull(displaced);
+            Assert.Single(Directory.EnumerateFiles(displaced, "*.invalid"));
         }
         finally
         {

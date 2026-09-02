@@ -13,19 +13,155 @@ internal static partial class PublishingTypes
     internal static partial class StateFile
     {
         private const int OpenReadWrite = 0x0002;
+        private const int OpenWriteOnly = 0x0001;
         private const int OpenCreate = 0x0040;
+        private const int OpenExclusive = 0x0080;
         private const int OpenCloseOnExec = 0x80000;
         private const int OpenDirectory = 0x10000;
         private const int OpenNoFollow = 0x20000;
         private const int LockExclusive = 2;
         private const int LockNonBlocking = 4;
 
+        internal sealed class DirectoryHandle : IDisposable
+        {
+            private readonly SafeFileHandle handle;
+
+            private DirectoryHandle(SafeFileHandle handle, string path)
+            {
+                this.handle = handle;
+                Path = path;
+            }
+
+            public string Path { get; }
+
+            public static DirectoryHandle OpenExisting(string path, string field)
+            {
+                RequireLinux(field);
+                int descriptor = Open(path, OpenDirectory | OpenNoFollow | OpenCloseOnExec, 0);
+                if (descriptor < 0)
+                {
+                    throw new AssetCtlException($"{field}: directory is unavailable or unsafe.", 7);
+                }
+
+                return new DirectoryHandle(new SafeFileHandle(descriptor, ownsHandle: true), path);
+            }
+
+            public DirectoryHandle CreateChild(string leaf, string field)
+            {
+                if (MkdirAt(Descriptor, leaf, 0x1C0) != 0)
+                {
+                    throw new AssetCtlException($"{field}: directory could not be created safely.", 7);
+                }
+
+                int descriptor = OpenAt(Descriptor, leaf, OpenDirectory | OpenNoFollow | OpenCloseOnExec, 0);
+                if (descriptor < 0)
+                {
+                    throw new AssetCtlException($"{field}: directory is unavailable or unsafe.", 7);
+                }
+
+                return new DirectoryHandle(
+                    new SafeFileHandle(descriptor, ownsHandle: true),
+                    System.IO.Path.Combine(Path, leaf)
+                );
+            }
+
+            public DirectoryHandle OpenChild(string leaf, string field)
+            {
+                int descriptor = OpenAt(Descriptor, leaf, OpenDirectory | OpenNoFollow | OpenCloseOnExec, 0);
+                if (descriptor < 0)
+                {
+                    throw new AssetCtlException($"{field}: directory is unavailable or unsafe.", 7);
+                }
+
+                return new DirectoryHandle(
+                    new SafeFileHandle(descriptor, ownsHandle: true),
+                    System.IO.Path.Combine(Path, leaf)
+                );
+            }
+
+            public FileStream CreateFile(string leaf, string field)
+            {
+                int descriptor = OpenAt(
+                    Descriptor,
+                    leaf,
+                    OpenWriteOnly | OpenCreate | OpenExclusive | OpenNoFollow | OpenCloseOnExec,
+                    0x180
+                );
+                if (descriptor < 0)
+                {
+                    throw new AssetCtlException($"{field}: file could not be created safely.", 7);
+                }
+
+                return new FileStream(new SafeFileHandle(descriptor, ownsHandle: true), FileAccess.Write);
+            }
+
+            public FileStream CreateLockedFile(string leaf, string field)
+            {
+                int descriptor = OpenAt(
+                    Descriptor,
+                    leaf,
+                    OpenReadWrite | OpenCreate | OpenExclusive | OpenNoFollow | OpenCloseOnExec,
+                    0x180
+                );
+                if (descriptor < 0)
+                {
+                    throw new AssetCtlException($"{field}: file could not be created safely.", 7);
+                }
+
+                var fileHandle = new SafeFileHandle(descriptor, ownsHandle: true);
+                if (Flock(fileHandle, LockExclusive | LockNonBlocking) != 0)
+                {
+                    fileHandle.Dispose();
+                    throw new AssetCtlException($"{field}: file could not be locked safely.", 7);
+                }
+
+                return new FileStream(fileHandle, FileAccess.ReadWrite);
+            }
+
+            public string DescriptorPath(string leaf) => $"/proc/self/fd/{Descriptor}/{leaf}";
+
+            public void MoveTo(string sourceLeaf, string destination, string field)
+            {
+                string destinationDirectory = System.IO.Path.GetDirectoryName(destination)!;
+                using DirectoryHandle target = OpenExisting(destinationDirectory, field);
+                if (RenameAt(Descriptor, sourceLeaf, target.Descriptor, System.IO.Path.GetFileName(destination)) != 0)
+                {
+                    throw new AssetCtlException($"{field}: descriptor-bound move failed.", 7);
+                }
+            }
+
+            public void MoveTo(string sourceLeaf, DirectoryHandle target, string destinationLeaf, string field)
+            {
+                if (RenameAt(Descriptor, sourceLeaf, target.Descriptor, destinationLeaf) != 0)
+                {
+                    throw new AssetCtlException($"{field}: descriptor-bound move failed.", 7);
+                }
+            }
+
+            public void EnsureStillNamed(string field)
+            {
+                string? boundPath = new FileInfo($"/proc/self/fd/{Descriptor}").LinkTarget;
+                if (
+                    boundPath is null
+                    || !string.Equals(
+                        System.IO.Path.GetFullPath(boundPath),
+                        System.IO.Path.GetFullPath(Path),
+                        StringComparison.Ordinal
+                    )
+                )
+                {
+                    throw new AssetCtlException($"{field}: directory changed during the operation.", 7);
+                }
+            }
+
+            public void Dispose() => handle.Dispose();
+
+            private int Descriptor => handle.DangerousGetHandle().ToInt32();
+        }
+
         public static FileStream OpenLockedLeaf(string directory, string leaf, string field)
         {
-            if (!OperatingSystem.IsLinux())
-            {
-                throw new AssetCtlException($"{field}: secure no-follow locking requires Linux.", 7);
-            }
+            RequireLinux(field);
 
             int directoryDescriptor = Open(directory, OpenDirectory | OpenNoFollow | OpenCloseOnExec, 0);
             if (directoryDescriptor < 0)
@@ -63,11 +199,35 @@ internal static partial class PublishingTypes
             }
         }
 
+        private static void RequireLinux(string field)
+        {
+            if (!OperatingSystem.IsLinux())
+            {
+                throw new AssetCtlException($"{field}: secure descriptor-bound state access requires Linux.", 7);
+            }
+        }
+
         [LibraryImport("libc", EntryPoint = "open", SetLastError = true, StringMarshalling = StringMarshalling.Utf8)]
         private static partial int Open(string path, int flags, uint mode);
 
         [LibraryImport("libc", EntryPoint = "openat", SetLastError = true, StringMarshalling = StringMarshalling.Utf8)]
         private static partial int OpenAt(int directoryDescriptor, string path, int flags, uint mode);
+
+        [LibraryImport("libc", EntryPoint = "mkdirat", SetLastError = true, StringMarshalling = StringMarshalling.Utf8)]
+        private static partial int MkdirAt(int directoryDescriptor, string path, uint mode);
+
+        [LibraryImport(
+            "libc",
+            EntryPoint = "renameat",
+            SetLastError = true,
+            StringMarshalling = StringMarshalling.Utf8
+        )]
+        private static partial int RenameAt(
+            int oldDirectoryDescriptor,
+            string oldPath,
+            int newDirectoryDescriptor,
+            string newPath
+        );
 
         [LibraryImport("libc", EntryPoint = "flock", SetLastError = true)]
         private static partial int Flock(SafeFileHandle descriptor, int operation);
@@ -158,9 +318,11 @@ internal static partial class PublishingTypes
         }
 
         internal sealed record PublicationTestHooks(
+            Action<string>? BeforeWorkFilesWritten = null,
             Action<string, string>? AfterWorkFilesStaged = null,
             Action<PublicationMove>? BeforeMove = null,
-            Action<PublicationMove>? AfterMove = null
+            Action<PublicationMove>? AfterMove = null,
+            Action<string>? BeforeQuarantineMove = null
         );
 
         internal sealed class SimulatedPublicationInterruptionException : Exception;
@@ -260,15 +422,22 @@ internal static partial class PublishingTypes
                     journal,
                     staged.TransactionRoot,
                     staged.LeasePath,
-                    staged.Lease
+                    staged.Lease,
+                    staged.TransactionDirectory
                 );
             }
             catch
             {
-                staged.Lease.Dispose();
-                DeleteTree(staged.TransactionRoot);
+                DisposeStaged(staged);
                 throw;
             }
+        }
+
+        private static void DisposeStaged(StagedPublication staged)
+        {
+            staged.Lease.Dispose();
+            staged.TransactionDirectory.Dispose();
+            DeleteTree(staged.TransactionRoot);
         }
 
         private static (bool AssetExisted, bool ManifestExisted) ValidateExistingState(
@@ -332,36 +501,35 @@ internal static partial class PublishingTypes
         )
         {
             string transaction = Guid.NewGuid().ToString("N");
-            string workRoot = PathPolicy.ResolveUnder(
-                configuration.RepositoryRoot,
-                configuration.Paths.WorkRoot,
-                "work_root",
-                allowMissing: true
-            );
-            string publishRoot = EnsureFixedDirectory(workRoot, "publish", "publication staging root");
-            string transactionRoot = Path.Combine(publishRoot, transaction);
-            AssetLock.RejectReparsePoint(transactionRoot, "publication transaction root");
-            Directory.CreateDirectory(transactionRoot);
-            AssetLock.RejectReparsePoint(transactionRoot, "publication transaction root");
+            StateFile.DirectoryHandle transactionDirectory = CreateTransactionDirectory(configuration, transaction);
+            string transactionRoot = transactionDirectory.Path;
             string leasePath = Path.Combine(transactionRoot, LeaseFileName);
             FileStream? lease = null;
             string assetStage = Path.Combine(transactionRoot, "asset.stage");
             string manifestStage = Path.Combine(transactionRoot, "manifest.stage");
             try
             {
-                lease = new FileStream(leasePath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None);
+                testHooks?.BeforeWorkFilesWritten?.Invoke(transactionRoot);
+                transactionDirectory.EnsureStillNamed("publication transaction root");
+                lease = transactionDirectory.CreateLockedFile(LeaseFileName, "publication lease");
                 JsonSerializer.Serialize(
                     lease,
                     new { process_id = Environment.ProcessId, acquired_at = DateTimeOffset.UtcNow },
                     JournalJsonOptions
                 );
                 lease.Flush(flushToDisk: true);
-                WriteDurable(assetStage, assetBytes);
-                WriteDurable(manifestStage, new UTF8Encoding(false).GetBytes(manifestText));
+                WriteDurable(transactionDirectory, "asset.stage", assetBytes, "staged asset");
+                WriteDurable(
+                    transactionDirectory,
+                    "manifest.stage",
+                    new UTF8Encoding(false).GetBytes(manifestText),
+                    "staged manifest"
+                );
                 testHooks?.AfterWorkFilesStaged?.Invoke(assetStage, manifestStage);
+                transactionDirectory.EnsureStillNamed("publication transaction root");
                 (string assetHash, long assetLength, string manifestHash) = VerifyStaged(
-                    assetStage,
-                    manifestStage,
+                    transactionDirectory.DescriptorPath("asset.stage"),
+                    transactionDirectory.DescriptorPath("manifest.stage"),
                     assetBytes,
                     manifestText
                 );
@@ -374,15 +542,36 @@ internal static partial class PublishingTypes
                     assetLength,
                     manifestHash,
                     leasePath,
-                    lease
+                    lease,
+                    transactionDirectory
                 );
             }
             catch
             {
                 lease?.Dispose();
+                transactionDirectory.Dispose();
                 DeleteTree(transactionRoot);
                 throw;
             }
+        }
+
+        private static StateFile.DirectoryHandle CreateTransactionDirectory(
+            EffectiveConfiguration configuration,
+            string transaction
+        )
+        {
+            string workRoot = PathPolicy.ResolveUnder(
+                configuration.RepositoryRoot,
+                configuration.Paths.WorkRoot,
+                "work_root",
+                allowMissing: true
+            );
+            string publishRoot = EnsureFixedDirectory(workRoot, "publish", "publication staging root");
+            using var publishDirectory = StateFile.DirectoryHandle.OpenExisting(
+                publishRoot,
+                "publication staging root"
+            );
+            return publishDirectory.CreateChild(transaction, "publication transaction root");
         }
 
         private static void PublishPrepared(
@@ -406,8 +595,14 @@ internal static partial class PublishingTypes
                     Move(publication.Manifest, journal.ManifestBackupPath, PublicationMove.BackupManifest, testHooks);
                 }
 
-                Move(journal.AssetStagePath, publication.Asset, PublicationMove.InstallAsset, testHooks);
-                Move(journal.ManifestStagePath, publication.Manifest, PublicationMove.InstallManifest, testHooks);
+                MoveStaged(publication, "asset.stage", publication.Asset, PublicationMove.InstallAsset, testHooks);
+                MoveStaged(
+                    publication,
+                    "manifest.stage",
+                    publication.Manifest,
+                    PublicationMove.InstallManifest,
+                    testHooks
+                );
                 if (!NewPairMatches(journal, publication.Asset, publication.Manifest))
                 {
                     throw new AssetCtlException("Published pair does not match its staged integrity evidence.", 7);
@@ -428,7 +623,10 @@ internal static partial class PublishingTypes
             }
         }
 
-        internal static PublicationRecoveryResult RecoverPending(EffectiveConfiguration configuration)
+        internal static PublicationRecoveryResult RecoverPending(
+            EffectiveConfiguration configuration,
+            PublicationTestHooks? testHooks = null
+        )
         {
             string journalRoot = JournalRoot(configuration);
             if (!Directory.Exists(journalRoot))
@@ -448,7 +646,7 @@ internal static partial class PublishingTypes
                 }
                 catch (Exception exception) when (exception is JsonException or InvalidDataException)
                 {
-                    string quarantined = QuarantineJournal(journalRoot, path);
+                    string quarantined = QuarantineJournal(journalRoot, path, testHooks);
                     throw new AssetCtlException(
                         $"Publication journal '{Path.GetFileName(path)}' is invalid and was quarantined as "
                             + $"'{Path.GetFileName(quarantined)}': {exception.Message}",
@@ -470,7 +668,7 @@ internal static partial class PublishingTypes
                 }
                 catch (AssetCtlException exception)
                 {
-                    string quarantined = QuarantineJournal(journalRoot, path);
+                    string quarantined = QuarantineJournal(journalRoot, path, testHooks);
                     throw new AssetCtlException(
                         $"Publication journal '{Path.GetFileName(path)}' was unsafe and was quarantined as "
                             + $"'{Path.GetFileName(quarantined)}': {exception.Message}",
@@ -556,7 +754,7 @@ internal static partial class PublishingTypes
             }
         }
 
-        private static string QuarantineJournal(string journalRoot, string path)
+        private static string QuarantineJournal(string journalRoot, string path, PublicationTestHooks? testHooks)
         {
             string fullRoot = Path.GetFullPath(journalRoot);
             string fullPath = Path.GetFullPath(path);
@@ -573,7 +771,18 @@ internal static partial class PublishingTypes
                 quarantineRoot,
                 Path.GetFileNameWithoutExtension(fullPath) + "." + Guid.NewGuid().ToString("N") + ".invalid"
             );
-            File.Move(fullPath, destination);
+            using var journalDirectory = StateFile.DirectoryHandle.OpenExisting(fullRoot, "publication journal root");
+            using StateFile.DirectoryHandle quarantineDirectory = journalDirectory.OpenChild(
+                "quarantine",
+                "publication quarantine root"
+            );
+            testHooks?.BeforeQuarantineMove?.Invoke(quarantineRoot);
+            journalDirectory.MoveTo(
+                Path.GetFileName(fullPath),
+                quarantineDirectory,
+                Path.GetFileName(destination),
+                "publication journal quarantine"
+            );
             return destination;
         }
 
@@ -622,6 +831,19 @@ internal static partial class PublishingTypes
         {
             testHooks?.BeforeMove?.Invoke(move);
             File.Move(source, destination);
+            testHooks?.AfterMove?.Invoke(move);
+        }
+
+        private static void MoveStaged(
+            PreparedPublication publication,
+            string sourceLeaf,
+            string destination,
+            PublicationMove move,
+            PublicationTestHooks? testHooks
+        )
+        {
+            testHooks?.BeforeMove?.Invoke(move);
+            publication.TransactionDirectory.MoveTo(sourceLeaf, destination, "publication staging move");
             testHooks?.AfterMove?.Invoke(move);
         }
 
@@ -809,6 +1031,13 @@ internal static partial class PublishingTypes
             stream.Flush(flushToDisk: true);
         }
 
+        private static void WriteDurable(StateFile.DirectoryHandle directory, string leaf, byte[] bytes, string field)
+        {
+            using FileStream stream = directory.CreateFile(leaf, field);
+            stream.Write(bytes);
+            stream.Flush(flushToDisk: true);
+        }
+
         private static string Hash(byte[] bytes) => Convert.ToHexStringLower(SHA256.HashData(bytes));
 
         private static bool IsSha256(string? value) =>
@@ -855,7 +1084,8 @@ internal static partial class PublishingTypes
                 PublicationJournal recoveryJournal,
                 string transactionRoot,
                 string leasePath,
-                FileStream lease
+                FileStream lease,
+                StateFile.DirectoryHandle transactionDirectory
             )
             {
                 Asset = asset;
@@ -866,6 +1096,7 @@ internal static partial class PublishingTypes
                 this.transactionRoot = transactionRoot;
                 this.leasePath = leasePath;
                 this.lease = lease;
+                TransactionDirectory = transactionDirectory;
             }
 
             private readonly string transactionRoot;
@@ -882,9 +1113,12 @@ internal static partial class PublishingTypes
 
             public PublicationJournal RecoveryJournal { get; }
 
+            public StateFile.DirectoryHandle TransactionDirectory { get; }
+
             public void Dispose()
             {
                 lease.Dispose();
+                TransactionDirectory.Dispose();
                 DeleteIfExists(leasePath);
                 if (Directory.Exists(transactionRoot) && !Directory.EnumerateFileSystemEntries(transactionRoot).Any())
                 {
@@ -902,7 +1136,8 @@ internal static partial class PublishingTypes
             long AssetLength,
             string ManifestHash,
             string LeasePath,
-            FileStream Lease
+            FileStream Lease,
+            StateFile.DirectoryHandle TransactionDirectory
         );
     }
 
