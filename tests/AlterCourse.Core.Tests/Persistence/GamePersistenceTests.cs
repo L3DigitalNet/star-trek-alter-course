@@ -561,9 +561,8 @@ public sealed class GamePersistenceTests
     private static ShipDefinition CreateDefinition() =>
         new(
             new ShipDefinitionId("pathfinder"),
-            "USS Pathfinder",
+            "Pathfinder class",
             new SpeedKilometersPerSecond(10),
-            new SensorIntegrity(0.4),
             new SimulationDuration(8000)
         );
 
@@ -571,16 +570,15 @@ public sealed class GamePersistenceTests
     {
         const string definition = """
             {
-              "schemaVersion": 1,
+              "schemaVersion": 2,
               "id": "pathfinder",
-              "displayName": "USS Pathfinder",
+              "designDisplayName": "Pathfinder class",
               "maximumTacticalSpeedKilometersPerSecond": 10,
-              "initialSensorIntegrity": 0.4,
               "sensorRepairDurationMilliseconds": 8000
             }
             """;
         string schema = File.ReadAllText(
-            Path.Combine(FindRepositoryRoot(), "src/AlterCourse.Godot/content/schemas/ship-definition-v1.schema.json")
+            Path.Combine(FindRepositoryRoot(), "src/AlterCourse.Godot/content/schemas/ship-definition-v2.schema.json")
         );
         return new ShipDefinitionCatalogLoader(schema).LoadCatalog([
             ShipDefinitionContent.FromText("pathfinder.json", definition),

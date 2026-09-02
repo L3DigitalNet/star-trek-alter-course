@@ -14,7 +14,7 @@ namespace AlterCourse.Godot.Gameplay;
 /// <summary>Owns one scene-lifetime simulation and projects it into the command shell.</summary>
 public partial class GameScreen : Control
 {
-    private const string SchemaPath = "res://content/schemas/ship-definition-v1.schema.json";
+    private const string SchemaPath = "res://content/schemas/ship-definition-v2.schema.json";
     private const string ShipPath = "res://content/ships/pathfinder.json";
     private const string DefaultQuickSaveUserPath = "user://quick-save-v1.json";
     private const string QuickSaveId = "quick-save";

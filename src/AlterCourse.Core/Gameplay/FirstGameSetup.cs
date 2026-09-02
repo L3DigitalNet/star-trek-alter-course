@@ -14,13 +14,7 @@ public static class FirstGameSetup
     public static GameSimulation Create(ShipDefinition playerShipDefinition)
     {
         ArgumentNullException.ThrowIfNull(playerShipDefinition);
-        if (playerShipDefinition.InitialSensorIntegrity.Value >= 1)
-        {
-            throw new ArgumentException(
-                "The first setup requires damaged initial sensors.",
-                nameof(playerShipDefinition)
-            );
-        }
+        var initialSensorIntegrity = new SensorIntegrity(0.4);
 
         (StrategicMap map, LocationId startingLocation) = CreateMap(playerShipDefinition.SensorRepairDuration);
 
@@ -32,7 +26,7 @@ public static class FirstGameSetup
             .Create()
             .Schedule(repairCompletion, ScheduledWorkKind.SensorRepairCompletion);
         var repair = new SensorRepairState(
-            playerShipDefinition.InitialSensorIntegrity,
+            initialSensorIntegrity,
             new SensorIntegrity(1),
             initialTime,
             repairCompletion,
@@ -43,7 +37,7 @@ public static class FirstGameSetup
             playerShipDefinition.Id,
             new TacticalPosition(3.25, -7.5),
             new TacticalMotion(new HeadingDegrees(0), new SpeedKilometersPerSecond(0)),
-            playerShipDefinition.InitialSensorIntegrity,
+            initialSensorIntegrity,
             repair
         );
         var state = new SimulationState(

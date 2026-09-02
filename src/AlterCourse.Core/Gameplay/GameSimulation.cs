@@ -335,7 +335,7 @@ public sealed class GameSimulation
         return new PlayerShipProjection(
             state.PlayerShip.InstanceId,
             state.PlayerShip.DefinitionId,
-            state.PlayerShipDefinition.DisplayName,
+            state.PlayerShipDefinition.DesignDisplayName,
             new TacticalProjection(
                 new TacticalPositionProjection(
                     state.PlayerShip.TacticalPosition.XKilometers,

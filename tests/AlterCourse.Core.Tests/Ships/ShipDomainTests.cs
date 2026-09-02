@@ -38,7 +38,6 @@ public sealed class ShipDomainTests
                 new ShipDefinitionId("ship"),
                 " ",
                 new SpeedKilometersPerSecond(1),
-                new SensorIntegrity(0.5),
                 new SimulationDuration(8000)
             )
         );
@@ -47,7 +46,6 @@ public sealed class ShipDomainTests
                 new ShipDefinitionId("ship"),
                 "Ship",
                 new SpeedKilometersPerSecond(1),
-                new SensorIntegrity(0.5),
                 new SimulationDuration(8050)
             )
         );
