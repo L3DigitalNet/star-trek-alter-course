@@ -427,15 +427,18 @@ internal static class CliTypes
 
         private static object Verify(EffectiveConfiguration configuration, CliOptions options)
         {
-            string? target = options.Value("asset-id");
+            string? assetId = options.Value("asset-id");
+            string? manifestPath = options.Value("manifest");
             global::System.Collections.Generic.IReadOnlyList<global::AlterCourse.AssetCtl.Domain.DomainModels.AssetManifest> selected =
-                target is null ? ManifestStore.LoadAll(configuration) : [ResolveManifest(configuration, options)];
+                assetId is null && manifestPath is null
+                    ? ManifestStore.LoadAll(configuration)
+                    : [ResolveManifest(configuration, options)];
             List<object> results = [];
             foreach (global::AlterCourse.AssetCtl.Domain.DomainModels.AssetManifest manifest in selected)
             {
                 ManifestStore.VerifyIntegrity(configuration, manifest);
                 byte[] bytes = File.ReadAllBytes(
-                    Path.Combine(configuration.RepositoryRoot, manifest.Request.Output.Path)
+                    PathPolicy.ResolveOutputPath(configuration, manifest.Request.Output.Path, allowMissing: false)
                 );
                 global::AlterCourse.AssetCtl.Domain.DomainModels.MechanicalValidationResult mechanical =
                     MechanicalValidator.Validate(
@@ -482,7 +485,11 @@ internal static class CliTypes
 
             (string actor, string note) = ValidateApprovalEligibility(configuration, manifest, options);
 
-            string assetPath = Path.Combine(configuration.RepositoryRoot, manifest.Request.Output.Path);
+            string assetPath = PathPolicy.ResolveOutputPath(
+                configuration,
+                manifest.Request.Output.Path,
+                allowMissing: false
+            );
             string beforeHash = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(assetPath)));
             global::AlterCourse.AssetCtl.Domain.DomainModels.AssetManifest approved = manifest with
             {
@@ -527,8 +534,8 @@ internal static class CliTypes
                 throw new AssetCtlException("Only a candidate can be approved.", 8);
             }
 
-            string actor = options.Required("approved-by");
-            string note = options.Required("approval-note");
+            string actor = RequiredText(options, "approved-by");
+            string note = RequiredText(options, "approval-note");
             if (
                 !string.Equals(
                     options.Required("confirm-approved-asset"),
@@ -569,8 +576,8 @@ internal static class CliTypes
                 throw new AssetCtlException("Deprecated assets cannot be deprecated again.", 8);
             }
 
-            string actor = options.Required("actor");
-            string reason = options.Required("reason");
+            string actor = RequiredText(options, "actor");
+            string reason = RequiredText(options, "reason");
             if (
                 manifest.Request.Lifecycle == AssetLifecycle.Approved
                 && !string.Equals(
@@ -617,16 +624,27 @@ internal static class CliTypes
         private static AssetManifest ResolveManifest(EffectiveConfiguration configuration, CliOptions options)
         {
             string? manifestPath = options.Value("manifest");
+            string? assetId = options.Value("asset-id");
+            if (manifestPath is not null && assetId is not null)
+            {
+                throw new AssetCtlException("--manifest and --asset-id are mutually exclusive.", 2);
+            }
             if (manifestPath is not null)
             {
                 return ManifestStore.LoadCatalogEntry(configuration, manifestPath);
             }
 
-            string id = options.Required("asset-id");
+            string id = assetId ?? throw new AssetCtlException("--asset-id or --manifest is required.", 2);
             return ManifestStore
                     .LoadAll(configuration)
                     .SingleOrDefault(manifest => string.Equals(manifest.Request.Id, id, StringComparison.Ordinal))
                 ?? throw new AssetCtlException($"Asset '{id}' was not found.", 1);
+        }
+
+        private static string RequiredText(CliOptions options, string key)
+        {
+            string value = options.Required(key).Trim();
+            return value.Length > 0 ? value : throw new AssetCtlException($"--{key} must not be blank.", 2);
         }
 
         private static string Human(string command, object result) =>
@@ -652,6 +670,9 @@ internal static class CliTypes
             Commands: validate-config, doctor, find, status, plan, generate, verify, approve, deprecate
             Common: --output human|json; --offline; --dry-run
             Asset selection: --asset-id ID or --manifest PATH
+            generate: --force --dry-run --offline
+            approve: --approved-by --approval-note --confirm-approved-asset --dry-run
+            deprecate: --actor --reason --confirm-approved-asset --dry-run
             """;
     }
 

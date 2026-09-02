@@ -118,7 +118,7 @@ internal static class ManifestStore
             integrity,
             approval,
             root.OptionalScalar("supersedes", "manifest"),
-            Path.GetRelativePath(configuration.RepositoryRoot, absolute),
+            CanonicalRelativePath(configuration.RepositoryRoot, absolute),
             deprecation
         );
     }
@@ -126,7 +126,7 @@ internal static class ManifestStore
     public static AssetManifest LoadCatalogEntry(EffectiveConfiguration configuration, string path)
     {
         string absolute = PathPolicy.ResolveManifestPath(configuration, path, allowMissing: false);
-        string relative = Path.GetRelativePath(configuration.RepositoryRoot, absolute);
+        string relative = CanonicalRelativePath(configuration.RepositoryRoot, absolute);
         return LoadAll(configuration)
                 .SingleOrDefault(manifest => string.Equals(manifest.ManifestPath, relative, StringComparison.Ordinal))
             ?? throw new AssetCtlException("Manifest is not an authoritative entry in the configured catalog.", 2);
@@ -139,7 +139,13 @@ internal static class ManifestStore
     )
     {
         AssetManifest owner = LoadCatalogEntry(configuration, manifestPath);
-        if (!string.Equals(owner.Request.Output.Path, outputPath, StringComparison.Ordinal))
+        if (
+            !string.Equals(
+                owner.Request.Output.Path,
+                CanonicalOutputPath(configuration, outputPath),
+                StringComparison.Ordinal
+            )
+        )
         {
             throw new AssetCtlException("Publication output is not owned by the selected catalog manifest.", 2);
         }
@@ -274,23 +280,7 @@ internal static class ManifestStore
             "transparency",
             "target_display_sizes"
         );
-        string outputPath = node.Scalar("path", "manifest.output");
-        string assetRoot = PathPolicy.ResolveUnder(
-            configuration.RepositoryRoot,
-            configuration.Paths.GodotAssetRoot,
-            "godot_asset_root",
-            allowMissing: true
-        );
-        string resolvedOutput = PathPolicy.ResolveUnder(
-            configuration.RepositoryRoot,
-            outputPath,
-            "manifest.output.path",
-            allowMissing: true
-        );
-        if (!resolvedOutput.StartsWith(assetRoot + Path.DirectorySeparatorChar, StringComparison.Ordinal))
-        {
-            throw new AssetCtlException("manifest.output.path: output is outside Godot asset root.", 2);
-        }
+        string outputPath = CanonicalOutputPath(configuration, node.Scalar("path", "manifest.output"));
 
         AssetFormat format = node.Scalar("format", "manifest.output") switch
         {
@@ -564,12 +554,7 @@ internal static class ManifestStore
             throw new AssetCtlException($"{manifest.Request.Id}: manifest has no integrity record.", 1);
         }
 
-        string path = PathPolicy.ResolveUnder(
-            configuration.RepositoryRoot,
-            manifest.Request.Output.Path,
-            "asset output",
-            allowMissing: false
-        );
+        string path = PathPolicy.ResolveOutputPath(configuration, manifest.Request.Output.Path, allowMissing: false);
         byte[] bytes = File.ReadAllBytes(path);
         string hash = Convert.ToHexStringLower(SHA256.HashData(bytes));
         if (
@@ -581,6 +566,16 @@ internal static class ManifestStore
         }
     }
 
+    private static string CanonicalOutputPath(EffectiveConfiguration configuration, string path)
+    {
+        string platformPath = path.Replace('\\', Path.DirectorySeparatorChar);
+        string absolute = PathPolicy.ResolveOutputPath(configuration, platformPath, allowMissing: true);
+        return CanonicalRelativePath(configuration.RepositoryRoot, absolute);
+    }
+
+    private static string CanonicalRelativePath(string repositoryRoot, string absolutePath) =>
+        Path.GetRelativePath(repositoryRoot, absolutePath).Replace(Path.DirectorySeparatorChar, '/');
+
     private static List<AssetReference> ReadReferences(YamlSequenceNode? node)
     {
         if (node is null)
@@ -589,8 +584,12 @@ internal static class ManifestStore
         }
 
         var result = new List<AssetReference>();
-        foreach (global::YamlDotNet.RepresentationModel.YamlMappingNode item in node.Children.Cast<YamlMappingNode>())
+        for (int index = 0; index < node.Children.Count; index++)
         {
+            if (node.Children[index] is not YamlMappingNode item)
+            {
+                throw new AssetCtlException($"manifest.references[{index}]: expected a mapping.", 2);
+            }
             item.RequireOnly("manifest.references", "path", "sha256", "rights_basis");
             result.Add(
                 new AssetReference(

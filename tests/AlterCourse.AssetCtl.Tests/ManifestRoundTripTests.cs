@@ -269,6 +269,25 @@ public sealed class ManifestRoundTripTests : IDisposable
         Assert.Contains(path, exception.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>Reports a non-mapping reference as a path-specific manifest usage error.</summary>
+    [Fact]
+    public void MalformedReferenceNodeReturnsUsageError()
+    {
+        EffectiveConfiguration configuration = Configuration();
+        AssetManifest manifest = Manifest();
+        string serialized = ManifestStore
+            .Serialize(manifest)
+            .Replace("references: []", "references: ['not-a-map']", StringComparison.Ordinal);
+        File.WriteAllText(Path.Combine(root, manifest.ManifestPath), serialized);
+
+        AssetCtlException exception = Assert.Throws<AssetCtlException>(() =>
+            ManifestStore.Load(configuration, manifest.ManifestPath)
+        );
+
+        Assert.Equal(2, exception.ExitCode);
+        Assert.Contains("manifest.references", exception.Message, StringComparison.Ordinal);
+    }
+
     /// <summary>Rejects noncanonical prompt line endings instead of changing hash-bearing provenance bytes.</summary>
     [Fact]
     public void SerializationRejectsCarriageReturnsInFinalPrompt()

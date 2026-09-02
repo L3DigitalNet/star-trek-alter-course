@@ -16,7 +16,7 @@ internal static class Program
         try
         {
             string? repository = TryFindRepository();
-            string? logRoot = TryLoadLogRoot(repository);
+            string? logRoot = ResolveLogRoot(arguments, repository);
             using ILoggerFactory loggerFactory = CreateLoggerFactory(repository, logRoot);
             using var httpClient = new HttpClient(CreateProviderHandler());
             return await RunAsync(arguments, loggerFactory, httpClient).ConfigureAwait(false);
@@ -29,6 +29,11 @@ internal static class Program
 
     internal static SocketsHttpHandler CreateProviderHandler() =>
         new() { AllowAutoRedirect = false, ConnectTimeout = TimeSpan.FromSeconds(15) };
+
+    internal static string? ResolveLogRoot(string[] arguments, string? repository) =>
+        string.Equals(arguments.FirstOrDefault(), "validate-config", StringComparison.Ordinal)
+            ? null
+            : TryLoadLogRoot(repository);
 
     internal static ILoggerFactory CreateLoggerFactory(string? repository, string? configuredLogRoot = ".assetctl/logs")
     {

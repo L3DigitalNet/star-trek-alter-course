@@ -7,6 +7,29 @@ namespace AlterCourse.AssetCtl.Tests;
 /// <summary>Verifies CLI parsing, lifecycle review gates, and diagnostic redaction.</summary>
 public sealed class CliAndLifecycleTests
 {
+    /// <summary>Keeps validate-config on stderr-only logging so an absent runtime-state root remains absent.</summary>
+    [Fact]
+    public void ValidateConfigLoggingCreatesNoRuntimeState()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"assetctl-validate-no-write-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            string? logRoot = AlterCourse.AssetCtl.Program.ResolveLogRoot(["validate-config"], root);
+            using Microsoft.Extensions.Logging.ILoggerFactory logger = AlterCourse.AssetCtl.Program.CreateLoggerFactory(
+                root,
+                logRoot
+            );
+
+            Assert.Null(logRoot);
+            Assert.False(Directory.Exists(Path.Combine(root, ".assetctl")));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     /// <summary>Provides one complete accepted option set for each public command.</summary>
     public static TheoryData<string, string[]> CommandOptions =>
         new()

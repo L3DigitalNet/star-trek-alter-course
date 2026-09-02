@@ -78,6 +78,81 @@ public sealed class PublishingAndBoundaryTests
         }
     }
 
+    /// <summary>Rejects a symlinked lock directory without touching its arbitrary external target.</summary>
+    [Fact]
+    public void AssetLockRejectsSymlinkedLockDirectoryBeforeCreatingLockFile()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "assetctl-lock-root-" + Guid.NewGuid().ToString("N"));
+        string external = Path.Combine(Path.GetTempPath(), "assetctl-lock-external-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "state"));
+        Directory.CreateDirectory(external);
+        Directory.CreateSymbolicLink(Path.Combine(root, "state", "locks"), external);
+        EffectiveConfiguration configuration = Configuration(root);
+        try
+        {
+            Assert.Throws<AssetCtlException>(() => AssetLock.Acquire(configuration, "ui.test.asset"));
+            Assert.Empty(Directory.EnumerateFileSystemEntries(external));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+            Directory.Delete(external, recursive: true);
+        }
+    }
+
+    /// <summary>Rejects a symlinked lock file before opening or truncating its arbitrary target.</summary>
+    [Fact]
+    public void AssetLockRejectsSymlinkedLockFileBeforeTruncatingTarget()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "assetctl-lock-file-" + Guid.NewGuid().ToString("N"));
+        string external = Path.Combine(Path.GetTempPath(), "assetctl-lock-target-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "state", "locks"));
+        File.WriteAllText(external, "unchanged");
+        File.CreateSymbolicLink(Path.Combine(root, "state", "locks", "catalog.lock"), external);
+        EffectiveConfiguration configuration = Configuration(root);
+        try
+        {
+            Assert.Throws<AssetCtlException>(() => AssetLock.Acquire(configuration, "ui.test.asset"));
+            Assert.Equal("unchanged", File.ReadAllText(external));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+            File.Delete(external);
+        }
+    }
+
+    /// <summary>Rejects asset reads redirected within the repository but outside the configured output root.</summary>
+    [Fact]
+    public void IntegrityAndApprovalRejectOutputSymlinkOutsideConfiguredRoot()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "assetctl-output-link-" + Guid.NewGuid().ToString("N"));
+        string assets = Path.Combine(root, "assets");
+        string outside = Path.Combine(root, "outside");
+        Directory.CreateDirectory(assets);
+        Directory.CreateDirectory(outside);
+        Directory.CreateSymbolicLink(Path.Combine(assets, "redirect"), outside);
+        EffectiveConfiguration configuration = Configuration(root);
+        AssetManifest template = Manifest([]);
+        AssetManifest manifest = template with
+        {
+            Request = template.Request with
+            {
+                Output = template.Request.Output with { Path = "assets/redirect/asset.png" },
+            },
+            Integrity = new IntegrityRecord(new string('0', 64), 0, "image/png"),
+        };
+        try
+        {
+            Assert.Throws<AssetCtlException>(() => ManifestStore.VerifyIntegrity(configuration, manifest));
+            Assert.Throws<AssetCtlException>(() => ApprovalPolicy.Validate(configuration, manifest));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static EffectiveConfiguration Configuration(string root) =>
         new(
             root,

@@ -23,8 +23,11 @@ internal static class PublishingTypes
                 allowMissing: true
             );
             string lockRoot = Path.Combine(stateRoot, "locks");
+            RejectReparsePoint(lockRoot, "asset lock directory");
             Directory.CreateDirectory(lockRoot);
+            RejectReparsePoint(lockRoot, "asset lock directory");
             string path = Path.Combine(lockRoot, "catalog.lock");
+            RejectReparsePoint(path, "asset catalog lock");
             FileStream lockStream;
             try
             {
@@ -54,6 +57,17 @@ internal static class PublishingTypes
         }
 
         public void Dispose() => stream.Dispose();
+
+        private static void RejectReparsePoint(string path, string field)
+        {
+            if (
+                (File.Exists(path) || Directory.Exists(path))
+                && (File.GetAttributes(path) & FileAttributes.ReparsePoint) == FileAttributes.ReparsePoint
+            )
+            {
+                throw new AssetCtlException($"{field}: symbolic links are prohibited.", 7);
+            }
+        }
     }
 
     public static class AtomicPublisher
@@ -561,7 +575,15 @@ internal static class PublishingTypes
                 "state_root",
                 allowMissing: true
             );
-            return Path.Combine(stateRoot, "publish-transactions");
+            string journalRoot = Path.Combine(stateRoot, "publish-transactions");
+            if (
+                (File.Exists(journalRoot) || Directory.Exists(journalRoot))
+                && (File.GetAttributes(journalRoot) & FileAttributes.ReparsePoint) == FileAttributes.ReparsePoint
+            )
+            {
+                throw new AssetCtlException("Publication journal root cannot be a symbolic link.", 7);
+            }
+            return journalRoot;
         }
 
         private static void RecoverJournal(

@@ -61,6 +61,40 @@ public sealed class PublicationRecoveryTests : IDisposable
         );
     }
 
+    /// <summary>Rejects a symlinked publication-journal directory without writing to its target.</summary>
+    [Fact]
+    public void PublicationRejectsSymlinkedJournalRootBeforeWritingExternalTarget()
+    {
+        EffectiveConfiguration configuration = Configuration();
+        string external = Path.Combine(Path.GetTempPath(), "assetctl-journal-external-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, ".assetctl", "state"));
+        Directory.CreateDirectory(external);
+        Directory.CreateSymbolicLink(Path.Combine(root, ".assetctl", "state", "publish-transactions"), external);
+        byte[] bytes = "first-asset"u8.ToArray();
+        AssetManifest manifest = Manifest(bytes, revision: 1);
+        File.WriteAllText(
+            Path.Combine(root, manifest.ManifestPath),
+            ManifestStore.Serialize(manifest with { Integrity = null })
+        );
+        try
+        {
+            Assert.Throws<AssetCtlException>(() =>
+                AtomicPublisher.Publish(
+                    configuration,
+                    manifest.Request.Output.Path,
+                    bytes,
+                    manifest.ManifestPath,
+                    ManifestStore.Serialize(manifest)
+                )
+            );
+            Assert.Empty(Directory.EnumerateFileSystemEntries(external));
+        }
+        finally
+        {
+            Directory.Delete(external, recursive: true);
+        }
+    }
+
     /// <summary>Publishes the first generated output over its authoritative manifest-only request.</summary>
     [Fact]
     public void FirstGenerationPublishesOverManifestOnlyRequest()
@@ -137,6 +171,47 @@ public sealed class PublicationRecoveryTests : IDisposable
 
         Assert.Equal(2, exception.ExitCode);
         Assert.Equal(victimBytes, File.ReadAllBytes(Path.Combine(root, victim.Request.Output.Path)));
+    }
+
+    /// <summary>Rejects alternate relative spellings of an approved output before publication changes either file.</summary>
+    [Theory]
+    [InlineData("assets/./victim.png")]
+    [InlineData("assets\\victim.png")]
+    public void PublicationRejectsCanonicalCatalogCollisionWithoutChangingApprovedVictim(string attackerPath)
+    {
+        EffectiveConfiguration configuration = Configuration();
+        byte[] victimBytes = "approved-victim"u8.ToArray();
+        AssetManifest victim = Manifest(victimBytes, 1, "victim") with
+        {
+            Request = Manifest(victimBytes, 1, "victim").Request with { Lifecycle = AssetLifecycle.Approved },
+            Approval = new ApprovalRecord("owner", DateTimeOffset.UtcNow, "approved"),
+        };
+        string victimManifestPath = Path.Combine(root, victim.ManifestPath);
+        File.WriteAllBytes(Path.Combine(root, victim.Request.Output.Path), victimBytes);
+        File.WriteAllText(victimManifestPath, ManifestStore.Serialize(victim));
+        string victimManifestBefore = File.ReadAllText(victimManifestPath);
+        byte[] attackerBytes = "attacker"u8.ToArray();
+        AssetManifest attacker = Manifest(attackerBytes, 1, "attacker") with
+        {
+            Request = Manifest(attackerBytes, 1, "attacker").Request with
+            {
+                Output = Manifest(attackerBytes, 1, "attacker").Request.Output with { Path = attackerPath },
+            },
+        };
+        File.WriteAllText(Path.Combine(root, attacker.ManifestPath), ManifestStore.Serialize(attacker));
+
+        Assert.Throws<AssetCtlException>(() =>
+            AtomicPublisher.Publish(
+                configuration,
+                attackerPath,
+                attackerBytes,
+                attacker.ManifestPath,
+                ManifestStore.Serialize(attacker)
+            )
+        );
+
+        Assert.Equal(victimBytes, File.ReadAllBytes(Path.Combine(root, victim.Request.Output.Path)));
+        Assert.Equal(victimManifestBefore, File.ReadAllText(victimManifestPath));
     }
 
     /// <summary>Restores the authoritative manifest-only request when a first-publication move fails.</summary>

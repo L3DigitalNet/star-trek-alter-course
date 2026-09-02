@@ -8,10 +8,9 @@ internal static class ApprovalPolicy
     public static void Validate(EffectiveConfiguration configuration, AssetManifest manifest)
     {
         ManifestStore.VerifyIntegrity(configuration, manifest);
-        string assetPath = PathPolicy.ResolveUnder(
-            configuration.RepositoryRoot,
+        string assetPath = PathPolicy.ResolveOutputPath(
+            configuration,
             manifest.Request.Output.Path,
-            "asset output",
             allowMissing: false
         );
         byte[] bytes = File.ReadAllBytes(assetPath);
