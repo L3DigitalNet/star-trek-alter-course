@@ -1,0 +1,65 @@
+schema_version: "1"
+id: "tooling.assetctl.fixture.generated-marker-png"
+lifecycle: "placeholder"
+quality_tier: "development"
+kind: "map-marker"
+revision: 1
+purpose: "Prove that a normalized generated-style RGBA PNG imports through the selected Godot runtime."
+output:
+  path: "src/AlterCourse.Godot/assets/assetctl-fixtures/generated-marker.png"
+  format: "png"
+  width: 80
+  height: 80
+  transparency: "required"
+  target_display_sizes:
+    - 16
+    - 24
+    - 80
+visual:
+  style_profile: "tactical-map"
+  importance: "secondary"
+  tags:
+    - "fixture"
+    - "assetctl"
+constraints:
+  required:
+    - "transparent pixels"
+  prohibited:
+    - "text"
+    - "watermark"
+references: []
+rights:
+  classification: "unreviewed-generated-placeholder"
+  license: null
+  attribution: null
+  source: null
+  notes: "Copied from the repository-owned GdUnit fixture solely for import validation; not approved for release."
+generation:
+  source_type: "generated"
+  generated_at: "2026-09-01T18:00:00Z"
+  run_id: "fixture-png-v1"
+  route: "raster-placeholder"
+  provider: "local-placeholder"
+  adapter: "local-placeholder"
+  adapter_version: "1"
+  provenance_schema_version: "1"
+  model_profile: "default"
+  model: "local-placeholder-v1"
+  quality_tier: "development"
+  final_prompt: "Representative RGBA PNG import fixture."
+  prompt_sha256: "8811f704462bc73b46c97ef6b40d4c850493b0f2a2e987640caf749376d5dbb8"
+  request_sha256: "40811d388bfbf8c0449ed556c86c84b6d5b6767b48c0cf2b1528077d921fec8c"
+  effective_config_sha256: "4421c27e174b421047747dff54b13e71cf41408cbb16f25e61eb60a9d6b2d752"
+  provider_request_id: null
+  estimated_cost_usd: 0
+  actual_cost_usd: 0
+validation: null
+integrity:
+  sha256: "e709c40067fec99c3b59c78a5a364da8c326a94c49a56337a46c98976d3db4cb"
+  byte_length: 3292
+  media_type: "image/png"
+approval:
+  approved_by: null
+  approved_at: null
+  approval_note: null
+supersedes: null

@@ -20,6 +20,10 @@ aliases:
 related:
   - 'docs/adr/0001-separate-simulation-from-godot.md'
   - 'docs/adr/0002-use-one-canonical-quality-gate.md'
+  - 'docs/adr/0003-prefer-native-capabilities-and-demand-driven-dependencies.md'
+  - 'docs/adr/0005-use-json-and-schema-validation-for-domain-content.md'
+  - 'docs/adr/0008-use-structured-observability-with-serilog.md'
+  - 'docs/adr/0009-use-layered-testing-and-architecture-conformance.md'
   - 'docs/development-quality.md'
   - 'LICENSE.md'
   - 'LEGAL.md'
@@ -36,7 +40,7 @@ Date: 2026-09-01
 
 Star Trek: Alter Course needs a reliable way for coding agents to obtain 2D visual assets without stopping implementation to ask the project owner for every icon, marker, texture, background, or temporary illustration. The repository will provide a standalone command-line tool named `assetctl` that can find an existing asset or create, validate, select, catalog, and publish a new placeholder or production candidate.
 
-`assetctl` will be implemented as an ordinary C#/.NET 8 console application under `tools/`. It will be part of `AlterCourse.sln`, but it will reference neither `AlterCourse.Core` nor `AlterCourse.Godot`. The tool will not require the Godot editor to perform normal asset generation or validation. The Godot project consumes only the selected asset files through ordinary `res://` paths.
+`assetctl` will be implemented as an ordinary C#/.NET 10 console application under `tools/`. It will be part of `AlterCourse.sln`, but it will reference neither `AlterCourse.Core` nor `AlterCourse.Godot`. The tool will not require the Godot editor to perform normal asset generation or validation. The Godot project consumes only the selected asset files through ordinary `res://` paths.
 
 Provider instances, model identifiers, endpoints, credentials references, capabilities, prices, routing priorities, quality tiers, style profiles, retry policy, and spending policy will be defined in versioned YAML configuration. The orchestration code will route on declared capabilities rather than vendor names. Adding another account, endpoint, or model that uses an existing adapter must require configuration only. Supporting a genuinely different API protocol may require one thin C# adapter, but must not require changes to catalog, routing, lifecycle, validation, or publishing logic.
 
@@ -83,7 +87,7 @@ ST:AC is a map-centric 2D starship command and strategy game. Development will r
 
 Without a standard mechanism, implementation agents will either block on missing art, create inconsistent files in arbitrary locations, copy inappropriate third-party material, or embed provider-specific scripts throughout the repository. This specification creates one controlled path from semantic need to usable Godot asset.
 
-The repository already separates pure simulation from Godot through ADR 0001 and uses one canonical quality gate through ADR 0002. `assetctl` must fit those decisions rather than create a parallel architecture or toolchain.
+The repository already separates pure simulation from Godot through ADR 0001 and uses one canonical quality gate through ADR 0002. Dependency admission follows ADR 0003; YAML asset-tool configuration remains bounded development and presentation metadata under ADR 0005; operational logging follows ADR 0008; and automated testing follows ADR 0009. `assetctl` must fit those decisions rather than create a parallel architecture or toolchain.
 
 ## Goals
 
@@ -166,9 +170,21 @@ The projects communicate through files and versioned contracts. A request to ins
 
 ### C# rather than Python or GDScript
 
-The tool MUST use C# and target `net8.0`, matching the current project target while using the repository-pinned SDK. It MUST NOT introduce Python, Node application dependencies, or Godot as runtime dependencies for the tool itself.
+The tool and its ordinary .NET test project MUST use C# and target `net10.0` using the repository-pinned .NET 10 SDK. The Godot-facing game projects remain free to target `net8.0` where required for Godot compatibility; that runtime constraint does not apply to this standalone development tool because it references neither game project nor Godot. The tool MUST NOT introduce Python, Node application dependencies, or Godot as runtime dependencies for the tool itself.
 
 Existing Node-based Markdown and structured-text verification remains repository infrastructure and is not part of the asset tool runtime.
+
+### Asset configuration versus game domain content
+
+The YAML configuration, style profiles, and asset manifests defined by this specification are development and presentation metadata, not canonical `AlterCourse.Core` domain content. They MUST NOT become an alternate source of authoritative simulation definitions or game rules. Any ships, factions, weapons, world topology, or other reusable simulation definitions consumed by Core remain subject to ADR 0005 and its canonical JSON and validation requirements unless a separate active ADR explicitly authorizes an exception.
+
+### Structured observability
+
+Operational logging MUST conform to ADR 0008. The `assetctl` composition root configures Serilog and connects it to `Microsoft.Extensions.Logging`; application code that needs operational logging receives `ILogger<T>` rather than locating a global logger or service locator. Run receipts remain provenance artifacts with their own contract and MUST NOT become a substitute logging backend or be reconstructed from logs.
+
+### Testing architecture
+
+`AlterCourse.AssetCtl.Tests` MUST use xUnit as an ordinary .NET test project under ADR 0009. Tests exercise pure tool behavior without Godot or hosted provider dependencies. CsCheck MAY be introduced only when a meaningful generated invariant exists, and ArchUnitNET MAY be used only when a durable architecture rule cannot be enforced more simply through the project graph, analyzers, or focused tests. Godot-specific asset import behavior remains in the existing Godot-aware test layer.
 
 ## Terminology
 
@@ -294,9 +310,10 @@ tests/
   work/
   runs/
   state/
+  logs/
 ```
 
-`.assetctl/` MUST be ignored by Git. It contains temporary candidates, run receipts, local locks, local budget state, and optional previews. It is not a source of repository truth.
+`.assetctl/` MUST be ignored by Git. It contains temporary candidates, run receipts, local locks, local budget state, bounded structured logs, and optional previews. It is not a source of repository truth.
 
 Only selected game assets belong under `src/AlterCourse.Godot/assets/`. Manifests remain outside the Godot project under `config/assets/catalog/` so YAML provenance does not clutter or complicate the Godot import tree.
 
@@ -310,7 +327,7 @@ The application project MUST be named `AlterCourse.AssetCtl`. The test project M
 
 Both projects MUST:
 
-- target `net8.0`;
+- target `net10.0`;
 - inherit nullable reference types, warnings-as-errors, C# language version, deterministic builds, documentation-file generation, analyzers, and package locking from repository settings;
 - use central package version management through `Directory.Packages.props`;
 - commit updated `packages.lock.json` files;
@@ -318,7 +335,7 @@ Both projects MUST:
 
 ### Dependency policy
 
-The implementation SHOULD use the smallest practical dependency set.
+The implementation SHOULD use the smallest practical dependency set. Every new or materially expanded package MUST satisfy ADR 0003's dependency-admission requirements, including a concrete current consumer, why a higher-ranked native or standard-library choice is insufficient, maintenance state, .NET 10 and Linux compatibility, license and distribution obligations, transitive and native dependencies, expected failure mode, coupling scope, and a plausible removal or replacement boundary. That evidence belongs in the implementation PR and should be proportional to the dependency's impact.
 
 Recommended responsibilities are:
 
@@ -326,16 +343,19 @@ Recommended responsibilities are:
 - `YamlDotNet` for safe YAML parsing and serialization;
 - `System.Text.Json` for provider DTOs, receipts, and machine output;
 - `HttpClient` with explicit typed clients for provider HTTP calls;
+- `Microsoft.Extensions.Logging` with Serilog as the structured logging backend required by ADR 0008;
 - a centrally pinned, license-compatible image library for raster decode, resize, alpha inspection, normalization, and PNG encoding;
 - a centrally pinned, license-compatible SVG parser and renderer for sanitization and review previews.
 
-SkiaSharp and Svg.Skia are acceptable starting candidates because they provide cross-platform .NET raster and vector rendering, but the implementing agent MUST verify current stable versions, Linux support, transitive native packages, and licenses before adoption. Dependency selection belongs in the implementation PR evidence, not as an unreviewed assumption in this specification.
+SkiaSharp and Svg.Skia are acceptable starting candidates because they provide cross-platform .NET raster and vector rendering, but the implementing agent MUST verify current stable versions, .NET 10 and Linux support, transitive native packages, and licenses before adoption. Dependency selection belongs in the implementation PR evidence, not as an unreviewed assumption in this specification.
 
 Vendor SDK packages SHOULD NOT be used initially. Provider REST protocols should be implemented with typed request and response DTOs so the repository does not inherit unrelated SDK dependencies or vendor-specific application structure. A vendor SDK MAY be introduced when a required capability cannot reasonably be implemented or maintained through the documented REST API, with the reason recorded in the implementation PR.
 
 ## Configuration system
 
 ### Design principles
+
+The configuration system is a bounded tool-specific YAML contract authorized by ADR 0005's development-tool configuration exception. It does not authorize YAML as a second representation for ordinary simulation content.
 
 Configuration MUST satisfy all of the following:
 
@@ -378,6 +398,7 @@ paths:
   work_root: '.assetctl/work'
   receipt_root: '.assetctl/runs'
   state_root: '.assetctl/state'
+  log_root: '.assetctl/logs'
 
 policy:
   external_generation_enabled: false
@@ -945,7 +966,7 @@ Repository agent instructions added during implementation MUST establish this be
 4. Default new development assets to lifecycle `placeholder` and quality tier `development`.
 5. Use the local fallback when external generation is unavailable or disallowed.
 6. Include the selected asset and manifest in the same implementation branch or PR that uses them.
-7. Do not commit `.assetctl/` candidates, receipts, locks, or local state.
+7. Do not commit `.assetctl/` candidates, receipts, locks, logs, or local state.
 8. Never invoke approval or approved-asset deprecation without an explicit owner instruction in the current task context.
 9. Never change spend limits, enable paid providers, weaken validation, or bypass rights requirements merely to unblock a generation.
 10. Report the chosen asset ID and `res://` path in the implementation summary.
@@ -961,7 +982,7 @@ The CLI MUST:
 - run from any directory inside the repository;
 - locate the repository root deterministically;
 - accept `--output human|json` on every read or execution command;
-- write machine results to standard output and diagnostics to standard error;
+- write command results to standard output and operational diagnostics and console logs to standard error, so structured JSON output is never contaminated by logging;
 - support cancellation and bounded timeouts;
 - use stable documented exit codes;
 - avoid interactive prompts in normal agent workflows;
@@ -1542,7 +1563,18 @@ YAML parsing MUST reject custom tags, duplicate keys, anchors, aliases, and unbo
 
 SVG sanitization requirements in this specification are security requirements, not optional style checks.
 
-### Logging
+### Logging and structured observability
+
+Operational logging MUST conform to ADR 0008 in addition to the redaction requirements below.
+
+- Serilog MUST be configured at the application composition root and connected through `Microsoft.Extensions.Logging`.
+- Application components that need operational logging MUST receive `ILogger<T>` through construction rather than use static global logging state or a service locator.
+- Console logging and diagnostics MUST write to standard error. Standard output is reserved for the command's human or JSON result contract.
+- The default development configuration MUST use a human-readable console sink and a bounded structured rolling-file sink beneath `.assetctl/logs/`. Tests that assert diagnostics SHOULD use an in-memory or collecting sink.
+- Structured fields SHOULD include stable command, run, asset, route, provider, model-profile, attempt, error-classification, and elapsed-duration identifiers where applicable.
+- Logs SHOULD use stable identifiers and hashes instead of copying full prompts, reference material, image bytes, provider response bodies, or other large or rights-sensitive content. The manifest and run receipt remain the specified provenance locations for the final prompt and detailed attempt evidence.
+- Logging sink failure MUST NOT change routing, scoring, selection, lifecycle, or publish semantics and MUST NOT leave partially applied tracked state. A sink failure may be surfaced as an operational diagnostic through a safe fallback path.
+- Logs are diagnostics, not authority. The tool MUST NOT decide whether generation, validation, review, approval, or publication occurred by querying a log sink.
 
 Logs and receipts MUST redact:
 
@@ -1552,7 +1584,7 @@ Logs and receipts MUST redact:
 - provider response bodies that may echo secrets;
 - local paths outside the repository when not required for diagnosis.
 
-A redaction regression test MUST cover each provider adapter.
+A redaction regression test MUST cover each provider adapter. Run receipts remain a separate provenance contract and MUST NOT be treated as a Serilog sink or reconstructed from log events.
 
 ## Rights, licensing, and project legal boundaries
 
@@ -1618,7 +1650,7 @@ Each generation attempt writes `.assetctl/runs/<run-id>.json` containing:
 - redacted errors;
 - publish and rollback result.
 
-Receipts are ignored by Git because they can be numerous and provider-specific. The committed manifest carries the durable selected summary.
+Receipts are ignored by Git because they can be numerous and provider-specific. The committed manifest carries the durable selected summary. Receipts are provenance and execution evidence rather than an operational logging sink; diagnostic logs remain independently bounded and non-authoritative under ADR 0008.
 
 ### No database
 
@@ -1649,6 +1681,8 @@ No provider client, asset manifest parser, routing policy, generation prompt, cr
 
 ## Testing specification
 
+`AlterCourse.AssetCtl.Tests` MUST use xUnit as the ordinary .NET test framework. It MUST remain Godot-independent and must not start the engine merely because generated assets are ultimately consumed by Godot. Provider, filesystem, time, and diagnostic boundaries SHOULD use focused in-memory implementations or test doubles rather than deep mocks. CsCheck MAY be added when a meaningful property, model, or metamorphic invariant justifies it; it MUST NOT be added merely so every test style named by ADR 0009 appears in this tool. ArchUnitNET MAY be used only for durable architecture rules that are not already enforced more simply by project references, analyzers, or focused assembly-reference tests.
+
 ### Unit tests
 
 Unit tests MUST cover:
@@ -1673,7 +1707,8 @@ Unit tests MUST cover:
 - idempotent no-op decisions;
 - error normalization;
 - retry eligibility and bounds;
-- log and receipt redaction;
+- structured-log and receipt redaction;
+- logging sink isolation from command semantics;
 - atomic publish rollback decisions.
 
 ### Adapter contract tests
@@ -1735,7 +1770,7 @@ Tests MUST inspect `AlterCourse.AssetCtl` assembly references and fail if it ref
 
 ### Godot integration tests
 
-At least one generated-style PNG and one sanitized SVG fixture MUST load through a headless Godot integration test. The test belongs in the existing Godot test layer, not in the AssetCtl application assembly.
+At least one generated-style PNG and one sanitized SVG fixture MUST load through a headless Godot integration test using the repository-selected Godot-aware test layer. The test belongs in the existing Godot test layer, not in `AlterCourse.AssetCtl.Tests` or the AssetCtl application assembly.
 
 ### Network isolation
 
@@ -1836,8 +1871,9 @@ The implementing agent SHOULD build vertical slices in this order.
 
 Deliver:
 
-- solution and project scaffolding;
+- solution and `net10.0` project scaffolding;
 - CLI shell and JSON output contract;
+- structured logging composition and redaction under ADR 0008;
 - safe YAML loading;
 - root configuration, quality tiers, style profiles, manifests, and schemas;
 - catalog discovery and `find`, `status`, `validate-config`;
@@ -1845,7 +1881,7 @@ Deliver:
 - local placeholder generator;
 - mechanical SVG and PNG validation;
 - atomic publication and receipts;
-- unit, golden, integration, and boundary tests;
+- xUnit unit, golden, integration, and boundary tests;
 - canonical gate integration.
 
 At the end of Phase 1, an agent can create a validated zero-cost placeholder offline.
@@ -1906,10 +1942,13 @@ The implementation MAY arrive in multiple PRs, but each merged phase must be com
 
 The complete asset pipeline is accepted when all of the following are true:
 
-- `AlterCourse.AssetCtl` is a standalone `net8.0` CLI in `AlterCourse.sln`.
-- It references neither game project nor Godot.
-- `AlterCourse.AssetCtl.Tests` is part of the canonical quality gate.
+- `AlterCourse.AssetCtl` and `AlterCourse.AssetCtl.Tests` target `net10.0` using the repository-pinned .NET 10 SDK.
+- It references neither game project nor Godot; the game projects' Godot-driven target framework remains an independent runtime concern.
+- `AlterCourse.AssetCtl.Tests` uses xUnit and is part of the canonical quality gate.
 - All tests and committed validation run offline with no provider credentials.
+- New dependencies satisfy ADR 0003 admission evidence and remain centrally pinned with committed lock files.
+- Asset-tool YAML configuration and manifests remain development and presentation metadata and do not become canonical Core domain content.
+- Operational logging uses `Microsoft.Extensions.Logging` with Serilog configured at the composition root, keeps stdout reserved for command results, writes console diagnostics to stderr, and treats logs as non-authoritative diagnostics distinct from run receipts.
 - Provider instances, endpoints, credentials references, model IDs, capabilities, economics, routes, quality tiers, and style profiles are tracked configuration.
 - No orchestration or routing code branches on Recraft, OpenAI, or xAI names.
 - Adding another model or provider instance through an existing adapter is proven by a configuration-only test.
@@ -1931,7 +1970,7 @@ The complete asset pipeline is accepted when all of the following are true:
 - Rights metadata reflects the repository's mixed-rights legal boundary.
 - Provider credentials and signed URLs never appear in output, logs, receipts, manifests, or Git.
 - The tool returns stable human and JSON output, including the final `res://` path.
-- Representative generated PNG and sanitized SVG assets import through headless Godot tests.
+- Representative generated PNG and sanitized SVG assets import through headless Godot tests in the existing Godot-aware test layer.
 - `./scripts/fix.sh` and `./scripts/verify.sh` pass without changing tracked files.
 
 ## Definition of done for an implementation PR
@@ -1939,6 +1978,7 @@ The complete asset pipeline is accepted when all of the following are true:
 An implementation PR is not complete merely because a provider returns an image. It must include:
 
 - code and tests for the phase's complete vertical slice;
+- ADR 0003 dependency-admission evidence for every newly introduced or materially expanded package;
 - centrally pinned dependencies and lockfile updates;
 - tracked configuration and schemas;
 - fixture-based provider responses with no live secrets;
@@ -1986,7 +2026,12 @@ Repository decisions and policy:
 
 - [ADR 0001: Separate simulation from Godot](../adr/0001-separate-simulation-from-godot.md)
 - [ADR 0002: Use one canonical quality gate](../adr/0002-use-one-canonical-quality-gate.md)
+- [ADR 0003: Prefer native capabilities and demand-driven dependencies](../adr/0003-prefer-native-capabilities-and-demand-driven-dependencies.md)
+- [ADR 0005: Use JSON and schema validation for domain content](../adr/0005-use-json-and-schema-validation-for-domain-content.md)
+- [ADR 0008: Use structured observability with Serilog](../adr/0008-use-structured-observability-with-serilog.md)
+- [ADR 0009: Use layered testing and architecture conformance](../adr/0009-use-layered-testing-and-architecture-conformance.md)
 - [Development quality](../development-quality.md)
+- [Repository .NET SDK pin](../../global.json)
 - [Repository licensing policy](../../LICENSE.md)
 - [Repository legal notice](../../LEGAL.md)
 

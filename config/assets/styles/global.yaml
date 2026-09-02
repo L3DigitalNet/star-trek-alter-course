@@ -1,0 +1,9 @@
+schema_version: "1"
+id: "global"
+summary: "Readable LCARS-adjacent visuals with restrained geometry and no embedded text."
+required:
+  - "clear silhouette"
+  - "readable at target size"
+prohibited:
+  - "watermark"
+  - "photorealistic trademarked insignia"

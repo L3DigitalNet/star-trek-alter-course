@@ -21,5 +21,13 @@ mono_crash.*.json
 /src/*/obj/
 /tests/*/bin/
 /tests/*/obj/
+/tools/*/bin/
+/tools/*/obj/
 TestResults/
 StrykerOutput/
+.assetctl/
+
+# Recoverable AssetCtl publication residue beside tracked manifests and assets
+/config/assets/catalog/**/*.asset.yaml.assetctl-stage-*
+/config/assets/catalog/**/*.asset.yaml.assetctl-backup-*
+/src/AlterCourse.Godot/assets/**/*.assetctl-backup-*

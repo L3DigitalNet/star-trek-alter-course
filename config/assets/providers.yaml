@@ -1,0 +1,133 @@
+schema_version: "1"
+providers:
+  local-placeholder:
+    adapter: "local-placeholder"
+    enabled: true
+    allowed_lifecycles:
+      - "placeholder"
+    models:
+      default:
+        model: "local-placeholder-v1"
+        capabilities:
+          - "raster.generate"
+          - "vector.generate"
+          - "image.transparent-output"
+        economics:
+          currency: "USD"
+          estimated_cost_per_output: 0.00
+          effective_date: "2026-09-01"
+  recraft-primary:
+    adapter: "recraft-images"
+    enabled: true
+    allowed_lifecycles:
+      - "placeholder"
+      - "candidate"
+    endpoint: "https://external.api.recraft.ai/v1"
+    endpoint_hosts:
+      - "external.api.recraft.ai"
+    credentials:
+      api_key:
+        source: "environment"
+        name: "RECRAFT_API_TOKEN"
+    downloads:
+      allowed_hosts: []
+    models:
+      vector:
+        model: "recraftv4_1_vector"
+        capabilities:
+          - "vector.generate"
+          - "image.transparent-output"
+        economics:
+          currency: "USD"
+          estimated_cost_per_output: 0.08
+          effective_date: "2026-09-01"
+        options:
+          supported_sizes: "none"
+      raster:
+        model: "recraftv4_1"
+        capabilities:
+          - "raster.generate"
+          - "image.transparent-output"
+        economics:
+          currency: "USD"
+          estimated_cost_per_output: 0.04
+          effective_date: "2026-09-01"
+        options:
+          supported_sizes: "1024x1024,1536x768,768x1536,1280x832,832x1280,1216x896,896x1216,1152x896,896x1152,832x1344,1280x896,896x1280,1344x768,768x1344"
+  openai-primary:
+    adapter: "openai-images"
+    enabled: true
+    allowed_lifecycles:
+      - "placeholder"
+      - "candidate"
+    endpoint: "https://api.openai.com/v1"
+    endpoint_hosts:
+      - "api.openai.com"
+    credentials:
+      api_key:
+        source: "environment"
+        name: "OPENAI_API_KEY"
+    models:
+      image:
+        model: "gpt-image-2"
+        capabilities:
+          - "raster.generate"
+          - "image.edit"
+          - "image.reference-input"
+          - "image.transparent-output"
+        economics:
+          currency: "USD"
+          pricing_basis: "provider-calculated"
+          effective_date: "2026-09-01"
+        options:
+          supported_sizes: "1024x1024,1536x1024,1024x1536"
+  xai-primary:
+    adapter: "xai-images"
+    enabled: true
+    allowed_lifecycles:
+      - "placeholder"
+      - "candidate"
+    endpoint: "https://api.x.ai/v1"
+    endpoint_hosts:
+      - "api.x.ai"
+    credentials:
+      api_key:
+        source: "environment"
+        name: "XAI_API_KEY"
+    models:
+      image:
+        model: "grok-imagine-image-2.0"
+        capabilities:
+          - "raster.generate"
+          - "image.edit"
+          - "image.reference-input"
+        economics:
+          currency: "USD"
+          estimated_cost_per_output: 0.02
+          effective_date: "2026-09-01"
+        options:
+          supported_sizes: "none"
+  openai-reviewer:
+    adapter: "openai-vision-review"
+    enabled: true
+    allowed_lifecycles:
+      - "placeholder"
+      - "candidate"
+    endpoint: "https://api.openai.com/v1"
+    endpoint_hosts:
+      - "api.openai.com"
+    credentials:
+      api_key:
+        source: "environment"
+        name: "OPENAI_API_KEY"
+    models:
+      economical:
+        model: "gpt-5-mini"
+        capabilities:
+          - "review.semantic"
+          - "review.reference-comparison"
+        economics:
+          currency: "USD"
+          estimated_cost_per_output: 0.02
+          pricing_basis: "token-usage"
+          effective_date: "2026-09-01"
