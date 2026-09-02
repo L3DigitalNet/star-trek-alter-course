@@ -2,14 +2,16 @@ class_name GameplayShellTest
 extends GdUnitTestSuite
 
 const TEST_QUICK_SAVE_PATH := "user://gameplay-shell-test-quick-save.json"
+const DEFAULT_QUICK_SAVE_PATH := "user://quick-save.json"
+const LEGACY_DEFAULT_QUICK_SAVE_PATH := "user://quick-save-v1.json"
 
 
 func before_test() -> void:
-	_remove_test_quick_save()
+	_remove_quick_save_files()
 
 
 func after_test() -> void:
-	_remove_test_quick_save()
+	_remove_quick_save_files()
 
 
 func test_main_scene_constructs_gameplay_shell() -> void:
@@ -27,6 +29,101 @@ func test_quick_save_and_load_controls_exist() -> void:
 
 	assert_object(screen.get_node_or_null("%QuickSaveButton")).is_instanceof(Button)
 	assert_object(screen.get_node_or_null("%QuickLoadButton")).is_instanceof(Button)
+
+
+func test_default_quick_save_writes_schema_v2_without_touching_legacy_slot() -> void:
+	_write_text(LEGACY_DEFAULT_QUICK_SAVE_PATH, "legacy-slot-sentinel")
+	var screen := _create_default_screen()
+
+	screen.call("QuickSave")
+
+	assert_str(screen.get_meta("quick_save_status", "")).is_equal("saved")
+	assert_bool(FileAccess.file_exists(DEFAULT_QUICK_SAVE_PATH)).is_true()
+	var save_json: Dictionary = JSON.parse_string(
+		FileAccess.get_file_as_string(DEFAULT_QUICK_SAVE_PATH)
+	)
+	assert_int(int(save_json.get("schemaVersion", -1))).is_equal(2)
+	assert_str(FileAccess.get_file_as_string(LEGACY_DEFAULT_QUICK_SAVE_PATH)).is_equal(
+		"legacy-slot-sentinel"
+	)
+
+
+func test_default_quick_load_falls_back_to_legacy_then_saves_generic_v2() -> void:
+	var snapshot_screen := _create_screen()
+	snapshot_screen.call("ProcessSyntheticDelta", 0.6)
+	snapshot_screen.call("QuickSave")
+	_copy_file(TEST_QUICK_SAVE_PATH, LEGACY_DEFAULT_QUICK_SAVE_PATH)
+	var legacy_contents := FileAccess.get_file_as_string(LEGACY_DEFAULT_QUICK_SAVE_PATH)
+
+	var screen := _create_default_screen()
+	screen.call("ProcessSyntheticDelta", 0.6)
+	screen.call("ProcessSyntheticDelta", 0.6)
+	screen.call("QuickLoad")
+
+	assert_str(screen.get_meta("quick_save_status", "")).is_equal("loaded")
+	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(600)
+	screen.call("QuickSave")
+	assert_bool(FileAccess.file_exists(DEFAULT_QUICK_SAVE_PATH)).is_true()
+	var save_json: Dictionary = JSON.parse_string(
+		FileAccess.get_file_as_string(DEFAULT_QUICK_SAVE_PATH)
+	)
+	assert_int(int(save_json.get("schemaVersion", -1))).is_equal(2)
+	assert_str(FileAccess.get_file_as_string(LEGACY_DEFAULT_QUICK_SAVE_PATH)).is_equal(
+		legacy_contents
+	)
+
+
+func test_generic_default_quick_save_wins_over_legacy_slot() -> void:
+	var snapshot_screen := _create_screen()
+	snapshot_screen.call("ProcessSyntheticDelta", 0.6)
+	snapshot_screen.call("QuickSave")
+	_copy_file(TEST_QUICK_SAVE_PATH, LEGACY_DEFAULT_QUICK_SAVE_PATH)
+	snapshot_screen.call("ProcessSyntheticDelta", 0.6)
+	snapshot_screen.call("QuickSave")
+	_copy_file(TEST_QUICK_SAVE_PATH, DEFAULT_QUICK_SAVE_PATH)
+
+	var screen := _create_default_screen()
+	screen.call("QuickLoad")
+
+	assert_str(screen.get_meta("quick_save_status", "")).is_equal("loaded")
+	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(1200)
+
+
+func test_invalid_generic_default_quick_save_does_not_fall_back_to_legacy() -> void:
+	var snapshot_screen := _create_screen()
+	snapshot_screen.call("ProcessSyntheticDelta", 0.6)
+	snapshot_screen.call("QuickSave")
+	_copy_file(TEST_QUICK_SAVE_PATH, LEGACY_DEFAULT_QUICK_SAVE_PATH)
+	_write_text(DEFAULT_QUICK_SAVE_PATH, "not-json")
+
+	var screen := _create_default_screen()
+	screen.call("ProcessSyntheticDelta", 0.6)
+	screen.call("ProcessSyntheticDelta", 0.6)
+	screen.call("QuickLoad")
+
+	assert_str(screen.get_meta("quick_save_status", "")).is_equal("load_failed")
+	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(1200)
+
+
+func test_custom_quick_save_path_never_consults_legacy_slot() -> void:
+	var snapshot_screen := _create_screen()
+	snapshot_screen.call("ProcessSyntheticDelta", 0.6)
+	snapshot_screen.call("QuickSave")
+	_copy_file(TEST_QUICK_SAVE_PATH, LEGACY_DEFAULT_QUICK_SAVE_PATH)
+	_remove_file(TEST_QUICK_SAVE_PATH)
+
+	var screen := _create_screen()
+	screen.call("ProcessSyntheticDelta", 0.6)
+	screen.call("ProcessSyntheticDelta", 0.6)
+	screen.call("QuickLoad")
+
+	assert_str(screen.get_meta("quick_save_status", "")).is_equal("load_failed")
+	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(1200)
+	_write_text(TEST_QUICK_SAVE_PATH, "not-json")
+	screen.call("ProcessSyntheticDelta", 0.6)
+	screen.call("QuickLoad")
+	assert_str(screen.get_meta("quick_save_status", "")).is_equal("load_failed")
+	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(1800)
 
 
 func test_quick_save_path_cannot_escape_user_boundary() -> void:
@@ -246,6 +343,14 @@ func _create_screen() -> Node:
 	return screen
 
 
+func _create_default_screen() -> Node:
+	var scene := load("res://Main.tscn") as PackedScene
+	var screen: Node = auto_free(scene.instantiate())
+	add_child(screen)
+	screen.set_process(false)
+	return screen
+
+
 func _find_destination_button(screen: Node, display_name: String) -> Button:
 	for child in screen.get_node("%DestinationButtons").get_children():
 		if child is Button and child.text == display_name:
@@ -253,6 +358,27 @@ func _find_destination_button(screen: Node, display_name: String) -> Button:
 	return null
 
 
-func _remove_test_quick_save() -> void:
-	if FileAccess.file_exists(TEST_QUICK_SAVE_PATH):
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(TEST_QUICK_SAVE_PATH))
+func _copy_file(source_user_path: String, destination_user_path: String) -> void:
+	var error := DirAccess.copy_absolute(
+		ProjectSettings.globalize_path(source_user_path),
+		ProjectSettings.globalize_path(destination_user_path)
+	)
+	assert_int(error).is_equal(OK)
+
+
+func _write_text(user_path: String, contents: String) -> void:
+	var file := FileAccess.open(user_path, FileAccess.WRITE)
+	assert_object(file).is_not_null()
+	file.store_string(contents)
+	file.close()
+
+
+func _remove_quick_save_files() -> void:
+	_remove_file(TEST_QUICK_SAVE_PATH)
+	_remove_file(DEFAULT_QUICK_SAVE_PATH)
+	_remove_file(LEGACY_DEFAULT_QUICK_SAVE_PATH)
+
+
+func _remove_file(user_path: String) -> void:
+	if FileAccess.file_exists(user_path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(user_path))

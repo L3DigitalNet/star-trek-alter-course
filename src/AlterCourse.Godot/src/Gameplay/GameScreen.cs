@@ -15,7 +15,8 @@ public partial class GameScreen : Control
 {
     private const string SchemaPath = "res://content/schemas/ship-definition-v2.schema.json";
     private const string ShipPath = "res://content/ships/pathfinder.json";
-    private const string DefaultQuickSaveUserPath = "user://quick-save-v1.json";
+    private const string DefaultQuickSaveUserPath = "user://quick-save.json";
+    private const string LegacyDefaultQuickSaveUserPath = "user://quick-save-v1.json";
     private const string QuickSaveId = "quick-save";
     private const string QuickSaveDisplayName = "Quick Save";
 
@@ -26,6 +27,7 @@ public partial class GameScreen : Control
     private LocationId? _selectedDestination;
     private DateTimeOffset? _quickSaveCreatedAtUtc;
     private string _quickSavePath = null!;
+    private bool _quickSaveUsesDefaultPath;
     private StrategicMapView _strategicMap = null!;
     private TacticalMapView _tacticalMap = null!;
     private VBoxContainer _destinationButtons = null!;
@@ -59,8 +61,14 @@ public partial class GameScreen : Control
         try
         {
             string quickSavePath = ResolveQuickSavePath(QuickSaveUserPath);
+            bool quickSaveUsesDefaultPath = string.Equals(
+                QuickSaveUserPath,
+                DefaultQuickSaveUserPath,
+                StringComparison.Ordinal
+            );
             (ShipDefinitionCatalog catalog, GameSimulation simulation) = CreateSimulationFromCanonicalContent();
             _quickSavePath = quickSavePath;
+            _quickSaveUsesDefaultPath = quickSaveUsesDefaultPath;
             _shipCatalog = catalog;
             _simulation = simulation;
             SetMeta("quick_save_user_path", QuickSaveUserPath);
@@ -151,7 +159,8 @@ public partial class GameScreen : Control
 
         try
         {
-            LoadedGameSave loaded = GamePersistence.Load(_quickSavePath, _shipCatalog);
+            string loadPath = ResolveQuickLoadPath();
+            LoadedGameSave loaded = GamePersistence.Load(loadPath, _shipCatalog);
 
             // Core constructs and validates the candidate in isolation. Assignment stays after that
             // boundary so an unreadable or invalid save cannot damage the playable aggregate.
@@ -337,6 +346,16 @@ public partial class GameScreen : Control
         }
 
         return resolvedPath;
+    }
+
+    private string ResolveQuickLoadPath()
+    {
+        if (!_quickSaveUsesDefaultPath || File.Exists(_quickSavePath))
+        {
+            return _quickSavePath;
+        }
+
+        return ResolveQuickSavePath(LegacyDefaultQuickSaveUserPath);
     }
 
     private void ConfigureRateButton(string path, double rate)
