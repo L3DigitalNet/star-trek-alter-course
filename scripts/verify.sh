@@ -81,6 +81,13 @@ dotnet build src/AlterCourse.Godot/AlterCourse.Godot.csproj -c Debug --no-restor
   --ignoreHeadlessMode \
   -a res://tests/GeneratedAssetImportTest.gd \
   -rd .godot/gdunit-reports-assets
+"${godot_bin}" \
+  --headless \
+  --path "${godot_project}" \
+  --script res://addons/gdUnit4/bin/GdUnitCmdTool.gd \
+  --ignoreHeadlessMode \
+  -a res://tests/GameplayShellTest.gd \
+  -rd .godot/gdunit-reports-gameplay
 "${godot_bin}" --headless --path "${godot_project}" res://tests/SmokeRunner.tscn
 
 after_state="$(tracked_state)"

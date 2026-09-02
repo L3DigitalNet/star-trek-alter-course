@@ -2,6 +2,14 @@
 
 ## Current snapshot
 
+- Feature #25 delivers the first executable gameplay walking skeleton: a pure deterministic Core simulation, a map-centric Godot command shell, and a V1 quick-save/load path.
+- The strategic map has three arbitrarily positioned locations and connected routes. Travel remains active until its scheduled arrival.
+- The player ship starts with damaged sensors and an active repair. Repair progresses on the same simulation timeline during real-time play, accelerated play, and strategic travel.
+- The Godot shell exposes Pause, 0.5x, 1x, 2x, and 4x. Its bounded adapter converts presentation time into explicit 100 ms Core steps.
+- Strategic and tactical views are distinct open maps. Core tactical state uses continuous kilometers and Y-positive-up; Godot performs screen projection.
+- The first validated ship definition and V1 schema live under `src/AlterCourse.Godot/content/`, separate from AssetCtl.
+- V1 JSON quick saves use Godot's `user://quick-save-v1.json` boundary and restore active travel, repair, scheduler, and runtime identity state only after validation succeeds.
+- The walking skeleton deliberately defers combat, shields, weapons, power distribution, crew, factions, diplomacy, economy, missions, AI, narrative, networking, and final art.
 - Fresh Catalog 5 adoption is configured for Project Standards v5.27.0.
 - Enabled packages: markdown-frontmatter 1.15, adr 1.6, markdown-tooling 1.15, agent-handoff 1.16, and github-workflow 1.8.
 - No legacy Agent Handoff implementation was found, so no migration was required.
