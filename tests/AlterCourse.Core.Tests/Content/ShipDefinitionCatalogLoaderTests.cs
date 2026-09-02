@@ -205,6 +205,29 @@ public sealed class ShipDefinitionCatalogLoaderTests
         Assert.Contains(first.Diagnostics, diagnostic => !string.IsNullOrWhiteSpace(diagnostic.SchemaLocation));
     }
 
+    /// <summary>Confirms every authored-input path rejects oversized documents before parsing.</summary>
+    [Fact]
+    public void RejectsOversizedDocumentsAcrossInputForms()
+    {
+        string oversized = new(' ', (256 * 1024) + 1);
+        byte[] bytes = Encoding.UTF8.GetBytes(oversized);
+
+        ShipContentValidationException text = Assert.Throws<ShipContentValidationException>(() =>
+            CreateLoader().LoadText(oversized, "large-text.json")
+        );
+        ShipContentValidationException utf8 = Assert.Throws<ShipContentValidationException>(() =>
+            CreateLoader().LoadUtf8(bytes, "large-bytes.json")
+        );
+        using var stream = new MemoryStream(bytes);
+        ShipContentValidationException streamed = Assert.Throws<ShipContentValidationException>(() =>
+            CreateLoader().Load(stream, "large-stream.json")
+        );
+
+        Assert.Equal("content.size-limit", text.Diagnostics.Single().Code);
+        Assert.Equal("content.size-limit", utf8.Diagnostics.Single().Code);
+        Assert.Equal("content.size-limit", streamed.Diagnostics.Single().Code);
+    }
+
     private static ShipDefinitionCatalogLoader CreateLoader() =>
         new(
             File.ReadAllText(

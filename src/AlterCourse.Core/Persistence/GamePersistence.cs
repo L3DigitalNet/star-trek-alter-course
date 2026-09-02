@@ -152,6 +152,7 @@ public static class GamePersistence
             }
 
             File.Move(temporaryPath, targetPath, overwrite: true);
+            temporaryCreated = false;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -166,7 +167,16 @@ public static class GamePersistence
         {
             if (temporaryCreated && File.Exists(temporaryPath))
             {
-                File.Delete(temporaryPath);
+                try
+                {
+                    File.Delete(temporaryPath);
+                }
+                catch (Exception exception)
+                    when (exception is IOException or UnauthorizedAccessException)
+                {
+                    // Cleanup is secondary to the typed write failure already in flight. The
+                    // isolated candidate may remain, but it must never replace that primary error.
+                }
             }
         }
     }
@@ -456,6 +466,13 @@ public static class GamePersistence
         }
 
         EnsureCount(snapshot.OutstandingWork.Length, MaximumOutstandingWork, "scheduler work");
+        if (snapshot.NextWorkId == long.MaxValue || snapshot.NextSequence == long.MaxValue)
+        {
+            throw new InvalidOperationException(
+                "Scheduler counters must retain headroom for deterministic continuation."
+            );
+        }
+
         var identities = new HashSet<long>();
         var sequences = new HashSet<long>();
         var work = new ScheduledWork[snapshot.OutstandingWork.Length];
@@ -466,46 +483,65 @@ public static class GamePersistence
             ScheduledWorkSnapshotV1 item =
                 snapshot.OutstandingWork[index]
                 ?? throw new InvalidOperationException("Scheduler work items cannot be null.");
-            EnsureFixedStep(item.DueTimeMilliseconds, "Scheduled due time");
-            if (!identities.Add(item.Id))
-            {
-                throw new InvalidOperationException("Scheduler contains a duplicate work identity.");
-            }
-
-            if (!sequences.Add(item.Sequence))
-            {
-                throw new InvalidOperationException("Scheduler contains a duplicate work sequence.");
-            }
-
-            if (
-                index > 0
-                && (
-                    item.DueTimeMilliseconds < previousDue
-                    || (item.DueTimeMilliseconds == previousDue && item.Sequence <= previousSequence)
-                )
-            )
-            {
-                throw new InvalidOperationException(
-                    "Outstanding scheduler work is not in stable due-time and sequence order."
-                );
-            }
-
-            work[index] = new ScheduledWork(
-                new ScheduledWorkId(item.Id),
-                new SimulationTime(item.DueTimeMilliseconds),
-                item.Sequence,
-                item.Kind switch
-                {
-                    TravelArrivalKind => ScheduledWorkKind.TravelArrival,
-                    SensorRepairCompletionKind => ScheduledWorkKind.SensorRepairCompletion,
-                    _ => throw new InvalidOperationException("Scheduled work kind is unknown."),
-                }
+            work[index] = RestoreScheduledWork(
+                item,
+                index,
+                previousDue,
+                previousSequence,
+                identities,
+                sequences
             );
             previousDue = item.DueTimeMilliseconds;
             previousSequence = item.Sequence;
         }
 
         return SimulationScheduler.Restore(snapshot.NextWorkId, snapshot.NextSequence, work);
+    }
+
+    private static ScheduledWork RestoreScheduledWork(
+        ScheduledWorkSnapshotV1 item,
+        int index,
+        long previousDue,
+        long previousSequence,
+        HashSet<long> identities,
+        HashSet<long> sequences
+    )
+    {
+        EnsureFixedStep(item.DueTimeMilliseconds, "Scheduled due time");
+        if (!identities.Add(item.Id))
+        {
+            throw new InvalidOperationException("Scheduler contains a duplicate work identity.");
+        }
+
+        if (!sequences.Add(item.Sequence))
+        {
+            throw new InvalidOperationException("Scheduler contains a duplicate work sequence.");
+        }
+
+        if (
+            index > 0
+            && (
+                item.DueTimeMilliseconds < previousDue
+                || (item.DueTimeMilliseconds == previousDue && item.Sequence <= previousSequence)
+            )
+        )
+        {
+            throw new InvalidOperationException(
+                "Outstanding scheduler work is not in stable due-time and sequence order."
+            );
+        }
+
+        return new ScheduledWork(
+            new ScheduledWorkId(item.Id),
+            new SimulationTime(item.DueTimeMilliseconds),
+            item.Sequence,
+            item.Kind switch
+            {
+                TravelArrivalKind => ScheduledWorkKind.TravelArrival,
+                SensorRepairCompletionKind => ScheduledWorkKind.SensorRepairCompletion,
+                _ => throw new InvalidOperationException("Scheduled work kind is unknown."),
+            }
+        );
     }
 
     private static StrategicMap RestoreMap(StrategicMapSnapshotV1 snapshot)
@@ -839,6 +875,13 @@ public static class GamePersistence
         if (milliseconds % SimulationFixedStep.Duration.Milliseconds != 0)
         {
             throw new InvalidOperationException($"{label} must be fixed-step aligned.");
+        }
+
+        if (milliseconds > long.MaxValue - SimulationFixedStep.Duration.Milliseconds)
+        {
+            throw new InvalidOperationException(
+                $"{label} must retain one fixed step of continuation headroom."
+            );
         }
     }
 

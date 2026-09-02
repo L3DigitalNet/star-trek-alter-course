@@ -190,6 +190,20 @@ public sealed class GamePersistenceTests
         AssertFailure(due, "due-grid.json", GamePersistenceFailure.InvalidData, "fixed-step");
     }
 
+    /// <summary>Confirms restored clocks and allocators retain room for deterministic continuation.</summary>
+    [Fact]
+    public void RejectsTerminalTimeAndSchedulerCounters()
+    {
+        long terminalAlignedTime = long.MaxValue - (long.MaxValue % 100);
+        byte[] time = Mutate(root => root["simulation"]!["timeMilliseconds"] = terminalAlignedTime);
+        byte[] workId = Mutate(root => root["simulation"]!["scheduler"]!["nextWorkId"] = long.MaxValue);
+        byte[] sequence = Mutate(root => root["simulation"]!["scheduler"]!["nextSequence"] = long.MaxValue);
+
+        AssertFailure(time, "terminal-time.json", GamePersistenceFailure.InvalidData, "headroom");
+        AssertFailure(workId, "terminal-work-id.json", GamePersistenceFailure.InvalidData, "headroom");
+        AssertFailure(sequence, "terminal-sequence.json", GamePersistenceFailure.InvalidData, "headroom");
+    }
+
     /// <summary>Confirms travel and repair must each correlate to exactly matching scheduled work.</summary>
     [Fact]
     public void RejectsBrokenTravelAndRepairCorrelations()
