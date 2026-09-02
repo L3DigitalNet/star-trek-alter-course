@@ -2,7 +2,7 @@
 
 ## Current focus
 
-- Await governed merge and admission for Final PR #37.
+- Manually test Milestone 1 on merged `dev` before any release promotion.
 
 ## Active incidents
 

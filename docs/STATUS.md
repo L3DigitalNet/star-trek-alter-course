@@ -2,7 +2,7 @@
 
 ## Current snapshot
 
-- Milestone 1 is implemented by Feature #36 and Final PR #37; manual gameplay testing on merged `dev` is the next release-facing step.
+- Feature #36 completed Milestone 1 through merged Final PR #37 (`eb3c976`); manual gameplay testing is the next release-facing step.
 - Version 0.1.0 remains the first source-only release. No packaged gameplay artifact is published.
 - The shell retains strategic travel, local tactical movement, sensor repair, deterministic time controls, advance-until-event, and quick save/load.
 - The proof world has three vessels: USS Pathfinder at Dawn Anchor, USS Wayfarer repairing at Vesper Reach, and USS Horizon traveling to Meridian Drift.
