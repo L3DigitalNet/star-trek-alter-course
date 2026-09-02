@@ -9,9 +9,8 @@ public sealed record ShipDefinition
     /// <summary>Initializes a minimal ship definition.</summary>
     public ShipDefinition(
         ShipDefinitionId id,
-        string displayName,
+        string designDisplayName,
         SpeedKilometersPerSecond maximumTacticalSpeed,
-        SensorIntegrity initialSensorIntegrity,
         SimulationDuration sensorRepairDuration
     )
     {
@@ -20,7 +19,7 @@ public sealed record ShipDefinition
             throw new ArgumentException("Ship definition requires an initialized identity.", nameof(id));
         }
 
-        ArgumentException.ThrowIfNullOrWhiteSpace(displayName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(designDisplayName);
         if (sensorRepairDuration.Milliseconds <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(sensorRepairDuration), "Repair duration must be positive.");
@@ -35,23 +34,19 @@ public sealed record ShipDefinition
         }
 
         Id = id;
-        DisplayName = displayName;
+        DesignDisplayName = designDisplayName;
         MaximumTacticalSpeed = maximumTacticalSpeed;
-        InitialSensorIntegrity = initialSensorIntegrity;
         SensorRepairDuration = sensorRepairDuration;
     }
 
     /// <summary>Gets the stable definition identity.</summary>
     public ShipDefinitionId Id { get; }
 
-    /// <summary>Gets the player-facing ship name.</summary>
-    public string DisplayName { get; }
+    /// <summary>Gets the reusable player-facing ship design label.</summary>
+    public string DesignDisplayName { get; }
 
     /// <summary>Gets the maximum tactical speed.</summary>
     public SpeedKilometersPerSecond MaximumTacticalSpeed { get; }
-
-    /// <summary>Gets the sensor integrity used by a new ship.</summary>
-    public SensorIntegrity InitialSensorIntegrity { get; }
 
     /// <summary>Gets the duration of a complete active sensor repair.</summary>
     public SimulationDuration SensorRepairDuration { get; }

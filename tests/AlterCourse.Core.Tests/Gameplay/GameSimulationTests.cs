@@ -1,4 +1,7 @@
+using AlterCourse.Core.Content;
 using AlterCourse.Core.Gameplay;
+using AlterCourse.Core.Identity;
+using AlterCourse.Core.Persistence;
 using AlterCourse.Core.Player;
 using AlterCourse.Core.Quantities;
 using AlterCourse.Core.Ships;
@@ -20,6 +23,7 @@ public sealed class GameSimulationTests
         PlayerProjection projection = first.GetPlayerProjection();
 
         Assert.Equal(1, projection.Ship.InstanceId.Value);
+        Assert.Equal("USS Pathfinder", projection.Ship.DisplayName);
         Assert.Equal(projection, second.GetPlayerProjection());
         Assert.Equal(3, projection.Strategic.Locations.Count);
         Assert.Equal(2, projection.Strategic.Routes.Count);
@@ -219,13 +223,20 @@ public sealed class GameSimulationTests
 
         Assert.Equal(AdvanceUntilOutcome.ScheduledEventResolved, repair.Outcome);
         Assert.Equal(8000, repair.StoppedAt.Milliseconds);
-        Assert.Equal([ScheduledWorkKind.SensorRepairCompletion], repair.ResolvedKinds);
+        Assert.Equal(
+            [ScheduledWorkKind.SensorRepairCompletion, ScheduledWorkKind.SensorRepairCompletion],
+            repair.ResolvedKinds
+        );
         Assert.NotNull(repair.Projection.Strategic.Travel);
         Assert.Equal(12000, arrival.StoppedAt.Milliseconds);
         Assert.Equal([ScheduledWorkKind.TravelArrival], arrival.ResolvedKinds);
         Assert.Equal(12000, ordinaryAdvance.FinalTime.Milliseconds);
         Assert.Equal(
-            [ScheduledWorkKind.SensorRepairCompletion, ScheduledWorkKind.TravelArrival],
+            [
+                ScheduledWorkKind.SensorRepairCompletion,
+                ScheduledWorkKind.SensorRepairCompletion,
+                ScheduledWorkKind.TravelArrival,
+            ],
             ordinaryAdvance.ResolvedKinds
         );
         Assert.Equal(ordinary.GetPlayerProjection(), ordinaryAdvance.Projection);
@@ -238,7 +249,7 @@ public sealed class GameSimulationTests
     {
         GameSimulation game = CreateGame();
         game.RequestTravel(new TravelIntent(ConnectedDestination(game)));
-        game.AdvanceFixedSteps(120);
+        game.AdvanceFixedSteps(140);
         PlayerProjection before = game.GetPlayerProjection();
 
         AdvanceUntilResult result = game.AdvanceUntilNextScheduledEvent();
@@ -300,16 +311,95 @@ public sealed class GameSimulationTests
         Assert.Equal(initial, game.GetPlayerProjection());
     }
 
-    private static GameSimulation CreateGame() =>
-        FirstGameSetup.Create(
-            new ShipDefinition(
-                new ShipDefinitionId("pathfinder"),
-                "USS Pathfinder",
-                new SpeedKilometersPerSecond(10),
-                new SensorIntegrity(0.4),
-                new SimulationDuration(8000)
-            )
+    /// <summary>Confirms oversized catch-up work is rejected before any ship or clock mutation.</summary>
+    [Fact]
+    public void AdvanceRejectsShipStepWorkOverBudgetWithoutMutation()
+    {
+        GameSimulation game = CreateGame();
+        var metadata = new GameSaveMetadata(
+            "work-budget",
+            "Work Budget",
+            DateTimeOffset.UnixEpoch,
+            DateTimeOffset.UnixEpoch
         );
+        byte[] initial = GamePersistence.Serialize(game, metadata);
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            game.AdvanceFixedSteps(1_000_001)
+        );
+
+        Assert.Contains("ship-step work budget", exception.Message, StringComparison.Ordinal);
+        Assert.Equal(initial, GamePersistence.Serialize(game, metadata));
+    }
+
+    /// <summary>Confirms bootstrap cannot admit scheduled work that persistence would reject for time exhaustion.</summary>
+    [Fact]
+    public void BootstrapRejectsScheduledDueTimeWithoutContinuationHeadroom()
+    {
+        var origin = new StrategicLocation(new LocationId("origin"), "Origin", default);
+        var destination = new StrategicLocation(new LocationId("destination"), "Destination", default);
+        var map = new StrategicMap(
+            [origin, destination],
+            [new StrategicRoute(origin.Id, destination.Id, new SimulationDuration(9223372036854775800))]
+        );
+        var start = new ShipStart(
+            new ShipInstanceId(1),
+            new ShipDefinitionId("pathfinder"),
+            "USS Boundary",
+            default,
+            default,
+            new SensorIntegrity(1),
+            new TravelingStart(origin.Id, destination.Id, new SimulationTime(0))
+        );
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            new GameBootstrap(new SimulationTime(0), map, start.InstanceId, [start]).CreateSimulation(CreateCatalog())
+        );
+
+        Assert.Contains("continuation headroom", exception.Message, StringComparison.Ordinal);
+    }
+
+    private static GameSimulation CreateGame()
+    {
+        return FirstGameSetup.Create(CreateCatalog());
+    }
+
+    private static ShipDefinitionCatalog CreateCatalog()
+    {
+        const string definition = """
+            {
+              "schemaVersion": 2,
+              "id": "pathfinder",
+              "designDisplayName": "Pathfinder class",
+              "maximumTacticalSpeedKilometersPerSecond": 10,
+              "sensorRepairDurationMilliseconds": 8000
+            }
+            """;
+        string schema = File.ReadAllText(
+            Path.Combine(FindRepositoryRoot(), "src/AlterCourse.Godot/content/schemas/ship-definition-v2.schema.json")
+        );
+        ShipDefinitionCatalog catalog = new ShipDefinitionCatalogLoader(schema).LoadCatalog([
+            ShipDefinitionContent.FromText("pathfinder.json", definition),
+        ]);
+        return catalog;
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        for (
+            var directory = new DirectoryInfo(AppContext.BaseDirectory);
+            directory is not null;
+            directory = directory.Parent
+        )
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "AlterCourse.sln")))
+            {
+                return directory.FullName;
+            }
+        }
+
+        throw new DirectoryNotFoundException("Could not locate the repository root from the test output directory.");
+    }
 
     private static LocationId ConnectedDestination(GameSimulation game)
     {

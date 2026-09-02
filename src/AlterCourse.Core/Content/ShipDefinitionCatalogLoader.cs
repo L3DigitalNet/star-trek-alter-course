@@ -7,11 +7,14 @@ using Json.Schema;
 
 namespace AlterCourse.Core.Content;
 
-/// <summary>Strictly validates version-one authored ship JSON and constructs domain definitions.</summary>
+/// <summary>Strictly validates version-two authored ship JSON and constructs domain definitions.</summary>
 public sealed class ShipDefinitionCatalogLoader
 {
+    /// <summary>Gets the maximum number of authored definitions admitted into one development catalog.</summary>
+    public const int MaximumDefinitions = 256;
+
     private static readonly Uri SchemaBaseUri = new(
-        "https://l3digital.net/star-trek-alter-course/schemas/ship-definition-v1.schema.json"
+        "https://l3digital.net/star-trek-alter-course/schemas/ship-definition-v2.schema.json"
     );
     private static readonly EvaluationOptions SchemaEvaluationOptions = new()
     {
@@ -21,7 +24,7 @@ public sealed class ShipDefinitionCatalogLoader
 
     private readonly JsonSchema _schema;
 
-    /// <summary>Initializes the loader from the canonical version-one JSON Schema text.</summary>
+    /// <summary>Initializes the loader from the canonical version-two JSON Schema text.</summary>
     public ShipDefinitionCatalogLoader(string schemaText)
     {
         ArgumentNullException.ThrowIfNull(schemaText);
@@ -48,10 +51,19 @@ public sealed class ShipDefinitionCatalogLoader
     public ShipDefinitionCatalog LoadCatalog(IEnumerable<ShipDefinitionContent> content)
     {
         ArgumentNullException.ThrowIfNull(content);
+        ShipDefinitionContent[] materialized = content.Take(MaximumDefinitions + 1).ToArray();
+        if (materialized.Length > MaximumDefinitions)
+        {
+            throw new ArgumentException(
+                $"A ship definition catalog supports at most {MaximumDefinitions} definitions.",
+                nameof(content)
+            );
+        }
+
         var definitions = new Dictionary<ShipDefinitionId, ShipDefinition>();
         var identities = new Dictionary<ShipDefinitionId, string>();
 
-        foreach (ShipDefinitionContent source in content)
+        foreach (ShipDefinitionContent source in materialized)
         {
             ShipDefinition definition = Load(source);
             if (identities.TryGetValue(definition.Id, out string? earlierSource))
@@ -78,7 +90,7 @@ public sealed class ShipDefinitionCatalogLoader
         using (document)
         {
             ValidateSchema(document.RootElement, content.SourceIdentity);
-            AuthoredShipDefinitionV1 authored = ReadAuthoredModel(document.RootElement, content.SourceIdentity);
+            AuthoredShipDefinitionV2 authored = ReadAuthoredModel(document.RootElement, content.SourceIdentity);
             return ValidateSemantics(authored, content.SourceIdentity);
         }
     }
@@ -186,13 +198,12 @@ public sealed class ShipDefinitionCatalogLoader
 
     private static string Location(string pointer) => string.IsNullOrEmpty(pointer) ? "#" : "#" + pointer;
 
-    private static AuthoredShipDefinitionV1 ReadAuthoredModel(JsonElement root, string sourceIdentity) =>
+    private static AuthoredShipDefinitionV2 ReadAuthoredModel(JsonElement root, string sourceIdentity) =>
         new(
             ReadInt32(root, "schemaVersion", sourceIdentity),
             root.GetProperty("id").GetString()!,
-            root.GetProperty("displayName").GetString()!,
+            root.GetProperty("designDisplayName").GetString()!,
             root.GetProperty("maximumTacticalSpeedKilometersPerSecond").GetDouble(),
-            root.GetProperty("initialSensorIntegrity").GetDouble(),
             ReadInt64(root, "sensorRepairDurationMilliseconds", sourceIdentity)
         );
 
@@ -249,13 +260,12 @@ public sealed class ShipDefinitionCatalogLoader
             $"'{propertyName}' must be representable as {expectedType}."
         );
 
-    private static ShipDefinition ValidateSemantics(AuthoredShipDefinitionV1 authored, string sourceIdentity)
+    private static ShipDefinition ValidateSemantics(AuthoredShipDefinitionV2 authored, string sourceIdentity)
     {
         var diagnostics = new List<ShipContentDiagnostic>();
         ShipDefinitionId id = ValidateIdentity(authored.Id, sourceIdentity, diagnostics);
-        ValidateDisplayName(authored.DisplayName, sourceIdentity, diagnostics);
+        ValidateDesignDisplayName(authored.DesignDisplayName, sourceIdentity, diagnostics);
         ValidateSpeed(authored.MaximumTacticalSpeedKilometersPerSecond, sourceIdentity, diagnostics);
-        ValidateSensorIntegrity(authored.InitialSensorIntegrity, sourceIdentity, diagnostics);
         ValidateRepairDuration(authored.SensorRepairDurationMilliseconds, sourceIdentity, diagnostics);
 
         if (diagnostics.Count > 0)
@@ -265,9 +275,8 @@ public sealed class ShipDefinitionCatalogLoader
 
         return new ShipDefinition(
             id,
-            authored.DisplayName,
+            authored.DesignDisplayName,
             new SpeedKilometersPerSecond(authored.MaximumTacticalSpeedKilometersPerSecond),
-            new SensorIntegrity(authored.InitialSensorIntegrity),
             new SimulationDuration(authored.SensorRepairDurationMilliseconds)
         );
     }
@@ -289,16 +298,16 @@ public sealed class ShipDefinitionCatalogLoader
         return new ShipDefinitionId(authoredId);
     }
 
-    private static void ValidateDisplayName(
-        string displayName,
+    private static void ValidateDesignDisplayName(
+        string designDisplayName,
         string sourceIdentity,
         List<ShipContentDiagnostic> diagnostics
     )
     {
-        if (string.IsNullOrWhiteSpace(displayName))
+        if (string.IsNullOrWhiteSpace(designDisplayName))
         {
             diagnostics.Add(
-                Semantic(sourceIdentity, "#/displayName", "Display name must contain non-whitespace text.")
+                Semantic(sourceIdentity, "#/designDisplayName", "Design display name must contain non-whitespace text.")
             );
         }
     }
@@ -312,24 +321,6 @@ public sealed class ShipDefinitionCatalogLoader
                     sourceIdentity,
                     "#/maximumTacticalSpeedKilometersPerSecond",
                     "Maximum tactical speed must be finite and nonnegative."
-                )
-            );
-        }
-    }
-
-    private static void ValidateSensorIntegrity(
-        double integrity,
-        string sourceIdentity,
-        List<ShipContentDiagnostic> diagnostics
-    )
-    {
-        if (!double.IsFinite(integrity) || integrity is < 0 or >= 1)
-        {
-            diagnostics.Add(
-                Semantic(
-                    sourceIdentity,
-                    "#/initialSensorIntegrity",
-                    "Initial sensor integrity must be within [0, 1) so the first player ship begins damaged."
                 )
             );
         }
@@ -364,12 +355,11 @@ public sealed class ShipDefinitionCatalogLoader
         string message
     ) => new([new ShipContentDiagnostic(code, sourceIdentity, instanceLocation, schemaLocation, message)]);
 
-    private sealed record AuthoredShipDefinitionV1(
+    private sealed record AuthoredShipDefinitionV2(
         int SchemaVersion,
         string Id,
-        string DisplayName,
+        string DesignDisplayName,
         double MaximumTacticalSpeedKilometersPerSecond,
-        double InitialSensorIntegrity,
         long SensorRepairDurationMilliseconds
     );
 }

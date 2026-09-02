@@ -1,8 +1,7 @@
 {
-	"schemaVersion": 1,
+	"schemaVersion": 2,
 	"id": "pathfinder",
-	"displayName": "USS Pathfinder",
+	"designDisplayName": "Pathfinder class",
 	"maximumTacticalSpeedKilometersPerSecond": 10,
-	"initialSensorIntegrity": 0.4,
 	"sensorRepairDurationMilliseconds": 8000
 }

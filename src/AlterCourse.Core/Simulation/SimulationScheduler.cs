@@ -6,6 +6,9 @@ namespace AlterCourse.Core.Simulation;
 /// <summary>Stores and orders immutable data-only scheduled simulation work.</summary>
 public sealed class SimulationScheduler
 {
+    /// <summary>Gets the maximum number of outstanding consequences retained by one scheduler.</summary>
+    public const int MaximumOutstandingWork = 4096;
+
     private SimulationScheduler(long nextWorkId, long nextSequence, ImmutableArray<ScheduledWork> outstandingWork)
     {
         NextWorkId = nextWorkId;
@@ -44,11 +47,26 @@ public sealed class SimulationScheduler
         IEnumerable<ScheduledWork> outstandingWork
     )
     {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(nextWorkId);
-        ArgumentOutOfRangeException.ThrowIfNegative(nextSequence);
         ArgumentNullException.ThrowIfNull(outstandingWork);
 
-        ScheduledWork[] work = outstandingWork.ToArray();
+        if (!AreCountersWithinPersistedRange(nextWorkId, nextSequence))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(nextWorkId),
+                nextWorkId,
+                "Scheduler counters are outside the persisted range."
+            );
+        }
+
+        ScheduledWork[] work = outstandingWork.Take(MaximumOutstandingWork + 1).ToArray();
+        if (work.Length > MaximumOutstandingWork)
+        {
+            throw new ArgumentException(
+                $"A scheduler supports at most {MaximumOutstandingWork} outstanding work items.",
+                nameof(outstandingWork)
+            );
+        }
+
         HashSet<long> identities = [];
         // Sequences are globally unique, not merely unique per due time: (DueTime, Sequence)
         // must remain a total order independent of input enumeration and sort stability.
@@ -68,16 +86,35 @@ public sealed class SimulationScheduler
 
     /// <summary>Schedules a known consequence and returns the following scheduler state.</summary>
     /// <param name="dueTime">The simulation time at which the work becomes due.</param>
+    /// <param name="targetShipId">The ship instance that owns the scheduled consequence.</param>
     /// <param name="kind">The known consequence kind.</param>
     /// <returns>The following scheduler state and scheduled work item.</returns>
+    /// <exception cref="ArgumentException"><paramref name="targetShipId"/> is uninitialized.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="kind"/> is unknown.</exception>
     /// <exception cref="OverflowException">A following identity or sequence cannot be represented.</exception>
-    public (SimulationScheduler Scheduler, ScheduledWork Work) Schedule(SimulationTime dueTime, ScheduledWorkKind kind)
+    public (SimulationScheduler Scheduler, ScheduledWork Work) Schedule(
+        SimulationTime dueTime,
+        ShipInstanceId targetShipId,
+        ScheduledWorkKind kind
+    )
     {
+        ScheduledWork.ValidateTarget(targetShipId);
         ScheduledWork.ValidateKind(kind);
+        if (OutstandingWork.Length >= MaximumOutstandingWork)
+        {
+            throw new InvalidOperationException(
+                $"Scheduling would exceed the {MaximumOutstandingWork}-item outstanding-work limit."
+            );
+        }
+
         long followingWorkId = checked(NextWorkId + 1);
         long followingSequence = checked(NextSequence + 1);
-        ScheduledWork scheduled = new(new ScheduledWorkId(NextWorkId), dueTime, NextSequence, kind);
+        if (!AreCountersWithinPersistedRange(followingWorkId, followingSequence))
+        {
+            throw new OverflowException("Scheduling would produce counters outside the persisted range.");
+        }
+
+        ScheduledWork scheduled = new(new ScheduledWorkId(NextWorkId), dueTime, NextSequence, targetShipId, kind);
 
         ImmutableArray<ScheduledWork> outstanding = OutstandingWork.Add(scheduled).Sort(CompareWork);
         return (new SimulationScheduler(followingWorkId, followingSequence, outstanding), scheduled);
@@ -109,6 +146,9 @@ public sealed class SimulationScheduler
         return dueComparison != 0 ? dueComparison : left.Sequence.CompareTo(right.Sequence);
     }
 
+    internal static bool AreCountersWithinPersistedRange(long nextWorkId, long nextSequence) =>
+        nextWorkId > 0 && nextWorkId < long.MaxValue - 1 && nextSequence >= 0 && nextSequence < long.MaxValue - 1;
+
     private static void ValidateRestoredItem(
         ScheduledWork item,
         long nextWorkId,
@@ -126,6 +166,11 @@ public sealed class SimulationScheduler
         if (item.Sequence < 0)
         {
             throw InvalidOutstandingWork("Outstanding work contains a negative sequence.");
+        }
+
+        if (item.TargetShipId.Value <= 0)
+        {
+            throw InvalidOutstandingWork("Outstanding work contains an uninitialized target ship identity.");
         }
 
         try
