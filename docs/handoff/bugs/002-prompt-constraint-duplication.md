@@ -6,10 +6,8 @@ The prompt compiler duplicated constraints after merging prompt layers and could
 
 ## Fix
 
-Prompt contract v4 deduplicates merged constraints and uses kind-neutral composition grammar.
-Regression coverage protects both behaviors.
+Prompt contract v4 deduplicates merged constraints and uses kind-neutral composition grammar. Regression coverage protects both behaviors.
 
 ## Lesson
 
-Prompt assembly is a versioned output contract.
-Test merged constraints and generated grammar at the compiler boundary, not only individual input fragments.
+Prompt assembly is a versioned output contract. Test merged constraints and generated grammar at the compiler boundary, not only individual input fragments.
