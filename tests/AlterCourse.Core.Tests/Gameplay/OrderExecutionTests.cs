@@ -208,7 +208,7 @@ public sealed class OrderExecutionTests
         ShipState orderlessNpc = state.GetRequiredShip(NpcId) with { ActiveOrder = null };
         SimulationState orderlessState = state.ReplaceShip(NpcId, orderlessNpc) with
         {
-            OrderIdAllocator = ShipOrderIdAllocator.Create(),
+            OrderIdAllocator = state.OrderIdAllocator,
         };
         var orderless = GameSimulation.RestoreState(orderlessState, catalog);
         var metadata = new GameSaveMetadata(
