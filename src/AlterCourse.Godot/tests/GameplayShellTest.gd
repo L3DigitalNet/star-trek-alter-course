@@ -649,6 +649,47 @@ func test_live_engineering_identity_selection_current_payload_and_traversal_surv
 	assert_str(screen.get_meta("active_workspace", "")).is_equal("engineering")
 
 
+func test_live_impulse_repair_stays_focused_then_submits_through_core() -> void:
+	var screen := _create_screen()
+	screen.call("QuickSave")
+	_write_text(
+		TEST_QUICK_SAVE_PATH,
+		_rewrite_v5_for_damaged_impulse(
+			FileAccess.get_file_as_string(TEST_QUICK_SAVE_PATH)
+		)
+	)
+
+	screen.call("QuickLoad")
+	assert_str(screen.get_meta("quick_save_status", "")).is_equal("loaded")
+	screen.call("ShowEngineeringWorkspace")
+	var impulse_repair := _find_engineering_action_button(screen, "repair-propulsion") as Button
+	assert_bool(impulse_repair.disabled).is_false()
+	var repair_button_id := impulse_repair.get_instance_id()
+	impulse_repair.grab_focus()
+
+	assert_int(screen.call("ProcessSyntheticDelta", 0.1)).is_equal(1)
+	await get_tree().process_frame
+	var refreshed_repair := _find_engineering_action_button(screen, "repair-propulsion") as Button
+	assert_int(refreshed_repair.get_instance_id()).is_equal(repair_button_id)
+	assert_bool(refreshed_repair.has_focus()).is_true()
+	assert_bool(refreshed_repair.disabled).is_false()
+
+	refreshed_repair.emit_signal("pressed")
+	assert_str(screen.get_meta("last_engineering_command", "")).is_equal(
+		"repair:impulse-propulsion:Accepted"
+	)
+	assert_str(screen.get_meta("engineering_repair_target", "")).is_equal("impulse-propulsion")
+	assert_str((screen.get_node("%Message") as Label).text).contains(
+		"Impulse propulsion repair started"
+	)
+	assert_int(
+		(_find_engineering_action_button(screen, "repair-propulsion") as Button).get_instance_id()
+	).is_equal(repair_button_id)
+	assert_bool(
+		(_find_engineering_action_button(screen, "repair-propulsion") as Button).disabled
+	).is_true()
+
+
 func test_removed_live_engineering_action_cannot_fire_stale_intent_in_preview() -> void:
 	var screen := _create_screen()
 	screen.call("ShowEngineeringWorkspace")
@@ -921,6 +962,8 @@ func test_travel_departure_presents_contact_and_scan_events_in_log() -> void:
 
 func test_batched_events_render_their_distinct_core_clocks_in_log() -> void:
 	var screen := _create_screen()
+	screen.call("ShowEngineeringWorkspace")
+	(_find_engineering_action_button(screen, "prioritize-sensors") as Button).emit_signal("pressed")
 	for _batch in range(12):
 		assert_int(screen.call("ProcessSyntheticDelta", 0.6)).is_equal(6)
 	assert_int(screen.call("ProcessSyntheticDelta", 0.2)).is_equal(2)
@@ -1023,7 +1066,7 @@ func test_normal_shell_never_projects_hidden_vessel_or_scheduler_truth() -> void
 	assert_str(presented).not_contains("ScheduledWork")
 
 
-func test_default_quick_save_writes_schema_v4_without_touching_legacy_slot() -> void:
+func test_default_quick_save_writes_schema_v5_without_touching_legacy_slot() -> void:
 	_write_text(LEGACY_DEFAULT_QUICK_SAVE_PATH, "legacy-slot-sentinel")
 	var screen := _create_default_screen()
 
@@ -1034,16 +1077,16 @@ func test_default_quick_save_writes_schema_v4_without_touching_legacy_slot() -> 
 	var save_json: Dictionary = JSON.parse_string(
 		FileAccess.get_file_as_string(DEFAULT_QUICK_SAVE_PATH)
 	)
-	assert_int(int(save_json.get("schemaVersion", -1))).is_equal(4)
+	assert_int(int(save_json.get("schemaVersion", -1))).is_equal(5)
 	assert_str(save_json.get("simulationRulesVersion", "")).is_equal(
-		"sensor-knowledge-first-contact-v1"
+		"engineering-backbone-v1"
 	)
 	assert_str(FileAccess.get_file_as_string(LEGACY_DEFAULT_QUICK_SAVE_PATH)).is_equal(
 		"legacy-slot-sentinel"
 	)
 
 
-func test_default_quick_load_discovers_legacy_slot_path_then_saves_generic_v4() -> void:
+func test_default_quick_load_discovers_legacy_slot_path_then_saves_generic_v5() -> void:
 	var snapshot_screen := _create_screen()
 	snapshot_screen.call("ProcessSyntheticDelta", 0.6)
 	snapshot_screen.call("QuickSave")
@@ -1062,9 +1105,9 @@ func test_default_quick_load_discovers_legacy_slot_path_then_saves_generic_v4() 
 	var save_json: Dictionary = JSON.parse_string(
 		FileAccess.get_file_as_string(DEFAULT_QUICK_SAVE_PATH)
 	)
-	assert_int(int(save_json.get("schemaVersion", -1))).is_equal(4)
+	assert_int(int(save_json.get("schemaVersion", -1))).is_equal(5)
 	assert_str(save_json.get("simulationRulesVersion", "")).is_equal(
-		"sensor-knowledge-first-contact-v1"
+		"engineering-backbone-v1"
 	)
 	assert_str(FileAccess.get_file_as_string(LEGACY_DEFAULT_QUICK_SAVE_PATH)).is_equal(
 		legacy_contents
@@ -1520,6 +1563,44 @@ func _write_text(user_path: String, contents: String) -> void:
 	assert_object(file).is_not_null()
 	file.store_string(contents)
 	file.close()
+
+
+func _rewrite_v5_for_damaged_impulse(save_text: String) -> String:
+	# Godot's JSON parser normalizes integer tokens through Variant; targeted structural edits keep the strict
+	# persistence contract intact while constructing one otherwise unreachable damaged-impulse test fixture.
+	var engineering_start := save_text.find('"engineering":')
+	var impulse_member := save_text.find('"impulseCondition": 1', engineering_start)
+	assert_int(engineering_start).is_greater_equal(0)
+	assert_int(impulse_member).is_greater(engineering_start)
+	var impulse_value := impulse_member + '"impulseCondition": '.length()
+	save_text = save_text.left(impulse_value) + "0.5" + save_text.substr(impulse_value + 1)
+
+	var repair_member := save_text.find('"activeRepair": {', engineering_start)
+	var repair_value_start := save_text.find("{", repair_member)
+	var repair_value_end := save_text.find("}", repair_value_start)
+	assert_int(repair_member).is_greater(engineering_start)
+	assert_int(repair_value_start).is_greater(repair_member)
+	assert_int(repair_value_end).is_greater(repair_value_start)
+	var repair: Dictionary = JSON.parse_string(
+		save_text.substr(repair_value_start, repair_value_end - repair_value_start + 1)
+	)
+	var repair_work_id := int(repair["scheduledCompletionId"])
+	save_text = save_text.left(repair_value_start) + "null" + save_text.substr(repair_value_end + 1)
+
+	var work_kind := save_text.find('"kind": "systemRepairCompletion"')
+	var work_start := save_text.rfind("{", work_kind)
+	var work_end := save_text.find("}", work_kind)
+	assert_int(work_kind).is_greater_equal(0)
+	assert_int(work_start).is_greater_equal(0)
+	assert_int(work_end).is_greater(work_kind)
+	var work: Dictionary = JSON.parse_string(save_text.substr(work_start, work_end - work_start + 1))
+	assert_int(int(work["id"])).is_equal(repair_work_id)
+	var removal_end := work_end + 1
+	while removal_end < save_text.length() and save_text[removal_end] in [" ", "\n", "\r", "\t"]:
+		removal_end += 1
+	if removal_end < save_text.length() and save_text[removal_end] == ",":
+		removal_end += 1
+	return save_text.left(work_start) + save_text.substr(removal_end)
 
 
 func _remove_quick_save_files() -> void:
