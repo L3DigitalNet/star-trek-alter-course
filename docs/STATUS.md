@@ -5,26 +5,31 @@
 - Features #36 and #38 completed Milestones 1 and 2 through merged Final PRs #37 (`eb3c976`) and #39 (`fba9b438`) on `dev`.
 - Task #40 consolidated their gameplay shell through Final PR #41 (`ed8ca4b`); owner gameplay evaluation found the shell working well.
 - Release Task #53 is Done; v0.3.0 is the current immutable source-only GitHub Release, tagged at `fae21bd`; no packaged gameplay artifact is published.
+- Feature #58's unreleased Milestone 3A slice adds first observed contact on `dev`; it is not a new release and does not complete all of Milestone 3.
 - The shell retains strategic travel, local tactical movement, sensor repair, deterministic time controls, player-relevant advance-until, and quick save/load.
 - The tracked launch script restores and builds before Godot starts, preventing stale local Debug content after branch changes.
-- The proof world has three vessels: USS Pathfinder at Dawn Anchor, USS Wayfarer repairing at Vesper Reach, and USS Horizon traveling to Meridian Drift.
+- The proof world has four vessels: USS Pathfinder at Dawn Anchor, USS Wayfarer repairing at Vesper Reach, USS Horizon traveling to Meridian Drift, and Survey Vessel Kestrel at Dawn Anchor.
 - Core owns an immutable ship-definition catalog and plural ordinary `ShipState`; `PlayerShipId` selects one ship for commands and projection.
 - Strategic, tactical, sensor, repair, and scheduled consequence state is ship-owned. Targeted same-kind work cannot cross ship identities.
 - Ships use stable identity order, removing collection insertion order from simulation semantics.
-- Typed `GameBootstrap` consumes declared starting state. `FirstGameSetup` produces the playable three-ship world.
+- Typed `GameBootstrap` consumes declared starting state. `FirstGameSetup` produces the playable four-ship world.
 - `Milestone2ProofSetup` supplies the long-horizon headless patrol and hold scenario.
 - NPC ships can own one stable `ShipOrder`: one-shot `TravelTo`, bounded cyclic `PatrolRoute`, or time-only `HoldUntil`.
 - The player ship cannot execute an autonomous order. Order execution reuses the same targetable Core travel command as player travel.
 - Cancellation removes only the identified order and its exact hold wake while preserving a physical journey already underway.
-- Ship-definition schema V2 separates reusable capability from vessel names and starting sensor condition.
-- The proof world reuses one validated Pathfinder-class definition for three vessel instances.
-- Save schema V3 persists bounded plural world state, definition references, active orders, and the order allocator; authored definitions remain external.
-- Historical `first-playable-v1` is validated at its source schema. V2-to-V3 writes current `active-world-orders-v1`, and old travel remains orderless.
+- Ship-definition schema V3 adds explicit passive sensor range and active-scan duration to reusable Pathfinder-class capability, while vessel names and starting sensor condition remain bootstrap state.
+- The proof world reuses one validated Pathfinder-class definition for four vessel instances.
+- Each ship owns bounded observer-local contact knowledge. Current, stale, and lost contacts preserve a local ID and learned identity without exposing the correlated ship ID through player or AI projections.
+- Passive detection is local to ships at the same strategic location and scales authored sensor range by sensor integrity. A current contact can be scanned, and an identified current contact can be hailed through typed Core commands.
+- The Kestrel proof vessel initially detects the damaged player ship, withdraws through the bounded explainable `CautiousContact` posture, and holds after an identified valid hail. Hidden NPC decisions remain off the player event stream.
+- Save schema V4 persists bounded plural world state, definitions, orders, sensor knowledge, active scans, contact posture, allocators, and exact scheduled correlations; authored definitions remain external.
+- Historical `first-playable-v1` is validated at its source schema. V2-to-V3 writes `active-world-orders-v1`; V3-to-V4 writes `sensor-knowledge-first-contact-v1` with empty knowledge, next local contact ID 1, and no scan, posture, or decision wake.
 - The generic quick-save slot is `user://quick-save.json`. Only the unchanged default path may discover the legacy `user://quick-save-v1.json` file when the generic slot is absent.
 - World admission is capped at 256 ships. Each advancement allows 1,000,000 moving-ship steps and 10,000 scheduled consequences.
 - Strategic-only intervals jump event-to-event and update repairs analytically; ships with active local tactical motion retain deterministic 100 ms integration.
+- Contact-sensitive local intervals evaluate observations at deterministic 100 ms boundaries. Contact-loss, scan-completion, and contact-decision work use exact scheduler correlations and revalidate their prerequisites at resolution.
 - Godot projects player-visible state and adapts coordinates, input, and elapsed presentation time; it neither owns authoritative ships nor exposes unrestricted NPC truth.
-- The tactical plot is player-centered and local, keeping legitimate sustained movement visible while numeric Core coordinates remain status truth.
+- The tactical plot is player-centered and local, keeping legitimate sustained movement visible while numeric Core coordinates remain status truth. It renders only actor-safe current or stale contacts, supports deterministic contact selection, and keeps contact actions stable across refreshes.
 - The solution uses a one-way Godot-to-Core project reference, exact .NET SDK 10.0.111, C# 12, Godot 4.7.2 .NET, .NET 8 runtime support, Node 24, xUnit, and GdUnit4 6.2.0.
 - `scripts/verify.sh` is the canonical read-only gate for formatting, analysis, policy, builds, tests, Godot integration, security, and smoke checks.
 - Figma's remote MCP endpoint and 14 official Figma skills are project-scoped for Codex and Claude; `codex mcp login figma` performs user authorization.
@@ -39,5 +44,5 @@
 - Owner accepted the command interface for v0.3.0: it runs smoothly with no errors.
 - Bug #49's PR #50 merged as `2064822`; the launcher imports Godot assets before loading the command theme.
 - Bug #51 merged through Final PR #52 as `c5602cc`; live context actions now retain pointer interaction and keyboard focus across refreshes.
-- Actor knowledge, contacts, first contact, faction strategy, general mission assignment, and tactical AI remain deferred.
-- Combat rules, engineering depth, diplomacy, economy, narrative, networking, and final art remain deferred.
+- Remaining Milestone 3 work includes richer uncertainty, strategic contacts, additional postures, affiliation and intent knowledge, and broader encounter transitions.
+- Milestone 4+ work remains deferred: sensor power allocation, engineering depth, faction strategy, combat, diplomacy, economy, narrative, networking, and final art.
