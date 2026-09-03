@@ -30,11 +30,7 @@ public sealed class GamePersistenceV5EngineeringTests
         Assert.Equal("sensors", engineering["activeRepair"]!["targetSystem"]!.GetValue<string>());
         Assert.Contains(
             simulation["scheduler"]!["outstandingWork"]!.AsArray(),
-            work => string.Equals(
-                work!["kind"]!.GetValue<string>(),
-                "systemRepairCompletion",
-                StringComparison.Ordinal
-            )
+            work => string.Equals(work!["kind"]!.GetValue<string>(), "systemRepairCompletion", StringComparison.Ordinal)
         );
         Assert.False(ship.ContainsKey("sensorIntegrity"));
         Assert.False(ship.ContainsKey("sensorRepair"));
@@ -64,11 +60,13 @@ public sealed class GamePersistenceV5EngineeringTests
         if (string.Equals(mutation, "nonfinite", StringComparison.Ordinal))
         {
             invalid = Encoding.UTF8.GetBytes(
-                Encoding.UTF8.GetString(valid).Replace(
-                    "\"generationCondition\": 0.625",
-                    "\"generationCondition\": 1e999",
-                    StringComparison.Ordinal
-                )
+                Encoding
+                    .UTF8.GetString(valid)
+                    .Replace(
+                        "\"generationCondition\": 0.625",
+                        "\"generationCondition\": 1e999",
+                        StringComparison.Ordinal
+                    )
             );
         }
 

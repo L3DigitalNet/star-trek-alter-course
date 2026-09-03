@@ -298,7 +298,12 @@ public sealed class SensorKnowledgeValidationTests
             $"Ship {id.Value}",
             default,
             default,
-            new ShipEngineeringState(new SystemCondition(1), new SystemCondition(1), new SystemCondition(1), new PowerAllocation(new(70), new(50))),
+            new ShipEngineeringState(
+                new SystemCondition(1),
+                new SystemCondition(1),
+                new SystemCondition(1),
+                new PowerAllocation(new(70), new(50))
+            ),
             new AtLocationState(Location)
         );
 

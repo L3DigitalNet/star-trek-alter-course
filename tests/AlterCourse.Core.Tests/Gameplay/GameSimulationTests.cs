@@ -449,7 +449,8 @@ public sealed class GameSimulationTests
                         new SystemCondition(isRepairing ? 0.4 : 1),
                         new AtLocationStart(location.Id),
                         isRepairing
-                            ? new SystemRepairStart(ShipSystemId.Sensors,
+                            ? new SystemRepairStart(
+                                ShipSystemId.Sensors,
                                 new SystemCondition(0.4),
                                 new SystemCondition(1),
                                 new SimulationTime(0)

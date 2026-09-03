@@ -244,7 +244,8 @@ public sealed class OrderExecutionTests
             PlayerId,
             ScheduledWorkKind.SystemRepairCompletion
         );
-        var repair = new SystemRepairState(ShipSystemId.Sensors,
+        var repair = new SystemRepairState(
+            ShipSystemId.Sensors,
             new SystemCondition(0.5),
             new SystemCondition(1),
             new SimulationTime(0),
@@ -377,7 +378,8 @@ public sealed class OrderExecutionTests
             PlayerId,
             ScheduledWorkKind.SystemRepairCompletion
         );
-        var repair = new SystemRepairState(ShipSystemId.Sensors,
+        var repair = new SystemRepairState(
+            ShipSystemId.Sensors,
             new SystemCondition(0.25),
             new SystemCondition(1),
             new SimulationTime(0),
@@ -471,7 +473,8 @@ public sealed class OrderExecutionTests
             PlayerId,
             ScheduledWorkKind.SystemRepairCompletion
         );
-        var repair = new SystemRepairState(ShipSystemId.Sensors,
+        var repair = new SystemRepairState(
+            ShipSystemId.Sensors,
             new SystemCondition(0.5),
             new SystemCondition(1),
             new SimulationTime(0),
@@ -509,7 +512,8 @@ public sealed class OrderExecutionTests
             PlayerId,
             ScheduledWorkKind.SystemRepairCompletion
         );
-        var repair = new SystemRepairState(ShipSystemId.Sensors,
+        var repair = new SystemRepairState(
+            ShipSystemId.Sensors,
             new SystemCondition(0.5),
             new SystemCondition(1),
             new SimulationTime(0),
@@ -642,7 +646,12 @@ public sealed class OrderExecutionTests
             $"Ship {id.Value}",
             default,
             default,
-            new ShipEngineeringState(new SystemCondition(1), new SystemCondition(1), new SystemCondition(1), new PowerAllocation(new(70), new(50))),
+            new ShipEngineeringState(
+                new SystemCondition(1),
+                new SystemCondition(1),
+                new SystemCondition(1),
+                new PowerAllocation(new(70), new(50))
+            ),
             new AtLocationState(location)
         );
 

@@ -73,12 +73,9 @@ public sealed record ShipStart
             new SystemCondition(1),
             new PowerAllocation(new PowerUnits(70), new PowerUnits(50)),
             strategic,
-            sensorRepair is null
-                ? null
-                : sensorRepair,
+            sensorRepair is null ? null : sensorRepair,
             ActiveOrder
-        )
-    { }
+        ) { }
 
     /// <summary>Gets deterministic runtime identity.</summary>
     public ShipInstanceId InstanceId { get; init; }

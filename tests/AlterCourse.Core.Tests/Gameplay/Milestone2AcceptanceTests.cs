@@ -263,7 +263,8 @@ public sealed class Milestone2AcceptanceTests
             PlayerId,
             ScheduledWorkKind.SystemRepairCompletion
         );
-        var repair = new SystemRepairState(ShipSystemId.Sensors,
+        var repair = new SystemRepairState(
+            ShipSystemId.Sensors,
             new SystemCondition(0.25),
             new SystemCondition(1),
             Time(3),

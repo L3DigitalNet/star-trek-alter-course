@@ -259,7 +259,12 @@ public sealed class GamePersistenceV4SensorTests
             maximumName,
             new TacticalPosition(observerIndex, -observerIndex),
             default,
-            new ShipEngineeringState(new SystemCondition(1), new SystemCondition(1), new SystemCondition(1), new PowerAllocation(new(70), new(50))),
+            new ShipEngineeringState(
+                new SystemCondition(1),
+                new SystemCondition(1),
+                new SystemCondition(1),
+                new PowerAllocation(new(70), new(50))
+            ),
             new AtLocationState(locationId),
             sensorKnowledge: new SensorKnowledge(SensorKnowledge.MaximumContactsPerObserver + 1L, contacts)
         );
@@ -361,8 +366,20 @@ public sealed class GamePersistenceV4SensorTests
         );
 
     private static ShipState Ship(ShipInstanceId id, string name) =>
-        new(id, DefinitionId, name, default, default, new ShipEngineeringState(new SystemCondition(1), new SystemCondition(1), new SystemCondition(1), new PowerAllocation(new(70), new(50))),
-            new AtLocationState(Location));
+        new(
+            id,
+            DefinitionId,
+            name,
+            default,
+            default,
+            new ShipEngineeringState(
+                new SystemCondition(1),
+                new SystemCondition(1),
+                new SystemCondition(1),
+                new PowerAllocation(new(70), new(50))
+            ),
+            new AtLocationState(Location)
+        );
 
     private static void ApplyMutation(JsonObject root, string mutation)
     {

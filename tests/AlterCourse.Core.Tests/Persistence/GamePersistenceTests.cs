@@ -468,7 +468,9 @@ public sealed class GamePersistenceTests
         Assert.Equal(0, normalizedSimulation["timeMilliseconds"]!.GetValue<long>());
         Assert.Equal(
             0,
-            normalizedSimulation["ships"]![0]!["engineering"]!["activeRepair"]!["startedAtMilliseconds"]!.GetValue<long>()
+            normalizedSimulation["ships"]![0]!["engineering"]!["activeRepair"]![
+                "startedAtMilliseconds"
+            ]!.GetValue<long>()
         );
         Assert.Equal(
             0,
@@ -589,11 +591,7 @@ public sealed class GamePersistenceTests
         Assert.Equal(50, ship["engineering"]!["impulseAllocation"]!.GetValue<int>());
         Assert.Contains(
             simulation["scheduler"]!["outstandingWork"]!.AsArray(),
-            work => string.Equals(
-                work!["kind"]!.GetValue<string>(),
-                "systemRepairCompletion",
-                StringComparison.Ordinal
-            )
+            work => string.Equals(work!["kind"]!.GetValue<string>(), "systemRepairCompletion", StringComparison.Ordinal)
         );
     }
 

@@ -852,10 +852,7 @@ public static class GamePersistence
                 PlayerShipId = envelope.Simulation.PlayerShipId,
                 Scheduler = MigrateSchedulerV4(envelope.Simulation.Scheduler),
                 StrategicMap = envelope.Simulation.StrategicMap,
-                Ships =
-                [
-                    .. envelope.Simulation.Ships.Select(ship => MigrateShipV4(ship, catalog)),
-                ],
+                Ships = [.. envelope.Simulation.Ships.Select(ship => MigrateShipV4(ship, catalog))],
             },
         };
 
@@ -1411,12 +1408,15 @@ public static class GamePersistence
             new SystemCondition(engineering.GenerationCondition),
             new SystemCondition(engineering.SensorCondition),
             new SystemCondition(engineering.ImpulseCondition),
-            new PowerAllocation(new PowerUnits(engineering.SensorAllocation), new PowerUnits(engineering.ImpulseAllocation))
+            new PowerAllocation(
+                new PowerUnits(engineering.SensorAllocation),
+                new PowerUnits(engineering.ImpulseAllocation)
+            )
         );
         state.Validate(definition.Engineering);
 
-        double effectiveMaximumSpeed = definition.MaximumTacticalSpeed.Value
-            * state.ImpulseCapability(definition.Engineering);
+        double effectiveMaximumSpeed =
+            definition.MaximumTacticalSpeed.Value * state.ImpulseCapability(definition.Engineering);
         if (ship.TacticalMotion.SpeedKilometersPerSecond > effectiveMaximumSpeed)
         {
             throw new InvalidOperationException("Ship tactical speed exceeds its effective impulse capability.");
@@ -1472,9 +1472,8 @@ public static class GamePersistence
             / (repair.ExpectedCompletionMilliseconds - repair.StartedAtMilliseconds);
         double expectedCondition =
             repair.StartingCondition + ((repair.TargetCondition - repair.StartingCondition) * progress);
-        double actualCondition = targetSystem == ShipSystemId.Sensors
-            ? engineering.SensorCondition
-            : engineering.ImpulseCondition;
+        double actualCondition =
+            targetSystem == ShipSystemId.Sensors ? engineering.SensorCondition : engineering.ImpulseCondition;
         if (actualCondition != expectedCondition)
         {
             throw new InvalidOperationException("System condition does not match the active repair at current time.");
@@ -2233,9 +2232,14 @@ public static class GamePersistence
     private static ScheduledWorkKind ParseWorkKind(string? kind, int sourceSchemaVersion)
     {
         if (
-            (sourceSchemaVersion <= V4SchemaVersion && string.Equals(kind, SystemRepairCompletionKind, StringComparison.Ordinal))
-            || (sourceSchemaVersion == CurrentSchemaVersion
-                && string.Equals(kind, SensorRepairCompletionKind, StringComparison.Ordinal))
+            (
+                sourceSchemaVersion <= V4SchemaVersion
+                && string.Equals(kind, SystemRepairCompletionKind, StringComparison.Ordinal)
+            )
+            || (
+                sourceSchemaVersion == CurrentSchemaVersion
+                && string.Equals(kind, SensorRepairCompletionKind, StringComparison.Ordinal)
+            )
         )
         {
             throw new InvalidOperationException("Scheduled repair work kind is unsupported by schema.");
