@@ -1,0 +1,162 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://src/Gameplay/CommandDeckWorkspace.cs" id="1_workspace"]
+[ext_resource type="Script" path="res://src/Gameplay/StrategicMapView.cs" id="2_strategic"]
+[ext_resource type="Script" path="res://src/Gameplay/TacticalMapView.cs" id="3_tactical"]
+[ext_resource type="Theme" path="res://assets/ui/command_theme.tres" id="4_theme"]
+
+[node name="CommandDeckWorkspace" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("4_theme")
+script = ExtResource("1_workspace")
+
+[node name="WorkspaceColumns" type="HBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 8
+
+[node name="SystemsSpine" type="PanelContainer" parent="WorkspaceColumns"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(132, 0)
+layout_mode = 2
+
+[node name="SystemsContent" type="VBoxContainer" parent="WorkspaceColumns/SystemsSpine"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="SystemsHeading" type="Label" parent="WorkspaceColumns/SystemsSpine/SystemsContent"]
+layout_mode = 2
+theme_type_variation = &"PanelHeading"
+text = "SHIP SYSTEMS"
+
+[node name="SystemRows" type="VBoxContainer" parent="WorkspaceColumns/SystemsSpine/SystemsContent"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="SystemsSpacer" type="Control" parent="WorkspaceColumns/SystemsSpine/SystemsContent"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="SystemsSummary" type="Label" parent="WorkspaceColumns/SystemsSpine/SystemsContent"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"MutedTelemetry"
+text = "STATUS SOURCE —"
+autowrap_mode = 2
+
+[node name="MapWorkspace" type="VBoxContainer" parent="WorkspaceColumns"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(560, 360)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 5.0
+theme_override_constants/separation = 4
+
+[node name="MapHeaderPanel" type="PanelContainer" parent="WorkspaceColumns/MapWorkspace"]
+layout_mode = 2
+
+[node name="MapHeader" type="HBoxContainer" parent="WorkspaceColumns/MapWorkspace/MapHeaderPanel"]
+layout_mode = 2
+
+[node name="MapTitle" type="Label" parent="WorkspaceColumns/MapWorkspace/MapHeaderPanel/MapHeader"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"PanelHeading"
+text = "STRATEGIC NAVIGATION"
+
+[node name="MapMode" type="Label" parent="WorkspaceColumns/MapWorkspace/MapHeaderPanel/MapHeader"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"MutedTelemetry"
+text = "LIVE CORE PROJECTION"
+
+[node name="MapViewport" type="PanelContainer" parent="WorkspaceColumns/MapWorkspace"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="MapLayer" type="Control" parent="WorkspaceColumns/MapWorkspace/MapViewport"]
+layout_mode = 2
+
+[node name="StrategicMap" type="Control" parent="WorkspaceColumns/MapWorkspace/MapViewport/MapLayer"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+focus_mode = 1
+mouse_default_cursor_shape = 2
+tooltip_text = "Select a known destination. Selection is UI intent; Core validates travel."
+script = ExtResource("2_strategic")
+
+[node name="TacticalMap" type="Control" parent="WorkspaceColumns/MapWorkspace/MapViewport/MapLayer"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+focus_mode = 1
+mouse_filter = 2
+tooltip_text = "Continuous tactical projection; preview contacts and vectors are illustrative only."
+script = ExtResource("3_tactical")
+
+[node name="MapFooterPanel" type="PanelContainer" parent="WorkspaceColumns/MapWorkspace"]
+layout_mode = 2
+
+[node name="MapFooter" type="Label" parent="WorkspaceColumns/MapWorkspace/MapFooterPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"MutedTelemetry"
+text = "SELECT A DESTINATION TO REQUEST TRAVEL"
+
+[node name="ContextInspector" type="PanelContainer" parent="WorkspaceColumns"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(336, 0)
+layout_mode = 2
+theme_type_variation = &"InspectorPanel"
+
+[node name="InspectorLayout" type="VBoxContainer" parent="WorkspaceColumns/ContextInspector"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="InspectorHeading" type="Label" parent="WorkspaceColumns/ContextInspector/InspectorLayout"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"PanelHeading"
+text = "CONTEXT"
+
+[node name="InspectorScroll" type="ScrollContainer" parent="WorkspaceColumns/ContextInspector/InspectorLayout"]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="InspectorContent" type="VBoxContainer" parent="WorkspaceColumns/ContextInspector/InspectorLayout/InspectorScroll"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 10
+
+[node name="ActionsHeading" type="Label" parent="WorkspaceColumns/ContextInspector/InspectorLayout"]
+layout_mode = 2
+theme_type_variation = &"PanelHeading"
+text = "PRESENTATION ACTIONS"
+
+[node name="ContextActions" type="VBoxContainer" parent="WorkspaceColumns/ContextInspector/InspectorLayout"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 6
