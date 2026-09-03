@@ -136,6 +136,7 @@ internal sealed record SimulationState
     {
         ArgumentNullException.ThrowIfNull(catalog);
         ValidateAggregateMembers();
+        var contactWorkIds = new HashSet<ScheduledWorkId>();
 
         foreach (ShipState ship in Ships)
         {
@@ -148,8 +149,8 @@ internal sealed record SimulationState
             }
 
             ValidateShip(ship, definition);
-            ValidateSensorKnowledge(ship, catalog);
-            ValidateAutonomousState(ship);
+            ValidateSensorKnowledge(ship, catalog, contactWorkIds);
+            ValidateAutonomousState(ship, contactWorkIds);
         }
 
         ValidateOrders();
@@ -264,7 +265,11 @@ internal sealed record SimulationState
         ValidateRepair(ship, definition);
     }
 
-    private void ValidateSensorKnowledge(ShipState observer, ShipDefinitionCatalog catalog)
+    private void ValidateSensorKnowledge(
+        ShipState observer,
+        ShipDefinitionCatalog catalog,
+        HashSet<ScheduledWorkId> contactWorkIds
+    )
     {
         SensorKnowledge knowledge =
             observer.SensorKnowledge ?? throw new InvalidOperationException("Ship sensor knowledge cannot be null.");
@@ -311,7 +316,7 @@ internal sealed record SimulationState
             }
 
             ValidateObservedFacts(contact, target, catalog);
-            ValidateContactLoss(observer, contact);
+            ValidateContactLoss(observer, contact, contactWorkIds);
         }
 
         if (knowledge.NextContactId <= previousId)
@@ -321,6 +326,7 @@ internal sealed record SimulationState
 
         if (knowledge.ActiveScan is { } activeScan)
         {
+            EnsureUniqueContactWorkId(activeScan.ScheduledCompletionId, contactWorkIds);
             ValidateActiveScan(observer, activeScan, catalog.GetRequired(observer.DefinitionId));
         }
     }
@@ -371,7 +377,11 @@ internal sealed record SimulationState
         }
     }
 
-    private void ValidateContactLoss(ShipState observer, SensorContactTrack contact)
+    private void ValidateContactLoss(
+        ShipState observer,
+        SensorContactTrack contact,
+        HashSet<ScheduledWorkId> contactWorkIds
+    )
     {
         switch (contact.Status)
         {
@@ -383,6 +393,7 @@ internal sealed record SimulationState
                     && contact.LossDueTime is { } lossDueTime
                     && lossDueTime.Milliseconds > Time.Milliseconds
                     && lossDueTime.Milliseconds > contact.LastObservedAt.Milliseconds:
+                EnsureUniqueContactWorkId(lossWorkId, contactWorkIds);
                 EnsureExactlyCorrelated(
                     observer.InstanceId,
                     lossWorkId,
@@ -435,7 +446,7 @@ internal sealed record SimulationState
         );
     }
 
-    private void ValidateAutonomousState(ShipState ship)
+    private void ValidateAutonomousState(ShipState ship, HashSet<ScheduledWorkId> contactWorkIds)
     {
         ShipAutonomousState autonomous =
             ship.AutonomousState ?? throw new InvalidOperationException("Ship autonomous state cannot be null.");
@@ -457,18 +468,27 @@ internal sealed record SimulationState
         if (
             autonomous.ContactPosture != ShipContactPosture.CautiousContact
             || wake.ScheduledWorkId.Value <= 0
-            || wake.DueTime.Milliseconds <= Time.Milliseconds
+            || wake.DueTime.Milliseconds < Time.Milliseconds
         )
         {
             throw new InvalidOperationException("A pending contact decision wake requires an active cautious posture.");
         }
 
+        EnsureUniqueContactWorkId(wake.ScheduledWorkId, contactWorkIds);
         EnsureExactlyCorrelated(
             ship.InstanceId,
             wake.ScheduledWorkId,
             wake.DueTime,
             ScheduledWorkKind.ShipContactDecisionWake
         );
+    }
+
+    private static void EnsureUniqueContactWorkId(ScheduledWorkId workId, HashSet<ScheduledWorkId> contactWorkIds)
+    {
+        if (!contactWorkIds.Add(workId))
+        {
+            throw new InvalidOperationException("Contact-owned state cannot share a scheduled work identity.");
+        }
     }
 
     private void ValidateOrders()

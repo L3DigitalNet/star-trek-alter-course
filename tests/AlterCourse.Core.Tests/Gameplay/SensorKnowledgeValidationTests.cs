@@ -133,6 +133,29 @@ public sealed class SensorKnowledgeValidationTests
         AssertInvalid(new SensorKnowledge(2, [Contact(1, NpcId)]), scheduler);
     }
 
+    /// <summary>Confirms two stale tracks cannot claim the same scheduled loss work.</summary>
+    [Fact]
+    public void RejectsSharedContactLossWorkIdentity()
+    {
+        (SimulationScheduler scheduler, ScheduledWork loss) = SimulationScheduler
+            .Create()
+            .Schedule(new SimulationTime(500), PlayerId, ScheduledWorkKind.SensorContactLoss);
+        SensorContactTrack first = Contact(1, NpcId) with
+        {
+            Status = SensorContactStatus.Stale,
+            LossWorkId = loss.Id,
+            LossDueTime = loss.DueTime,
+        };
+        SensorContactTrack second = Contact(2, new ShipInstanceId(3)) with
+        {
+            Status = SensorContactStatus.Stale,
+            LossWorkId = loss.Id,
+            LossDueTime = loss.DueTime,
+        };
+
+        AssertInvalid(new SensorKnowledge(3, [first, second]), scheduler);
+    }
+
     /// <summary>Confirms active scans target retained local identities and pair to one exact completion.</summary>
     [Fact]
     public void ValidatesExactActiveScanCorrelation()
@@ -173,7 +196,7 @@ public sealed class SensorKnowledgeValidationTests
         AssertInvalid(new SensorKnowledge(2, [Contact(1, NpcId)]), scheduler);
     }
 
-    /// <summary>Confirms cautious posture may be idle but a pending wake is future and exactly scheduled.</summary>
+    /// <summary>Confirms cautious posture may be idle and a pending wake is current or future and exactly scheduled.</summary>
     [Fact]
     public void ValidatesExactCautiousDecisionWakeCorrelation()
     {
@@ -200,6 +223,25 @@ public sealed class SensorKnowledgeValidationTests
             scheduler
         );
         AssertInvalidAutonomy(new ShipAutonomousState(ShipContactPosture.CautiousContact), scheduler);
+    }
+
+    /// <summary>Confirms a same-time decision wake can wait for the next advancement batch.</summary>
+    [Fact]
+    public void AcceptsSameTimeCautiousDecisionWake()
+    {
+        (SimulationScheduler scheduler, ScheduledWork scheduled) = SimulationScheduler
+            .Create()
+            .Schedule(new SimulationTime(100), NpcId, ScheduledWorkKind.ShipContactDecisionWake);
+
+        CreateState(
+                SensorKnowledge.Empty,
+                scheduler,
+                new ShipAutonomousState(
+                    ShipContactPosture.CautiousContact,
+                    new ShipContactDecisionWake(scheduled.Id, scheduled.DueTime)
+                )
+            )
+            .Validate(CreateCatalog());
     }
 
     private static SensorContactTrack Contact(
@@ -238,13 +280,14 @@ public sealed class SensorKnowledgeValidationTests
         var location = new StrategicLocation(Location, "Test", default);
         ShipState player = CreateShip(PlayerId) with { SensorKnowledge = knowledge };
         ShipState npc = CreateShip(NpcId) with { AutonomousState = npcAutonomy ?? ShipAutonomousState.Empty };
+        ShipState additionalNpc = CreateShip(new ShipInstanceId(3));
         return new SimulationState(
             new SimulationTime(100),
             scheduler ?? SimulationScheduler.Create(),
-            ShipInstanceIdAllocator.Restore(3),
+            ShipInstanceIdAllocator.Restore(4),
             new StrategicMap([location], []),
             PlayerId,
-            [player, npc]
+            [player, npc, additionalNpc]
         );
     }
 
