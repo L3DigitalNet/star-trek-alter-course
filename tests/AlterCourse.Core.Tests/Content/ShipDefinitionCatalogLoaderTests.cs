@@ -1,6 +1,8 @@
 using System.Text;
 using AlterCourse.Core.Content;
+using AlterCourse.Core.Quantities;
 using AlterCourse.Core.Ships;
+using AlterCourse.Core.Simulation;
 
 namespace AlterCourse.Core.Tests.Content;
 
@@ -113,6 +115,38 @@ public sealed class ShipDefinitionCatalogLoaderTests
         Assert.Throws<ShipContentValidationException>(() =>
             CreateLoader()
                 .LoadText(DefinitionWithId(new string('i', ShipDefinitionId.MaximumLength + 1)), "oversized-id.json")
+        );
+    }
+
+    /// <summary>Confirms domain construction and semantic admission share the 64-character design-name bound.</summary>
+    [Fact]
+    public void EnforcesDesignDisplayNameLengthAcrossDomainAndContent()
+    {
+        string maximumName = new('n', ShipDefinition.MaximumDesignDisplayNameLength);
+        string maximum = ValidDefinition.Replace("Pathfinder class", maximumName, StringComparison.Ordinal);
+        ShipDefinition loaded = CreateLoader().LoadText(maximum, "maximum-name.json");
+
+        Assert.Equal(maximumName, loaded.DesignDisplayName);
+        Assert.Throws<ArgumentException>(() =>
+            new ShipDefinition(
+                new ShipDefinitionId("oversized"),
+                new string('n', ShipDefinition.MaximumDesignDisplayNameLength + 1),
+                new SpeedKilometersPerSecond(1),
+                new DistanceKilometers(1),
+                new SimulationDuration(100),
+                new SimulationDuration(100)
+            )
+        );
+        Assert.Throws<ShipContentValidationException>(() =>
+            CreateLoader()
+                .LoadText(
+                    ValidDefinition.Replace(
+                        "Pathfinder class",
+                        new string('n', ShipDefinition.MaximumDesignDisplayNameLength + 1),
+                        StringComparison.Ordinal
+                    ),
+                    "oversized-name.json"
+                )
         );
     }
 

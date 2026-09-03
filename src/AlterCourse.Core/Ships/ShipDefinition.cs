@@ -6,6 +6,9 @@ namespace AlterCourse.Core.Ships;
 /// <summary>Defines the immutable ship values consumed by the first gameplay slice.</summary>
 public sealed record ShipDefinition
 {
+    /// <summary>Gets the maximum persisted design display-name length.</summary>
+    public const int MaximumDesignDisplayNameLength = 64;
+
     /// <summary>Initializes a minimal ship definition.</summary>
     public ShipDefinition(
         ShipDefinitionId id,
@@ -22,6 +25,14 @@ public sealed record ShipDefinition
         }
 
         ArgumentException.ThrowIfNullOrWhiteSpace(designDisplayName);
+        if (designDisplayName.Length > MaximumDesignDisplayNameLength)
+        {
+            throw new ArgumentException(
+                $"Design display name cannot exceed {MaximumDesignDisplayNameLength} characters.",
+                nameof(designDisplayName)
+            );
+        }
+
         if (activeScanDuration.Milliseconds <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(activeScanDuration), "Active scan duration must be positive.");

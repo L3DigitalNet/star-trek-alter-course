@@ -11,4 +11,13 @@ internal enum ScheduledWorkKind
 
     /// <summary>Wakes an active order at its next decision boundary.</summary>
     OrderWake = 3,
+
+    /// <summary>Transitions one observer-local stale contact to lost.</summary>
+    SensorContactLoss = 4,
+
+    /// <summary>Completes one ship-owned active sensor scan.</summary>
+    ActiveSensorScanCompletion = 5,
+
+    /// <summary>Wakes one ship for an autonomous contact decision.</summary>
+    ShipContactDecisionWake = 6,
 }

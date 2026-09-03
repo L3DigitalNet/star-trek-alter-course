@@ -1,6 +1,8 @@
+using AlterCourse.Core.AI;
 using AlterCourse.Core.Gameplay;
 using AlterCourse.Core.Identity;
 using AlterCourse.Core.Orders;
+using AlterCourse.Core.Sensors;
 using AlterCourse.Core.Tactical;
 
 namespace AlterCourse.Core.Ships;
@@ -18,7 +20,9 @@ internal sealed record ShipState
         SensorIntegrity sensorIntegrity,
         SensorRepairState? sensorRepair,
         ShipStrategicState strategicState,
-        ShipOrder? activeOrder = null
+        ShipOrder? activeOrder = null,
+        SensorKnowledge? sensorKnowledge = null,
+        ShipAutonomousState? autonomousState = null
     )
     {
         if (instanceId.Value <= 0)
@@ -54,6 +58,8 @@ internal sealed record ShipState
         SensorRepair = sensorRepair;
         StrategicState = strategicState;
         ActiveOrder = activeOrder;
+        SensorKnowledge = sensorKnowledge ?? SensorKnowledge.Empty;
+        AutonomousState = autonomousState ?? ShipAutonomousState.Empty;
     }
 
     internal ShipInstanceId InstanceId { get; }
@@ -65,4 +71,6 @@ internal sealed record ShipState
     internal SensorRepairState? SensorRepair { get; init; }
     internal ShipStrategicState StrategicState { get; init; }
     internal ShipOrder? ActiveOrder { get; init; }
+    internal SensorKnowledge SensorKnowledge { get; init; }
+    internal ShipAutonomousState AutonomousState { get; init; }
 }

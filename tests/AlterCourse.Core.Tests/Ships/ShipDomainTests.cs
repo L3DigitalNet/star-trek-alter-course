@@ -43,6 +43,16 @@ public sealed class ShipDomainTests
                 new SimulationDuration(8000)
             )
         );
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new ShipDefinition(
+                new ShipDefinitionId("ship"),
+                "Ship",
+                new SpeedKilometersPerSecond(1),
+                new DistanceKilometers(30),
+                new SimulationDuration(0),
+                new SimulationDuration(8000)
+            )
+        );
         Assert.Throws<ArgumentException>(() =>
             new ShipDefinition(
                 new ShipDefinitionId("ship"),

@@ -322,6 +322,16 @@ public sealed class ShipDefinitionCatalogLoader
                 Semantic(sourceIdentity, "#/designDisplayName", "Design display name must contain non-whitespace text.")
             );
         }
+        else if (designDisplayName.Length > ShipDefinition.MaximumDesignDisplayNameLength)
+        {
+            diagnostics.Add(
+                Semantic(
+                    sourceIdentity,
+                    "#/designDisplayName",
+                    $"Design display name cannot exceed {ShipDefinition.MaximumDesignDisplayNameLength} characters."
+                )
+            );
+        }
     }
 
     private static void ValidateSpeed(double speed, string sourceIdentity, List<ShipContentDiagnostic> diagnostics)
