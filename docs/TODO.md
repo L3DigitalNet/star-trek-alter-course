@@ -6,5 +6,5 @@
 
 ## Agent tasks
 
-- Feature #47: push the verified branch, open its Final PR to `dev`, review CI, and merge only after approval.
+- Before a future release, obtain owner manual gameplay validation of the merged Feature #47 command interface.
 - Milestone 3+: add actor knowledge, sensor contacts, and first contact; later milestones may add faction strategy, combat, engineering, and related systems.
