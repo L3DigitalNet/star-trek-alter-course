@@ -31,11 +31,12 @@ public partial class GameScreen : Control
     private const string ActionQuickLoad = "quick_load";
     private const string ActionEngageTravel = "engage_selected_travel";
     private const string ActionSetCourse = "set_tactical_course";
+    private const int RecentActivityLimit = 64;
 
     private static readonly double[] RunningRates = [0.5, 1, 2, 4];
 
     private readonly SimulationRateController _rateController = new();
-    private readonly List<PlayerAdvanceEvent> _recentEvents = [];
+    private readonly List<CommandInterfacePresenter.ActivityEvent> _recentActivity = [];
     private GameSimulation? _simulation;
     private ShipDefinitionCatalog? _shipCatalog;
     private PlayerProjection? _projection;
@@ -319,7 +320,7 @@ public partial class GameScreen : Control
             // boundary so an unreadable or invalid save cannot damage the playable aggregate.
             _simulation = loaded.Simulation;
             _quickSaveCreatedAtUtc = loaded.Metadata.CreatedAtUtc;
-            _recentEvents.Clear();
+            _recentActivity.Clear();
             ClearSelectedDestination();
             ClearSelectedContact();
 
@@ -418,6 +419,7 @@ public partial class GameScreen : Control
                 TravelOutcome.RouteUnavailable => "Travel unavailable: no direct route is known.",
                 _ => "Travel request was not accepted.",
             };
+            PresentResolvedEvents(result.ResolvedEvents, announce: false);
             RefreshProjection();
         }
         catch (Exception exception)
@@ -699,7 +701,7 @@ public partial class GameScreen : Control
             _projection,
             _selectedDestination,
             _selectedContact,
-            _recentEvents,
+            _recentActivity,
             mode
         );
         PresentWorkspace(presentation);
@@ -1054,16 +1056,18 @@ public partial class GameScreen : Control
 
         try
         {
+            string contactLabel = DescribeContact(contactId);
             HailResult result = _simulation.RequestHail(contactId);
             _messageLabel.Text = result.Outcome switch
             {
-                HailOutcome.Acknowledged => $"{DescribeContact(contactId)} acknowledged the hail.",
-                HailOutcome.NoResponse => $"{DescribeContact(contactId)} did not respond.",
+                HailOutcome.Acknowledged => $"{contactLabel} acknowledged the hail.",
+                HailOutcome.NoResponse => $"{contactLabel} did not respond.",
                 HailOutcome.ContactNotFound => "Hail unavailable: contact is no longer present.",
                 HailOutcome.ContactNotCurrent => "Hail unavailable: contact is not current.",
                 HailOutcome.ContactNotIdentified => "Hail unavailable: identify the contact first.",
                 _ => "Hail request was not accepted.",
             };
+            PresentHailOutcome(contactId, contactLabel, result.Outcome);
             SetMeta("last_contact_command", $"hail:{result.Outcome}");
             RefreshProjection();
         }
@@ -1336,12 +1340,41 @@ public partial class GameScreen : Control
             return;
         }
 
-        _recentEvents.AddRange(events);
+        long eventTimeMilliseconds = _simulation!.GetPlayerProjection().SimulationTime.Milliseconds;
+        foreach (PlayerAdvanceEvent @event in events)
+        {
+            AppendRecentActivity(new CommandInterfacePresenter.ResolvedActivityEvent(eventTimeMilliseconds, @event));
+        }
+
         string description = string.Join(", ", events.Select(DescribePlayerEvent));
         SetMeta("last_advance_event", description);
         if (announce)
         {
             _messageLabel.Text = description;
+        }
+    }
+
+    private void PresentHailOutcome(SensorContactId contactId, string contactLabel, HailOutcome outcome)
+    {
+        if (outcome is HailOutcome.Acknowledged or HailOutcome.NoResponse)
+        {
+            AppendRecentActivity(
+                new CommandInterfacePresenter.HailActivityEvent(
+                    _projection!.SimulationTime.Milliseconds,
+                    contactId,
+                    contactLabel,
+                    outcome
+                )
+            );
+        }
+    }
+
+    private void AppendRecentActivity(CommandInterfacePresenter.ActivityEvent activity)
+    {
+        _recentActivity.Add(activity);
+        if (_recentActivity.Count > RecentActivityLimit)
+        {
+            _recentActivity.RemoveRange(0, _recentActivity.Count - RecentActivityLimit);
         }
     }
 

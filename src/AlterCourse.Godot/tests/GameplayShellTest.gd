@@ -497,7 +497,11 @@ func test_live_contact_marker_hit_selects_actor_safe_inspector_context() -> void
 	assert_str(tactical_map.call("ContactLabel", 1)).is_equal("Contact 1")
 	assert_int(tactical_map.call("HitTestContactId", marker)).is_equal(1)
 	assert_int(tactical_map.call("HitTestContactId", marker + Vector2(17, 0))).is_equal(0)
-	assert_bool(tactical_map.call("SelectContactAt", marker)).is_true()
+	var click := InputEventMouseButton.new()
+	click.button_index = MOUSE_BUTTON_LEFT
+	click.pressed = true
+	click.position = marker
+	tactical_map.call("_GuiInput", click)
 
 	assert_int(screen.get_meta("selected_contact", 0)).is_equal(1)
 	var inspector_text := _collect_control_text(_command_deck(screen).get_node("%InspectorContent"))
@@ -609,10 +613,19 @@ func test_active_scan_and_hail_actions_translate_typed_contact_and_reconcile_but
 	var scan_instance_id := scan_button.get_instance_id()
 	var hail_instance_id := hail_button.get_instance_id()
 
+	scan_button.grab_focus()
+	assert_bool(scan_button.has_focus()).is_true()
 	scan_button.emit_signal("pressed")
+	await get_tree().process_frame
 	assert_str(screen.get_meta("last_contact_command", "")).is_equal("active-scan:Accepted")
 	assert_int(screen.get_meta("active_scan_contact", 0)).is_equal(1)
-	assert_bool((_find_action_button(screen, "active-scan") as Button).disabled).is_true()
+	var disabled_scan := _find_action_button(screen, "active-scan") as Button
+	assert_bool(disabled_scan.disabled).is_true()
+	assert_int(disabled_scan.get_instance_id()).is_equal(scan_instance_id)
+	assert_bool(disabled_scan.has_focus()).is_false()
+	var focus_owner := get_viewport().gui_get_focus_owner() as Control
+	assert_object(focus_owner).is_not_null()
+	assert_bool(focus_owner is Button and (focus_owner as Button).disabled).is_false()
 	assert_str(_collect_control_text(_command_deck(screen).get_node("%InspectorContent"))).contains(
 		"0 %"
 	)
@@ -636,9 +649,46 @@ func test_active_scan_and_hail_actions_translate_typed_contact_and_reconcile_but
 	screen.call("RequestSelectedHail")
 	assert_str(screen.get_meta("last_contact_command", "")).is_equal("hail:Acknowledged")
 	assert_str(screen.get_node("%Message").text).contains("Survey Vessel Kestrel")
+	var acknowledged_log := _collect_control_text(screen.get_node("%EventLogContent"))
+	assert_str(acknowledged_log).contains("Survey Vessel Kestrel acknowledged the hail")
+	assert_str(acknowledged_log).not_contains("Ship 4")
 	screen.call("ShowPreview", 2)
 	assert_str(_collect_control_text(_command_deck(screen))).not_contains("Survey Vessel Kestrel")
 	assert_bool((_find_action_button(screen, "hail-target") as Button).disabled).is_true()
+
+
+func test_travel_departure_presents_contact_and_scan_events_in_log() -> void:
+	var screen := _create_screen()
+	screen.call("AdvanceUntilNextPlayerRelevantEvent")
+	screen.call("ShowTacticalView")
+	screen.call("SelectContact", 1)
+	screen.call("RequestSelectedActiveScan")
+	screen.call("ShowStrategicView")
+	screen.call("SelectDestination", "vesper-reach")
+	screen.call("RequestSelectedTravel")
+
+	var event_log := _collect_control_text(screen.get_node("%EventLogContent"))
+	assert_str(event_log).contains("Contact 1: Contact became stale")
+	assert_str(event_log).contains("Contact 1: Active scan interrupted")
+	assert_str(event_log).contains("Contact detected")
+
+
+func test_hail_no_response_appears_in_log_without_hidden_ship_identity() -> void:
+	var screen := _create_screen()
+	screen.call("SelectDestination", "vesper-reach")
+	screen.call("RequestSelectedTravel")
+	screen.call("AdvanceUntilNextPlayerRelevantEvent")
+	screen.call("AdvanceUntilNextPlayerRelevantEvent")
+	screen.call("ShowTacticalView")
+	screen.call("SelectContact", 1)
+	screen.call("RequestSelectedActiveScan")
+	screen.call("AdvanceUntilNextPlayerRelevantEvent")
+	screen.call("RequestSelectedHail")
+
+	assert_str(screen.get_meta("last_contact_command", "")).is_equal("hail:NoResponse")
+	var event_log := _collect_control_text(screen.get_node("%EventLogContent"))
+	assert_str(event_log).contains("USS Wayfarer did not respond")
+	assert_str(event_log).not_contains("Ship 2")
 
 
 func test_live_unsupported_values_and_engineering_actions_are_explicitly_unavailable() -> void:

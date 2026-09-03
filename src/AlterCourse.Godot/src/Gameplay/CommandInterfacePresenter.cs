@@ -10,12 +10,27 @@ namespace AlterCourse.Godot.Gameplay;
 /// <summary>Maps a fresh player-known Core projection into immutable command-interface display data.</summary>
 public static class CommandInterfacePresenter
 {
+    /// <summary>Represents one player-visible activity retained by the command-interface log.</summary>
+    public abstract record ActivityEvent(long SimulationTimeMilliseconds);
+
+    /// <summary>Wraps one actor-safe event resolved by deterministic Core advancement.</summary>
+    public sealed record ResolvedActivityEvent(long SimulationTimeMilliseconds, PlayerAdvanceEvent Event)
+        : ActivityEvent(SimulationTimeMilliseconds);
+
+    /// <summary>Captures one typed hail response using the observer-local contact context shown to the player.</summary>
+    public sealed record HailActivityEvent(
+        long SimulationTimeMilliseconds,
+        SensorContactId ContactId,
+        string ContactLabel,
+        HailOutcome Outcome
+    ) : ActivityEvent(SimulationTimeMilliseconds);
+
     /// <summary>Builds a live presentation without inspecting hidden scheduler, NPC, or aggregate state.</summary>
     public static CommandInterfacePresentation PresentLive(
         PlayerProjection projection,
         LocationId? selectedLocationId = null,
         SensorContactId? selectedContactId = null,
-        IReadOnlyList<PlayerAdvanceEvent>? recentEvents = null,
+        IReadOnlyList<ActivityEvent>? recentEvents = null,
         CommandInterfaceMode mode = CommandInterfaceMode.Travel
     )
     {
@@ -231,64 +246,68 @@ public static class CommandInterfacePresenter
 
     private static ImmutableArray<CommandInterfaceEventRow> BuildEvents(
         PlayerProjection projection,
-        IReadOnlyList<PlayerAdvanceEvent> events
+        IReadOnlyList<ActivityEvent> events
     ) =>
         [
-            .. events.Select(@event =>
-                @event.Kind switch
+            .. events.Select(activity =>
+                activity switch
                 {
-                    PlayerAdvanceEventKind.TravelArrived => new CommandInterfaceEventRow(
-                        FormatClock(projection.SimulationTime.Milliseconds),
-                        "NAV",
-                        "Strategic travel arrived at destination.",
-                        CommandInterfaceTone.Navigation
-                    ),
-                    PlayerAdvanceEventKind.SensorRepairCompleted => new CommandInterfaceEventRow(
-                        FormatClock(projection.SimulationTime.Milliseconds),
-                        "ENGINEER",
-                        "Sensor repair completed.",
+                    ResolvedActivityEvent { Event.Kind: PlayerAdvanceEventKind.TravelArrived } =>
+                        new CommandInterfaceEventRow(
+                            FormatClock(activity.SimulationTimeMilliseconds),
+                            "NAV",
+                            "Strategic travel arrived at destination.",
+                            CommandInterfaceTone.Navigation
+                        ),
+                    ResolvedActivityEvent { Event.Kind: PlayerAdvanceEventKind.SensorRepairCompleted } =>
+                        new CommandInterfaceEventRow(
+                            FormatClock(activity.SimulationTimeMilliseconds),
+                            "ENGINEER",
+                            "Sensor repair completed.",
+                            CommandInterfaceTone.Nominal
+                        ),
+                    ResolvedActivityEvent { Event.Kind: PlayerAdvanceEventKind.SensorContactDetected } resolved =>
+                        SensorEvent(projection, resolved, "Contact detected."),
+                    ResolvedActivityEvent { Event.Kind: PlayerAdvanceEventKind.SensorContactStale } resolved =>
+                        SensorEvent(projection, resolved, "Contact became stale."),
+                    ResolvedActivityEvent { Event.Kind: PlayerAdvanceEventKind.SensorContactReacquired } resolved =>
+                        SensorEvent(projection, resolved, "Contact reacquired."),
+                    ResolvedActivityEvent { Event.Kind: PlayerAdvanceEventKind.SensorContactLost } resolved =>
+                        SensorEvent(projection, resolved, "Contact lost."),
+                    ResolvedActivityEvent { Event.Kind: PlayerAdvanceEventKind.ActiveSensorScanCompleted } resolved =>
+                        SensorEvent(projection, resolved, "Active scan completed."),
+                    ResolvedActivityEvent { Event.Kind: PlayerAdvanceEventKind.ActiveSensorScanInterrupted } resolved =>
+                        SensorEvent(projection, resolved, "Active scan interrupted."),
+                    HailActivityEvent { Outcome: HailOutcome.Acknowledged } hail => HailEvent(
+                        hail,
+                        "acknowledged the hail.",
                         CommandInterfaceTone.Nominal
                     ),
-                    PlayerAdvanceEventKind.SensorContactDetected => SensorEvent(
-                        projection,
-                        @event,
-                        "Contact detected."
+                    HailActivityEvent { Outcome: HailOutcome.NoResponse } hail => HailEvent(
+                        hail,
+                        "did not respond.",
+                        CommandInterfaceTone.Caution
                     ),
-                    PlayerAdvanceEventKind.SensorContactStale => SensorEvent(
-                        projection,
-                        @event,
-                        "Contact became stale."
-                    ),
-                    PlayerAdvanceEventKind.SensorContactReacquired => SensorEvent(
-                        projection,
-                        @event,
-                        "Contact reacquired."
-                    ),
-                    PlayerAdvanceEventKind.SensorContactLost => SensorEvent(projection, @event, "Contact lost."),
-                    PlayerAdvanceEventKind.ActiveSensorScanCompleted => SensorEvent(
-                        projection,
-                        @event,
-                        "Active scan completed."
-                    ),
-                    PlayerAdvanceEventKind.ActiveSensorScanInterrupted => SensorEvent(
-                        projection,
-                        @event,
-                        "Active scan interrupted."
-                    ),
-                    _ => throw new ArgumentOutOfRangeException(nameof(events), @event, "Unknown player event."),
+                    _ => throw new ArgumentOutOfRangeException(nameof(events), activity, "Unknown player activity."),
                 }
             ),
         ];
 
+    private static CommandInterfaceEventRow HailEvent(
+        HailActivityEvent hail,
+        string message,
+        CommandInterfaceTone tone
+    ) => new(FormatClock(hail.SimulationTimeMilliseconds), "COMMS", $"{hail.ContactLabel} {message}", tone);
+
     private static CommandInterfaceEventRow SensorEvent(
         PlayerProjection projection,
-        PlayerAdvanceEvent @event,
+        ResolvedActivityEvent resolved,
         string message
     ) =>
         new(
-            FormatClock(projection.SimulationTime.Milliseconds),
+            FormatClock(resolved.SimulationTimeMilliseconds),
             "SENSOR",
-            $"{DescribeContact(projection, @event)}: {message}",
+            $"{DescribeContact(projection, resolved.Event)}: {message}",
             CommandInterfaceTone.Caution
         );
 
