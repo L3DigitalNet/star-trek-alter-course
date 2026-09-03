@@ -11,4 +11,7 @@ public enum PlayerAction
 
     /// <summary>Advance authoritative simulation time.</summary>
     AdvanceTime = 3,
+
+    /// <summary>Actively identify a current sensor contact.</summary>
+    ActiveSensorScan = 4,
 }

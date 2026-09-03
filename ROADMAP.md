@@ -365,6 +365,20 @@ A strong acceptance scenario is:
 
 ## Milestone 3 — Sensor Knowledge and First Contact
 
+### Implementation outcome — Milestone 3A: First Observed Contact
+
+Feature #58 implements the first governed slice of this milestone. It does **not** mark Milestone 3 complete.
+
+Each `ShipState` now owns bounded sensor knowledge with observer-local `SensorContactId` values. The aggregate retains target-ship correlation only for Core rule resolution; player projections and autonomous decision input receive actor-safe contact snapshots without the target's ship ID. Local passive observation applies only to distinct ships at the same strategic location. Effective range is the authored passive sensor range multiplied by the observing ship's sensor integrity. Contacts are observed as Current, become Stale when no longer detectable, become Lost after a fixed retention interval, and can be reacquired with their existing observer-local ID and learned identity.
+
+The slice adds one active scan and one hail seam. A player can scan a current detected contact to learn its vessel and design display names, then hail an identified current contact. The proof vessel's persisted `CautiousContact` posture receives only its own contact snapshot. Its pure explainable policy chooses Hold, Approach, or Withdraw deterministically; the proof path withdraws from an unidentified contact and holds after a valid identified hail. The resulting motion uses the same validated targetable tactical-course command as player course input.
+
+Contact-sensitive local advancement reuses the Core's 100 ms tactical grid, while inactive strategic simulation remains event-driven. Contact loss, scan completion, and autonomous decision wakes use appended scheduled-work kinds with exact correlations, stable ordering, and revalidation at resolution. Player advance-until remains silent about hidden NPC work but may stop for a player-safe contact or scan event.
+
+Save schema V4 persists sensor knowledge, active scans, autonomous contact posture, and new scheduler correlations under `sensor-knowledge-first-contact-v1`. V3-to-V4 migration deliberately creates empty knowledge, a next contact ID of 1, no active scan, no posture, and no decision wake, preserving historical behavior. Ship-definition schema V3 adds explicit passive sensor range and active-scan duration. The four-ship Dawn Anchor proof world gives damaged USS Pathfinder and full-integrity Survey Vessel Kestrel different knowledge at the same time, then proves scan, hail, autonomous response, and save/load continuation.
+
+The slice deliberately defers affiliation and intent knowledge, scalar confidence or measurement error, strategic contacts, cloaking and electronic warfare, NPC scanning, additional doctrines, faction AI, dialogue, sensor power, combat, and generalized encounter generation. See [First Observed Contact](docs/design/first-observed-contact.md) for the implemented boundary and rules.
+
 ### Goal
 
 Make incomplete information a real simulation boundary and create the first autonomous multi-ship encounter that does not require combat.

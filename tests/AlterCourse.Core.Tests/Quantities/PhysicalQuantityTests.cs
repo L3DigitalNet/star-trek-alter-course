@@ -5,6 +5,34 @@ namespace AlterCourse.Core.Tests.Quantities;
 /// <summary>Verifies physical-quantity validation and canonical units.</summary>
 public sealed class PhysicalQuantityTests
 {
+    /// <summary>Confirms distance accepts, normalizes, and compares finite nonnegative kilometers.</summary>
+    [Fact]
+    public void DistanceAcceptsAndComparesFiniteNonnegativeKilometers()
+    {
+        var zero = new DistanceKilometers(-0.0);
+        var near = new DistanceKilometers(3.25);
+        var equalNear = new DistanceKilometers(3.25);
+        var far = new DistanceKilometers(30);
+
+        Assert.Equal(0, zero.Value);
+        Assert.True(zero < near);
+        Assert.True(near <= equalNear);
+        Assert.True(far > near);
+        Assert.True(far >= new DistanceKilometers(30));
+        Assert.True(near.CompareTo(far) < 0);
+    }
+
+    /// <summary>Confirms distance rejects values outside its domain.</summary>
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    [InlineData(double.NegativeInfinity)]
+    public void DistanceRejectsNegativeOrNonfiniteValues(double value)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new DistanceKilometers(value));
+    }
+
     /// <summary>Confirms speed accepts finite nonnegative kilometers per second.</summary>
     [Fact]
     public void SpeedAcceptsFiniteNonnegativeKilometersPerSecond()
@@ -51,6 +79,7 @@ public sealed class PhysicalQuantityTests
     public void NegativeZeroFoldsToPositiveZero()
     {
         Assert.Equal(0, BitConverter.DoubleToInt64Bits(new SpeedKilometersPerSecond(-0.0).Value));
+        Assert.Equal(0, BitConverter.DoubleToInt64Bits(new DistanceKilometers(-0.0).Value));
         Assert.Equal(0, BitConverter.DoubleToInt64Bits(new HeadingDegrees(-0.0).Value));
     }
 

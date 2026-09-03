@@ -6,6 +6,40 @@ namespace AlterCourse.Core.Tests.Simulation;
 /// <summary>Verifies deterministic scheduled-work ordering and restoration.</summary>
 public sealed class SimulationSchedulerTests
 {
+    /// <summary>Confirms appended contact work preserves every preexisting persisted numeric identity.</summary>
+    [Fact]
+    public void ScheduledWorkKindNumericIdentitiesRemainStable()
+    {
+        Assert.Equal(1, (int)ScheduledWorkKind.TravelArrival);
+        Assert.Equal(2, (int)ScheduledWorkKind.SensorRepairCompletion);
+        Assert.Equal(3, (int)ScheduledWorkKind.OrderWake);
+        Assert.Equal(4, (int)ScheduledWorkKind.SensorContactLoss);
+        Assert.Equal(5, (int)ScheduledWorkKind.ActiveSensorScanCompletion);
+        Assert.Equal(6, (int)ScheduledWorkKind.ShipContactDecisionWake);
+    }
+
+    /// <summary>Confirms every appended contact consequence crosses scheduling and restoration boundaries.</summary>
+    [Theory]
+    [InlineData(4)]
+    [InlineData(5)]
+    [InlineData(6)]
+    public void ContactWorkKindsAreSupported(int numericKind)
+    {
+        var kind = (ScheduledWorkKind)numericKind;
+        (SimulationScheduler scheduled, ScheduledWork work) = SimulationScheduler
+            .Create()
+            .Schedule(new SimulationTime(100), Target(), kind);
+
+        var restored = SimulationScheduler.Restore(
+            scheduled.NextWorkId,
+            scheduled.NextSequence,
+            scheduled.OutstandingWork
+        );
+
+        Assert.Equal(kind, work.Kind);
+        Assert.Equal(work, Assert.Single(restored.OutstandingWork));
+    }
+
     /// <summary>Confirms same-time, same-kind work for different ships uses persisted sequence order.</summary>
     [Fact]
     public void SameTimeWorkUsesStableSequenceOrder()
@@ -418,6 +452,15 @@ public sealed class SimulationSchedulerTests
             maximum
         );
 
+        Assert.Equal(66_560, SimulationScheduler.MaximumOutstandingWork);
+        Assert.Equal(SimulationScheduler.MaximumOutstandingWork, restored.OutstandingWork.Length);
+        Assert.Throws<InvalidOperationException>(() =>
+            restored.Schedule(
+                new SimulationTime(SimulationScheduler.MaximumOutstandingWork + 1L),
+                Target(),
+                ScheduledWorkKind.TravelArrival
+            )
+        );
         Assert.Equal(SimulationScheduler.MaximumOutstandingWork, restored.OutstandingWork.Length);
         Assert.Throws<ArgumentException>(() =>
             SimulationScheduler.Restore(2, 1, OverflowAfter(Work(1, 0), SimulationScheduler.MaximumOutstandingWork + 1))

@@ -6,4 +6,6 @@
 
 ## Agent tasks
 
-- Milestone 3+: add actor knowledge, sensor contacts, and first contact; later milestones may add faction strategy, combat, engineering, and related systems.
+- Milestone 3: extend first observed contact only through separately governed work.
+- Remaining Milestone 3 scope includes richer uncertainty, strategic contacts, affiliation and intent knowledge, more postures, and broader encounters.
+- Milestone 4+: add sensor power and engineering, then faction strategy, combat, diplomacy, economy, narrative, networking, and final art.

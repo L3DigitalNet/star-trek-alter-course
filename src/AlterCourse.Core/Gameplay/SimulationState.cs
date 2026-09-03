@@ -1,7 +1,9 @@
 using System.Collections.Immutable;
+using AlterCourse.Core.AI;
 using AlterCourse.Core.Content;
 using AlterCourse.Core.Identity;
 using AlterCourse.Core.Orders;
+using AlterCourse.Core.Sensors;
 using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
@@ -134,6 +136,7 @@ internal sealed record SimulationState
     {
         ArgumentNullException.ThrowIfNull(catalog);
         ValidateAggregateMembers();
+        var contactWorkIds = new HashSet<ScheduledWorkId>();
 
         foreach (ShipState ship in Ships)
         {
@@ -146,6 +149,8 @@ internal sealed record SimulationState
             }
 
             ValidateShip(ship, definition);
+            ValidateSensorKnowledge(ship, catalog, contactWorkIds);
+            ValidateAutonomousState(ship, contactWorkIds);
         }
 
         ValidateOrders();
@@ -213,6 +218,8 @@ internal sealed record SimulationState
     private void ValidateScheduledWork(ScheduledWork work)
     {
         ShipState target = GetRequiredShip(work.TargetShipId);
+        // These five non-loss correlations define the per-ship scheduler allowance in SimulationScheduler; adding a
+        // separately retainable work category requires that bound to grow with the world maximum.
         bool correlated = work.Kind switch
         {
             ScheduledWorkKind.SensorRepairCompletion => target.SensorRepair is SensorRepairState repair
@@ -224,6 +231,17 @@ internal sealed record SimulationState
             ScheduledWorkKind.OrderWake => target.ActiveOrder is HoldUntilOrder hold
                 && hold.ScheduledWakeId == work.Id
                 && hold.Until == work.DueTime,
+            ScheduledWorkKind.SensorContactLoss => target.SensorKnowledge.Contacts.Any(contact =>
+                contact.Status == SensorContactStatus.Stale
+                && contact.LossWorkId == work.Id
+                && contact.LossDueTime == work.DueTime
+            ),
+            ScheduledWorkKind.ActiveSensorScanCompletion => target.SensorKnowledge.ActiveScan is { } scan
+                && scan.ScheduledCompletionId == work.Id
+                && scan.ExpectedCompletion == work.DueTime,
+            ScheduledWorkKind.ShipContactDecisionWake => target.AutonomousState.PendingContactDecisionWake is { } wake
+                && wake.ScheduledWorkId == work.Id
+                && wake.DueTime == work.DueTime,
             _ => false,
         };
         if (!correlated)
@@ -247,6 +265,232 @@ internal sealed record SimulationState
         }
 
         ValidateRepair(ship, definition);
+    }
+
+    private void ValidateSensorKnowledge(
+        ShipState observer,
+        ShipDefinitionCatalog catalog,
+        HashSet<ScheduledWorkId> contactWorkIds
+    )
+    {
+        SensorKnowledge knowledge =
+            observer.SensorKnowledge ?? throw new InvalidOperationException("Ship sensor knowledge cannot be null.");
+        if (knowledge.Contacts.Length > SensorKnowledge.MaximumContactsPerObserver)
+        {
+            throw new InvalidOperationException(
+                $"Ship sensor knowledge exceeds the {SensorKnowledge.MaximumContactsPerObserver}-contact limit."
+            );
+        }
+
+        if (knowledge.NextContactId <= 0 || knowledge.NextContactId == long.MaxValue)
+        {
+            throw new InvalidOperationException("Contact allocator is outside its persisted range.");
+        }
+
+        long previousId = 0;
+        HashSet<ShipInstanceId> targets = [];
+        foreach (SensorContactTrack contact in knowledge.Contacts)
+        {
+            if (contact is null || contact.Id.Value <= previousId)
+            {
+                throw new InvalidOperationException("Sensor contacts require unique identities in canonical order.");
+            }
+
+            previousId = contact.Id.Value;
+            if (contact.TargetShipId.Value <= 0 || contact.TargetShipId == observer.InstanceId)
+            {
+                throw new InvalidOperationException("A sensor contact requires a distinct initialized target ship.");
+            }
+
+            if (!targets.Add(contact.TargetShipId))
+            {
+                throw new InvalidOperationException("Sensor knowledge cannot retain multiple contacts for one target.");
+            }
+
+            ShipState target;
+            try
+            {
+                target = GetRequiredShip(contact.TargetShipId);
+            }
+            catch (KeyNotFoundException exception)
+            {
+                throw new InvalidOperationException("A sensor contact target must exist in the simulation.", exception);
+            }
+
+            ValidateObservedFacts(contact, target, catalog);
+            ValidateContactLoss(observer, contact, contactWorkIds);
+        }
+
+        if (knowledge.NextContactId <= previousId)
+        {
+            throw new InvalidOperationException("Contact allocator must follow every retained contact identity.");
+        }
+
+        if (knowledge.ActiveScan is { } activeScan)
+        {
+            EnsureUniqueContactWorkId(activeScan.ScheduledCompletionId, contactWorkIds);
+            ValidateActiveScan(observer, activeScan, catalog.GetRequired(observer.DefinitionId));
+        }
+    }
+
+    private void ValidateObservedFacts(SensorContactTrack contact, ShipState target, ShipDefinitionCatalog catalog)
+    {
+        if (
+            !double.IsFinite(contact.LastObservedPosition.XKilometers)
+            || !double.IsFinite(contact.LastObservedPosition.YKilometers)
+        )
+        {
+            throw new InvalidOperationException("A sensor contact's last observed position must be finite.");
+        }
+
+        if (contact.LastObservedAt.Milliseconds > Time.Milliseconds)
+        {
+            throw new InvalidOperationException("A sensor contact cannot have been observed in the future.");
+        }
+
+        switch (contact.Identification)
+        {
+            case SensorContactIdentification.Detected
+                when contact.KnownVesselDisplayName is null && contact.KnownDesignDisplayName is null:
+                break;
+            case SensorContactIdentification.Identified
+                when !string.IsNullOrWhiteSpace(contact.KnownVesselDisplayName)
+                    && !string.IsNullOrWhiteSpace(contact.KnownDesignDisplayName)
+                    && contact.KnownVesselDisplayName.Length <= ShipState.MaximumVesselDisplayNameLength
+                    && contact.KnownDesignDisplayName.Length <= ShipDefinition.MaximumDesignDisplayNameLength:
+                ShipDefinition targetDefinition = catalog.GetRequired(target.DefinitionId);
+                if (
+                    !string.Equals(contact.KnownVesselDisplayName, target.VesselDisplayName, StringComparison.Ordinal)
+                    || !string.Equals(
+                        contact.KnownDesignDisplayName,
+                        targetDefinition.DesignDisplayName,
+                        StringComparison.Ordinal
+                    )
+                )
+                {
+                    throw new InvalidOperationException("Identified contact display facts must match their target.");
+                }
+
+                break;
+            default:
+                throw new InvalidOperationException(
+                    "Sensor contact identification and learned names are inconsistent."
+                );
+        }
+    }
+
+    private void ValidateContactLoss(
+        ShipState observer,
+        SensorContactTrack contact,
+        HashSet<ScheduledWorkId> contactWorkIds
+    )
+    {
+        switch (contact.Status)
+        {
+            case SensorContactStatus.Current
+            or SensorContactStatus.Lost when contact.LossWorkId is null && contact.LossDueTime is null:
+                return;
+            case SensorContactStatus.Stale
+                when contact.LossWorkId is { Value: > 0 } lossWorkId
+                    && contact.LossDueTime is { } lossDueTime
+                    && lossDueTime.Milliseconds > Time.Milliseconds
+                    && lossDueTime.Milliseconds > contact.LastObservedAt.Milliseconds:
+                EnsureUniqueContactWorkId(lossWorkId, contactWorkIds);
+                EnsureExactlyCorrelated(
+                    observer.InstanceId,
+                    lossWorkId,
+                    lossDueTime,
+                    ScheduledWorkKind.SensorContactLoss
+                );
+                return;
+            default:
+                throw new InvalidOperationException(
+                    "Sensor contact status and loss-work correlation are inconsistent."
+                );
+        }
+    }
+
+    private void ValidateActiveScan(ShipState observer, ActiveSensorScanState scan, ShipDefinition observerDefinition)
+    {
+        if (scan.TargetContactId.Value <= 0 || scan.ScheduledCompletionId.Value <= 0)
+        {
+            throw new InvalidOperationException("An active scan requires initialized contact and work identities.");
+        }
+
+        SensorContactTrack? targetContact = observer.SensorKnowledge.Contacts.FirstOrDefault(contact =>
+            contact.Id == scan.TargetContactId
+        );
+        if (
+            targetContact is null
+            || targetContact.Status != SensorContactStatus.Current
+            || targetContact.Identification != SensorContactIdentification.Detected
+        )
+        {
+            throw new InvalidOperationException("An active scan requires a current unidentified local contact.");
+        }
+
+        if (
+            scan.StartedAt.Milliseconds > Time.Milliseconds
+            || scan.ExpectedCompletion.Milliseconds <= Time.Milliseconds
+            || scan.ExpectedCompletion.Milliseconds <= scan.StartedAt.Milliseconds
+            || scan.ExpectedCompletion.Milliseconds - scan.StartedAt.Milliseconds
+                != observerDefinition.ActiveScanDuration.Milliseconds
+        )
+        {
+            throw new InvalidOperationException("An active scan must contain the current simulation time.");
+        }
+
+        EnsureExactlyCorrelated(
+            observer.InstanceId,
+            scan.ScheduledCompletionId,
+            scan.ExpectedCompletion,
+            ScheduledWorkKind.ActiveSensorScanCompletion
+        );
+    }
+
+    private void ValidateAutonomousState(ShipState ship, HashSet<ScheduledWorkId> contactWorkIds)
+    {
+        ShipAutonomousState autonomous =
+            ship.AutonomousState ?? throw new InvalidOperationException("Ship autonomous state cannot be null.");
+        if (ship.InstanceId == PlayerShipId && autonomous != ShipAutonomousState.Empty)
+        {
+            throw new InvalidOperationException("The player ship cannot have an autonomous contact posture or wake.");
+        }
+
+        if (autonomous.ContactPosture is not null and not ShipContactPosture.CautiousContact)
+        {
+            throw new InvalidOperationException("Ship contact posture is unsupported.");
+        }
+
+        if (autonomous.PendingContactDecisionWake is not { } wake)
+        {
+            return;
+        }
+
+        if (
+            autonomous.ContactPosture != ShipContactPosture.CautiousContact
+            || wake.ScheduledWorkId.Value <= 0
+            || wake.DueTime.Milliseconds < Time.Milliseconds
+        )
+        {
+            throw new InvalidOperationException("A pending contact decision wake requires an active cautious posture.");
+        }
+
+        EnsureUniqueContactWorkId(wake.ScheduledWorkId, contactWorkIds);
+        EnsureExactlyCorrelated(
+            ship.InstanceId,
+            wake.ScheduledWorkId,
+            wake.DueTime,
+            ScheduledWorkKind.ShipContactDecisionWake
+        );
+    }
+
+    private static void EnsureUniqueContactWorkId(ScheduledWorkId workId, HashSet<ScheduledWorkId> contactWorkIds)
+    {
+        if (!contactWorkIds.Add(workId))
+        {
+            throw new InvalidOperationException("Contact-owned state cannot share a scheduled work identity.");
+        }
     }
 
     private void ValidateOrders()
@@ -416,10 +660,7 @@ internal sealed record SimulationState
         ScheduledWorkKind kind
     )
     {
-        int count = Scheduler.OutstandingWork.Count(work =>
-            work.TargetShipId == targetShipId && work.Id == id && work.DueTime == dueTime && work.Kind == kind
-        );
-        if (count != 1)
+        if (!Scheduler.ContainsExact(id, targetShipId, dueTime, kind))
         {
             throw new InvalidOperationException("Runtime ship state lacks exactly one correlated scheduled work item.");
         }

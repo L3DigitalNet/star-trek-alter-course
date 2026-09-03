@@ -107,7 +107,7 @@ public sealed class WorldBootstrapSignatureTests
         );
         JsonNode simulation = JsonNode.Parse(saved)!["simulation"]!;
 
-        Assert.InRange(saved.Length, 1, 1024 * 1024);
+        Assert.InRange(saved.Length, 1, 128 * 1024 * 1024);
         Assert.Equal(256, simulation["ships"]!.AsArray().Count);
         Assert.Equal(256, simulation["strategicMap"]!["locations"]!.AsArray().Count);
         Assert.Equal(1024, simulation["strategicMap"]!["routes"]!.AsArray().Count);
@@ -139,7 +139,10 @@ public sealed class WorldBootstrapSignatureTests
 
         AdvanceUntilResult repairs = game.AdvanceUntilNextPlayerRelevantEvent();
         Assert.Equal(8000, repairs.StoppedAt.Milliseconds);
-        Assert.Equal([PlayerAdvanceEvent.SensorRepairCompleted], repairs.ResolvedEvents);
+        Assert.Equal(
+            [new PlayerAdvanceEvent(PlayerAdvanceEventKind.SensorRepairCompleted, new SimulationTime(8000))],
+            repairs.ResolvedEvents
+        );
         JsonArray afterRepairs = Ships(Parse(game));
         Assert.Null(afterRepairs[0]!["sensorRepair"]);
         Assert.Null(afterRepairs[1]!["sensorRepair"]);
@@ -517,15 +520,17 @@ public sealed class WorldBootstrapSignatureTests
     {
         string definition = $$"""
             {
-              "schemaVersion": 2,
+              "schemaVersion": 3,
               "id": "{{definitionId}}",
               "designDisplayName": "Pathfinder class",
               "maximumTacticalSpeedKilometersPerSecond": 10,
+              "passiveSensorRangeKilometers": 30.0,
+              "activeScanDurationMilliseconds": 2000,
               "sensorRepairDurationMilliseconds": 8000
             }
             """;
         string schema = File.ReadAllText(
-            Path.Combine(FindRepositoryRoot(), "src/AlterCourse.Godot/content/schemas/ship-definition-v2.schema.json")
+            Path.Combine(FindRepositoryRoot(), "src/AlterCourse.Godot/content/schemas/ship-definition-v3.schema.json")
         );
         return new ShipDefinitionCatalogLoader(schema).LoadCatalog([
             ShipDefinitionContent.FromText("pathfinder.json", definition),

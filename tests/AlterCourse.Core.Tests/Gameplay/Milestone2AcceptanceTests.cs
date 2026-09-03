@@ -305,7 +305,10 @@ public sealed class Milestone2AcceptanceTests
         SimulationState final = game.CaptureState();
 
         Assert.Equal(Time(9), result.FinalTime);
-        Assert.Equal([PlayerAdvanceEvent.SensorRepairCompleted], result.ResolvedEvents);
+        Assert.Equal(
+            [new PlayerAdvanceEvent(PlayerAdvanceEventKind.SensorRepairCompleted, Time(6))],
+            result.ResolvedEvents
+        );
         Assert.Equal(afterMotion, final.GetRequiredShip(PlayerId).TacticalPosition);
         Assert.Equal(1, final.GetRequiredShip(PlayerId).SensorIntegrity.Value);
         Assert.Null(final.GetRequiredShip(PlayerId).SensorRepair);
@@ -376,6 +379,8 @@ public sealed class Milestone2AcceptanceTests
             DefinitionId,
             "Pathfinder",
             new SpeedKilometersPerSecond(10),
+            new DistanceKilometers(30),
+            new SimulationDuration(2000),
             repairDuration ?? new SimulationDuration(6 * HourMilliseconds)
         );
         return new ShipDefinitionCatalog(

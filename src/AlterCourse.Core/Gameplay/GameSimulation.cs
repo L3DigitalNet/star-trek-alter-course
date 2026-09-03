@@ -1,7 +1,9 @@
+using AlterCourse.Core.AI;
 using AlterCourse.Core.Content;
 using AlterCourse.Core.Identity;
 using AlterCourse.Core.Orders;
 using AlterCourse.Core.Player;
+using AlterCourse.Core.Sensors;
 using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
@@ -16,7 +18,9 @@ public sealed class GameSimulation
     // capacity from a later request or commits partial time, ship, or scheduler state.
     private const int SameBoundaryExecutionBudget = 1024;
     private const int TotalConsequenceExecutionBudget = 10_000;
+    private const int ContactMaterializationBoundaryBudget = 10_000;
     private const long ShipStepWorkBudget = 1_000_000;
+    private const long SensorContactLossMilliseconds = 5_000;
 
     // Local arrival frames use one non-origin offset so tactical positions remain continuous values,
     // not a hidden grid or strategic-map projection.
@@ -35,17 +39,24 @@ public sealed class GameSimulation
     /// <summary>Returns a fresh read-only projection of player-known simulation state.</summary>
     public PlayerProjection GetPlayerProjection() => Project(_state);
 
+    /// <summary>Gets the latest autonomous contact explanation produced during this live session.</summary>
+    internal ShipContactDecisionExplanation? LastContactDecisionExplanation { get; private set; }
+
     /// <summary>Validates and schedules persistent strategic travel for the player ship.</summary>
     public TravelRequestResult RequestTravel(TravelIntent intent)
     {
         var command = new ShipTravelCommand(_state.PlayerShipId, intent.Destination);
         ShipTravelApplicationResult application = ApplyShipTravel(_state, command);
+        IReadOnlyList<PlayerAdvanceEvent> resolvedEvents = new ReadOnlyValueList<PlayerAdvanceEvent>([]);
         if (application.Outcome == TravelOutcome.Accepted)
         {
-            Commit(application.CandidateState);
+            List<PlayerAdvanceEvent> playerEvents = [];
+            SimulationState candidate = ObserveAllShips(application.CandidateState, _shipCatalog, playerEvents);
+            Commit(candidate);
+            resolvedEvents = new ReadOnlyValueList<PlayerAdvanceEvent>(playerEvents);
         }
 
-        return new TravelRequestResult(application.Outcome);
+        return new TravelRequestResult(application.Outcome, resolvedEvents);
     }
 
     internal static ShipTravelApplicationResult ApplyShipTravel(SimulationState state, ShipTravelCommand command)
@@ -93,27 +104,185 @@ public sealed class GameSimulation
     /// <summary>Validates and changes only the player ship's local tactical motion.</summary>
     public SetTacticalCourseResult SetTacticalCourse(SetTacticalCourseIntent intent)
     {
-        ShipState playerShip = _state.GetRequiredShip(_state.PlayerShipId);
-        if (playerShip.StrategicState is TravelingState)
+        TacticalCourseApplicationResult application = ApplyTacticalCourse(
+            _state,
+            _shipCatalog,
+            new TargetableTacticalCourseCommand(_state.PlayerShipId, intent.Heading, intent.Speed)
+        );
+        if (application.Outcome == SetTacticalCourseOutcome.Accepted)
         {
-            return new SetTacticalCourseResult(SetTacticalCourseOutcome.UnavailableWhileTraveling);
+            Commit(application.CandidateState);
         }
 
-        ShipDefinition definition = _shipCatalog.GetRequired(playerShip.DefinitionId);
-        if (intent.Speed.Value > definition.MaximumTacticalSpeed.Value)
+        return new SetTacticalCourseResult(application.Outcome);
+    }
+
+    /// <summary>Validates and sends the player's identity to one identified current contact.</summary>
+    public HailResult RequestHail(SensorContactId contactId)
+    {
+        ShipState player = _state.GetRequiredShip(_state.PlayerShipId);
+        SensorContactTrack? contact = player.SensorKnowledge.Contacts.FirstOrDefault(candidate =>
+            candidate.Id == contactId
+        );
+        if (contact is null)
         {
-            return new SetTacticalCourseResult(SetTacticalCourseOutcome.SpeedExceedsMaximum);
+            return new HailResult(HailOutcome.ContactNotFound);
         }
 
-        SimulationState candidate = _state.ReplaceShip(
-            playerShip.InstanceId,
-            playerShip with
+        if (contact.Status != SensorContactStatus.Current)
+        {
+            return new HailResult(HailOutcome.ContactNotCurrent);
+        }
+
+        if (contact.Identification != SensorContactIdentification.Identified)
+        {
+            return new HailResult(HailOutcome.ContactNotIdentified);
+        }
+
+        return RespondToHail(player, contact);
+    }
+
+    private HailResult RespondToHail(ShipState player, SensorContactTrack contact)
+    {
+        ShipState target = _state.GetRequiredShip(contact.TargetShipId);
+        SensorContactTrack? reciprocal = target.SensorKnowledge.Contacts.FirstOrDefault(candidate =>
+            candidate.TargetShipId == player.InstanceId && candidate.Status == SensorContactStatus.Current
+        );
+        if (target.AutonomousState.ContactPosture != ShipContactPosture.CautiousContact || reciprocal is null)
+        {
+            return new HailResult(HailOutcome.NoResponse);
+        }
+
+        ShipDefinition playerDefinition = _shipCatalog.GetRequired(player.DefinitionId);
+        var incomingHail = new IncomingHailFact(
+            reciprocal.Id,
+            player.VesselDisplayName,
+            playerDefinition.DesignDisplayName
+        );
+        SimulationScheduler scheduler = _state.Scheduler;
+        ActiveSensorScanState? activeScan = target.SensorKnowledge.ActiveScan;
+        if (activeScan?.TargetContactId == reciprocal.Id)
+        {
+            (scheduler, bool removed) = scheduler.Cancel(activeScan.ScheduledCompletionId);
+            if (!removed)
             {
-                TacticalMotion = new TacticalMotion(intent.Heading, intent.Speed),
+                throw new InvalidOperationException("A target-side scan lacks its exact scheduled completion.");
+            }
+
+            activeScan = null;
+        }
+
+        SensorContactTrack identifiedPlayer = reciprocal with
+        {
+            Identification = SensorContactIdentification.Identified,
+            KnownVesselDisplayName = incomingHail.TransmittedVesselDisplayName,
+            KnownDesignDisplayName = incomingHail.TransmittedDesignDisplayName,
+        };
+        SensorKnowledge updatedKnowledge = new(
+            target.SensorKnowledge.NextContactId,
+            target.SensorKnowledge.Contacts.Replace(reciprocal, identifiedPlayer),
+            activeScan
+        );
+        ShipState informedTarget = target with { SensorKnowledge = updatedKnowledge };
+        SimulationState informedState = _state.ReplaceShip(target.InstanceId, informedTarget) with
+        {
+            Scheduler = scheduler,
+        };
+        ShipContactDecisionExplanation decision = DecideContact(
+            informedState,
+            informedTarget,
+            _shipCatalog,
+            incomingHail
+        );
+        SimulationState candidate = ApplyContactDecision(informedState, informedTarget, _shipCatalog, decision);
+        Commit(candidate);
+        LastContactDecisionExplanation = decision;
+        return new HailResult(HailOutcome.Acknowledged);
+    }
+
+    internal static TacticalCourseApplicationResult ApplyTacticalCourse(
+        SimulationState state,
+        ShipDefinitionCatalog shipCatalog,
+        TargetableTacticalCourseCommand command
+    )
+    {
+        ShipState targetShip = state.GetRequiredShip(command.TargetShipId);
+        if (targetShip.StrategicState is TravelingState)
+        {
+            return new TacticalCourseApplicationResult(SetTacticalCourseOutcome.UnavailableWhileTraveling, state);
+        }
+
+        ShipDefinition definition = shipCatalog.GetRequired(targetShip.DefinitionId);
+        if (command.Speed.Value > definition.MaximumTacticalSpeed.Value)
+        {
+            return new TacticalCourseApplicationResult(SetTacticalCourseOutcome.SpeedExceedsMaximum, state);
+        }
+
+        SimulationState candidate = state.ReplaceShip(
+            targetShip.InstanceId,
+            targetShip with
+            {
+                TacticalMotion = new TacticalMotion(command.Heading, command.Speed),
             }
         );
+        return new TacticalCourseApplicationResult(SetTacticalCourseOutcome.Accepted, candidate);
+    }
+
+    /// <summary>Validates and schedules an active scan of one player-local contact.</summary>
+    public ActiveSensorScanResult RequestActiveSensorScan(SensorContactId contactId)
+    {
+        ShipState observer = _state.GetRequiredShip(_state.PlayerShipId);
+        SensorContactTrack? contact = observer.SensorKnowledge.Contacts.FirstOrDefault(candidate =>
+            candidate.Id == contactId
+        );
+        if (contact is null)
+        {
+            return new ActiveSensorScanResult(ActiveSensorScanOutcome.ContactNotFound);
+        }
+
+        if (contact.Status != SensorContactStatus.Current)
+        {
+            return new ActiveSensorScanResult(ActiveSensorScanOutcome.ContactNotCurrent);
+        }
+
+        if (contact.Identification == SensorContactIdentification.Identified)
+        {
+            return new ActiveSensorScanResult(ActiveSensorScanOutcome.AlreadyIdentified);
+        }
+
+        ShipDefinition definition = _shipCatalog.GetRequired(observer.DefinitionId);
+        if (!HasEffectiveSensorCapability(observer, definition) || observer.StrategicState is not AtLocationState)
+        {
+            return new ActiveSensorScanResult(ActiveSensorScanOutcome.SensorsUnavailable);
+        }
+
+        if (observer.SensorKnowledge.ActiveScan is not null)
+        {
+            return new ActiveSensorScanResult(ActiveSensorScanOutcome.ScanAlreadyActive);
+        }
+
+        SimulationTime completion = _state.Time.AdvanceBy(definition.ActiveScanDuration);
+        (SimulationScheduler scheduler, ScheduledWork work) = _state.Scheduler.Schedule(
+            completion,
+            observer.InstanceId,
+            ScheduledWorkKind.ActiveSensorScanCompletion
+        );
+        SensorKnowledge knowledge = observer.SensorKnowledge with
+        {
+            ActiveScan = new ActiveSensorScanState(contactId, _state.Time, completion, work.Id),
+        };
+        SimulationState candidate = _state.ReplaceShip(
+            observer.InstanceId,
+            observer with
+            {
+                SensorKnowledge = knowledge,
+            }
+        ) with
+        {
+            Scheduler = scheduler,
+        };
         Commit(candidate);
-        return new SetTacticalCourseResult(SetTacticalCourseOutcome.Accepted);
+        return new ActiveSensorScanResult(ActiveSensorScanOutcome.Accepted);
     }
 
     /// <summary>Advances by explicit one-hundred-millisecond steps and returns resolved consequences.</summary>
@@ -124,11 +293,8 @@ public sealed class GameSimulation
         SimulationTime target = _state.Time.AdvanceBy(new SimulationDuration(milliseconds));
         SimulationAdvanceTraceResult advance = AdvanceTo(_state, target, _shipCatalog);
         Commit(advance.State);
-        return new SimulationAdvanceResult(
-            _state.Time,
-            PlayerEvents(advance.Traces, _state.PlayerShipId),
-            Project(_state)
-        );
+        RememberLatestContactDecision(advance.Traces);
+        return new SimulationAdvanceResult(_state.Time, advance.PlayerEvents, Project(_state));
     }
 
     /// <summary>Advances through hidden work to the next consequence targeting the player ship.</summary>
@@ -149,12 +315,13 @@ public sealed class GameSimulation
         }
 
         SimulationTime boundary = nextPlayerWork.Value.DueTime;
-        SimulationAdvanceTraceResult advance = AdvanceTo(_state, boundary, _shipCatalog);
+        SimulationAdvanceTraceResult advance = AdvanceTo(_state, boundary, _shipCatalog, true);
         Commit(advance.State);
+        RememberLatestContactDecision(advance.Traces);
         return new AdvanceUntilResult(
             AdvanceUntilOutcome.PlayerEventResolved,
             _state.Time,
-            PlayerEvents(advance.Traces, _state.PlayerShipId),
+            advance.PlayerEvents,
             Project(_state)
         );
     }
@@ -191,10 +358,51 @@ public sealed class GameSimulation
     internal static GameSimulation RestoreState(SimulationState restoredState, ShipDefinitionCatalog shipCatalog) =>
         new(restoredState, shipCatalog);
 
+    internal void BootstrapHiddenCautiousContactObservation(ShipInstanceId observerId)
+    {
+        ShipState observer = _state.GetRequiredShip(observerId);
+        if (observerId == _state.PlayerShipId || observer.StrategicState is not AtLocationState)
+        {
+            throw new InvalidOperationException("A hidden cautious-contact observer must be a local non-player ship.");
+        }
+
+        if (
+            _state.Ships.Any(ship =>
+                ship.SensorKnowledge.NextContactId != SensorKnowledge.Empty.NextContactId
+                || !ship.SensorKnowledge.Contacts.IsEmpty
+                || ship.SensorKnowledge.ActiveScan is not null
+                || ship.AutonomousState.ContactPosture is not null
+                || ship.AutonomousState.PendingContactDecisionWake is not null
+            )
+        )
+        {
+            throw new InvalidOperationException(
+                "Initial hidden observation requires untouched knowledge and autonomy."
+            );
+        }
+
+        SimulationState prepared = _state.ReplaceShip(
+            observerId,
+            observer with
+            {
+                AutonomousState = new ShipAutonomousState(ShipContactPosture.CautiousContact),
+            }
+        );
+        List<PlayerAdvanceEvent> playerEvents = [];
+        SimulationState candidate = ObserveAllShips(prepared, _shipCatalog, playerEvents);
+        if (playerEvents.Count != 0)
+        {
+            throw new InvalidOperationException("Hidden bootstrap observation cannot reveal a player contact.");
+        }
+
+        Commit(candidate);
+    }
+
     internal static SimulationAdvanceTraceResult AdvanceTo(
         SimulationState initial,
         SimulationTime target,
-        ShipDefinitionCatalog shipCatalog
+        ShipDefinitionCatalog shipCatalog,
+        bool stopAfterPlayerEvent = false
     )
     {
         initial.Time.AdvanceTo(target);
@@ -206,27 +414,86 @@ public sealed class GameSimulation
 
         SimulationState current = initial;
         List<ScheduledConsequenceTrace> traces = [];
+        List<PlayerAdvanceEvent> playerEvents = [];
         long actualShipSteps = 0;
+        int contactMaterializationBoundaries = 0;
         int totalExecutions = 0;
 
         while (current.Time.Milliseconds < target.Milliseconds)
         {
-            SimulationTime boundary = target;
-            if (
-                !current.Scheduler.OutstandingWork.IsDefaultOrEmpty
-                && current.Scheduler.OutstandingWork[0].DueTime.Milliseconds <= target.Milliseconds
-            )
+            bool materializeContacts = RequiresContactMaterialization(current);
+            SimulationTime boundary = NextAdvancementBoundary(current, target, materializeContacts);
+            if (materializeContacts)
             {
-                boundary = current.Scheduler.OutstandingWork[0].DueTime;
+                ChargeContactMaterializationBoundary(ref contactMaterializationBoundaries);
             }
 
             current = AdvanceSegment(current, boundary, ref actualShipSteps);
-            current = ResolveDueAtCurrentBoundary(current, traces, ref totalExecutions);
+            int priorPlayerEventCount = playerEvents.Count;
+            current = ResolveCurrentBoundary(current, shipCatalog, traces, playerEvents, ref totalExecutions);
+            if (stopAfterPlayerEvent && playerEvents.Count != priorPlayerEventCount)
+            {
+                break;
+            }
         }
 
-        current = ResolveDueAtCurrentBoundary(current, traces, ref totalExecutions);
+        if (current.Time == target)
+        {
+            current = ResolveCurrentBoundary(
+                current,
+                shipCatalog,
+                traces,
+                playerEvents,
+                ref totalExecutions,
+                observe: false
+            );
+        }
         current.Validate(shipCatalog);
-        return new SimulationAdvanceTraceResult(current, new ReadOnlyValueList<ScheduledConsequenceTrace>(traces));
+        return new SimulationAdvanceTraceResult(
+            current,
+            new ReadOnlyValueList<ScheduledConsequenceTrace>(traces),
+            new ReadOnlyValueList<PlayerAdvanceEvent>(playerEvents)
+        );
+    }
+
+    private static SimulationTime NextAdvancementBoundary(
+        SimulationState state,
+        SimulationTime target,
+        bool materializeContacts
+    )
+    {
+        SimulationTime boundary = target;
+        if (
+            !state.Scheduler.OutstandingWork.IsDefaultOrEmpty
+            && state.Scheduler.OutstandingWork[0].DueTime.Milliseconds <= target.Milliseconds
+        )
+        {
+            boundary = state.Scheduler.OutstandingWork[0].DueTime;
+        }
+
+        if (materializeContacts)
+        {
+            SimulationTime nextStep = state.Time.AdvanceBy(SimulationFixedStep.Duration);
+            if (nextStep.Milliseconds < boundary.Milliseconds)
+            {
+                boundary = nextStep;
+            }
+        }
+
+        return boundary;
+    }
+
+    private static void ChargeContactMaterializationBoundary(ref int materializationBoundaries)
+    {
+        int attempted = checked(materializationBoundaries + 1);
+        if (attempted > ContactMaterializationBoundaryBudget)
+        {
+            throw new InvalidOperationException(
+                $"Advancement exceeds the {ContactMaterializationBoundaryBudget} contact-materialization boundary budget at attempt {attempted}."
+            );
+        }
+
+        materializationBoundaries = attempted;
     }
 
     private static SimulationState AdvanceSegment(
@@ -311,17 +578,447 @@ public sealed class GameSimulation
         };
     }
 
-    private static SimulationState ResolveDueAtCurrentBoundary(
+    private static bool RequiresContactMaterialization(SimulationState state)
+    {
+        foreach (ShipState observer in state.Ships)
+        {
+            if (observer.StrategicState is not AtLocationState observerLocation)
+            {
+                continue;
+            }
+
+            bool hasLocalTarget = state.Ships.Any(target =>
+                target.InstanceId != observer.InstanceId
+                && target.StrategicState is AtLocationState targetLocation
+                && targetLocation.LocationId == observerLocation.LocationId
+            );
+            if (hasLocalTarget && (observer.TacticalMotion.Speed.Value != 0 || observer.SensorRepair is not null))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static SimulationState ObserveAllShips(
         SimulationState state,
-        List<ScheduledConsequenceTrace> traces,
-        ref int totalExecutions
+        ShipDefinitionCatalog shipCatalog,
+        List<PlayerAdvanceEvent> playerEvents
+    )
+    {
+        ShipState[] truth = [.. state.Ships];
+        SimulationState current = state;
+        foreach (ShipState truthObserver in truth)
+        {
+            ShipState observer = current.GetRequiredShip(truthObserver.InstanceId);
+            ShipDefinition observerDefinition = shipCatalog.GetRequired(observer.DefinitionId);
+            double effectiveRange = observerDefinition.PassiveSensorRange.Value * observer.SensorIntegrity.Value;
+            var observableTargets = new HashSet<ShipInstanceId>();
+            if (observer.StrategicState is AtLocationState observerLocation)
+            {
+                IEnumerable<ShipState> targets =
+                    observer.SensorKnowledge.Contacts.Length == SensorKnowledge.MaximumContactsPerObserver
+                        ? observer.SensorKnowledge.Contacts.Select(contact =>
+                            truth[FindShipIndex(truth, contact.TargetShipId)]
+                        )
+                        : truth;
+                foreach (ShipState target in targets)
+                {
+                    if (
+                        effectiveRange > 0
+                        && target.InstanceId != observer.InstanceId
+                        && target.StrategicState is AtLocationState targetLocation
+                        && targetLocation.LocationId == observerLocation.LocationId
+                        && IsWithinInclusiveRange(
+                            Distance(observer.TacticalPosition, target.TacticalPosition),
+                            effectiveRange
+                        )
+                    )
+                    {
+                        observableTargets.Add(target.InstanceId);
+                    }
+                }
+            }
+
+            (current, observer) = ReconcileObserverContacts(current, observer, truth, observableTargets, playerEvents);
+            bool decisionRequired = HasMeaningfulContactTransition(
+                truthObserver.SensorKnowledge,
+                observer.SensorKnowledge
+            );
+            current = ScheduleContactDecisionWake(current, observer, decisionRequired);
+        }
+
+        return current;
+    }
+
+    private static int FindShipIndex(IReadOnlyList<ShipState> ships, ShipInstanceId shipId)
+    {
+        int low = 0;
+        int high = ships.Count - 1;
+        while (low <= high)
+        {
+            int middle = low + ((high - low) / 2);
+            long value = ships[middle].InstanceId.Value;
+            if (value == shipId.Value)
+            {
+                return middle;
+            }
+
+            if (value < shipId.Value)
+            {
+                low = middle + 1;
+            }
+            else
+            {
+                high = middle - 1;
+            }
+        }
+
+        throw new InvalidOperationException("Sensor knowledge references a missing truth target.");
+    }
+
+    private static (SimulationState State, ShipState Observer) ReconcileObserverContacts(
+        SimulationState state,
+        ShipState observer,
+        IReadOnlyList<ShipState> truth,
+        HashSet<ShipInstanceId> observableTargets,
+        List<PlayerAdvanceEvent> playerEvents
     )
     {
         SimulationState current = state;
-        int executions = 0;
+        SensorKnowledge knowledge = observer.SensorKnowledge;
+        (current, List<SensorContactTrack> contacts) = ReconcileRetainedContacts(
+            current,
+            observer,
+            truth,
+            observableTargets,
+            playerEvents
+        );
 
-        // Repeating batch dequeue permits consequences to schedule same-boundary work without
-        // leaving it overdue; the finite budget prevents an infinite consequence cycle.
+        long nextContactId = AdmitNewContacts(
+            observer,
+            truth,
+            observableTargets,
+            contacts,
+            knowledge.NextContactId,
+            current.Time,
+            current.PlayerShipId,
+            playerEvents
+        );
+        (current, ActiveSensorScanState? activeScan) = InterruptInvalidScan(
+            current,
+            observer,
+            contacts,
+            knowledge.ActiveScan,
+            playerEvents
+        );
+
+        SensorKnowledge updatedKnowledge = new(nextContactId, contacts, activeScan);
+        ShipState updatedObserver = observer with { SensorKnowledge = updatedKnowledge };
+        return (current.ReplaceShip(observer.InstanceId, updatedObserver), updatedObserver);
+    }
+
+    private static (SimulationState State, List<SensorContactTrack> Contacts) ReconcileRetainedContacts(
+        SimulationState state,
+        ShipState observer,
+        IReadOnlyList<ShipState> truth,
+        HashSet<ShipInstanceId> observableTargets,
+        List<PlayerAdvanceEvent> playerEvents
+    )
+    {
+        SimulationState current = state;
+        List<SensorContactTrack> contacts = [];
+        foreach (
+            SensorContactTrack contact in observer.SensorKnowledge.Contacts.OrderBy(contact =>
+                contact.TargetShipId.Value
+            )
+        )
+        {
+            ShipState target = truth[FindShipIndex(truth, contact.TargetShipId)];
+            if (observableTargets.Contains(contact.TargetShipId))
+            {
+                (current, SensorContactTrack refreshed) = RefreshObservedContact(
+                    current,
+                    observer.InstanceId,
+                    target,
+                    contact,
+                    playerEvents
+                );
+                contacts.Add(refreshed);
+                continue;
+            }
+
+            if (contact.Status == SensorContactStatus.Current)
+            {
+                (current, SensorContactTrack stale) = MarkContactStale(
+                    current,
+                    observer.InstanceId,
+                    contact,
+                    playerEvents
+                );
+                contacts.Add(stale);
+                continue;
+            }
+
+            contacts.Add(contact);
+        }
+
+        return (current, contacts);
+    }
+
+    private static (SimulationState State, SensorContactTrack Contact) RefreshObservedContact(
+        SimulationState state,
+        ShipInstanceId observerId,
+        ShipState target,
+        SensorContactTrack contact,
+        List<PlayerAdvanceEvent> playerEvents
+    )
+    {
+        if (contact.LossWorkId is { } lossWorkId)
+        {
+            (SimulationScheduler scheduler, _) = state.Scheduler.Cancel(lossWorkId);
+            state = state with { Scheduler = scheduler };
+        }
+
+        if (contact.Status != SensorContactStatus.Current)
+        {
+            AddContactEvent(
+                observerId,
+                state.PlayerShipId,
+                PlayerAdvanceEventKind.SensorContactReacquired,
+                state.Time,
+                contact.Id,
+                playerEvents
+            );
+        }
+
+        return (
+            state,
+            contact with
+            {
+                LastObservedPosition = target.TacticalPosition,
+                LastObservedAt = state.Time,
+                Status = SensorContactStatus.Current,
+                LossWorkId = null,
+                LossDueTime = null,
+            }
+        );
+    }
+
+    private static (SimulationState State, SensorContactTrack Contact) MarkContactStale(
+        SimulationState state,
+        ShipInstanceId observerId,
+        SensorContactTrack contact,
+        List<PlayerAdvanceEvent> playerEvents
+    )
+    {
+        SimulationTime lossDueTime = state.Time.AdvanceBy(new SimulationDuration(SensorContactLossMilliseconds));
+        (SimulationScheduler scheduler, ScheduledWork lossWork) = state.Scheduler.Schedule(
+            lossDueTime,
+            observerId,
+            ScheduledWorkKind.SensorContactLoss
+        );
+        state = state with { Scheduler = scheduler };
+        AddContactEvent(
+            observerId,
+            state.PlayerShipId,
+            PlayerAdvanceEventKind.SensorContactStale,
+            state.Time,
+            contact.Id,
+            playerEvents
+        );
+        return (
+            state,
+            contact with
+            {
+                Status = SensorContactStatus.Stale,
+                LossWorkId = lossWork.Id,
+                LossDueTime = lossDueTime,
+            }
+        );
+    }
+
+    private static long AdmitNewContacts(
+        ShipState observer,
+        IReadOnlyList<ShipState> truth,
+        HashSet<ShipInstanceId> observableTargets,
+        List<SensorContactTrack> contacts,
+        long nextContactId,
+        SimulationTime observationTime,
+        ShipInstanceId playerShipId,
+        List<PlayerAdvanceEvent> playerEvents
+    )
+    {
+        HashSet<ShipInstanceId> retainedTargets = [.. contacts.Select(contact => contact.TargetShipId)];
+        foreach (
+            ShipState target in truth
+                .Where(target =>
+                    observableTargets.Contains(target.InstanceId) && !retainedTargets.Contains(target.InstanceId)
+                )
+                .OrderBy(target => target.InstanceId.Value)
+        )
+        {
+            if (contacts.Count == SensorKnowledge.MaximumContactsPerObserver)
+            {
+                break;
+            }
+
+            var contactId = new SensorContactId(nextContactId);
+            nextContactId = checked(nextContactId + 1);
+            contacts.Add(
+                new SensorContactTrack(
+                    contactId,
+                    target.InstanceId,
+                    target.TacticalPosition,
+                    observationTime,
+                    SensorContactStatus.Current,
+                    SensorContactIdentification.Detected
+                )
+            );
+            AddContactEvent(
+                observer.InstanceId,
+                playerShipId,
+                PlayerAdvanceEventKind.SensorContactDetected,
+                observationTime,
+                contactId,
+                playerEvents
+            );
+        }
+
+        return nextContactId;
+    }
+
+    private static (SimulationState State, ActiveSensorScanState? ActiveScan) InterruptInvalidScan(
+        SimulationState state,
+        ShipState observer,
+        List<SensorContactTrack> contacts,
+        ActiveSensorScanState? activeScan,
+        List<PlayerAdvanceEvent> playerEvents
+    )
+    {
+        if (
+            activeScan is not null
+            && contacts.First(contact => contact.Id == activeScan.TargetContactId).Status != SensorContactStatus.Current
+        )
+        {
+            (SimulationScheduler scheduler, _) = state.Scheduler.Cancel(activeScan.ScheduledCompletionId);
+            state = state with { Scheduler = scheduler };
+            AddContactEvent(
+                observer.InstanceId,
+                state.PlayerShipId,
+                PlayerAdvanceEventKind.ActiveSensorScanInterrupted,
+                state.Time,
+                activeScan.TargetContactId,
+                playerEvents
+            );
+            activeScan = null;
+        }
+
+        return (state, activeScan);
+    }
+
+    private static bool HasMeaningfulContactTransition(SensorKnowledge prior, SensorKnowledge current) =>
+        current.Contacts.Any(contact =>
+        {
+            SensorContactStatus? priorStatus = prior
+                .Contacts.FirstOrDefault(priorContact => priorContact.TargetShipId == contact.TargetShipId)
+                ?.Status;
+            return contact.Status switch
+            {
+                SensorContactStatus.Current => priorStatus != SensorContactStatus.Current,
+                SensorContactStatus.Stale => priorStatus == SensorContactStatus.Current,
+                SensorContactStatus.Lost => false,
+                _ => throw new InvalidOperationException("A sensor contact has an unsupported status."),
+            };
+        });
+
+    private static SimulationState ScheduleContactDecisionWake(
+        SimulationState state,
+        ShipState observer,
+        bool decisionRequired
+    )
+    {
+        if (
+            !decisionRequired
+            || observer.InstanceId == state.PlayerShipId
+            || observer.AutonomousState.ContactPosture != ShipContactPosture.CautiousContact
+            || observer.AutonomousState.PendingContactDecisionWake is not null
+        )
+        {
+            return state;
+        }
+
+        (SimulationScheduler scheduler, ScheduledWork work) = state.Scheduler.Schedule(
+            state.Time,
+            observer.InstanceId,
+            ScheduledWorkKind.ShipContactDecisionWake
+        );
+        ShipState updated = observer with
+        {
+            AutonomousState = observer.AutonomousState with
+            {
+                PendingContactDecisionWake = new ShipContactDecisionWake(work.Id, work.DueTime),
+            },
+        };
+        return state.ReplaceShip(observer.InstanceId, updated) with { Scheduler = scheduler };
+    }
+
+    private static double Distance(TacticalPosition left, TacticalPosition right)
+    {
+        double x = Math.Abs(left.XKilometers - right.XKilometers);
+        double y = Math.Abs(left.YKilometers - right.YKilometers);
+        if (x < y)
+        {
+            (x, y) = (y, x);
+        }
+
+        if (double.IsPositiveInfinity(x) || x == 0)
+        {
+            return x;
+        }
+
+        double ratio = y / x;
+        return x * Math.Sqrt(1 + (ratio * ratio));
+    }
+
+    private static bool IsWithinInclusiveRange(double distance, double range)
+    {
+        double tolerance = Math.Max(1, range) * 1e-12;
+        return distance <= range + tolerance;
+    }
+
+    private static void AddContactEvent(
+        ShipInstanceId observerId,
+        ShipInstanceId playerShipId,
+        PlayerAdvanceEventKind kind,
+        SimulationTime occurredAt,
+        SensorContactId contactId,
+        List<PlayerAdvanceEvent> playerEvents
+    )
+    {
+        if (observerId == playerShipId)
+        {
+            playerEvents.Add(new PlayerAdvanceEvent(kind, occurredAt, contactId));
+        }
+    }
+
+    private static SimulationState ResolveCurrentBoundary(
+        SimulationState state,
+        ShipDefinitionCatalog shipCatalog,
+        List<ScheduledConsequenceTrace> traces,
+        List<PlayerAdvanceEvent> playerEvents,
+        ref int totalExecutions,
+        bool observe = true
+    )
+    {
+        SimulationState current = state;
+        if (observe)
+        {
+            current = ObserveAllShips(current, shipCatalog, playerEvents);
+        }
+
+        int executions = 0;
         while (true)
         {
             (SimulationScheduler scheduler, IReadOnlyList<ScheduledWork> dueWork) = current.Scheduler.DequeueDue(
@@ -335,38 +1032,47 @@ public sealed class GameSimulation
             current = current with { Scheduler = scheduler };
             foreach (ScheduledWork work in dueWork)
             {
-                executions = checked(executions + 1);
-                if (executions > SameBoundaryExecutionBudget)
-                {
-                    throw new InvalidOperationException(
-                        "Scheduled work exceeded the finite same-boundary execution budget."
-                    );
-                }
-
-                int attemptedTotal = checked(totalExecutions + 1);
-                if (attemptedTotal > TotalConsequenceExecutionBudget)
-                {
-                    throw new InvalidOperationException(
-                        $"Scheduled work exceeds the {TotalConsequenceExecutionBudget} total consequence execution budget at attempt {attemptedTotal}."
-                    );
-                }
-
-                totalExecutions = attemptedTotal;
-                (current, ScheduledConsequenceTrace trace) = ResolveScheduledWork(current, work);
+                ChargeScheduledExecution(ref executions, ref totalExecutions);
+                (current, ScheduledConsequenceTrace trace) = ResolveScheduledWork(current, work, shipCatalog);
                 traces.Add(trace);
+                AddPlayerScheduledEvent(trace, current.PlayerShipId, playerEvents);
+                current = ObserveAllShips(current, shipCatalog, playerEvents);
             }
         }
     }
 
+    private static void ChargeScheduledExecution(ref int boundaryExecutions, ref int totalExecutions)
+    {
+        boundaryExecutions = checked(boundaryExecutions + 1);
+        if (boundaryExecutions > SameBoundaryExecutionBudget)
+        {
+            throw new InvalidOperationException("Scheduled work exceeded the finite same-boundary execution budget.");
+        }
+
+        int attemptedTotal = checked(totalExecutions + 1);
+        if (attemptedTotal > TotalConsequenceExecutionBudget)
+        {
+            throw new InvalidOperationException(
+                $"Scheduled work exceeds the {TotalConsequenceExecutionBudget} total consequence execution budget at attempt {attemptedTotal}."
+            );
+        }
+
+        totalExecutions = attemptedTotal;
+    }
+
     private static (SimulationState State, ScheduledConsequenceTrace Trace) ResolveScheduledWork(
         SimulationState state,
-        ScheduledWork work
+        ScheduledWork work,
+        ShipDefinitionCatalog shipCatalog
     ) =>
         work.Kind switch
         {
             ScheduledWorkKind.SensorRepairCompletion => CompleteSensorRepair(state, work),
             ScheduledWorkKind.TravelArrival => CompleteTravel(state, work),
             ScheduledWorkKind.OrderWake => CompleteHold(state, work),
+            ScheduledWorkKind.SensorContactLoss => LoseSensorContact(state, work),
+            ScheduledWorkKind.ActiveSensorScanCompletion => CompleteActiveSensorScan(state, work, shipCatalog),
+            ScheduledWorkKind.ShipContactDecisionWake => CompleteShipContactDecisionWake(state, work, shipCatalog),
             _ => throw new InvalidOperationException("Scheduled work kind is unsupported."),
         };
 
@@ -516,51 +1222,284 @@ public sealed class GameSimulation
         );
     }
 
-    // Milestone 2 order rules never consult a random source; the trace records that contract explicitly
-    // so later randomized behavior cannot appear without changing observable diagnostic data.
+    private static (SimulationState State, ScheduledConsequenceTrace Trace) LoseSensorContact(
+        SimulationState state,
+        ScheduledWork work
+    )
+    {
+        ShipState observer = state.GetRequiredShip(work.TargetShipId);
+        SensorContactTrack? contact = observer.SensorKnowledge.Contacts.FirstOrDefault(candidate =>
+            candidate.Status == SensorContactStatus.Stale
+            && candidate.LossWorkId == work.Id
+            && candidate.LossDueTime == work.DueTime
+        );
+        if (contact is null)
+        {
+            return (state, InvalidatedContactTrace(state, work, ScheduledConsequenceRule.SensorContactLoss));
+        }
+
+        SensorKnowledge knowledge = new(
+            observer.SensorKnowledge.NextContactId,
+            observer.SensorKnowledge.Contacts.Replace(
+                contact,
+                contact with
+                {
+                    Status = SensorContactStatus.Lost,
+                    LossWorkId = null,
+                    LossDueTime = null,
+                }
+            ),
+            observer.SensorKnowledge.ActiveScan
+        );
+        ShipState updatedObserver = observer with { SensorKnowledge = knowledge };
+        SimulationState candidate = state.ReplaceShip(observer.InstanceId, updatedObserver);
+        candidate = ScheduleContactDecisionWake(candidate, updatedObserver, decisionRequired: true);
+        return (
+            candidate,
+            Trace(
+                state,
+                work,
+                null,
+                ScheduledConsequenceRule.SensorContactLoss,
+                ScheduledConsequenceAction.LoseSensorContact,
+                true,
+                contact.Id
+            )
+        );
+    }
+
+    private static (SimulationState State, ScheduledConsequenceTrace Trace) CompleteActiveSensorScan(
+        SimulationState state,
+        ScheduledWork work,
+        ShipDefinitionCatalog shipCatalog
+    )
+    {
+        ShipState observer = state.GetRequiredShip(work.TargetShipId);
+        ActiveSensorScanState? scan = observer.SensorKnowledge.ActiveScan;
+        SensorContactTrack? contact = scan is null
+            ? null
+            : observer.SensorKnowledge.Contacts.FirstOrDefault(candidate =>
+                candidate.Id == scan.TargetContactId && candidate.Status == SensorContactStatus.Current
+            );
+        if (scan is null || scan.ScheduledCompletionId != work.Id || contact is null)
+        {
+            return (state, InvalidatedContactTrace(state, work, ScheduledConsequenceRule.ActiveSensorScanCompletion));
+        }
+
+        ShipState target = state.GetRequiredShip(contact.TargetShipId);
+        ShipDefinition targetDefinition = shipCatalog.GetRequired(target.DefinitionId);
+        SensorContactTrack identified = contact with
+        {
+            Identification = SensorContactIdentification.Identified,
+            KnownVesselDisplayName = target.VesselDisplayName,
+            KnownDesignDisplayName = targetDefinition.DesignDisplayName,
+        };
+        SensorKnowledge knowledge = new(
+            observer.SensorKnowledge.NextContactId,
+            observer.SensorKnowledge.Contacts.Replace(contact, identified)
+        );
+        SimulationState candidate = state.ReplaceShip(
+            observer.InstanceId,
+            observer with
+            {
+                SensorKnowledge = knowledge,
+            }
+        );
+        return (
+            candidate,
+            Trace(
+                state,
+                work,
+                null,
+                ScheduledConsequenceRule.ActiveSensorScanCompletion,
+                ScheduledConsequenceAction.CompleteActiveSensorScan,
+                true,
+                contact.Id
+            )
+        );
+    }
+
+    private static (SimulationState State, ScheduledConsequenceTrace Trace) CompleteShipContactDecisionWake(
+        SimulationState state,
+        ScheduledWork work,
+        ShipDefinitionCatalog shipCatalog
+    )
+    {
+        ShipState ship = state.GetRequiredShip(work.TargetShipId);
+        ShipContactDecisionWake? wake = ship.AutonomousState.PendingContactDecisionWake;
+        if (wake is null || wake.ScheduledWorkId != work.Id || wake.DueTime != work.DueTime)
+        {
+            return (state, InvalidatedContactTrace(state, work, ScheduledConsequenceRule.ShipContactDecisionWake));
+        }
+
+        SimulationState cleared = state.ReplaceShip(
+            ship.InstanceId,
+            ship with
+            {
+                AutonomousState = ship.AutonomousState with { PendingContactDecisionWake = null },
+            }
+        );
+        ShipState clearedShip = cleared.GetRequiredShip(ship.InstanceId);
+        ShipContactDecisionExplanation decision = DecideContact(cleared, clearedShip, shipCatalog);
+        SimulationState candidate = ApplyContactDecision(cleared, clearedShip, shipCatalog, decision);
+        return (
+            candidate,
+            Trace(
+                state,
+                work,
+                null,
+                ScheduledConsequenceRule.ShipContactDecisionWake,
+                ScheduledConsequenceAction.WakeShipContactDecision,
+                true,
+                contactDecision: decision
+            )
+        );
+    }
+
+    private static ShipContactDecisionExplanation DecideContact(
+        SimulationState state,
+        ShipState ship,
+        ShipDefinitionCatalog shipCatalog,
+        IncomingHailFact? incomingHail = null
+    )
+    {
+        ShipDefinition definition = shipCatalog.GetRequired(ship.DefinitionId);
+        var facts = new ShipContactDecisionFacts(
+            ship.TacticalPosition,
+            ship.TacticalMotion,
+            ship.StrategicState is AtLocationState,
+            definition.MaximumTacticalSpeed,
+            ship.SensorKnowledge.Contacts.Select(contact => contact.ToActorSafeSnapshot()),
+            incomingHail
+        );
+        var input = new ShipContactDecisionInput(
+            ship.InstanceId,
+            state.Time,
+            ShipContactDecisionGoal.RespondCautiously,
+            ShipContactPosture.CautiousContact,
+            facts
+        );
+        return CautiousContactDecisionPolicy.Evaluate(input);
+    }
+
+    private static SimulationState ApplyContactDecision(
+        SimulationState state,
+        ShipState ship,
+        ShipDefinitionCatalog shipCatalog,
+        ShipContactDecisionExplanation decision
+    )
+    {
+        if (decision.ResultingCourse is not { } course)
+        {
+            return state;
+        }
+
+        TacticalCourseApplicationResult application = ApplyTacticalCourse(
+            state,
+            shipCatalog,
+            new TargetableTacticalCourseCommand(ship.InstanceId, course.Heading, course.Speed)
+        );
+        if (application.Outcome != SetTacticalCourseOutcome.Accepted)
+        {
+            throw new InvalidOperationException("A validated autonomous course was rejected during application.");
+        }
+
+        return application.CandidateState;
+    }
+
+    private static ScheduledConsequenceTrace InvalidatedContactTrace(
+        SimulationState state,
+        ScheduledWork work,
+        ScheduledConsequenceRule rule
+    ) => Trace(state, work, null, rule, ScheduledConsequenceAction.IgnoreInvalidatedWork, false);
+
+    // Current scheduled rules, including cautious-contact decisions, never consult a random source. The
+    // trace keeps later randomized behavior from appearing without changing observable diagnostic data.
     private static ScheduledConsequenceTrace Trace(
         SimulationState state,
         ScheduledWork work,
         ShipOrder? order,
         ScheduledConsequenceRule rule,
         ScheduledConsequenceAction action,
-        bool completed
-    ) => new(work.Id, work.TargetShipId, work.Kind, state.Time, order?.Id, order?.Kind, rule, action, completed, false);
+        bool completed,
+        SensorContactId? contactId = null,
+        ShipContactDecisionExplanation? contactDecision = null
+    ) =>
+        new(
+            work.Id,
+            work.TargetShipId,
+            work.Kind,
+            state.Time,
+            order?.Id,
+            order?.Kind,
+            rule,
+            action,
+            completed,
+            false,
+            contactId,
+            contactDecision
+        );
 
-    private static ReadOnlyValueList<PlayerAdvanceEvent> PlayerEvents(
-        IReadOnlyList<ScheduledConsequenceTrace> traces,
-        ShipInstanceId playerShipId
-    )
+    private void RememberLatestContactDecision(IReadOnlyList<ScheduledConsequenceTrace> traces)
     {
-        List<PlayerAdvanceEvent> events = [];
-        foreach (ScheduledConsequenceTrace trace in traces.Where(trace => trace.TargetShipId == playerShipId))
+        ShipContactDecisionExplanation? latest = traces
+            .Select(trace => trace.ContactDecision)
+            .LastOrDefault(decision => decision is not null);
+        if (latest is not null)
         {
-            switch (trace.WorkKind)
-            {
-                case ScheduledWorkKind.TravelArrival:
-                    events.Add(PlayerAdvanceEvent.TravelArrived);
-                    break;
-                case ScheduledWorkKind.SensorRepairCompletion:
-                    events.Add(PlayerAdvanceEvent.SensorRepairCompleted);
-                    break;
-                case ScheduledWorkKind.OrderWake:
-                    break;
-                default:
-                    throw new InvalidOperationException("A resolved scheduled consequence has an unknown kind.");
-            }
+            LastContactDecisionExplanation = latest;
         }
-
-        return new ReadOnlyValueList<PlayerAdvanceEvent>(events);
     }
 
-    private static PlayerProjection Project(SimulationState state)
+    private static void AddPlayerScheduledEvent(
+        ScheduledConsequenceTrace trace,
+        ShipInstanceId playerShipId,
+        List<PlayerAdvanceEvent> playerEvents
+    )
+    {
+        if (trace.TargetShipId != playerShipId || !trace.Completed)
+        {
+            return;
+        }
+
+        PlayerAdvanceEvent? playerEvent = trace.WorkKind switch
+        {
+            ScheduledWorkKind.TravelArrival => new PlayerAdvanceEvent(
+                PlayerAdvanceEventKind.TravelArrived,
+                trace.ResolutionTime
+            ),
+            ScheduledWorkKind.SensorRepairCompletion => new PlayerAdvanceEvent(
+                PlayerAdvanceEventKind.SensorRepairCompleted,
+                trace.ResolutionTime
+            ),
+            ScheduledWorkKind.SensorContactLoss => new PlayerAdvanceEvent(
+                PlayerAdvanceEventKind.SensorContactLost,
+                trace.ResolutionTime,
+                trace.ContactId
+            ),
+            ScheduledWorkKind.ActiveSensorScanCompletion => new PlayerAdvanceEvent(
+                PlayerAdvanceEventKind.ActiveSensorScanCompleted,
+                trace.ResolutionTime,
+                trace.ContactId
+            ),
+            ScheduledWorkKind.OrderWake or ScheduledWorkKind.ShipContactDecisionWake => null,
+            _ => throw new InvalidOperationException("A resolved scheduled consequence has an unknown kind."),
+        };
+        if (playerEvent is not null)
+        {
+            playerEvents.Add(playerEvent);
+        }
+    }
+
+    private PlayerProjection Project(SimulationState state)
     {
         ShipState playerShip = state.GetRequiredShip(state.PlayerShipId);
+        ShipDefinition playerDefinition = _shipCatalog.GetRequired(playerShip.DefinitionId);
         return new PlayerProjection(
             state.Time,
             ProjectStrategic(state, playerShip),
-            ProjectShip(state, playerShip),
-            new ReadOnlyValueList<PlayerAction>(GetAvailableActions(playerShip))
+            ProjectShip(state, playerShip, playerDefinition),
+            new ReadOnlyValueList<PlayerAction>(GetAvailableActions(playerShip, playerDefinition))
         );
     }
 
@@ -610,9 +1549,18 @@ public sealed class GameSimulation
         );
     }
 
-    private static PlayerShipProjection ProjectShip(SimulationState state, ShipState playerShip)
+    private static PlayerShipProjection ProjectShip(
+        SimulationState state,
+        ShipState playerShip,
+        ShipDefinition playerDefinition
+    )
     {
         SensorRepairState? repair = playerShip.SensorRepair;
+        ActiveSensorScanState? activeScan = playerShip.SensorKnowledge.ActiveScan;
+        SensorContactTrack[] activeContacts =
+        [
+            .. playerShip.SensorKnowledge.Contacts.Where(contact => contact.Status != SensorContactStatus.Lost),
+        ];
         return new PlayerShipProjection(
             playerShip.InstanceId,
             playerShip.DefinitionId,
@@ -628,15 +1576,89 @@ public sealed class GameSimulation
             new SensorProjection(
                 playerShip.SensorIntegrity.Value,
                 repair?.ProgressAt(state.Time) ?? 1,
-                repair is not null
+                repair is not null,
+                new ReadOnlyValueList<SensorContactSnapshot>(
+                    activeContacts.Select(contact => contact.ToActorSafeSnapshot())
+                ),
+                new ReadOnlyValueList<SensorContactActionProjection>(
+                    activeContacts.Select(contact => new SensorContactActionProjection(
+                        contact.Id,
+                        new ReadOnlyValueList<SensorContactAction>(
+                            GetAvailableContactActions(playerShip, playerDefinition, contact)
+                        )
+                    ))
+                ),
+                activeScan?.TargetContactId,
+                ActiveScanProgressAt(state.Time, activeScan)
             )
         );
     }
 
-    private static PlayerAction[] GetAvailableActions(ShipState playerShip) =>
-        playerShip.StrategicState is AtLocationState
-            ? [PlayerAction.Travel, PlayerAction.SetTacticalCourse, PlayerAction.AdvanceTime]
-            : [PlayerAction.AdvanceTime];
+    private static double? ActiveScanProgressAt(SimulationTime currentTime, ActiveSensorScanState? activeScan)
+    {
+        if (activeScan is null)
+        {
+            return null;
+        }
+
+        long duration = activeScan.ExpectedCompletion.Milliseconds - activeScan.StartedAt.Milliseconds;
+        long elapsed = currentTime.Milliseconds - activeScan.StartedAt.Milliseconds;
+        return Math.Clamp((double)elapsed / duration, 0, 1);
+    }
+
+    private static SensorContactAction[] GetAvailableContactActions(
+        ShipState playerShip,
+        ShipDefinition playerDefinition,
+        SensorContactTrack contact
+    )
+    {
+        if (contact.Status != SensorContactStatus.Current)
+        {
+            return [];
+        }
+
+        var actions = new List<SensorContactAction>();
+        if (
+            contact.Identification == SensorContactIdentification.Detected
+            && HasEffectiveSensorCapability(playerShip, playerDefinition)
+            && playerShip.StrategicState is AtLocationState
+            && playerShip.SensorKnowledge.ActiveScan is null
+        )
+        {
+            actions.Add(SensorContactAction.ActiveScan);
+        }
+
+        if (contact.Identification == SensorContactIdentification.Identified)
+        {
+            actions.Add(SensorContactAction.Hail);
+        }
+
+        return [.. actions];
+    }
+
+    private static PlayerAction[] GetAvailableActions(ShipState playerShip, ShipDefinition playerDefinition)
+    {
+        if (playerShip.StrategicState is not AtLocationState)
+        {
+            return [PlayerAction.AdvanceTime];
+        }
+
+        List<PlayerAction> actions = [PlayerAction.Travel, PlayerAction.SetTacticalCourse, PlayerAction.AdvanceTime];
+        if (
+            playerShip.SensorKnowledge.Contacts.Any(contact =>
+                GetAvailableContactActions(playerShip, playerDefinition, contact)
+                    .Contains(SensorContactAction.ActiveScan)
+            )
+        )
+        {
+            actions.Add(PlayerAction.ActiveSensorScan);
+        }
+
+        return [.. actions];
+    }
+
+    private static bool HasEffectiveSensorCapability(ShipState ship, ShipDefinition definition) =>
+        definition.PassiveSensorRange.Value > 0 && ship.SensorIntegrity.Value > 0;
 
     private void Commit(SimulationState candidate)
     {

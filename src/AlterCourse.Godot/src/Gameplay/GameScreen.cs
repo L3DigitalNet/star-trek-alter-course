@@ -4,6 +4,7 @@ using AlterCourse.Core.Gameplay;
 using AlterCourse.Core.Persistence;
 using AlterCourse.Core.Player;
 using AlterCourse.Core.Quantities;
+using AlterCourse.Core.Sensors;
 using AlterCourse.Core.Strategic;
 using Godot;
 using GodotFile = Godot.FileAccess;
@@ -15,7 +16,7 @@ namespace AlterCourse.Godot.Gameplay;
 /// </summary>
 public partial class GameScreen : Control
 {
-    private const string SchemaPath = "res://content/schemas/ship-definition-v2.schema.json";
+    private const string SchemaPath = "res://content/schemas/ship-definition-v3.schema.json";
     private const string ShipPath = "res://content/ships/pathfinder.json";
     private const string DefaultQuickSaveUserPath = "user://quick-save.json";
     private const string LegacyDefaultQuickSaveUserPath = "user://quick-save-v1.json";
@@ -30,15 +31,17 @@ public partial class GameScreen : Control
     private const string ActionQuickLoad = "quick_load";
     private const string ActionEngageTravel = "engage_selected_travel";
     private const string ActionSetCourse = "set_tactical_course";
+    private const int RecentActivityLimit = 64;
 
     private static readonly double[] RunningRates = [0.5, 1, 2, 4];
 
     private readonly SimulationRateController _rateController = new();
-    private readonly List<PlayerAdvanceEvent> _recentEvents = [];
+    private readonly List<CommandInterfacePresenter.ActivityEvent> _recentActivity = [];
     private GameSimulation? _simulation;
     private ShipDefinitionCatalog? _shipCatalog;
     private PlayerProjection? _projection;
     private LocationId? _selectedDestination;
+    private SensorContactId? _selectedContact;
     private DateTimeOffset? _quickSaveCreatedAtUtc;
     private string _quickSavePath = null!;
     private bool _quickSaveUsesDefaultPath;
@@ -127,6 +130,7 @@ public partial class GameScreen : Control
             _shipCatalog = null;
             _projection = null;
             _selectedDestination = null;
+            _selectedContact = null;
             SetGameplayEnabled(false);
             _messageLabel.Text = "Gameplay content is unavailable. Check the local installation and restart.";
             SetMeta("load_error", _messageLabel.Text);
@@ -138,6 +142,22 @@ public partial class GameScreen : Control
     public override void _Process(double delta)
     {
         ProcessSyntheticDelta(delta);
+    }
+
+    /// <inheritdoc />
+    public override void _Input(InputEvent @event)
+    {
+        if (!@event.IsAction(ActionTogglePause))
+        {
+            return;
+        }
+
+        if (@event.IsActionPressed(ActionTogglePause))
+        {
+            TogglePause();
+        }
+
+        GetViewport().SetInputAsHandled();
     }
 
     /// <inheritdoc />
@@ -208,7 +228,7 @@ public partial class GameScreen : Control
         {
             SimulationAdvanceResult result = _simulation.AdvanceFixedSteps(steps);
             SetMeta("advance_status", "advanced");
-            if (result.ResolvedEvents.Contains(PlayerAdvanceEvent.TravelArrived))
+            if (result.ResolvedEvents.Any(@event => @event.Kind == PlayerAdvanceEventKind.TravelArrived))
             {
                 ClearSelectedDestination();
             }
@@ -316,8 +336,9 @@ public partial class GameScreen : Control
             // boundary so an unreadable or invalid save cannot damage the playable aggregate.
             _simulation = loaded.Simulation;
             _quickSaveCreatedAtUtc = loaded.Metadata.CreatedAtUtc;
-            _recentEvents.Clear();
+            _recentActivity.Clear();
             ClearSelectedDestination();
+            ClearSelectedContact();
 
             // Rate is a current player preference, so it survives load. Fractional carry is dropped
             // because presentation time accumulated before the snapshot must not advance restored truth.
@@ -351,6 +372,45 @@ public partial class GameScreen : Control
         OnDestinationSelected(destination);
     }
 
+    /// <summary>Selects an observer-local contact through the GDScript integration boundary.</summary>
+    public void SelectContact(long contactId)
+    {
+        if (_projection is null || _dataMode != CommandInterfaceDataMode.Live)
+        {
+            return;
+        }
+
+        var selected = new SensorContactId(contactId);
+        if (
+            _projection.Ship.Sensors.Contacts.All(contact =>
+                contact.Id != selected || contact.Status == SensorContactStatus.Lost
+            )
+        )
+        {
+            return;
+        }
+
+        OnContactSelected(selected);
+    }
+
+    /// <summary>Requests an active scan of the selected observer-local contact.</summary>
+    public void RequestSelectedActiveScan()
+    {
+        if (_selectedContact is SensorContactId contactId)
+        {
+            RequestActiveScan(contactId);
+        }
+    }
+
+    /// <summary>Requests a bounded hail to the selected observer-local contact.</summary>
+    public void RequestSelectedHail()
+    {
+        if (_selectedContact is SensorContactId contactId)
+        {
+            RequestHail(contactId);
+        }
+    }
+
     /// <summary>Submits selected strategic travel through the typed Core command.</summary>
     public void RequestSelectedTravel()
     {
@@ -375,6 +435,7 @@ public partial class GameScreen : Control
                 TravelOutcome.RouteUnavailable => "Travel unavailable: no direct route is known.",
                 _ => "Travel request was not accepted.",
             };
+            PresentResolvedEvents(result.ResolvedEvents, announce: false);
             RefreshProjection();
         }
         catch (Exception exception)
@@ -394,7 +455,7 @@ public partial class GameScreen : Control
         try
         {
             AdvanceUntilResult result = _simulation.AdvanceUntilNextPlayerRelevantEvent();
-            if (result.ResolvedEvents.Contains(PlayerAdvanceEvent.TravelArrived))
+            if (result.ResolvedEvents.Any(@event => @event.Kind == PlayerAdvanceEventKind.TravelArrived))
             {
                 ClearSelectedDestination();
             }
@@ -522,6 +583,7 @@ public partial class GameScreen : Control
         BindButtons();
 
         _commandDeck.DestinationSelected += OnWorkspaceDestinationSelected;
+        _commandDeck.ContactSelected += OnWorkspaceContactSelected;
         _commandDeck.PresentationActionRequested += OnPresentationActionRequested;
         _engineering.EngineeringCommandRequested += OnEngineeringCommandRequested;
         _travelButton.Pressed += RequestSelectedTravel;
@@ -649,11 +711,13 @@ public partial class GameScreen : Control
     private void RefreshProjection()
     {
         _projection = _simulation!.GetPlayerProjection();
+        RevalidateSelectedContact();
         CommandInterfaceMode mode = _engineeringWorkspaceActive ? CommandInterfaceMode.Engineering : _commandMode;
         CommandInterfacePresentation presentation = CommandInterfacePresenter.PresentLive(
             _projection,
             _selectedDestination,
-            _recentEvents,
+            _selectedContact,
+            _recentActivity,
             mode
         );
         PresentWorkspace(presentation);
@@ -878,6 +942,32 @@ public partial class GameScreen : Control
         _messageLabel.Text = $"Selected destination: {FindLocationName(destination)}.";
     }
 
+    private void OnWorkspaceContactSelected(object? sender, CommandDeckWorkspace.ContactEventArgs args)
+    {
+        if (_dataMode == CommandInterfaceDataMode.Live)
+        {
+            OnContactSelected(args.ContactId);
+        }
+    }
+
+    private void OnContactSelected(SensorContactId contactId)
+    {
+        if (
+            _projection is null
+            || _projection.Ship.Sensors.Contacts.All(contact =>
+                contact.Id != contactId || contact.Status == SensorContactStatus.Lost
+            )
+        )
+        {
+            return;
+        }
+
+        _selectedContact = contactId;
+        SetMeta("selected_contact", contactId.Value);
+        RefreshProjection();
+        _messageLabel.Text = $"Selected {DescribeContact(contactId)}.";
+    }
+
     private void OnPresentationActionRequested(object? sender, CommandDeckWorkspace.ActionEventArgs args)
     {
         if (_dataMode != CommandInterfaceDataMode.Live || args.Action.Intent is not CommandInterfaceIntent intent)
@@ -885,7 +975,7 @@ public partial class GameScreen : Control
             return;
         }
 
-        SubmitIntent(intent);
+        SubmitAction(args.Action, intent);
     }
 
     private void OnEngineeringCommandRequested(
@@ -912,8 +1002,94 @@ public partial class GameScreen : Control
             case CommandInterfaceIntent.AdvanceTime:
                 AdvanceUntilNextPlayerRelevantEvent();
                 break;
+            case CommandInterfaceIntent.ActiveScan:
+            case CommandInterfaceIntent.Hail:
+                return;
             default:
                 throw new ArgumentOutOfRangeException(nameof(intent), intent, "Unknown command-interface intent.");
+        }
+    }
+
+    private void SubmitAction(CommandInterfaceAction action, CommandInterfaceIntent intent)
+    {
+        if (intent is CommandInterfaceIntent.ActiveScan or CommandInterfaceIntent.Hail)
+        {
+            if (action.FocusedContactId is not SensorContactId contactId)
+            {
+                return;
+            }
+
+            if (intent == CommandInterfaceIntent.ActiveScan)
+            {
+                RequestActiveScan(contactId);
+            }
+            else
+            {
+                RequestHail(contactId);
+            }
+
+            return;
+        }
+
+        SubmitIntent(intent);
+    }
+
+    private void RequestActiveScan(SensorContactId contactId)
+    {
+        if (_simulation is null || _dataMode != CommandInterfaceDataMode.Live)
+        {
+            return;
+        }
+
+        try
+        {
+            ActiveSensorScanResult result = _simulation.RequestActiveSensorScan(contactId);
+            _messageLabel.Text = result.Outcome switch
+            {
+                ActiveSensorScanOutcome.Accepted => $"Active scan started on {DescribeContact(contactId)}.",
+                ActiveSensorScanOutcome.ContactNotFound => "Active scan unavailable: contact is no longer present.",
+                ActiveSensorScanOutcome.ContactNotCurrent => "Active scan unavailable: contact is not current.",
+                ActiveSensorScanOutcome.AlreadyIdentified => "Active scan unavailable: contact is already identified.",
+                ActiveSensorScanOutcome.SensorsUnavailable => "Active scan unavailable: sensors are offline.",
+                ActiveSensorScanOutcome.ScanAlreadyActive => "Active scan unavailable: another scan is active.",
+                _ => "Active scan request was not accepted.",
+            };
+            SetMeta("last_contact_command", $"active-scan:{result.Outcome}");
+            RefreshProjection();
+        }
+        catch (Exception exception)
+        {
+            ReportCommandFailure("Active scan command failed safely.", exception);
+        }
+    }
+
+    private void RequestHail(SensorContactId contactId)
+    {
+        if (_simulation is null || _dataMode != CommandInterfaceDataMode.Live)
+        {
+            return;
+        }
+
+        try
+        {
+            string contactLabel = DescribeContact(contactId);
+            HailResult result = _simulation.RequestHail(contactId);
+            _messageLabel.Text = result.Outcome switch
+            {
+                HailOutcome.Acknowledged => $"{contactLabel} acknowledged the hail.",
+                HailOutcome.NoResponse => $"{contactLabel} did not respond.",
+                HailOutcome.ContactNotFound => "Hail unavailable: contact is no longer present.",
+                HailOutcome.ContactNotCurrent => "Hail unavailable: contact is not current.",
+                HailOutcome.ContactNotIdentified => "Hail unavailable: identify the contact first.",
+                _ => "Hail request was not accepted.",
+            };
+            PresentHailOutcome(contactId, contactLabel, result.Outcome);
+            SetMeta("last_contact_command", $"hail:{result.Outcome}");
+            RefreshProjection();
+        }
+        catch (Exception exception)
+        {
+            ReportCommandFailure("Hail command failed safely.", exception);
         }
     }
 
@@ -937,12 +1113,68 @@ public partial class GameScreen : Control
         SetMeta("tactical_y", projection.Ship.Tactical.Position.YKilometers);
         SetMeta("tactical_heading", projection.Ship.Tactical.HeadingDegrees);
         SetMeta("tactical_speed", projection.Ship.Tactical.SpeedKilometersPerSecond);
+        CommandInterfaceContact[] visibleContacts =
+        [
+            .. projection
+                .Ship.Sensors.Contacts.Where(contact => contact.Status != SensorContactStatus.Lost)
+                .OrderBy(contact => contact.Id.Value)
+                .Select(contact => new CommandInterfaceContact(
+                    contact.Id,
+                    contact.Identification == SensorContactIdentification.Identified
+                        ? contact.KnownVesselDisplayName
+                            ?? contact.KnownDesignDisplayName
+                            ?? $"Contact {contact.Id.Value}"
+                        : $"Contact {contact.Id.Value}",
+                    contact.Status,
+                    contact.Identification,
+                    contact.LastObservedPosition.XKilometers,
+                    contact.LastObservedPosition.YKilometers,
+                    contact.LastObservedAt.Milliseconds,
+                    projection.SimulationTime.Milliseconds - contact.LastObservedAt.Milliseconds,
+                    contact.Identification == SensorContactIdentification.Identified
+                        ? contact.KnownVesselDisplayName
+                        : null,
+                    contact.Identification == SensorContactIdentification.Identified
+                        ? contact.KnownDesignDisplayName
+                        : null,
+                    projection.Ship.Sensors.ActiveScanContactId == contact.Id
+                )),
+        ];
+        SetMeta("sensor_contact_count", visibleContacts.Length);
+        SetMeta("active_scan_contact", projection.Ship.Sensors.ActiveScanContactId?.Value ?? 0);
+        SetMeta("selected_contact", _selectedContact?.Value ?? 0);
+        SetMeta("first_contact_id", visibleContacts.FirstOrDefault()?.Id.Value ?? 0);
+        SetMeta("first_contact_label", visibleContacts.FirstOrDefault()?.Label ?? string.Empty);
+        SetMeta("first_contact_status", visibleContacts.FirstOrDefault()?.Status.ToString() ?? string.Empty);
+        SetMeta(
+            "first_contact_identification",
+            visibleContacts.FirstOrDefault()?.Identification.ToString() ?? string.Empty
+        );
     }
 
     private void ClearSelectedDestination()
     {
         _selectedDestination = null;
         SetMeta("selected_destination", string.Empty);
+    }
+
+    private void ClearSelectedContact()
+    {
+        _selectedContact = null;
+        SetMeta("selected_contact", 0);
+    }
+
+    private void RevalidateSelectedContact()
+    {
+        if (
+            _selectedContact is SensorContactId selected
+            && _projection!.Ship.Sensors.Contacts.All(contact =>
+                contact.Id != selected || contact.Status == SensorContactStatus.Lost
+            )
+        )
+        {
+            ClearSelectedContact();
+        }
     }
 
     private void SetGameplayEnabled(bool enabled)
@@ -1001,6 +1233,12 @@ public partial class GameScreen : Control
         }
         else
         {
+            if (_commandDeck.TacticalMap.IsVisibleInTree())
+            {
+                controls.Add(_commandDeck.TacticalMap);
+            }
+
+            controls.AddRange(_commandDeck.GetVisibleFocusControls());
             controls.AddRange(
                 new Button[]
                 {
@@ -1101,7 +1339,7 @@ public partial class GameScreen : Control
         }
     }
 
-    private static string DescribeAdvanceResult(AdvanceUntilResult result)
+    private string DescribeAdvanceResult(AdvanceUntilResult result)
     {
         if (result.ResolvedEvents.Count == 0)
         {
@@ -1118,7 +1356,13 @@ public partial class GameScreen : Control
             return;
         }
 
-        _recentEvents.AddRange(events);
+        foreach (PlayerAdvanceEvent @event in events)
+        {
+            AppendRecentActivity(
+                new CommandInterfacePresenter.ResolvedActivityEvent(@event.OccurredAt.Milliseconds, @event)
+            );
+        }
+
         string description = string.Join(", ", events.Select(DescribePlayerEvent));
         SetMeta("last_advance_event", description);
         if (announce)
@@ -1127,13 +1371,56 @@ public partial class GameScreen : Control
         }
     }
 
-    private static string DescribePlayerEvent(PlayerAdvanceEvent @event) =>
-        @event switch
+    private void PresentHailOutcome(SensorContactId contactId, string contactLabel, HailOutcome outcome)
+    {
+        if (outcome is HailOutcome.Acknowledged or HailOutcome.NoResponse)
         {
-            PlayerAdvanceEvent.TravelArrived => "arrival complete",
-            PlayerAdvanceEvent.SensorRepairCompleted => "sensor repair complete",
+            AppendRecentActivity(
+                new CommandInterfacePresenter.HailActivityEvent(
+                    _projection!.SimulationTime.Milliseconds,
+                    contactId,
+                    contactLabel,
+                    outcome
+                )
+            );
+        }
+    }
+
+    private void AppendRecentActivity(CommandInterfacePresenter.ActivityEvent activity)
+    {
+        _recentActivity.Add(activity);
+        if (_recentActivity.Count > RecentActivityLimit)
+        {
+            _recentActivity.RemoveRange(0, _recentActivity.Count - RecentActivityLimit);
+        }
+    }
+
+    private string DescribePlayerEvent(PlayerAdvanceEvent @event) =>
+        @event.Kind switch
+        {
+            PlayerAdvanceEventKind.TravelArrived => "arrival complete",
+            PlayerAdvanceEventKind.SensorRepairCompleted => "sensor repair complete",
+            PlayerAdvanceEventKind.SensorContactDetected => $"{DescribeContact(@event)} detected",
+            PlayerAdvanceEventKind.SensorContactStale => $"{DescribeContact(@event)} stale",
+            PlayerAdvanceEventKind.SensorContactReacquired => $"{DescribeContact(@event)} reacquired",
+            PlayerAdvanceEventKind.SensorContactLost => $"{DescribeContact(@event)} lost",
+            PlayerAdvanceEventKind.ActiveSensorScanCompleted => $"{DescribeContact(@event)} scan complete",
+            PlayerAdvanceEventKind.ActiveSensorScanInterrupted => $"{DescribeContact(@event)} scan interrupted",
             _ => "player event complete",
         };
+
+    private string DescribeContact(PlayerAdvanceEvent @event) =>
+        @event.SensorContactId is { } contactId ? DescribeContact(contactId) : "Contact";
+
+    private string DescribeContact(SensorContactId contactId)
+    {
+        SensorContactSnapshot? contact = _projection?.Ship.Sensors.Contacts.SingleOrDefault(candidate =>
+            candidate.Id == contactId
+        );
+        return contact?.Identification == SensorContactIdentification.Identified
+            ? contact.KnownVesselDisplayName ?? contact.KnownDesignDisplayName ?? $"Contact {contactId.Value}"
+            : $"Contact {contactId.Value}";
+    }
 
     private void ReportPersistenceFailure(string operation, string status, string category, Exception exception)
     {

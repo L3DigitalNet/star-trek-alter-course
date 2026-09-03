@@ -76,6 +76,9 @@ internal readonly record struct ScheduledWork
             is not ScheduledWorkKind.TravelArrival
                 and not ScheduledWorkKind.SensorRepairCompletion
                 and not ScheduledWorkKind.OrderWake
+                and not ScheduledWorkKind.SensorContactLoss
+                and not ScheduledWorkKind.ActiveSensorScanCompletion
+                and not ScheduledWorkKind.ShipContactDecisionWake
         )
         {
             throw new ArgumentOutOfRangeException(nameof(kind), kind, "Scheduled work kind is not supported.");

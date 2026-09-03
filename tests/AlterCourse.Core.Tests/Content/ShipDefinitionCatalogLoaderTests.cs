@@ -1,6 +1,8 @@
 using System.Text;
 using AlterCourse.Core.Content;
+using AlterCourse.Core.Quantities;
 using AlterCourse.Core.Ships;
+using AlterCourse.Core.Simulation;
 
 namespace AlterCourse.Core.Tests.Content;
 
@@ -9,10 +11,12 @@ public sealed class ShipDefinitionCatalogLoaderTests
 {
     private const string ValidDefinition = """
         {
-          "schemaVersion": 2,
+          "schemaVersion": 3,
           "id": "pathfinder",
           "designDisplayName": "Pathfinder class",
           "maximumTacticalSpeedKilometersPerSecond": 10,
+          "passiveSensorRangeKilometers": 30.0,
+          "activeScanDurationMilliseconds": 2000,
           "sensorRepairDurationMilliseconds": 8000
         }
         """;
@@ -33,6 +37,8 @@ public sealed class ShipDefinitionCatalogLoaderTests
         Assert.Equal(new ShipDefinitionId("pathfinder"), fromText.Id);
         Assert.Equal("Pathfinder class", fromText.DesignDisplayName);
         Assert.Equal(10, fromText.MaximumTacticalSpeed.Value);
+        Assert.Equal(30, fromText.PassiveSensorRange.Value);
+        Assert.Equal(2000, fromText.ActiveScanDuration.Milliseconds);
         Assert.Equal(8000, fromText.SensorRepairDuration.Milliseconds);
     }
 
@@ -41,16 +47,16 @@ public sealed class ShipDefinitionCatalogLoaderTests
     public void LoadsSchemaValidIntegralNumericForms()
     {
         string json = ValidDefinition
-            .Replace("\"schemaVersion\": 2", "\"schemaVersion\": 2.0", StringComparison.Ordinal)
+            .Replace("\"schemaVersion\": 3", "\"schemaVersion\": 3.0", StringComparison.Ordinal)
             .Replace(
-                "\"sensorRepairDurationMilliseconds\": 8000",
-                "\"sensorRepairDurationMilliseconds\": 8e3",
+                "\"activeScanDurationMilliseconds\": 2000",
+                "\"activeScanDurationMilliseconds\": 2e3",
                 StringComparison.Ordinal
             );
 
         ShipDefinition definition = CreateLoader().LoadText(json, "integral-forms.json");
 
-        Assert.Equal(8000, definition.SensorRepairDuration.Milliseconds);
+        Assert.Equal(2000, definition.ActiveScanDuration.Milliseconds);
     }
 
     /// <summary>Confirms an integral JSON number outside the runtime range fails with a typed diagnostic.</summary>
@@ -60,8 +66,8 @@ public sealed class ShipDefinitionCatalogLoaderTests
     public void RejectsUnmappableIntegralNumberWithSourceAwareDiagnostic(string invalidDuration)
     {
         string json = ValidDefinition.Replace(
-            "\"sensorRepairDurationMilliseconds\": 8000",
-            $"\"sensorRepairDurationMilliseconds\": {invalidDuration}",
+            "\"activeScanDurationMilliseconds\": 2000",
+            $"\"activeScanDurationMilliseconds\": {invalidDuration}",
             StringComparison.Ordinal
         );
 
@@ -71,7 +77,7 @@ public sealed class ShipDefinitionCatalogLoaderTests
 
         Assert.Contains("semantic", exception.Diagnostics[0].Code, StringComparison.OrdinalIgnoreCase);
         Assert.Equal("integral-range.json", exception.Diagnostics[0].SourceIdentity);
-        Assert.Equal("#/sensorRepairDurationMilliseconds", exception.Diagnostics[0].InstanceLocation);
+        Assert.Equal("#/activeScanDurationMilliseconds", exception.Diagnostics[0].InstanceLocation);
     }
 
     /// <summary>Confirms the repository's canonical schema and ship definition remain load-compatible.</summary>
@@ -80,7 +86,7 @@ public sealed class ShipDefinitionCatalogLoaderTests
     {
         string root = FindRepositoryRoot();
         string schema = File.ReadAllText(
-            Path.Combine(root, "src/AlterCourse.Godot/content/schemas/ship-definition-v2.schema.json")
+            Path.Combine(root, "src/AlterCourse.Godot/content/schemas/ship-definition-v3.schema.json")
         );
         string definition = File.ReadAllText(Path.Combine(root, "src/AlterCourse.Godot/content/ships/pathfinder.json"));
 
@@ -109,6 +115,38 @@ public sealed class ShipDefinitionCatalogLoaderTests
         Assert.Throws<ShipContentValidationException>(() =>
             CreateLoader()
                 .LoadText(DefinitionWithId(new string('i', ShipDefinitionId.MaximumLength + 1)), "oversized-id.json")
+        );
+    }
+
+    /// <summary>Confirms domain construction and semantic admission share the 64-character design-name bound.</summary>
+    [Fact]
+    public void EnforcesDesignDisplayNameLengthAcrossDomainAndContent()
+    {
+        string maximumName = new('n', ShipDefinition.MaximumDesignDisplayNameLength);
+        string maximum = ValidDefinition.Replace("Pathfinder class", maximumName, StringComparison.Ordinal);
+        ShipDefinition loaded = CreateLoader().LoadText(maximum, "maximum-name.json");
+
+        Assert.Equal(maximumName, loaded.DesignDisplayName);
+        Assert.Throws<ArgumentException>(() =>
+            new ShipDefinition(
+                new ShipDefinitionId("oversized"),
+                new string('n', ShipDefinition.MaximumDesignDisplayNameLength + 1),
+                new SpeedKilometersPerSecond(1),
+                new DistanceKilometers(1),
+                new SimulationDuration(100),
+                new SimulationDuration(100)
+            )
+        );
+        Assert.Throws<ShipContentValidationException>(() =>
+            CreateLoader()
+                .LoadText(
+                    ValidDefinition.Replace(
+                        "Pathfinder class",
+                        new string('n', ShipDefinition.MaximumDesignDisplayNameLength + 1),
+                        StringComparison.Ordinal
+                    ),
+                    "oversized-name.json"
+                )
         );
     }
 
@@ -163,8 +201,8 @@ public sealed class ShipDefinitionCatalogLoaderTests
     public void RejectsUnknownMembers()
     {
         string json = ValidDefinition.Replace(
-            "\"schemaVersion\": 2,",
-            "\"schemaVersion\": 2,\n  \"unconsumed\": true,",
+            "\"schemaVersion\": 3,",
+            "\"schemaVersion\": 3,\n  \"unconsumed\": true,",
             StringComparison.Ordinal
         );
 
@@ -177,9 +215,9 @@ public sealed class ShipDefinitionCatalogLoaderTests
 
     /// <summary>Confirms missing and unsupported schema versions are structural failures.</summary>
     [Theory]
-    [InlineData("\"schemaVersion\": 2,", "")]
-    [InlineData("\"schemaVersion\": 2", "\"schemaVersion\": 1")]
-    [InlineData("\"schemaVersion\": 2", "\"schemaVersion\": 3")]
+    [InlineData("\"schemaVersion\": 3,", "")]
+    [InlineData("\"schemaVersion\": 3", "\"schemaVersion\": 2")]
+    [InlineData("\"schemaVersion\": 3", "\"schemaVersion\": 4")]
     public void RejectsWrongOrMissingSchemaVersion(string original, string replacement)
     {
         string json = ValidDefinition.Replace(original, replacement, StringComparison.Ordinal);
@@ -209,21 +247,35 @@ public sealed class ShipDefinitionCatalogLoaderTests
         Assert.Contains("schema", exception.Diagnostics[0].Code, StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>Confirms structural constraints reject values that cannot reach domain construction.</summary>
-    [Fact]
-    public void RejectsStructurallyInvalidDefinition()
+    /// <summary>Confirms both version-three sensor capabilities are required.</summary>
+    [Theory]
+    [InlineData("  \"passiveSensorRangeKilometers\": 30.0,\n")]
+    [InlineData("  \"activeScanDurationMilliseconds\": 2000,\n")]
+    public void RejectsMissingSensorCapability(string removedMember)
     {
-        string json = ValidDefinition.Replace(
-            "\"maximumTacticalSpeedKilometersPerSecond\": 10",
-            "\"maximumTacticalSpeedKilometersPerSecond\": -1",
-            StringComparison.Ordinal
+        string json = ValidDefinition.Replace(removedMember, string.Empty, StringComparison.Ordinal);
+
+        ShipContentValidationException exception = Assert.Throws<ShipContentValidationException>(() =>
+            CreateLoader().LoadText(json, "missing-capability.json")
         );
+
+        Assert.Contains("schema", exception.Diagnostics[0].Code, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Confirms structural constraints reject values that cannot reach domain construction.</summary>
+    [Theory]
+    [InlineData("\"maximumTacticalSpeedKilometersPerSecond\": 10", "\"maximumTacticalSpeedKilometersPerSecond\": -1")]
+    [InlineData("\"passiveSensorRangeKilometers\": 30.0", "\"passiveSensorRangeKilometers\": -1")]
+    [InlineData("\"activeScanDurationMilliseconds\": 2000", "\"activeScanDurationMilliseconds\": 0")]
+    public void RejectsStructurallyInvalidDefinition(string original, string replacement)
+    {
+        string json = ValidDefinition.Replace(original, replacement, StringComparison.Ordinal);
 
         ShipContentValidationException exception = Assert.Throws<ShipContentValidationException>(() =>
             CreateLoader().LoadText(json, "structural.json")
         );
 
-        Assert.Contains("maximumTacticalSpeedKilometersPerSecond", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("schema", exception.Diagnostics[0].Code, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>Confirms game-rule invariants remain a semantic validation stage after schema validation.</summary>
@@ -233,6 +285,8 @@ public sealed class ShipDefinitionCatalogLoaderTests
         "\"maximumTacticalSpeedKilometersPerSecond\": 10",
         "\"maximumTacticalSpeedKilometersPerSecond\": 1e400"
     )]
+    [InlineData("\"passiveSensorRangeKilometers\": 30.0", "\"passiveSensorRangeKilometers\": 1e400")]
+    [InlineData("\"activeScanDurationMilliseconds\": 2000", "\"activeScanDurationMilliseconds\": 2050")]
     [InlineData("\"sensorRepairDurationMilliseconds\": 8000", "\"sensorRepairDurationMilliseconds\": 8050")]
     public void RejectsSemanticallyInvalidDefinition(string original, string replacement)
     {
@@ -367,7 +421,7 @@ public sealed class ShipDefinitionCatalogLoaderTests
             File.ReadAllText(
                 Path.Combine(
                     FindRepositoryRoot(),
-                    "src/AlterCourse.Godot/content/schemas/ship-definition-v2.schema.json"
+                    "src/AlterCourse.Godot/content/schemas/ship-definition-v3.schema.json"
                 )
             )
         );

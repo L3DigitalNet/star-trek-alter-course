@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using AlterCourse.Core.Gameplay;
 using AlterCourse.Core.Identity;
 
 namespace AlterCourse.Core.Simulation;
@@ -6,14 +7,20 @@ namespace AlterCourse.Core.Simulation;
 /// <summary>Stores and orders immutable data-only scheduled simulation work.</summary>
 internal sealed class SimulationScheduler
 {
+    // Each ship can correlate travel, repair, order, scan, and decision work independently of one loss item per
+    // possible contact. Keep this list aligned with SimulationState.ValidateScheduledWork.
+    private const int IndependentlyCorrelatedWorkKindsPerShip = 5;
+
     /// <summary>Gets the maximum number of outstanding consequences retained by one scheduler.</summary>
-    public const int MaximumOutstandingWork = 4096;
+    public const int MaximumOutstandingWork =
+        SimulationState.MaximumShips * ((SimulationState.MaximumShips - 1) + IndependentlyCorrelatedWorkKindsPerShip);
 
     private SimulationScheduler(long nextWorkId, long nextSequence, ImmutableArray<ScheduledWork> outstandingWork)
     {
         NextWorkId = nextWorkId;
         NextSequence = nextSequence;
         OutstandingWork = outstandingWork;
+        WorkById = outstandingWork.ToImmutableDictionary(work => work.Id);
     }
 
     /// <summary>Gets the next persisted scheduled-work identity value.</summary>
@@ -24,6 +31,8 @@ internal sealed class SimulationScheduler
 
     /// <summary>Gets outstanding work in due-time and sequence order.</summary>
     public ImmutableArray<ScheduledWork> OutstandingWork { get; }
+
+    private ImmutableDictionary<ScheduledWorkId, ScheduledWork> WorkById { get; }
 
     /// <summary>Creates an empty scheduler at its initial deterministic state.</summary>
     /// <returns>An empty scheduler.</returns>
@@ -173,6 +182,17 @@ internal sealed class SimulationScheduler
 
     internal static bool AreCountersWithinPersistedRange(long nextWorkId, long nextSequence) =>
         nextWorkId > 0 && nextWorkId < long.MaxValue - 1 && nextSequence >= 0 && nextSequence < long.MaxValue - 1;
+
+    internal bool ContainsExact(
+        ScheduledWorkId id,
+        ShipInstanceId targetShipId,
+        SimulationTime dueTime,
+        ScheduledWorkKind kind
+    ) =>
+        WorkById.TryGetValue(id, out ScheduledWork work)
+        && work.TargetShipId == targetShipId
+        && work.DueTime == dueTime
+        && work.Kind == kind;
 
     private static void ValidateRestoredItem(
         ScheduledWork item,

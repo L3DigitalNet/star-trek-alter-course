@@ -7,4 +7,7 @@ internal enum ScheduledConsequenceRule
     TravelToArrival = 3,
     PatrolWaypointArrival = 4,
     HoldUntilWake = 5,
+    SensorContactLoss = 6,
+    ActiveSensorScanCompletion = 7,
+    ShipContactDecisionWake = 8,
 }
