@@ -358,6 +358,46 @@ public sealed class GameSimulation
     internal static GameSimulation RestoreState(SimulationState restoredState, ShipDefinitionCatalog shipCatalog) =>
         new(restoredState, shipCatalog);
 
+    internal void BootstrapHiddenCautiousContactObservation(ShipInstanceId observerId)
+    {
+        ShipState observer = _state.GetRequiredShip(observerId);
+        if (observerId == _state.PlayerShipId || observer.StrategicState is not AtLocationState)
+        {
+            throw new InvalidOperationException("A hidden cautious-contact observer must be a local non-player ship.");
+        }
+
+        if (
+            _state.Ships.Any(ship =>
+                ship.SensorKnowledge.NextContactId != SensorKnowledge.Empty.NextContactId
+                || !ship.SensorKnowledge.Contacts.IsEmpty
+                || ship.SensorKnowledge.ActiveScan is not null
+                || ship.AutonomousState.ContactPosture is not null
+                || ship.AutonomousState.PendingContactDecisionWake is not null
+            )
+        )
+        {
+            throw new InvalidOperationException(
+                "Initial hidden observation requires untouched knowledge and autonomy."
+            );
+        }
+
+        SimulationState prepared = _state.ReplaceShip(
+            observerId,
+            observer with
+            {
+                AutonomousState = new ShipAutonomousState(ShipContactPosture.CautiousContact),
+            }
+        );
+        List<PlayerAdvanceEvent> playerEvents = [];
+        SimulationState candidate = ObserveAllShips(prepared, _shipCatalog, playerEvents);
+        if (playerEvents.Count != 0)
+        {
+            throw new InvalidOperationException("Hidden bootstrap observation cannot reveal a player contact.");
+        }
+
+        Commit(candidate);
+    }
+
     internal static SimulationAdvanceTraceResult AdvanceTo(
         SimulationState initial,
         SimulationTime target,
@@ -590,7 +630,10 @@ public sealed class GameSimulation
                         && target.InstanceId != observer.InstanceId
                         && target.StrategicState is AtLocationState targetLocation
                         && targetLocation.LocationId == observerLocation.LocationId
-                        && Distance(observer.TacticalPosition, target.TacticalPosition) <= effectiveRange
+                        && IsWithinInclusiveRange(
+                            Distance(observer.TacticalPosition, target.TacticalPosition),
+                            effectiveRange
+                        )
                     )
                     {
                         observableTargets.Add(target.InstanceId);
@@ -924,6 +967,12 @@ public sealed class GameSimulation
 
         double ratio = y / x;
         return x * Math.Sqrt(1 + (ratio * ratio));
+    }
+
+    private static bool IsWithinInclusiveRange(double distance, double range)
+    {
+        double tolerance = Math.Max(1, range) * 1e-12;
+        return distance <= range + tolerance;
     }
 
     private static void AddContactEvent(

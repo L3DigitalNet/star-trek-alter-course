@@ -360,7 +360,7 @@ public sealed class GameSimulationTests
     [Fact]
     public void AdvanceRejectsShipStepWorkOverBudgetWithoutMutation()
     {
-        GameSimulation game = CreateGame();
+        GameSimulation game = CreateIsolatedGame();
         var metadata = new GameSaveMetadata(
             "work-budget",
             "Work Budget",
@@ -463,6 +463,27 @@ public sealed class GameSimulationTests
     private static GameSimulation CreateGame()
     {
         return FirstGameSetup.Create(CreateCatalog());
+    }
+
+    private static GameSimulation CreateIsolatedGame()
+    {
+        var location = new StrategicLocation(new LocationId("isolated"), "Isolated", default);
+        var playerId = new ShipInstanceId(1);
+        var start = new ShipStart(
+            playerId,
+            new ShipDefinitionId("pathfinder"),
+            "USS Pathfinder",
+            new TacticalPosition(3.25, -7.5),
+            default,
+            new SensorIntegrity(1),
+            new AtLocationStart(location.Id)
+        );
+        return new GameBootstrap(
+            new SimulationTime(0),
+            new StrategicMap([location], []),
+            playerId,
+            [start]
+        ).CreateSimulation(CreateCatalog());
     }
 
     private static ShipDefinitionCatalog CreateCatalog()

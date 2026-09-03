@@ -11,7 +11,7 @@ namespace AlterCourse.Core.Gameplay;
 /// <summary>Builds the deterministic first playable simulation aggregate.</summary>
 public static class FirstGameSetup
 {
-    /// <summary>Creates the representative three-ship proof world from validated content.</summary>
+    /// <summary>Creates the representative four-ship proof world from validated content.</summary>
     public static GameSimulation Create(ShipDefinitionCatalog catalog)
     {
         ArgumentNullException.ThrowIfNull(catalog);
@@ -53,8 +53,21 @@ public static class FirstGameSetup
                 repaired,
                 new TravelingStart(vesper, meridian, initialTime)
             ),
+            new(
+                new ShipInstanceId(4),
+                playerShipDefinition.Id,
+                "Survey Vessel Kestrel",
+                new TacticalPosition(21.25, -7.5),
+                zeroMotion,
+                repaired,
+                new AtLocationStart(dawn)
+            ),
         ];
-        return new GameBootstrap(initialTime, map, starts[0].InstanceId, starts).CreateSimulation(catalog);
+        GameSimulation simulation = new GameBootstrap(initialTime, map, starts[0].InstanceId, starts).CreateSimulation(
+            catalog
+        );
+        simulation.BootstrapHiddenCautiousContactObservation(starts[3].InstanceId);
+        return simulation;
     }
 
     private static (StrategicMap Map, LocationId Dawn, LocationId Vesper, LocationId Meridian) CreateMap()
