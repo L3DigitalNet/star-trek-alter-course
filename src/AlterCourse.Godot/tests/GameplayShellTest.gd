@@ -21,11 +21,14 @@ func test_main_scene_constructs_gameplay_shell() -> void:
 	var screen := _create_screen()
 
 	assert_object(screen).is_instanceof(Control)
-	assert_object(screen.get_node_or_null("OuterMargin/Shell/Workspace/MapPanel")).is_not_null()
-	assert_object(screen.get_node_or_null("OuterMargin/Shell/Workspace/StatusPanel")).is_not_null()
-	assert_object(screen.get_node_or_null("OuterMargin/Shell/Workspace/ContextPanel")).is_not_null()
-	assert_object(screen.get_node_or_null("OuterMargin/Shell/FeedbackPanel")).is_not_null()
-	assert_object(screen.get_node_or_null("OuterMargin/Shell/BottomBar")).is_not_null()
+	assert_object(screen.get_node_or_null("%TopStatusBar")).is_instanceof(PanelContainer)
+	assert_object(screen.get_node_or_null("%WorkspaceHost")).is_instanceof(PanelContainer)
+	assert_object(screen.get_node_or_null("%StationTabs")).is_instanceof(PanelContainer)
+	assert_object(screen.get_node_or_null("%BottomArea")).is_instanceof(HBoxContainer)
+	assert_object(screen.get_node_or_null("%EventLogPanel")).is_instanceof(PanelContainer)
+	assert_object(screen.get_node_or_null("%CaptainActionsPanel")).is_instanceof(PanelContainer)
+	assert_object(screen.get_node_or_null("%CommandDeckWorkspace")).is_instanceof(Control)
+	assert_object(screen.get_node_or_null("%EngineeringWorkspace")).is_instanceof(Control)
 	assert_object(screen.theme).is_instanceof(Theme)
 	assert_int(screen.get_node("%RateControls").get_child_count()).is_equal(5)
 	assert_str(screen.get_node("%AdvanceUntilButton").text).contains("[U]")
@@ -38,6 +41,18 @@ func test_quick_save_and_load_controls_exist() -> void:
 
 	assert_object(screen.get_node_or_null("%QuickSaveButton")).is_instanceof(Button)
 	assert_object(screen.get_node_or_null("%QuickLoadButton")).is_instanceof(Button)
+
+
+func test_default_live_state_is_command_deck_travel() -> void:
+	var screen := _create_screen()
+
+	assert_str(screen.get_meta("data_mode", "")).is_equal("Live")
+	assert_str(screen.get_meta("active_workspace", "")).is_equal("command")
+	assert_str(screen.get_meta("active_view", "")).is_equal("strategic")
+	assert_bool((_command_deck(screen) as Control).visible).is_true()
+	assert_bool((_command_deck(screen).get_node("%StrategicMap") as Control).visible).is_true()
+	assert_bool((_engineering_workspace(screen) as Control).visible).is_false()
+	assert_str((screen.get_node("%ViewStatus") as Label).text).is_equal("COMMAND DECK / TRAVEL")
 
 
 func test_semantic_input_actions_and_theme_states_are_configured() -> void:
@@ -59,6 +74,11 @@ func test_semantic_input_actions_and_theme_states_are_configured() -> void:
 
 	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
 		assert_object(screen.theme.get_stylebox(state, "Button")).is_not_null()
+	var focus_style := screen.theme.get_stylebox("focus", "Button") as StyleBoxFlat
+	var normal_style := screen.theme.get_stylebox("normal", "Button") as StyleBoxFlat
+	assert_bool(focus_style.border_color.is_equal_approx(Color("67c6d4"))).is_true()
+	assert_int(focus_style.border_width_left).is_equal(2)
+	assert_int(normal_style.border_width_left).is_equal(1)
 
 
 func test_keyboard_view_pause_rate_and_tactical_course_use_shell_actions() -> void:
@@ -67,7 +87,7 @@ func test_keyboard_view_pause_rate_and_tactical_course_use_shell_actions() -> vo
 	_send_action(screen, "view_tactical")
 	assert_str(screen.get_meta("active_view", "")).is_equal("tactical")
 	assert_bool((screen.get_node("%TacticalButton") as Button).button_pressed).is_true()
-	assert_bool(screen.get_node("%TacticalCommands").visible).is_true()
+	assert_bool((_command_deck(screen).get_node("%TacticalMap") as Control).visible).is_true()
 	_send_action(screen, "toggle_pause")
 	assert_float(screen.get_meta("simulation_rate", -1.0)).is_equal(0.0)
 	assert_str(screen.get_node("%RateStatus").text).contains("PAUSED")
@@ -116,43 +136,139 @@ func test_initial_focus_and_explicit_traversal_follow_visible_context() -> void:
 	var screen := _create_screen()
 	await get_tree().process_frame
 
-	var strategic := screen.get_node("%StrategicButton") as Button
-	assert_bool(strategic.has_focus()).is_true()
-	assert_str(str(strategic.focus_next)).is_not_empty()
-	var destination := _find_destination_button(screen, "Vesper Reach")
-	assert_str(str(destination.focus_next)).is_not_empty()
+	var command := screen.get_node("%CommandStationButton") as Button
+	assert_bool(command.has_focus()).is_true()
+	assert_str(str(command.focus_next)).is_not_empty()
 	screen.call("ShowTacticalView")
-	var course := screen.get_node("%CourseButton") as Button
-	assert_str(str(course.focus_next)).is_not_empty()
-	assert_str(str(course.focus_previous)).is_not_empty()
+	await get_tree().process_frame
+	assert_bool(command.has_focus()).is_true()
+	assert_bool((screen.get_node("%CourseButton") as Button).visible).is_true()
+	screen.call("ShowEngineeringWorkspace")
+	await get_tree().process_frame
+	var engineering_focus := get_viewport().gui_get_focus_owner()
+	assert_object(engineering_focus).is_not_null()
+	assert_bool(_engineering_workspace(screen).is_ancestor_of(engineering_focus)).is_true()
+	var reached_command := false
+	var reached_bottom_return := false
+	var cycled_to_entry := false
+	var current := engineering_focus
+	for _step in range(64):
+		assert_str(str(current.focus_next)).is_not_empty()
+		var next := current.get_node_or_null(current.focus_next) as Control
+		assert_object(next).is_not_null()
+		if next == null:
+			break
+		assert_bool(next.is_visible_in_tree()).is_true()
+		var previous := next.get_node_or_null(next.focus_previous) as Control
+		assert_object(previous).is_not_null()
+		assert_bool(previous == current).is_true()
+		reached_command = reached_command or next == screen.get_node("%CommandStationButton")
+		reached_bottom_return = reached_bottom_return or next == screen.get_node(
+			"%EngineeringBottomReturnButton"
+		)
+		current = next
+		if current == engineering_focus:
+			cycled_to_entry = true
+			break
+	assert_bool(reached_command).is_true()
+	assert_bool(reached_bottom_return).is_true()
+	assert_bool(cycled_to_entry).is_true()
+	assert_bool((_engineering_workspace(screen) as Control).visible).is_true()
+	assert_bool((_command_deck(screen) as Control).visible).is_false()
+	screen.call("ShowCommandWorkspace")
+	await get_tree().process_frame
+	assert_bool(command.has_focus()).is_true()
 
 
 func test_container_layout_remains_stable_at_practical_sizes() -> void:
 	var screen := _create_screen()
 	screen.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	for viewport_size in [Vector2(1024, 640), Vector2(1440, 900)]:
+	for viewport_size in [Vector2(1600, 900), Vector2(1920, 1080), Vector2(2560, 1440)]:
 		screen.size = viewport_size
 		await get_tree().process_frame
-		var status := screen.get_node("OuterMargin/Shell/Workspace/StatusPanel") as Control
-		var map := screen.get_node("OuterMargin/Shell/Workspace/MapPanel") as Control
-		var context := screen.get_node("OuterMargin/Shell/Workspace/ContextPanel") as Control
-		var bottom := screen.get_node("OuterMargin/Shell/BottomBar") as Control
-		assert_bool(status.get_global_rect().intersects(map.get_global_rect())).is_false()
-		assert_bool(map.get_global_rect().intersects(context.get_global_rect())).is_false()
-		assert_float(map.size.x).is_greater(status.size.x)
-		assert_float(map.size.x).is_greater(context.size.x)
+		var top := screen.get_node("%TopStatusBar") as Control
+		var workspace := screen.get_node("%WorkspaceHost") as Control
+		var stations := screen.get_node("%StationTabs") as Control
+		var bottom := screen.get_node("%BottomArea") as Control
+		var map := _command_deck(screen).get_node("%MapWorkspace") as Control
+		var systems := _command_deck(screen).get_node("%SystemsSpine") as Control
+		var inspector := _command_deck(screen).get_node("%ContextInspector") as Control
+		assert_bool(top.get_global_rect().intersects(workspace.get_global_rect())).is_false()
+		assert_bool(workspace.get_global_rect().intersects(stations.get_global_rect())).is_false()
+		assert_bool(stations.get_global_rect().intersects(bottom.get_global_rect())).is_false()
+		assert_float(map.size.x).is_greater(systems.size.x)
+		assert_float(map.size.x).is_greater(inspector.size.x)
 		assert_float(screen.get_node("%Message").size.y).is_greater(0.0)
 		assert_float(bottom.get_global_rect().end.x).is_less_equal(screen.get_global_rect().end.x)
 		assert_float(bottom.get_global_rect().end.y).is_less_equal(screen.get_global_rect().end.y)
+		screen.call("ShowEngineeringWorkspace")
+		await get_tree().process_frame
+		var technical := _engineering_workspace(screen).get_node(
+			"WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/TechnicalWorkspace"
+		) as Control
+		var hierarchy := _engineering_workspace(screen).get_node(
+			"WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/HierarchyPanel"
+		) as Control
+		var engineering_inspector := _engineering_workspace(screen).get_node(
+			"WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/InspectorColumn"
+		) as Control
+		assert_float(technical.size.x).is_greater(hierarchy.size.x)
+		assert_float(technical.size.x).is_greater(engineering_inspector.size.x)
+		screen.call("ShowCommandWorkspace")
+		await get_tree().process_frame
+
+
+func test_engineering_minimums_and_key_panels_remain_accessible_at_1600_by_900() -> void:
+	var screen := _create_screen()
+	screen.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	screen.size = Vector2(1600, 900)
+	screen.call("ShowPreview", 3)
+	await get_tree().process_frame
+
+	var engineering := _engineering_workspace(screen) as Control
+	var workspace_margin := engineering.get_node("WorkspaceMargin") as MarginContainer
+	var workspace_stack := engineering.get_node("WorkspaceMargin/WorkspaceStack") as VBoxContainer
+	var allocation := engineering.get_node("%PowerAllocationSummary") as Control
+	var inspector_scroll := engineering.get_node("%EngineeringInspectorScroll") as ScrollContainer
+	var actions := engineering.get_node("%EngineeringActions") as Control
+	assert_float(workspace_stack.get_combined_minimum_size().y).is_less_equal(
+		workspace_margin.size.y
+	)
+	assert_float(allocation.get_global_rect().end.y).is_less_equal(
+		engineering.get_global_rect().end.y
+	)
+	assert_bool(inspector_scroll.is_ancestor_of(actions)).is_true()
+	assert_bool(
+		inspector_scroll.get_v_scroll_bar().max_value
+		> inspector_scroll.get_v_scroll_bar().page
+	).is_true()
+
+
+func test_engineering_uses_native_schematic_projection() -> void:
+	var screen := _create_screen()
+	screen.call("ShowPreview", 3)
+	await get_tree().process_frame
+
+	var schematic := _engineering_workspace(screen).get_node("%EngineeringSchematic") as Control
+	assert_object(schematic).is_not_null()
+	assert_str((screen.get_node("%ViewStatus") as Label).text).is_equal("ENGINEERING WORKSPACE")
+	assert_str(schematic.get_script().resource_path).ends_with("EngineeringSchematicView.cs")
+	assert_int(schematic.get_meta("component_count", 0)).is_equal(9)
+	assert_int(schematic.get_meta("link_count", 0)).is_equal(7)
+	assert_bool(schematic.get_meta("is_preview", false)).is_true()
+	assert_float(schematic.get_meta("maximum_component_width", 0.0)).is_equal(220.0)
+	assert_bool(schematic.get_meta("topology_available", false)).is_true()
+	assert_object(_engineering_workspace(screen).get_node_or_null("%SchematicComponents")).is_null()
+	assert_object(_engineering_workspace(screen).get_node_or_null("%SchematicLinks")).is_null()
 
 
 func test_view_switch_preserves_workspace_geometry_and_persistent_header() -> void:
 	var screen := _create_screen()
 	await get_tree().process_frame
-	var context := screen.get_node("OuterMargin/Shell/Workspace/ContextPanel") as Control
-	var map_panel := screen.get_node("OuterMargin/Shell/Workspace/MapPanel") as Control
-	var context_size := context.size
-	var map_size := map_panel.size
+	var command := _command_deck(screen)
+	var workspace_size := (screen.get_node("%WorkspaceHost") as Control).size
+	var simulation_identity: int = screen.get_meta("simulation_identity", 0)
+	var command_instance_id := command.get_instance_id()
 
 	screen.call("ShowTacticalView")
 	await get_tree().process_frame
@@ -160,8 +276,226 @@ func test_view_switch_preserves_workspace_geometry_and_persistent_header() -> vo
 	assert_object(screen.get_node_or_null("%SimulationTime")).is_instanceof(Label)
 	assert_object(screen.get_node_or_null("%RateStatus")).is_instanceof(Label)
 	assert_object(screen.get_node_or_null("%ViewStatus")).is_instanceof(Label)
-	assert_vector(context.size).is_equal(context_size)
-	assert_vector(map_panel.size).is_equal(map_size)
+	assert_vector((screen.get_node("%WorkspaceHost") as Control).size).is_equal(workspace_size)
+	assert_int(_command_deck(screen).get_instance_id()).is_equal(command_instance_id)
+	assert_int(screen.get_meta("simulation_identity", 0)).is_equal(simulation_identity)
+
+
+func test_strategic_tactical_switch_preserves_selection_and_map_instances() -> void:
+	var screen := _create_screen()
+	var strategic_map := _command_deck(screen).get_node("%StrategicMap")
+	var tactical_map := _command_deck(screen).get_node("%TacticalMap")
+	screen.call("SelectDestination", "vesper-reach")
+
+	screen.call("ShowTacticalView")
+	assert_bool((tactical_map as Control).visible).is_true()
+	assert_bool((strategic_map as Control).visible).is_false()
+	screen.call("ShowStrategicView")
+
+	assert_bool((strategic_map as Control).visible).is_true()
+	assert_bool((tactical_map as Control).visible).is_false()
+	assert_str(screen.get_meta("selected_destination", "")).is_equal("vesper-reach")
+	assert_int(_command_deck(screen).get_node("%StrategicMap").get_instance_id()).is_equal(
+		strategic_map.get_instance_id()
+	)
+	assert_int(_command_deck(screen).get_node("%TacticalMap").get_instance_id()).is_equal(
+		tactical_map.get_instance_id()
+	)
+
+
+func test_station_tabs_expose_only_implemented_workspaces_and_track_selection() -> void:
+	var screen := _create_screen()
+	var unsupported := [
+		"%TacticalStationButton",
+		"%NavigationStationButton",
+		"%ScienceStationButton",
+		"%CommsStationButton",
+		"%OperationsStationButton",
+	]
+
+	assert_bool((screen.get_node("%CommandStationButton") as Button).button_pressed).is_true()
+	assert_bool((screen.get_node("%EngineeringStationButton") as Button).disabled).is_false()
+	for button_path in unsupported:
+		var button := screen.get_node(button_path) as Button
+		assert_bool(button.disabled).is_true()
+		assert_str(button.tooltip_text).contains("not implemented")
+
+	screen.call("ShowEngineeringWorkspace")
+	assert_bool((screen.get_node("%EngineeringStationButton") as Button).button_pressed).is_true()
+	assert_bool((screen.get_node("%CommandStationButton") as Button).button_pressed).is_false()
+	screen.call("ShowCommandWorkspace")
+	assert_bool((screen.get_node("%CommandStationButton") as Button).button_pressed).is_true()
+
+
+func test_engineering_reuses_persistent_bottom_area_and_return_restores_command_mode() -> void:
+	var screen := _create_screen()
+	var captain_actions := screen.get_node("%CaptainActions") as Control
+	var engineering_actions := screen.get_node("%EngineeringBottomActions") as Control
+
+	assert_str(screen.get_meta("bottom_area_mode", "")).is_equal("command")
+	assert_str((screen.get_node("%EventLogHeading") as Label).text).is_equal("EVENT / ORDER LOG")
+	assert_bool(captain_actions.visible).is_true()
+	assert_bool(engineering_actions.visible).is_false()
+	assert_object(
+		_engineering_workspace(screen).get_node_or_null(
+			"WorkspaceMargin/WorkspaceStack/ActivityRegion"
+		)
+	).is_null()
+
+	screen.call("ShowPreview", 3)
+	assert_str(screen.get_meta("bottom_area_mode", "")).is_equal("engineering")
+	assert_str((screen.get_node("%EventLogHeading") as Label).text).is_equal(
+		"ENGINEERING EVENT LOG"
+	)
+	assert_bool(captain_actions.visible).is_false()
+	assert_bool(engineering_actions.visible).is_true()
+	assert_str(_collect_control_text(screen.get_node("%EngineeringQueueContent"))).contains(
+		"EPS Bus A-4 inspection"
+	)
+	var preview_action := screen.get_node("%EngineeringQueueActions").get_node(
+		"BottomAction_reorder_repairs"
+	) as Button
+	assert_bool(preview_action.disabled).is_true()
+	assert_str(preview_action.text).contains("PREVIEW ONLY")
+
+	(screen.get_node("%EngineeringBottomReturnButton") as Button).emit_signal("pressed")
+	assert_str(screen.get_meta("active_workspace", "")).is_equal("command")
+	assert_str(screen.get_meta("bottom_area_mode", "")).is_equal("command")
+	assert_bool(captain_actions.visible).is_true()
+	assert_bool(engineering_actions.visible).is_false()
+
+
+func test_command_inspector_keeps_mode_sections_above_quick_actions() -> void:
+	var screen := _create_screen()
+
+	screen.call("ShowPreview", 1)
+	assert_str((_command_deck(screen).get_node("%InspectorHeading") as Label).text).is_equal(
+		"DESTINATION / ROUTE"
+	)
+	assert_int(_command_deck(screen).get_node("%InspectorContent").get_child_count()).is_equal(2)
+	assert_object(_command_deck(screen).get_node_or_null("%ContextActions")).is_instanceof(
+		VBoxContainer
+	)
+
+	screen.call("ShowPreview", 2)
+	assert_str((screen.get_node("%ViewStatus") as Label).text).is_equal("COMMAND DECK / COMBAT")
+	assert_str((_command_deck(screen).get_node("%InspectorHeading") as Label).text).is_equal(
+		"SELECTED CONTACT / TACTICAL SUMMARY"
+	)
+	assert_int(_command_deck(screen).get_node("%InspectorContent").get_child_count()).is_equal(2)
+	assert_bool((_find_action_button(screen, "fire-phasers") as Button).disabled).is_true()
+
+
+func test_command_engineering_command_preserves_simulation_time_selection_and_context() -> void:
+	var screen := _create_screen()
+	screen.call("SelectDestination", "vesper-reach")
+	screen.call("ShowTacticalView")
+	screen.call("ProcessSyntheticDelta", 0.6)
+	var identity: int = screen.get_meta("simulation_identity", 0)
+	var time: int = screen.get_meta("simulation_time_milliseconds", -1)
+	var command_instance_id := _command_deck(screen).get_instance_id()
+	var engineering_instance_id := _engineering_workspace(screen).get_instance_id()
+
+	screen.call("ShowEngineeringWorkspace")
+	assert_str(screen.get_meta("active_workspace", "")).is_equal("engineering")
+	assert_int(screen.get_meta("simulation_identity", 0)).is_equal(identity)
+	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(time)
+	screen.call("ShowCommandWorkspace")
+	assert_str(screen.get_meta("active_view", "")).is_equal("tactical")
+	assert_str(screen.get_meta("selected_destination", "")).is_equal("vesper-reach")
+	assert_int(screen.get_meta("simulation_identity", 0)).is_equal(identity)
+	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(time)
+	assert_int(_command_deck(screen).get_instance_id()).is_equal(command_instance_id)
+	assert_int(_engineering_workspace(screen).get_instance_id()).is_equal(engineering_instance_id)
+
+
+func test_preview_fixtures_use_production_workspaces_and_never_advance_or_submit() -> void:
+	var screen := _create_screen()
+	var identity: int = screen.get_meta("simulation_identity", 0)
+	var time: int = screen.get_meta("simulation_time_milliseconds", -1)
+
+	screen.call("ShowPreview", 1)
+	assert_str(screen.get_meta("data_mode", "")).is_equal("TravelPreview")
+	assert_str(screen.get_meta("active_workspace", "")).is_equal("command")
+	assert_str(_collect_control_text(_command_deck(screen))).contains("BETAZED")
+	assert_bool((_find_action_button(screen, "adjust-course") as Button).disabled).is_true()
+	assert_int(screen.call("ProcessSyntheticDelta", 20.0)).is_equal(0)
+	(_find_action_button(screen, "adjust-course") as Button).emit_signal("pressed")
+	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(time)
+
+	screen.call("ShowPreview", 2)
+	assert_str(screen.get_meta("data_mode", "")).is_equal("CombatPreview")
+	assert_str(screen.get_meta("active_view", "")).is_equal("tactical")
+	assert_str(_collect_control_text(_command_deck(screen))).contains("GALOR-CLASS CRUISER")
+	assert_bool((_find_action_button(screen, "fire-phasers") as Button).disabled).is_true()
+
+	screen.call("ShowPreview", 3)
+	assert_str(screen.get_meta("data_mode", "")).is_equal("EngineeringPreview")
+	assert_str(screen.get_meta("active_workspace", "")).is_equal("engineering")
+	assert_str(_collect_control_text(_engineering_workspace(screen))).contains("EPS BUS A-4")
+	assert_bool((_find_engineering_action_button(screen, "isolate-eps") as Button).disabled).is_true()
+	assert_int(screen.get_meta("simulation_identity", 0)).is_equal(identity)
+	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(time)
+
+	screen.call("RestoreLiveMode")
+	assert_str(screen.get_meta("data_mode", "")).is_equal("Live")
+	assert_str(screen.get_meta("active_workspace", "")).is_equal("engineering")
+	assert_int(screen.get_meta("simulation_identity", 0)).is_equal(identity)
+
+
+func test_live_workspace_actions_translate_to_existing_typed_commands() -> void:
+	var screen := _create_screen()
+	screen.call("SelectDestination", "vesper-reach")
+	(_find_action_button(screen, "travel") as Button).emit_signal("pressed")
+	assert_bool(screen.get_meta("travel_active", false)).is_true()
+
+	screen.call("AdvanceUntilNextPlayerRelevantEvent")
+	screen.call("AdvanceUntilNextPlayerRelevantEvent")
+	screen.call("ShowTacticalView")
+	(_find_action_button(screen, "set-tactical-course") as Button).emit_signal("pressed")
+	assert_float(screen.get_meta("tactical_heading", -1.0)).is_equal_approx(45.0, 0.0001)
+	assert_float(screen.get_meta("tactical_speed", -1.0)).is_equal_approx(2.0, 0.0001)
+	(_find_action_button(screen, "advance-time") as Button).emit_signal("pressed")
+	assert_str(screen.get_meta("advance_status", "")).is_equal("advanced")
+
+
+func test_live_context_action_identity_and_focus_survive_projection_refresh() -> void:
+	var screen := _create_screen()
+	screen.call("ShowTacticalView")
+	await get_tree().process_frame
+	var course_button := _find_action_button(screen, "set-tactical-course") as Button
+	var advance_button := _find_action_button(screen, "advance-time") as Button
+	var course_instance_id := course_button.get_instance_id()
+	var advance_instance_id := advance_button.get_instance_id()
+	course_button.grab_focus()
+	assert_bool(course_button.has_focus()).is_true()
+
+	assert_int(screen.call("ProcessSyntheticDelta", 0.1)).is_equal(1)
+	await get_tree().process_frame
+
+	var refreshed_course := _find_action_button(screen, "set-tactical-course") as Button
+	var refreshed_advance := _find_action_button(screen, "advance-time") as Button
+	assert_int(refreshed_course.get_instance_id()).is_equal(course_instance_id)
+	assert_int(refreshed_advance.get_instance_id()).is_equal(advance_instance_id)
+	assert_bool(refreshed_course.has_focus()).is_true()
+	refreshed_advance.emit_signal("pressed")
+	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(8000)
+
+
+func test_live_unsupported_values_and_engineering_actions_are_explicitly_unavailable() -> void:
+	var screen := _create_screen()
+	assert_str(_collect_control_text(_command_deck(screen))).contains("UNAVAILABLE")
+	assert_bool((_find_action_button(screen, "fire-phasers") as Button).disabled).is_true()
+
+	screen.call("ShowEngineeringWorkspace")
+	var engineering_text := _collect_control_text(_engineering_workspace(screen))
+	assert_str(engineering_text).contains("NOT PROVIDED BY LIVE SIMULATION")
+	assert_bool((_find_engineering_action_button(screen, "allocate-power") as Button).disabled).is_true()
+	assert_bool(
+		_engineering_workspace(screen).get_node("%EngineeringSchematic").get_meta(
+			"topology_available", true
+		)
+	).is_false()
 
 
 func test_invalid_content_bootstrap_is_fail_closed_and_player_safe() -> void:
@@ -176,7 +510,15 @@ func test_invalid_content_bootstrap_is_fail_closed_and_player_safe() -> void:
 	assert_str(screen.get_node("%Message").text).not_contains("not-json")
 	assert_str(screen.get_node("%Message").text).not_contains(INVALID_CONTENT_PATH)
 	for control_name in [
-		"%TravelButton", "%CourseButton", "%AdvanceUntilButton", "%QuickSaveButton", "%QuickLoadButton"
+		"%TravelButton",
+		"%CourseButton",
+		"%AdvanceUntilButton",
+		"%QuickSaveButton",
+		"%QuickLoadButton",
+		"%StrategicButton",
+		"%TacticalButton",
+		"%CommandStationButton",
+		"%EngineeringStationButton",
 	]:
 		assert_bool((screen.get_node(control_name) as Button).disabled).is_true()
 
@@ -422,10 +764,7 @@ func test_pause_repeated_processing_never_advances_core_time() -> void:
 
 func test_connected_destination_submits_travel_and_refreshes_visible_state() -> void:
 	var screen := _create_screen()
-	var destination_button := _find_destination_button(screen, "Vesper Reach")
-
-	assert_object(destination_button).is_not_null()
-	destination_button.emit_signal("pressed")
+	screen.call("SelectDestination", "vesper-reach")
 	var travel_button := screen.get_node("%TravelButton") as Button
 	assert_bool(travel_button.disabled).is_false()
 	travel_button.emit_signal("pressed")
@@ -434,34 +773,45 @@ func test_connected_destination_submits_travel_and_refreshes_visible_state() -> 
 	assert_str(screen.get_meta("travel_origin", "")).is_equal("dawn-anchor")
 	assert_str(screen.get_meta("travel_destination", "")).is_equal("vesper-reach")
 	assert_int(screen.get_meta("travel_eta_milliseconds", -1)).is_equal(12000)
-	assert_str(screen.get_node("%TravelStatus").text).contains("Dawn Anchor → Vesper Reach")
+	assert_str(_collect_control_text(_command_deck(screen))).contains("Dawn Anchor")
+	assert_str(_collect_control_text(_command_deck(screen))).contains("Vesper Reach")
+
+
+func test_unconnected_destination_submits_intent_and_core_rejects_route() -> void:
+	var screen := _create_screen()
+	screen.call("SelectDestination", "meridian-drift")
+	var travel_button := screen.get_node("%TravelButton") as Button
+	assert_bool(travel_button.disabled).is_false()
+
+	travel_button.emit_signal("pressed")
+
+	assert_bool(screen.get_meta("travel_active", false)).is_false()
+	assert_str(screen.get_node("%Message").text).contains("no direct route is known")
+	assert_str(screen.get_meta("selected_destination", "")).is_equal("meridian-drift")
 
 
 func test_destination_selection_projects_one_authoritative_pressed_state() -> void:
 	var screen := _create_screen()
-	_assert_destination_button_state(screen, "")
-
-	var vesper := _find_destination_button(screen, "Vesper Reach")
-	vesper.button_pressed = true
-	vesper.emit_signal("pressed")
-	_assert_destination_button_state(screen, "Vesper Reach")
-
-	var meridian := _find_destination_button(screen, "Meridian Drift")
-	meridian.button_pressed = true
-	meridian.emit_signal("pressed")
-	_assert_destination_button_state(screen, "Meridian Drift")
+	assert_str(screen.get_meta("selected_destination", "")).is_empty()
+	assert_bool((screen.get_node("%TravelButton") as Button).disabled).is_true()
 
 	screen.call("SelectDestination", "vesper-reach")
-	_assert_destination_button_state(screen, "Vesper Reach")
+	assert_str(screen.get_meta("selected_destination", "")).is_equal("vesper-reach")
+	assert_bool((screen.get_node("%TravelButton") as Button).disabled).is_false()
+	assert_str(_collect_control_text(_command_deck(screen).get_node("%InspectorContent"))).contains(
+		"Vesper Reach"
+	)
+	assert_str((_find_action_button(screen, "travel") as Button).text).contains("Vesper Reach")
 	screen.call("RequestSelectedTravel")
-	_assert_destination_button_state(screen, "Vesper Reach")
+	assert_str(screen.get_meta("selected_destination", "")).is_equal("vesper-reach")
 
 	screen.call("AdvanceUntilNextPlayerRelevantEvent")
 	screen.call("AdvanceUntilNextPlayerRelevantEvent")
-	_assert_destination_button_state(screen, "")
+	assert_str(screen.get_meta("selected_destination", "not-reset")).is_empty()
+	assert_bool((screen.get_node("%TravelButton") as Button).disabled).is_true()
 
 
-func test_time_driven_arrival_refreshes_connected_destination_buttons() -> void:
+func test_time_driven_arrival_refreshes_command_presentation() -> void:
 	var screen := _create_screen()
 	screen.call("SelectDestination", "vesper-reach")
 	screen.call("RequestSelectedTravel")
@@ -470,9 +820,9 @@ func test_time_driven_arrival_refreshes_connected_destination_buttons() -> void:
 		assert_int(screen.call("ProcessSyntheticDelta", 0.6)).is_equal(6)
 
 	assert_bool(screen.get_meta("travel_active", true)).is_false()
-	assert_str(screen.get_node("%TravelStatus").text).contains("Vesper Reach")
-	assert_bool(_find_destination_button(screen, "Vesper Reach").disabled).is_true()
-	assert_bool(_find_destination_button(screen, "Meridian Drift").disabled).is_false()
+	assert_str(_collect_control_text(_command_deck(screen))).contains("Vesper Reach")
+	assert_str(screen.get_meta("selected_destination", "not-reset")).is_empty()
+	assert_bool((screen.get_node("%TravelButton") as Button).disabled).is_true()
 
 	screen.call("AdvanceUntilNextPlayerRelevantEvent")
 	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(12000)
@@ -484,9 +834,8 @@ func test_time_driven_arrival_refreshes_connected_destination_buttons() -> void:
 
 func test_fixed_rate_hidden_horizon_arrival_does_not_masquerade_as_player_arrival() -> void:
 	var screen := _create_screen()
-	var initial_button_count := screen.get_node("%DestinationButtons").get_child_count()
-	var initial_vesper_disabled: bool = _find_destination_button(screen, "Vesper Reach").disabled
-	var initial_meridian_disabled: bool = _find_destination_button(screen, "Meridian Drift").disabled
+	var initial_location_count: int = screen.get_meta("map_location_count", 0)
+	var initial_route_count: int = screen.get_meta("map_route_count", 0)
 
 	for _step in range(23):
 		assert_int(screen.call("ProcessSyntheticDelta", 0.6)).is_equal(6)
@@ -497,14 +846,9 @@ func test_fixed_rate_hidden_horizon_arrival_does_not_masquerade_as_player_arriva
 	assert_str(screen.get_meta("travel_origin", "")).is_empty()
 	assert_str(screen.get_meta("travel_destination", "")).is_empty()
 	assert_int(screen.get_meta("travel_eta_milliseconds", -1)).is_equal(-1)
-	assert_int(screen.get_node("%DestinationButtons").get_child_count()).is_equal(initial_button_count)
-	assert_str(screen.get_node("%TravelStatus").text).contains("AT LOCATION")
-	assert_bool(_find_destination_button(screen, "Vesper Reach").disabled).is_equal(
-		initial_vesper_disabled
-	)
-	assert_bool(_find_destination_button(screen, "Meridian Drift").disabled).is_equal(
-		initial_meridian_disabled
-	)
+	assert_int(screen.get_meta("map_location_count", 0)).is_equal(initial_location_count)
+	assert_int(screen.get_meta("map_route_count", 0)).is_equal(initial_route_count)
+	assert_str(_collect_control_text(_command_deck(screen))).contains("AT LOCATION")
 
 
 func test_advance_until_stops_at_repair_before_arrival() -> void:
@@ -518,12 +862,18 @@ func test_advance_until_stops_at_repair_before_arrival() -> void:
 	assert_str(screen.get_meta("last_advance_event", "")).contains("sensor repair complete")
 	assert_bool(screen.get_meta("travel_active", false)).is_true()
 	assert_float(screen.get_meta("sensor_integrity", 0.0)).is_equal_approx(1.0, 0.0001)
+	assert_str(_collect_control_text(screen.get_node("%EventLogContent"))).contains(
+		"Sensor repair completed"
+	)
 
 	screen.call("AdvanceUntilNextPlayerRelevantEvent")
 	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(12000)
 	assert_str(screen.get_meta("last_advance_event", "")).contains("arrival complete")
 	assert_bool(screen.get_meta("travel_active", true)).is_false()
-	assert_str(screen.get_node("%TravelStatus").text).contains("Vesper Reach")
+	assert_str(_collect_control_text(_command_deck(screen))).contains("Vesper Reach")
+	assert_str(_collect_control_text(screen.get_node("%EventLogContent"))).contains(
+		"Strategic travel arrived"
+	)
 
 
 func test_tactical_view_course_command_refreshes_continuous_movement() -> void:
@@ -544,7 +894,8 @@ func test_tactical_view_course_command_refreshes_continuous_movement() -> void:
 
 func test_tactical_plot_keeps_sustained_course_marker_and_direction_visible() -> void:
 	var screen := _create_screen()
-	var tactical_map := screen.get_node("%TacticalMap") as Control
+	var tactical_map := _command_deck(screen).get_node("%TacticalMap") as Control
+	tactical_map.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	tactical_map.size = Vector2(400, 300)
 	screen.call("ShowTacticalView")
 	screen.call("SetDemonstrationCourse")
@@ -571,7 +922,8 @@ func test_tactical_plot_keeps_sustained_course_marker_and_direction_visible() ->
 
 func test_tactical_transform_inverts_north_and_preserves_fractional_positions() -> void:
 	var screen := _create_screen()
-	var tactical_map := screen.get_node("%TacticalMap") as Control
+	var tactical_map := _command_deck(screen).get_node("%TacticalMap") as Control
+	tactical_map.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	tactical_map.size = Vector2(400, 300)
 	var origin: Vector2 = screen.call("MapTacticalPosition", 0.0, 0.0)
 	var north: Vector2 = screen.call("MapTacticalPosition", 0.0, 1.0)
@@ -617,22 +969,26 @@ func _create_default_screen() -> Node:
 	return screen
 
 
-func _find_destination_button(screen: Node, display_name: String) -> Button:
-	for child in screen.get_node("%DestinationButtons").get_children():
-		if child is Button and child.text == display_name:
+func _command_deck(screen: Node) -> Node:
+	return screen.get_node("%CommandDeckWorkspace")
+
+
+func _engineering_workspace(screen: Node) -> Node:
+	return screen.get_node("%EngineeringWorkspace")
+
+
+func _find_action_button(screen: Node, action_id: String) -> Button:
+	for child in _command_deck(screen).get_node("%ContextActions").get_children():
+		if child is Button and child.name == "Action_" + action_id:
 			return child
 	return null
 
 
-func _assert_destination_button_state(screen: Node, expected_pressed: String) -> void:
-	var pressed: Array[String] = []
-	for child in screen.get_node("%DestinationButtons").get_children():
-		if child is Button and child.button_pressed:
-			pressed.append(child.text)
-	if expected_pressed.is_empty():
-		assert_array(pressed).is_empty()
-	else:
-		assert_array(pressed).contains_exactly([expected_pressed])
+func _find_engineering_action_button(screen: Node, action_id: String) -> Button:
+	for child in _engineering_workspace(screen).get_node("%EngineeringActionsContent").get_children():
+		if child is Button and child.name == "Action_" + action_id.replace("-", "_"):
+			return child
+	return null
 
 
 func _copy_file(source_user_path: String, destination_user_path: String) -> void:
