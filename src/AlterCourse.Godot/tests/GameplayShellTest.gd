@@ -148,7 +148,31 @@ func test_initial_focus_and_explicit_traversal_follow_visible_context() -> void:
 	var engineering_focus := get_viewport().gui_get_focus_owner()
 	assert_object(engineering_focus).is_not_null()
 	assert_bool(_engineering_workspace(screen).is_ancestor_of(engineering_focus)).is_true()
-	assert_str(str(engineering_focus.focus_next)).is_not_empty()
+	var reached_command := false
+	var reached_bottom_return := false
+	var cycled_to_entry := false
+	var current := engineering_focus
+	for _step in range(64):
+		assert_str(str(current.focus_next)).is_not_empty()
+		var next := current.get_node_or_null(current.focus_next) as Control
+		assert_object(next).is_not_null()
+		if next == null:
+			break
+		assert_bool(next.is_visible_in_tree()).is_true()
+		var previous := next.get_node_or_null(next.focus_previous) as Control
+		assert_object(previous).is_not_null()
+		assert_bool(previous == current).is_true()
+		reached_command = reached_command or next == screen.get_node("%CommandStationButton")
+		reached_bottom_return = reached_bottom_return or next == screen.get_node(
+			"%EngineeringBottomReturnButton"
+		)
+		current = next
+		if current == engineering_focus:
+			cycled_to_entry = true
+			break
+	assert_bool(reached_command).is_true()
+	assert_bool(reached_bottom_return).is_true()
+	assert_bool(cycled_to_entry).is_true()
 	assert_bool((_engineering_workspace(screen) as Control).visible).is_true()
 	assert_bool((_command_deck(screen) as Control).visible).is_false()
 	screen.call("ShowCommandWorkspace")

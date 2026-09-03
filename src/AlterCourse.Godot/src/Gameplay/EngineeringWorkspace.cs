@@ -80,7 +80,6 @@ public partial class EngineeringWorkspace : Control
         RebuildSection(_connectedLoads, "CONNECTED LOADS", FindTelemetry("connected-loads"));
         RebuildSection(_powerAllocation, "POWER ALLOCATION SUMMARY", FindTelemetry("power-allocation"));
         RebuildActions(presentation.Actions);
-        UpdateFocusTraversal();
     }
 
     /// <summary>Returns whether the named engineering action currently submits authoritative intent.</summary>
@@ -105,6 +104,25 @@ public partial class EngineeringWorkspace : Control
         {
             _schematic.GrabFocus();
         }
+    }
+
+    /// <summary>Gets the current visible Engineering controls for the shell-owned traversal ring.</summary>
+    public IReadOnlyList<Control> GetVisibleFocusControls()
+    {
+        if (!IsInsideTree() || !IsVisibleInTree())
+        {
+            return [];
+        }
+
+        var controls = new List<Control>();
+        controls.AddRange(_hierarchyButtons.Values.Where(IsFocusable));
+        if (IsFocusable(_schematic))
+        {
+            controls.Add(_schematic);
+        }
+
+        controls.AddRange(_actionButtons.Values.Where(IsFocusable));
+        return controls;
     }
 
     private void BindScene()
@@ -272,27 +290,10 @@ public partial class EngineeringWorkspace : Control
     private CommandInterfaceTelemetrySection? FindTelemetry(string id) =>
         _presentation?.Telemetry.FirstOrDefault(section => string.Equals(section.Id, id, StringComparison.Ordinal));
 
-    private void UpdateFocusTraversal()
-    {
-        if (!IsInsideTree())
-        {
-            return;
-        }
-
-        var controls = new List<Control>();
-        controls.AddRange(_hierarchyButtons.Values.Where(button => !button.Disabled));
-        controls.Add(_schematic);
-        controls.AddRange(_actionButtons.Values.Where(button => !button.Disabled));
-        for (int index = 0; index < controls.Count; index++)
-        {
-            Control previous = controls[(index - 1 + controls.Count) % controls.Count];
-            Control next = controls[(index + 1) % controls.Count];
-            controls[index].FocusPrevious = previous.GetPath();
-            controls[index].FocusNeighborTop = previous.GetPath();
-            controls[index].FocusNext = next.GetPath();
-            controls[index].FocusNeighborBottom = next.GetPath();
-        }
-    }
+    private static bool IsFocusable(Control control) =>
+        control.IsVisibleInTree()
+        && control.FocusMode != FocusModeEnum.None
+        && (control is not BaseButton button || !button.Disabled);
 
     private static void ClearChildren(Node parent)
     {

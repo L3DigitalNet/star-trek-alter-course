@@ -992,26 +992,37 @@ public partial class GameScreen : Control
         }
 
         var controls = new List<Control>();
-        controls.AddRange(
-            new Button[]
-            {
-                _commandStationButton,
-                _engineeringStationButton,
-                _engineeringBottomReturnButton,
-                _strategicButton,
-                _tacticalButton,
-                _travelButton,
-                _courseButton,
-                _pauseButton,
-                _halfRateButton,
-                _normalRateButton,
-                _doubleRateButton,
-                _quadRateButton,
-                _advanceUntilButton,
-                _quickSaveButton,
-                _quickLoadButton,
-            }.Where(button => button.IsVisibleInTree() && !button.Disabled)
-        );
+        if (_engineeringWorkspaceActive)
+        {
+            controls.Add(_commandStationButton);
+            controls.Add(_engineeringStationButton);
+            controls.AddRange(_engineering.GetVisibleFocusControls());
+            controls.Add(_engineeringBottomReturnButton);
+        }
+        else
+        {
+            controls.AddRange(
+                new Button[]
+                {
+                    _commandStationButton,
+                    _engineeringStationButton,
+                    _strategicButton,
+                    _tacticalButton,
+                    _travelButton,
+                    _courseButton,
+                    _pauseButton,
+                    _halfRateButton,
+                    _normalRateButton,
+                    _doubleRateButton,
+                    _quadRateButton,
+                    _advanceUntilButton,
+                    _quickSaveButton,
+                    _quickLoadButton,
+                }
+            );
+        }
+
+        controls = controls.Where(IsFocusable).ToList();
         if (controls.Count == 0)
         {
             return;
@@ -1027,6 +1038,11 @@ public partial class GameScreen : Control
             controls[index].FocusNeighborBottom = next.GetPath();
         }
     }
+
+    private static bool IsFocusable(Control control) =>
+        control.IsVisibleInTree()
+        && control.FocusMode != FocusModeEnum.None
+        && (control is not BaseButton button || !button.Disabled);
 
     private Button CurrentWorkspaceButton() =>
         _engineeringWorkspaceActive ? _engineeringStationButton : _commandStationButton;
