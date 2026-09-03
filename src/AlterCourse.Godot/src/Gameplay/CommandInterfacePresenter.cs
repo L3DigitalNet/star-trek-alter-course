@@ -182,24 +182,65 @@ public static class CommandInterfacePresenter
     ) =>
         [
             .. events.Select(@event =>
-                @event switch
+                @event.Kind switch
                 {
-                    PlayerAdvanceEvent.TravelArrived => new CommandInterfaceEventRow(
+                    PlayerAdvanceEventKind.TravelArrived => new CommandInterfaceEventRow(
                         FormatClock(projection.SimulationTime.Milliseconds),
                         "NAV",
                         "Strategic travel arrived at destination.",
                         CommandInterfaceTone.Navigation
                     ),
-                    PlayerAdvanceEvent.SensorRepairCompleted => new CommandInterfaceEventRow(
+                    PlayerAdvanceEventKind.SensorRepairCompleted => new CommandInterfaceEventRow(
                         FormatClock(projection.SimulationTime.Milliseconds),
                         "ENGINEER",
                         "Sensor repair completed.",
                         CommandInterfaceTone.Nominal
                     ),
+                    PlayerAdvanceEventKind.SensorContactDetected => SensorEvent(
+                        projection,
+                        @event,
+                        "Contact detected."
+                    ),
+                    PlayerAdvanceEventKind.SensorContactStale => SensorEvent(
+                        projection,
+                        @event,
+                        "Contact became stale."
+                    ),
+                    PlayerAdvanceEventKind.SensorContactReacquired => SensorEvent(
+                        projection,
+                        @event,
+                        "Contact reacquired."
+                    ),
+                    PlayerAdvanceEventKind.SensorContactLost => SensorEvent(projection, @event, "Contact lost."),
+                    PlayerAdvanceEventKind.ActiveSensorScanCompleted => SensorEvent(
+                        projection,
+                        @event,
+                        "Active scan completed."
+                    ),
+                    PlayerAdvanceEventKind.ActiveSensorScanInterrupted => SensorEvent(
+                        projection,
+                        @event,
+                        "Active scan interrupted."
+                    ),
                     _ => throw new ArgumentOutOfRangeException(nameof(events), @event, "Unknown player event."),
                 }
             ),
         ];
+
+    private static CommandInterfaceEventRow SensorEvent(
+        PlayerProjection projection,
+        PlayerAdvanceEvent @event,
+        string message
+    ) =>
+        new(
+            FormatClock(projection.SimulationTime.Milliseconds),
+            "SENSOR",
+            $"{DescribeContact(@event)}: {message}",
+            CommandInterfaceTone.Caution
+        );
+
+    private static string DescribeContact(PlayerAdvanceEvent @event) =>
+        @event.SensorContactId is { } contactId ? $"Contact {contactId.Value}" : "Contact";
 
     private static ImmutableArray<CommandInterfaceStation> BuildStations(CommandInterfaceMode mode)
     {

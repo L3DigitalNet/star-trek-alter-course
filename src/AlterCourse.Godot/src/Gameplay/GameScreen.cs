@@ -208,7 +208,7 @@ public partial class GameScreen : Control
         {
             SimulationAdvanceResult result = _simulation.AdvanceFixedSteps(steps);
             SetMeta("advance_status", "advanced");
-            if (result.ResolvedEvents.Contains(PlayerAdvanceEvent.TravelArrived))
+            if (result.ResolvedEvents.Any(@event => @event.Kind == PlayerAdvanceEventKind.TravelArrived))
             {
                 ClearSelectedDestination();
             }
@@ -394,7 +394,7 @@ public partial class GameScreen : Control
         try
         {
             AdvanceUntilResult result = _simulation.AdvanceUntilNextPlayerRelevantEvent();
-            if (result.ResolvedEvents.Contains(PlayerAdvanceEvent.TravelArrived))
+            if (result.ResolvedEvents.Any(@event => @event.Kind == PlayerAdvanceEventKind.TravelArrived))
             {
                 ClearSelectedDestination();
             }
@@ -1128,12 +1128,21 @@ public partial class GameScreen : Control
     }
 
     private static string DescribePlayerEvent(PlayerAdvanceEvent @event) =>
-        @event switch
+        @event.Kind switch
         {
-            PlayerAdvanceEvent.TravelArrived => "arrival complete",
-            PlayerAdvanceEvent.SensorRepairCompleted => "sensor repair complete",
+            PlayerAdvanceEventKind.TravelArrived => "arrival complete",
+            PlayerAdvanceEventKind.SensorRepairCompleted => "sensor repair complete",
+            PlayerAdvanceEventKind.SensorContactDetected => $"{DescribeContact(@event)} detected",
+            PlayerAdvanceEventKind.SensorContactStale => $"{DescribeContact(@event)} stale",
+            PlayerAdvanceEventKind.SensorContactReacquired => $"{DescribeContact(@event)} reacquired",
+            PlayerAdvanceEventKind.SensorContactLost => $"{DescribeContact(@event)} lost",
+            PlayerAdvanceEventKind.ActiveSensorScanCompleted => $"{DescribeContact(@event)} scan complete",
+            PlayerAdvanceEventKind.ActiveSensorScanInterrupted => $"{DescribeContact(@event)} scan interrupted",
             _ => "player event complete",
         };
+
+    private static string DescribeContact(PlayerAdvanceEvent @event) =>
+        @event.SensorContactId is { } contactId ? $"Contact {contactId.Value}" : "Contact";
 
     private void ReportPersistenceFailure(string operation, string status, string category, Exception exception)
     {
