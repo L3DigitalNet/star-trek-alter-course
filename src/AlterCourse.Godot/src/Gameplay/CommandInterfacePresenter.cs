@@ -221,10 +221,22 @@ public static class CommandInterfacePresenter
         };
         return
         [
-            new("command", "COMMAND", selected == "command", 0, CommandInterfaceTone.Command),
+            new(
+                "command",
+                "COMMAND",
+                string.Equals(selected, "command", StringComparison.Ordinal),
+                0,
+                CommandInterfaceTone.Command
+            ),
             new("tactical", "TACTICAL", false, 0, CommandInterfaceTone.Muted),
             new("navigation", "NAVIGATION", false, 0, CommandInterfaceTone.Navigation),
-            new("engineering", "ENGINEERING", selected == "engineering", 0, CommandInterfaceTone.Engineering),
+            new(
+                "engineering",
+                "ENGINEERING",
+                string.Equals(selected, "engineering", StringComparison.Ordinal),
+                0,
+                CommandInterfaceTone.Engineering
+            ),
             new("science", "SCIENCE", false, 0, CommandInterfaceTone.Muted),
             new("comms", "COMMS", false, 0, CommandInterfaceTone.Muted),
             new("operations", "OPERATIONS", false, 0, CommandInterfaceTone.Muted),
