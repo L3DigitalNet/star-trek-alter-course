@@ -9,7 +9,7 @@
 - Feature #62 and draft Final PR #63 contain the unreleased Milestone 4 Engineering Backbone implementation; it is not merged, released, or on `main`.
 - The shell retains strategic travel, local tactical movement, Engineering power allocation and system repair, deterministic time controls, player-relevant advance-until, and quick save/load.
 - The tracked launch script restores and builds before Godot starts, preventing stale local Debug content after branch changes.
-- The proof world retains USS Pathfinder at Dawn Anchor, USS Wayfarer repairing at Vesper Reach, and USS Horizon traveling to Meridian Drift.
+- The proof world retains USS Pathfinder at Dawn Anchor, USS Wayfarer at Vesper Reach, and USS Horizon traveling to Meridian Drift.
 - Survey Vessel Kestrel is the fourth durable vessel at Dawn Anchor and owns the focused cautious-contact posture.
 - Core owns an immutable ship-definition catalog and plural ordinary `ShipState`; `PlayerShipId` selects one ship for commands and projection.
 - Strategic, tactical, sensor, repair, and scheduled consequence state is ship-owned. Targeted same-kind work cannot cross ship identities.
