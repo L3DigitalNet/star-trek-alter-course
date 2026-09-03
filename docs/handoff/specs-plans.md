@@ -17,3 +17,4 @@
 | Feature #58 | Merged / Done | Milestone 3A merged to `dev` through Final PR #61 as squash `a104e3f`; unreleased. |
 | Task #59 | Merged / Done | Godot UID and import metadata merged through Final PR #60 as `ce454f5` into `dev`. |
 | Feature #62 | Merged / Done | Milestone 4 Engineering merged through Final PR #63 as `0f2278e` into `dev`; unreleased. |
+| Task #64 | Published / Closing | v0.4.0 Final PR #66 released as `b3b6635`; sync PR #67 put `dev` at `2edd194`. Closure follows this pushed record. |
