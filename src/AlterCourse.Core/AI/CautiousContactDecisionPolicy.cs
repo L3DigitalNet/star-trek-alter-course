@@ -214,30 +214,43 @@ public static class CautiousContactDecisionPolicy
         TacticalPosition right
     )
     {
-        double coordinateMagnitude = new[]
-        {
-            Math.Abs(left.XKilometers),
-            Math.Abs(left.YKilometers),
-            Math.Abs(right.XKilometers),
-            Math.Abs(right.YKilometers),
-        }.Max();
-        if (coordinateMagnitude == 0)
+        (int Exponent, double Significand) deltaX = AbsoluteDifference(left.XKilometers, right.XKilometers);
+        (int Exponent, double Significand) deltaY = AbsoluteDifference(left.YKilometers, right.YKilometers);
+        if (deltaX.Significand == 0 && deltaY.Significand == 0)
         {
             return default;
         }
 
-        int coordinateExponent = Math.ILogB(coordinateMagnitude);
-        double deltaX =
-            Math.ScaleB(left.XKilometers, -coordinateExponent) - Math.ScaleB(right.XKilometers, -coordinateExponent);
-        double deltaY =
-            Math.ScaleB(left.YKilometers, -coordinateExponent) - Math.ScaleB(right.YKilometers, -coordinateExponent);
-        double normalizedDistance = Math.Sqrt((deltaX * deltaX) + (deltaY * deltaY));
-        if (normalizedDistance == 0)
-        {
-            return default;
-        }
-
+        int componentExponent =
+            deltaX.Significand == 0 ? deltaY.Exponent
+            : deltaY.Significand == 0 ? deltaX.Exponent
+            : Math.Max(deltaX.Exponent, deltaY.Exponent);
+        double scaledX = Math.ScaleB(deltaX.Significand, deltaX.Exponent - componentExponent);
+        double scaledY = Math.ScaleB(deltaY.Significand, deltaY.Exponent - componentExponent);
+        double normalizedDistance = Math.Sqrt((scaledX * scaledX) + (scaledY * scaledY));
         int distanceExponent = Math.ILogB(normalizedDistance);
-        return (1, checked(coordinateExponent + distanceExponent), Math.ScaleB(normalizedDistance, -distanceExponent));
+        return (1, checked(componentExponent + distanceExponent), Math.ScaleB(normalizedDistance, -distanceExponent));
+    }
+
+    private static (int Exponent, double Significand) AbsoluteDifference(double left, double right)
+    {
+        double difference = left - right;
+        int exponentOffset = 0;
+        if (!double.IsFinite(difference))
+        {
+            // Scaling operands before subtraction preserves an overflowing opposite-sign difference. Scaling the
+            // coordinates as a group would instead erase a small displacement beside an unrelated huge coordinate.
+            difference = Math.ScaleB(left, -1) - Math.ScaleB(right, -1);
+            exponentOffset = 1;
+        }
+
+        double magnitude = Math.Abs(difference);
+        if (magnitude == 0)
+        {
+            return default;
+        }
+
+        int exponent = Math.ILogB(magnitude);
+        return (checked(exponent + exponentOffset), Math.ScaleB(magnitude, -exponent));
     }
 }

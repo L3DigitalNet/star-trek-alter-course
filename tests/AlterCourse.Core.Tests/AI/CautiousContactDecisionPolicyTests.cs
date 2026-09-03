@@ -258,6 +258,22 @@ public sealed class CautiousContactDecisionPolicyTests
         Assert.Equal(new SensorContactId(9), result.PrimaryContactId);
     }
 
+    /// <summary>Confirms a tiny local displacement survives an unrelated huge shared coordinate.</summary>
+    [Fact]
+    public void PrimarySelectionPreservesMixedScaleDisplacement()
+    {
+        ShipContactDecisionExplanation result = CautiousContactDecisionPolicy.Evaluate(
+            Input(
+                [Contact(3, new TacticalPosition(1e308, 2e-300)), Contact(9, new TacticalPosition(1e308, 1e-300))],
+                ownPosition: new TacticalPosition(1e308, 0)
+            )
+        );
+
+        Assert.Equal(new SensorContactId(9), result.PrimaryContactId);
+        Assert.Equal(ShipContactDecisionAction.Withdraw, result.SelectedAction);
+        Assert.NotNull(result.ResultingCourse);
+    }
+
     /// <summary>Confirms hidden world and definition types cannot enter the public policy input graph.</summary>
     [Fact]
     public void PolicyInputExcludesHiddenTruthTypes()
