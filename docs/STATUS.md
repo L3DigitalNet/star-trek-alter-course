@@ -6,7 +6,7 @@
 - Task #40 consolidated their gameplay shell through Final PR #41 (`ed8ca4b`); owner gameplay evaluation found the shell working well.
 - Release Task #53 is Done; v0.3.0 is the current immutable source-only GitHub Release, tagged at `fae21bd`; no packaged gameplay artifact is published.
 - Feature #58's unreleased Milestone 3A slice adds first observed contact; it is not a new release and does not complete all of Milestone 3.
-- Feature #62 and draft Final PR #63 contain the unreleased Milestone 4 Engineering Backbone implementation; it is not merged, released, or on `main`.
+- Feature #62 and ready Final PR #63 contain the unreleased Milestone 4 Engineering Backbone implementation; it is not merged, released, or on `main`.
 - The shell retains strategic travel, tactical movement, Engineering power and repair, deterministic time controls, advance-until, and quick save/load.
 - The tracked launch script restores and builds before Godot starts, preventing stale local Debug content after branch changes.
 - The proof world retains USS Pathfinder at Dawn Anchor, USS Wayfarer at Vesper Reach, and USS Horizon traveling to Meridian Drift.
@@ -55,6 +55,6 @@
 - Owner accepted the command interface for v0.3.0: it runs smoothly with no errors.
 - Bug #49's PR #50 merged as `2064822`; the launcher imports Godot assets before loading the command theme.
 - Bug #51 merged through Final PR #52 as `c5602cc`; live context actions now retain pointer interaction and keyboard focus across refreshes.
-- Milestone 4 Core 376/376 and GameplayShell 60/60 are green; manual and adversarial review passed; canonical passed on `379011b`.
+- Milestone 4 Core 376/376 and GameplayShell 60/60 are green; manual, adversarial, canonical, and hosted verification passed.
 - Remaining Milestone 3 work includes richer uncertainty, strategic contacts, additional postures, affiliation and intent knowledge, and broader encounter transitions.
 - Engineering depth beyond this backbone, faction strategy, combat, diplomacy, economy, narrative, networking, and final art remain deferred.
