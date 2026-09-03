@@ -30,13 +30,7 @@ public static class CautiousContactDecisionPolicy
             MovementCandidate(ShipContactDecisionAction.Approach, movementConstraints, primary, incomingHail),
             MovementCandidate(ShipContactDecisionAction.Withdraw, movementConstraints, primary, incomingHail),
         ];
-        ShipContactDecisionCandidate selected = candidates
-            .Select((candidate, index) => (candidate, index))
-            .Where(item => item.candidate.HardConstraintsSatisfied && item.candidate.Score is not null)
-            .OrderByDescending(item => item.candidate.Score)
-            .ThenBy(item => item.index)
-            .First()
-            .candidate;
+        ShipContactDecisionCandidate selected = SelectCandidate(candidates);
 
         SetTacticalCourseIntent? course = selected.Action switch
         {
@@ -72,6 +66,24 @@ public static class CautiousContactDecisionPolicy
         );
     }
 
+    internal static ShipContactDecisionCandidate SelectCandidate(
+        IEnumerable<ShipContactDecisionCandidate> candidates
+    ) =>
+        candidates
+            .Where(candidate => candidate.HardConstraintsSatisfied && candidate.Score is not null)
+            .OrderByDescending(candidate => candidate.Score)
+            .ThenBy(candidate => TieBreakPriority(candidate.Action))
+            .First();
+
+    private static int TieBreakPriority(ShipContactDecisionAction action) =>
+        action switch
+        {
+            ShipContactDecisionAction.Hold => 1,
+            ShipContactDecisionAction.Approach => 2,
+            ShipContactDecisionAction.Withdraw => 3,
+            _ => throw new InvalidOperationException("A cautious-contact candidate has an unsupported action."),
+        };
+
     private static ShipContactConstraintEvaluation[] MovementConstraints(
         ShipContactDecisionFacts facts,
         SensorContactSnapshot? primary,
@@ -95,7 +107,7 @@ public static class CautiousContactDecisionPolicy
         return hailed
             ?? facts
                 .Contacts.Where(contact => contact.Status == SensorContactStatus.Current)
-                .OrderBy(contact => DistanceSquared(facts.OwnPosition, contact.LastObservedPosition))
+                .OrderBy(contact => DistanceKey(facts.OwnPosition, contact.LastObservedPosition))
                 .ThenBy(contact => contact.Id.Value)
                 .FirstOrDefault();
     }
@@ -195,12 +207,37 @@ public static class CautiousContactDecisionPolicy
     }
 
     private static bool HasNonzeroDisplacement(ShipContactDecisionFacts facts, SensorContactSnapshot contact) =>
-        DistanceSquared(facts.OwnPosition, contact.LastObservedPosition) > 0;
+        DistanceKey(facts.OwnPosition, contact.LastObservedPosition).NonzeroRank != 0;
 
-    private static double DistanceSquared(TacticalPosition left, TacticalPosition right)
+    private static (int NonzeroRank, int Exponent, double Significand) DistanceKey(
+        TacticalPosition left,
+        TacticalPosition right
+    )
     {
-        double deltaX = left.XKilometers - right.XKilometers;
-        double deltaY = left.YKilometers - right.YKilometers;
-        return (deltaX * deltaX) + (deltaY * deltaY);
+        double coordinateMagnitude = new[]
+        {
+            Math.Abs(left.XKilometers),
+            Math.Abs(left.YKilometers),
+            Math.Abs(right.XKilometers),
+            Math.Abs(right.YKilometers),
+        }.Max();
+        if (coordinateMagnitude == 0)
+        {
+            return default;
+        }
+
+        int coordinateExponent = Math.ILogB(coordinateMagnitude);
+        double deltaX =
+            Math.ScaleB(left.XKilometers, -coordinateExponent) - Math.ScaleB(right.XKilometers, -coordinateExponent);
+        double deltaY =
+            Math.ScaleB(left.YKilometers, -coordinateExponent) - Math.ScaleB(right.YKilometers, -coordinateExponent);
+        double normalizedDistance = Math.Sqrt((deltaX * deltaX) + (deltaY * deltaY));
+        if (normalizedDistance == 0)
+        {
+            return default;
+        }
+
+        int distanceExponent = Math.ILogB(normalizedDistance);
+        return (1, checked(coordinateExponent + distanceExponent), Math.ScaleB(normalizedDistance, -distanceExponent));
     }
 }

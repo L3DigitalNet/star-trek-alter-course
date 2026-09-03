@@ -209,13 +209,69 @@ public sealed class HailAndContactDecisionTests
         );
     }
 
+    /// <summary>Confirms stale and lost transitions each trigger one hidden cautious decision.</summary>
+    [Fact]
+    public void ContactStaleAndLossEachScheduleOneHiddenHoldDecision()
+    {
+        GameSimulation game = CreateGame(cautiousNpc: true);
+        ShipDefinitionCatalog catalog = CreateCatalog();
+        game.AdvanceFixedSteps(1);
+        game.SetTacticalCourse(new SetTacticalCourseIntent(new HeadingDegrees(270), new SpeedKilometersPerSecond(5)));
+
+        SimulationAdvanceTraceResult stale = GameSimulation.AdvanceTo(
+            game.CaptureState(),
+            new SimulationTime(2_900),
+            catalog
+        );
+
+        ShipState staleNpc = stale.State.GetRequiredShip(NpcId);
+        SensorContactTrack staleContact = Assert.Single(staleNpc.SensorKnowledge.Contacts);
+        ScheduledConsequenceTrace staleWake = Assert.Single(
+            stale.Traces,
+            trace => trace.WorkKind == ScheduledWorkKind.ShipContactDecisionWake
+        );
+        Assert.Equal(SensorContactStatus.Stale, staleContact.Status);
+        Assert.Equal(ShipContactDecisionAction.Hold, staleWake.ContactDecision!.SelectedAction);
+        Assert.Equal(new SimulationTime(2_900), staleWake.ResolutionTime);
+        Assert.Null(staleWake.ContactDecision.PrimaryContactId);
+        Assert.Equal(
+            ShipContactDecisionPolicyReason.NoCurrentContactHold,
+            staleWake.ContactDecision.Candidates[0].PolicyReason
+        );
+        Assert.Equal(0, staleNpc.TacticalMotion.Speed.Value);
+        AssertNoPendingDecisionWake(stale.State, staleNpc);
+        Assert.Empty(stale.PlayerEvents);
+
+        SimulationAdvanceTraceResult lost = GameSimulation.AdvanceTo(
+            stale.State,
+            staleContact.LossDueTime!.Value,
+            catalog
+        );
+
+        ShipState lostNpc = lost.State.GetRequiredShip(NpcId);
+        ScheduledConsequenceTrace lossWake = Assert.Single(
+            lost.Traces,
+            trace => trace.WorkKind == ScheduledWorkKind.ShipContactDecisionWake
+        );
+        Assert.Equal(
+            [ScheduledWorkKind.SensorContactLoss, ScheduledWorkKind.ShipContactDecisionWake],
+            lost.Traces.Select(trace => trace.WorkKind)
+        );
+        Assert.Equal(SensorContactStatus.Lost, Assert.Single(lostNpc.SensorKnowledge.Contacts).Status);
+        Assert.Equal(ShipContactDecisionAction.Hold, lossWake.ContactDecision!.SelectedAction);
+        Assert.Equal(staleContact.LossDueTime, lossWake.ResolutionTime);
+        Assert.Null(lossWake.ContactDecision.PrimaryContactId);
+        AssertNoPendingDecisionWake(lost.State, lostNpc);
+        Assert.Empty(lost.PlayerEvents);
+    }
+
     /// <summary>Confirms a decision wake cannot consult changed truth behind the same retained observation.</summary>
     [Fact]
     public void ContactDecisionWakeIsInvariantToHiddenTargetPosition()
     {
         ShipDefinitionCatalog catalog = CreateCatalog();
-        SimulationState firstWorld = CreateHiddenTruthDecisionWorld(new TacticalPosition(500, 300));
-        SimulationState secondWorld = CreateHiddenTruthDecisionWorld(new TacticalPosition(-600, 400));
+        SimulationState firstWorld = CreateHiddenTruthDecisionWorld(new TacticalPosition(10, 3));
+        SimulationState secondWorld = CreateHiddenTruthDecisionWorld(new TacticalPosition(-5, 4));
         ShipState firstHiddenPlayer = firstWorld.GetRequiredShip(PlayerId);
         ShipState secondHiddenPlayer = secondWorld.GetRequiredShip(PlayerId);
         SensorContactSnapshot firstRetainedObservation = Assert
@@ -257,6 +313,15 @@ public sealed class HailAndContactDecisionTests
         Assert.Equal(ActiveSensorScanOutcome.Accepted, game.RequestActiveSensorScan(new SensorContactId(1)).Outcome);
         game.AdvanceFixedSteps(20);
         return game;
+    }
+
+    private static void AssertNoPendingDecisionWake(SimulationState state, ShipState ship)
+    {
+        Assert.Null(ship.AutonomousState.PendingContactDecisionWake);
+        Assert.DoesNotContain(
+            state.Scheduler.OutstandingWork,
+            work => work.Kind == ScheduledWorkKind.ShipContactDecisionWake
+        );
     }
 
     private static GameSimulation WithPlayerContact(

@@ -314,6 +314,27 @@ public sealed class SensorObservationCommandTests
         Assert.Equal(before, unavailable.GetPlayerProjection());
     }
 
+    /// <summary>Confirms zero authored range removes scan legality and rejects the command.</summary>
+    [Fact]
+    public void ActiveScanRejectsZeroAuthoredSensorRange()
+    {
+        GameSimulation observed = CreateGame(
+            Ship(1, ObserverDefinitionId, default),
+            Ship(2, TargetDefinitionId, new TacticalPosition(5, 0))
+        );
+        observed.AdvanceFixedSteps(1);
+        var unavailable = GameSimulation.RestoreState(observed.CaptureState(), CreateCatalog(passiveRange: 0));
+        PlayerProjection before = unavailable.GetPlayerProjection();
+        SimulationState beforeState = unavailable.CaptureState();
+
+        ActiveSensorScanResult result = unavailable.RequestActiveSensorScan(new SensorContactId(1));
+
+        Assert.Equal(ActiveSensorScanOutcome.SensorsUnavailable, result.Outcome);
+        Assert.DoesNotContain(PlayerAction.ActiveSensorScan, before.AvailableActions);
+        Assert.Empty(Assert.Single(before.Ship.Sensors.ContactActions).AvailableActions);
+        Assert.Same(beforeState, unavailable.CaptureState());
+    }
+
     /// <summary>Confirms a contact leaving range interrupts a scan and stale precedence remains stable.</summary>
     [Fact]
     public void ActiveScanIsInterruptedWhenContactCeasesToBeCurrent()

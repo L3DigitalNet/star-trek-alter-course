@@ -213,6 +213,51 @@ public sealed class CautiousContactDecisionPolicyTests
         );
     }
 
+    /// <summary>Confirms equal candidate scores use the declared action key rather than input order.</summary>
+    [Fact]
+    public void CandidateScoreTieUsesStableActionKey()
+    {
+        ShipContactDecisionCandidate[] candidates =
+        [
+            Candidate(ShipContactDecisionAction.Withdraw),
+            Candidate(ShipContactDecisionAction.Approach),
+            Candidate(ShipContactDecisionAction.Hold),
+        ];
+
+        ShipContactDecisionCandidate selected = CautiousContactDecisionPolicy.SelectCandidate(candidates);
+
+        Assert.Equal(ShipContactDecisionAction.Hold, selected.Action);
+        Assert.Equal(selected, CautiousContactDecisionPolicy.SelectCandidate(candidates.Reverse()));
+    }
+
+    /// <summary>Confirms nearest selection remains ordered for finite distances whose squares overflow.</summary>
+    [Fact]
+    public void PrimarySelectionHandlesExtremeFiniteDistances()
+    {
+        ShipContactDecisionExplanation result = CautiousContactDecisionPolicy.Evaluate(
+            Input([Contact(3, new TacticalPosition(1.1e200, 1.1e200)), Contact(9, new TacticalPosition(1e200, 1e200))])
+        );
+
+        Assert.Equal(new SensorContactId(9), result.PrimaryContactId);
+    }
+
+    /// <summary>Confirms opposite-sign finite coordinates remain ordered when raw subtraction overflows.</summary>
+    [Fact]
+    public void PrimarySelectionHandlesOppositeFiniteExtremes()
+    {
+        ShipContactDecisionExplanation result = CautiousContactDecisionPolicy.Evaluate(
+            Input(
+                [
+                    Contact(3, new TacticalPosition(double.MaxValue, 0)),
+                    Contact(9, new TacticalPosition(double.MaxValue * 0.5, 0)),
+                ],
+                ownPosition: new TacticalPosition(-double.MaxValue, 0)
+            )
+        );
+
+        Assert.Equal(new SensorContactId(9), result.PrimaryContactId);
+    }
+
     /// <summary>Confirms hidden world and definition types cannot enter the public policy input graph.</summary>
     [Fact]
     public void PolicyInputExcludesHiddenTruthTypes()
@@ -237,7 +282,8 @@ public sealed class CautiousContactDecisionPolicyTests
         IEnumerable<SensorContactSnapshot> contacts,
         double maximumSpeed = 2,
         IncomingHailFact? incomingHail = null,
-        bool isAtLocation = true
+        bool isAtLocation = true,
+        TacticalPosition ownPosition = default
     ) =>
         new(
             DecidingShipId,
@@ -245,13 +291,21 @@ public sealed class CautiousContactDecisionPolicyTests
             ShipContactDecisionGoal.RespondCautiously,
             ShipContactPosture.CautiousContact,
             new ShipContactDecisionFacts(
-                default,
+                ownPosition,
                 new TacticalMotion(new HeadingDegrees(27), new SpeedKilometersPerSecond(1)),
                 isAtLocation,
                 new SpeedKilometersPerSecond(maximumSpeed),
                 contacts,
                 incomingHail
             )
+        );
+
+    private static ShipContactDecisionCandidate Candidate(ShipContactDecisionAction action) =>
+        new(
+            action,
+            [new ShipContactConstraintEvaluation(ShipContactDecisionConstraint.HoldAvailable, true)],
+            50,
+            ShipContactDecisionPolicyReason.NoCurrentContactHold
         );
 
     private static SensorContactSnapshot Contact(

@@ -250,7 +250,8 @@ public sealed class GameSimulation
             return new ActiveSensorScanResult(ActiveSensorScanOutcome.AlreadyIdentified);
         }
 
-        if (observer.SensorIntegrity.Value == 0 || observer.StrategicState is not AtLocationState)
+        ShipDefinition definition = _shipCatalog.GetRequired(observer.DefinitionId);
+        if (!HasEffectiveSensorCapability(observer, definition) || observer.StrategicState is not AtLocationState)
         {
             return new ActiveSensorScanResult(ActiveSensorScanOutcome.SensorsUnavailable);
         }
@@ -260,7 +261,6 @@ public sealed class GameSimulation
             return new ActiveSensorScanResult(ActiveSensorScanOutcome.ScanAlreadyActive);
         }
 
-        ShipDefinition definition = _shipCatalog.GetRequired(observer.DefinitionId);
         SimulationTime completion = _state.Time.AdvanceBy(definition.ActiveScanDuration);
         (SimulationScheduler scheduler, ScheduledWork work) = _state.Scheduler.Schedule(
             completion,
@@ -642,7 +642,11 @@ public sealed class GameSimulation
             }
 
             (current, observer) = ReconcileObserverContacts(current, observer, truth, observableTargets, playerEvents);
-            current = ScheduleContactDecisionWake(current, observer, truthObserver.SensorKnowledge, observableTargets);
+            bool decisionRequired = HasMeaningfulContactTransition(
+                truthObserver.SensorKnowledge,
+                observer.SensorKnowledge
+            );
+            current = ScheduleContactDecisionWake(current, observer, decisionRequired);
         }
 
         return current;
@@ -910,28 +914,33 @@ public sealed class GameSimulation
         return (state, activeScan);
     }
 
+    private static bool HasMeaningfulContactTransition(SensorKnowledge prior, SensorKnowledge current) =>
+        current.Contacts.Any(contact =>
+        {
+            SensorContactStatus? priorStatus = prior
+                .Contacts.FirstOrDefault(priorContact => priorContact.TargetShipId == contact.TargetShipId)
+                ?.Status;
+            return contact.Status switch
+            {
+                SensorContactStatus.Current => priorStatus != SensorContactStatus.Current,
+                SensorContactStatus.Stale => priorStatus == SensorContactStatus.Current,
+                SensorContactStatus.Lost => false,
+                _ => throw new InvalidOperationException("A sensor contact has an unsupported status."),
+            };
+        });
+
     private static SimulationState ScheduleContactDecisionWake(
         SimulationState state,
         ShipState observer,
-        SensorKnowledge priorKnowledge,
-        HashSet<ShipInstanceId> observableTargets
+        bool decisionRequired
     )
     {
         if (
-            observer.InstanceId == state.PlayerShipId
+            !decisionRequired
+            || observer.InstanceId == state.PlayerShipId
             || observer.AutonomousState.ContactPosture != ShipContactPosture.CautiousContact
             || observer.AutonomousState.PendingContactDecisionWake is not null
         )
-        {
-            return state;
-        }
-
-        bool gainedCurrentContact = observer.SensorKnowledge.Contacts.Any(contact =>
-            observableTargets.Contains(contact.TargetShipId)
-            && priorKnowledge.Contacts.FirstOrDefault(prior => prior.TargetShipId == contact.TargetShipId)?.Status
-                != SensorContactStatus.Current
-        );
-        if (!gainedCurrentContact)
         {
             return state;
         }
@@ -1237,13 +1246,9 @@ public sealed class GameSimulation
             ),
             observer.SensorKnowledge.ActiveScan
         );
-        SimulationState candidate = state.ReplaceShip(
-            observer.InstanceId,
-            observer with
-            {
-                SensorKnowledge = knowledge,
-            }
-        );
+        ShipState updatedObserver = observer with { SensorKnowledge = knowledge };
+        SimulationState candidate = state.ReplaceShip(observer.InstanceId, updatedObserver);
+        candidate = ScheduleContactDecisionWake(candidate, updatedObserver, decisionRequired: true);
         return (
             candidate,
             Trace(
@@ -1475,14 +1480,15 @@ public sealed class GameSimulation
         }
     }
 
-    private static PlayerProjection Project(SimulationState state)
+    private PlayerProjection Project(SimulationState state)
     {
         ShipState playerShip = state.GetRequiredShip(state.PlayerShipId);
+        ShipDefinition playerDefinition = _shipCatalog.GetRequired(playerShip.DefinitionId);
         return new PlayerProjection(
             state.Time,
             ProjectStrategic(state, playerShip),
-            ProjectShip(state, playerShip),
-            new ReadOnlyValueList<PlayerAction>(GetAvailableActions(playerShip))
+            ProjectShip(state, playerShip, playerDefinition),
+            new ReadOnlyValueList<PlayerAction>(GetAvailableActions(playerShip, playerDefinition))
         );
     }
 
@@ -1532,7 +1538,11 @@ public sealed class GameSimulation
         );
     }
 
-    private static PlayerShipProjection ProjectShip(SimulationState state, ShipState playerShip)
+    private static PlayerShipProjection ProjectShip(
+        SimulationState state,
+        ShipState playerShip,
+        ShipDefinition playerDefinition
+    )
     {
         SensorRepairState? repair = playerShip.SensorRepair;
         ActiveSensorScanState? activeScan = playerShip.SensorKnowledge.ActiveScan;
@@ -1562,7 +1572,9 @@ public sealed class GameSimulation
                 new ReadOnlyValueList<SensorContactActionProjection>(
                     activeContacts.Select(contact => new SensorContactActionProjection(
                         contact.Id,
-                        new ReadOnlyValueList<SensorContactAction>(GetAvailableContactActions(playerShip, contact))
+                        new ReadOnlyValueList<SensorContactAction>(
+                            GetAvailableContactActions(playerShip, playerDefinition, contact)
+                        )
                     ))
                 ),
                 activeScan?.TargetContactId,
@@ -1583,7 +1595,11 @@ public sealed class GameSimulation
         return Math.Clamp((double)elapsed / duration, 0, 1);
     }
 
-    private static SensorContactAction[] GetAvailableContactActions(ShipState playerShip, SensorContactTrack contact)
+    private static SensorContactAction[] GetAvailableContactActions(
+        ShipState playerShip,
+        ShipDefinition playerDefinition,
+        SensorContactTrack contact
+    )
     {
         if (contact.Status != SensorContactStatus.Current)
         {
@@ -1593,7 +1609,7 @@ public sealed class GameSimulation
         var actions = new List<SensorContactAction>();
         if (
             contact.Identification == SensorContactIdentification.Detected
-            && playerShip.SensorIntegrity.Value > 0
+            && HasEffectiveSensorCapability(playerShip, playerDefinition)
             && playerShip.StrategicState is AtLocationState
             && playerShip.SensorKnowledge.ActiveScan is null
         )
@@ -1609,7 +1625,7 @@ public sealed class GameSimulation
         return [.. actions];
     }
 
-    private static PlayerAction[] GetAvailableActions(ShipState playerShip)
+    private static PlayerAction[] GetAvailableActions(ShipState playerShip, ShipDefinition playerDefinition)
     {
         if (playerShip.StrategicState is not AtLocationState)
         {
@@ -1619,7 +1635,8 @@ public sealed class GameSimulation
         List<PlayerAction> actions = [PlayerAction.Travel, PlayerAction.SetTacticalCourse, PlayerAction.AdvanceTime];
         if (
             playerShip.SensorKnowledge.Contacts.Any(contact =>
-                GetAvailableContactActions(playerShip, contact).Contains(SensorContactAction.ActiveScan)
+                GetAvailableContactActions(playerShip, playerDefinition, contact)
+                    .Contains(SensorContactAction.ActiveScan)
             )
         )
         {
@@ -1628,6 +1645,9 @@ public sealed class GameSimulation
 
         return [.. actions];
     }
+
+    private static bool HasEffectiveSensorCapability(ShipState ship, ShipDefinition definition) =>
+        definition.PassiveSensorRange.Value > 0 && ship.SensorIntegrity.Value > 0;
 
     private void Commit(SimulationState candidate)
     {

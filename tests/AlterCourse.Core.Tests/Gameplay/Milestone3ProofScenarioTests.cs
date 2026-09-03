@@ -162,6 +162,10 @@ public sealed class Milestone3ProofScenarioTests
         Assert.Equal(24100, stale.FinalTime.Milliseconds);
         Assert.Equal(PlayerAdvanceEventKind.SensorContactStale, Assert.Single(stale.ResolvedEvents).Kind);
         Assert.Equal(SensorContactStatus.Stale, Assert.Single(stale.Projection.Ship.Sensors.Contacts).Status);
+        ShipState staleKestrel = Milestone3ProofFixture.Kestrel(uninterrupted);
+        Assert.Equal(SensorContactStatus.Stale, Assert.Single(staleKestrel.SensorKnowledge.Contacts).Status);
+        Assert.Equal(0, staleKestrel.TacticalMotion.Speed.Value);
+        Assert.Equal(ShipContactDecisionAction.Hold, uninterrupted.LastContactDecisionExplanation!.SelectedAction);
         GameSimulation resumed = _fixture.RoundTrip(uninterrupted, "milestone-3-mid-stale.json");
 
         SimulationAdvanceResult beforeLoss = uninterrupted.AdvanceFixedSteps(49);
@@ -181,6 +185,10 @@ public sealed class Milestone3ProofScenarioTests
             SensorContactStatus.Lost,
             Assert.Single(Milestone3ProofFixture.Player(uninterrupted).SensorKnowledge.Contacts).Status
         );
+        ShipState lostKestrel = Milestone3ProofFixture.Kestrel(uninterrupted);
+        Assert.Equal(SensorContactStatus.Lost, Assert.Single(lostKestrel.SensorKnowledge.Contacts).Status);
+        Assert.Equal(0, lostKestrel.TacticalMotion.Speed.Value);
+        Assert.Equal(ShipContactDecisionAction.Hold, uninterrupted.LastContactDecisionExplanation!.SelectedAction);
         AssertSameSave(uninterrupted, resumed);
     }
 
