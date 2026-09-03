@@ -1,5 +1,6 @@
 using AlterCourse.Core.Identity;
 using AlterCourse.Core.Orders;
+using AlterCourse.Core.Sensors;
 using AlterCourse.Core.Simulation;
 
 namespace AlterCourse.Core.Gameplay;
@@ -14,5 +15,6 @@ internal sealed record ScheduledConsequenceTrace(
     ScheduledConsequenceRule Rule,
     ScheduledConsequenceAction Action,
     bool Completed,
-    bool RandomnessUsed
+    bool RandomnessUsed,
+    SensorContactId? ContactId = null
 );

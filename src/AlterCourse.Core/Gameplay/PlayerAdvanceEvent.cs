@@ -1,11 +1,6 @@
+using AlterCourse.Core.Sensors;
+
 namespace AlterCourse.Core.Gameplay;
 
-/// <summary>Identifies a player-visible consequence produced by simulation advancement.</summary>
-public enum PlayerAdvanceEvent
-{
-    /// <summary>The player ship completed strategic travel.</summary>
-    TravelArrived = 1,
-
-    /// <summary>The player ship completed sensor repair.</summary>
-    SensorRepairCompleted = 2,
-}
+/// <summary>Describes one player-safe advancement event and its optional observer-local contact.</summary>
+public sealed record PlayerAdvanceEvent(PlayerAdvanceEventKind Kind, SensorContactId? SensorContactId = null);

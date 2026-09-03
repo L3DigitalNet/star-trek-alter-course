@@ -292,7 +292,7 @@ public sealed class OrderExecutionTests
         AdvanceUntilResult result = game.AdvanceUntilNextPlayerRelevantEvent();
 
         Assert.Equal(800, result.StoppedAt.Milliseconds);
-        Assert.Equal([PlayerAdvanceEvent.SensorRepairCompleted], result.ResolvedEvents);
+        Assert.Equal([new PlayerAdvanceEvent(PlayerAdvanceEventKind.SensorRepairCompleted)], result.ResolvedEvents);
         Assert.Null(game.CaptureState().GetRequiredShip(NpcId).ActiveOrder);
         Assert.Null(game.CaptureState().GetRequiredShip(PlayerId).SensorRepair);
 
@@ -317,7 +317,7 @@ public sealed class OrderExecutionTests
         AdvanceUntilResult result = game.AdvanceUntilNextPlayerRelevantEvent();
 
         Assert.Equal(new SimulationTime(1000), result.StoppedAt);
-        Assert.Equal([PlayerAdvanceEvent.SensorRepairCompleted], result.ResolvedEvents);
+        Assert.Equal([new PlayerAdvanceEvent(PlayerAdvanceEventKind.SensorRepairCompleted)], result.ResolvedEvents);
         Assert.Null(game.CaptureState().GetRequiredShip(PlayerId).SensorRepair);
         AssertPatrolLeg(game.CaptureState(), NpcId, new ShipOrderId(1), 2, Beta, Gamma);
     }

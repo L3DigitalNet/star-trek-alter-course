@@ -7,4 +7,8 @@ internal enum ScheduledConsequenceAction
     CompleteTravelTo = 3,
     ContinuePatrol = 4,
     CompleteHold = 5,
+    LoseSensorContact = 6,
+    CompleteActiveSensorScan = 7,
+    WakeShipContactDecision = 8,
+    IgnoreInvalidatedWork = 9,
 }

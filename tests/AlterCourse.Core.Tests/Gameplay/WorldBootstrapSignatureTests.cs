@@ -139,7 +139,7 @@ public sealed class WorldBootstrapSignatureTests
 
         AdvanceUntilResult repairs = game.AdvanceUntilNextPlayerRelevantEvent();
         Assert.Equal(8000, repairs.StoppedAt.Milliseconds);
-        Assert.Equal([PlayerAdvanceEvent.SensorRepairCompleted], repairs.ResolvedEvents);
+        Assert.Equal([new PlayerAdvanceEvent(PlayerAdvanceEventKind.SensorRepairCompleted)], repairs.ResolvedEvents);
         JsonArray afterRepairs = Ships(Parse(game));
         Assert.Null(afterRepairs[0]!["sensorRepair"]);
         Assert.Null(afterRepairs[1]!["sensorRepair"]);

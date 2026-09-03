@@ -4,6 +4,7 @@ using AlterCourse.Core.Identity;
 using AlterCourse.Core.Persistence;
 using AlterCourse.Core.Player;
 using AlterCourse.Core.Quantities;
+using AlterCourse.Core.Sensors;
 using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
@@ -263,13 +264,24 @@ public sealed class GameSimulationTests
 
         Assert.Equal(AdvanceUntilOutcome.PlayerEventResolved, repair.Outcome);
         Assert.Equal(8000, repair.StoppedAt.Milliseconds);
-        Assert.Equal([PlayerAdvanceEvent.SensorRepairCompleted], repair.ResolvedEvents);
+        Assert.Equal([new PlayerAdvanceEvent(PlayerAdvanceEventKind.SensorRepairCompleted)], repair.ResolvedEvents);
         Assert.NotNull(repair.Projection.Strategic.Travel);
         Assert.Equal(12000, arrival.StoppedAt.Milliseconds);
-        Assert.Equal([PlayerAdvanceEvent.TravelArrived], arrival.ResolvedEvents);
+        var contactDetected = new PlayerAdvanceEvent(
+            PlayerAdvanceEventKind.SensorContactDetected,
+            new SensorContactId(1)
+        );
+        Assert.Equal(
+            [new PlayerAdvanceEvent(PlayerAdvanceEventKind.TravelArrived), contactDetected],
+            arrival.ResolvedEvents
+        );
         Assert.Equal(12000, ordinaryAdvance.FinalTime.Milliseconds);
         Assert.Equal(
-            [PlayerAdvanceEvent.SensorRepairCompleted, PlayerAdvanceEvent.TravelArrived],
+            [
+                new PlayerAdvanceEvent(PlayerAdvanceEventKind.SensorRepairCompleted),
+                new PlayerAdvanceEvent(PlayerAdvanceEventKind.TravelArrived),
+                contactDetected,
+            ],
             ordinaryAdvance.ResolvedEvents
         );
         Assert.Equal(ordinary.GetPlayerProjection(), ordinaryAdvance.Projection);
