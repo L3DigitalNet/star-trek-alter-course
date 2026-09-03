@@ -18,6 +18,7 @@ public sealed class GameSimulation
     // capacity from a later request or commits partial time, ship, or scheduler state.
     private const int SameBoundaryExecutionBudget = 1024;
     private const int TotalConsequenceExecutionBudget = 10_000;
+    private const int ContactMaterializationBoundaryBudget = 10_000;
     private const long ShipStepWorkBudget = 1_000_000;
     private const long SensorContactLossMilliseconds = 5_000;
 
@@ -43,12 +44,16 @@ public sealed class GameSimulation
     {
         var command = new ShipTravelCommand(_state.PlayerShipId, intent.Destination);
         ShipTravelApplicationResult application = ApplyShipTravel(_state, command);
+        IReadOnlyList<PlayerAdvanceEvent> resolvedEvents = new ReadOnlyValueList<PlayerAdvanceEvent>([]);
         if (application.Outcome == TravelOutcome.Accepted)
         {
-            Commit(application.CandidateState);
+            List<PlayerAdvanceEvent> playerEvents = [];
+            SimulationState candidate = ObserveAllShips(application.CandidateState, _shipCatalog, playerEvents);
+            Commit(candidate);
+            resolvedEvents = new ReadOnlyValueList<PlayerAdvanceEvent>(playerEvents);
         }
 
-        return new TravelRequestResult(application.Outcome);
+        return new TravelRequestResult(application.Outcome, resolvedEvents);
     }
 
     internal static ShipTravelApplicationResult ApplyShipTravel(SimulationState state, ShipTravelCommand command)
@@ -283,11 +288,18 @@ public sealed class GameSimulation
         List<ScheduledConsequenceTrace> traces = [];
         List<PlayerAdvanceEvent> playerEvents = [];
         long actualShipSteps = 0;
+        int contactMaterializationBoundaries = 0;
         int totalExecutions = 0;
 
         while (current.Time.Milliseconds < target.Milliseconds)
         {
-            SimulationTime boundary = NextAdvancementBoundary(current, target);
+            bool materializeContacts = RequiresContactMaterialization(current);
+            SimulationTime boundary = NextAdvancementBoundary(current, target, materializeContacts);
+            if (materializeContacts)
+            {
+                ChargeContactMaterializationBoundary(ref contactMaterializationBoundaries);
+            }
+
             current = AdvanceSegment(current, boundary, ref actualShipSteps);
             int priorPlayerEventCount = playerEvents.Count;
             current = ResolveCurrentBoundary(current, shipCatalog, traces, playerEvents, ref totalExecutions);
@@ -316,7 +328,11 @@ public sealed class GameSimulation
         );
     }
 
-    private static SimulationTime NextAdvancementBoundary(SimulationState state, SimulationTime target)
+    private static SimulationTime NextAdvancementBoundary(
+        SimulationState state,
+        SimulationTime target,
+        bool materializeContacts
+    )
     {
         SimulationTime boundary = target;
         if (
@@ -327,7 +343,7 @@ public sealed class GameSimulation
             boundary = state.Scheduler.OutstandingWork[0].DueTime;
         }
 
-        if (RequiresContactMaterialization(state))
+        if (materializeContacts)
         {
             SimulationTime nextStep = state.Time.AdvanceBy(SimulationFixedStep.Duration);
             if (nextStep.Milliseconds < boundary.Milliseconds)
@@ -337,6 +353,19 @@ public sealed class GameSimulation
         }
 
         return boundary;
+    }
+
+    private static void ChargeContactMaterializationBoundary(ref int materializationBoundaries)
+    {
+        int attempted = checked(materializationBoundaries + 1);
+        if (attempted > ContactMaterializationBoundaryBudget)
+        {
+            throw new InvalidOperationException(
+                $"Advancement exceeds the {ContactMaterializationBoundaryBudget} contact-materialization boundary budget at attempt {attempted}."
+            );
+        }
+
+        materializationBoundaries = attempted;
     }
 
     private static SimulationState AdvanceSegment(
@@ -457,7 +486,6 @@ public sealed class GameSimulation
             ShipState observer = current.GetRequiredShip(truthObserver.InstanceId);
             ShipDefinition observerDefinition = shipCatalog.GetRequired(observer.DefinitionId);
             double effectiveRange = observerDefinition.PassiveSensorRange.Value * observer.SensorIntegrity.Value;
-            double effectiveRangeSquared = effectiveRange * effectiveRange;
             var observableTargets = new HashSet<ShipInstanceId>();
             if (observer.StrategicState is AtLocationState observerLocation)
             {
@@ -474,7 +502,7 @@ public sealed class GameSimulation
                         && target.InstanceId != observer.InstanceId
                         && target.StrategicState is AtLocationState targetLocation
                         && targetLocation.LocationId == observerLocation.LocationId
-                        && DistanceSquared(observer.TacticalPosition, target.TacticalPosition) <= effectiveRangeSquared
+                        && Distance(observer.TacticalPosition, target.TacticalPosition) <= effectiveRange
                     )
                     {
                         observableTargets.Add(target.InstanceId);
@@ -792,11 +820,22 @@ public sealed class GameSimulation
         return state.ReplaceShip(observer.InstanceId, updated) with { Scheduler = scheduler };
     }
 
-    private static double DistanceSquared(TacticalPosition left, TacticalPosition right)
+    private static double Distance(TacticalPosition left, TacticalPosition right)
     {
-        double x = left.XKilometers - right.XKilometers;
-        double y = left.YKilometers - right.YKilometers;
-        return (x * x) + (y * y);
+        double x = Math.Abs(left.XKilometers - right.XKilometers);
+        double y = Math.Abs(left.YKilometers - right.YKilometers);
+        if (x < y)
+        {
+            (x, y) = (y, x);
+        }
+
+        if (double.IsPositiveInfinity(x) || x == 0)
+        {
+            return x;
+        }
+
+        double ratio = y / x;
+        return x * Math.Sqrt(1 + (ratio * ratio));
     }
 
     private static void AddContactEvent(

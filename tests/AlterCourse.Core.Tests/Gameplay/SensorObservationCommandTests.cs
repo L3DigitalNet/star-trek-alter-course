@@ -305,6 +305,112 @@ public sealed class SensorObservationCommandTests
         );
     }
 
+    /// <summary>Confirms strategic departure reconciles local knowledge and scan work immediately.</summary>
+    [Fact]
+    public void TravelDepartureImmediatelyStalesContactsAndInterruptsActiveScan()
+    {
+        GameSimulation game = CreateGame(
+            Ship(1, ObserverDefinitionId, default),
+            Ship(2, TargetDefinitionId, new TacticalPosition(5, 0))
+        );
+        game.AdvanceFixedSteps(1);
+        game.RequestActiveSensorScan(new SensorContactId(1));
+
+        TravelRequestResult departure = game.RequestTravel(new TravelIntent(Remote));
+
+        SensorContactTrack contact = Assert.Single(
+            game.CaptureState().GetRequiredShip(new ShipInstanceId(1)).SensorKnowledge.Contacts
+        );
+        Assert.Equal(TravelOutcome.Accepted, departure.Outcome);
+        Assert.Equal(
+            [PlayerAdvanceEventKind.SensorContactStale, PlayerAdvanceEventKind.ActiveSensorScanInterrupted],
+            departure.ResolvedEvents.Select(playerEvent => playerEvent.Kind)
+        );
+        Assert.Equal(SensorContactStatus.Stale, contact.Status);
+        Assert.Equal(new SimulationTime(5_100), contact.LossDueTime);
+        Assert.Null(game.GetPlayerProjection().Ship.Sensors.ActiveScanContactId);
+        Assert.DoesNotContain(
+            game.CaptureState().Scheduler.OutstandingWork,
+            work => work.Kind == ScheduledWorkKind.ActiveSensorScanCompletion
+        );
+        Assert.Empty(game.RequestTravel(new TravelIntent(Local)).ResolvedEvents);
+    }
+
+    /// <summary>Confirms departure contact loss is batch-equivalent and remains an advance-until horizon.</summary>
+    [Fact]
+    public void TravelDepartureContactLossIsBatchEquivalentAndAdvanceUntilVisible()
+    {
+        GameSimulation large = CreateObservedDepartureGame();
+        GameSimulation singles = CreateObservedDepartureGame();
+        GameSimulation until = CreateObservedDepartureGame();
+
+        SimulationAdvanceResult batched = large.AdvanceFixedSteps(50);
+        var singleEvents = new List<PlayerAdvanceEvent>();
+        for (int index = 0; index < 50; index++)
+        {
+            singleEvents.AddRange(singles.AdvanceFixedSteps(1).ResolvedEvents);
+        }
+
+        AdvanceUntilResult loss = until.AdvanceUntilNextPlayerRelevantEvent();
+
+        Assert.Equal(singleEvents, batched.ResolvedEvents);
+        Assert.Equal(singles.GetPlayerProjection(), large.GetPlayerProjection());
+        Assert.Equal(
+            singles.CaptureState().Scheduler.OutstandingWork.ToArray(),
+            large.CaptureState().Scheduler.OutstandingWork.ToArray()
+        );
+        Assert.Equal(AdvanceUntilOutcome.PlayerEventResolved, loss.Outcome);
+        Assert.Equal(5_100, loss.StoppedAt.Milliseconds);
+        Assert.Equal(PlayerAdvanceEventKind.SensorContactLost, Assert.Single(loss.ResolvedEvents).Kind);
+    }
+
+    /// <summary>Confirms stationary repair observation is finitely bounded without committing a rejected candidate.</summary>
+    [Fact]
+    public void StationaryRepairContactMaterializationRejectsBudgetExhaustionAtomically()
+    {
+        ShipDefinitionCatalog catalog = CreateCatalog(sensorRepairDurationMilliseconds: 1_000_100);
+        GameSimulation game = CreateGame(
+            catalog,
+            Ship(
+                1,
+                ObserverDefinitionId,
+                default,
+                integrity: 0.5,
+                repair: new SensorRepairStart(new SensorIntegrity(0.5), new SensorIntegrity(1), new SimulationTime(0))
+            ),
+            Ship(2, TargetDefinitionId, new TacticalPosition(5, 0))
+        );
+        SimulationState before = game.CaptureState();
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            game.AdvanceFixedSteps(10_001)
+        );
+
+        Assert.Contains("contact-materialization boundary budget", exception.Message, StringComparison.Ordinal);
+        Assert.Same(before, game.CaptureState());
+    }
+
+    /// <summary>Confirms finite large-magnitude positions use Euclidean range without squared overflow.</summary>
+    [Fact]
+    public void PassiveObservationHandlesLargeFiniteDistancesAndZeroSeparation()
+    {
+        ShipDefinitionCatalog catalog = CreateCatalog(passiveRange: 1.5e200);
+        GameSimulation game = CreateGame(
+            catalog,
+            Ship(1, ObserverDefinitionId, default),
+            Ship(2, TargetDefinitionId, default),
+            Ship(3, TargetDefinitionId, new TacticalPosition(1e200, 1e200)),
+            Ship(4, TargetDefinitionId, new TacticalPosition(1.1e200, 1.1e200))
+        );
+
+        SimulationAdvanceResult result = game.AdvanceFixedSteps(1);
+
+        Assert.Equal(
+            [default(TacticalPosition), new TacticalPosition(1e200, 1e200)],
+            result.Projection.Ship.Sensors.Contacts.Select(contact => contact.LastObservedPosition)
+        );
+    }
+
     /// <summary>Confirms one large advancement and one-hundred-millisecond calls produce identical state.</summary>
     [Fact]
     public void ContactMaterializationIsBatchEquivalent()
@@ -403,15 +509,30 @@ public sealed class SensorObservationCommandTests
 
     private static GameSimulation CreateGame(params ShipStart[] starts) => CreateGame((IEnumerable<ShipStart>)starts);
 
-    private static GameSimulation CreateGame(IEnumerable<ShipStart> starts)
+    private static GameSimulation CreateGame(IEnumerable<ShipStart> starts) => CreateGame(CreateCatalog(), starts);
+
+    private static GameSimulation CreateGame(ShipDefinitionCatalog catalog, params ShipStart[] starts) =>
+        CreateGame(catalog, (IEnumerable<ShipStart>)starts);
+
+    private static GameSimulation CreateGame(ShipDefinitionCatalog catalog, IEnumerable<ShipStart> starts)
     {
         var map = new StrategicMap(
             [new StrategicLocation(Local, "Local", default), new StrategicLocation(Remote, "Remote", default)],
-            []
+            [new StrategicRoute(Local, Remote, new SimulationDuration(8_000))]
         );
-        return new GameBootstrap(new SimulationTime(0), map, new ShipInstanceId(1), starts).CreateSimulation(
-            CreateCatalog()
+        return new GameBootstrap(new SimulationTime(0), map, new ShipInstanceId(1), starts).CreateSimulation(catalog);
+    }
+
+    private static GameSimulation CreateObservedDepartureGame()
+    {
+        GameSimulation game = CreateGame(
+            Ship(1, ObserverDefinitionId, default),
+            Ship(2, TargetDefinitionId, new TacticalPosition(5, 0))
         );
+        game.AdvanceFixedSteps(1);
+        game.RequestActiveSensorScan(new SensorContactId(1));
+        game.RequestTravel(new TravelIntent(Remote));
+        return game;
     }
 
     private static ShipStart Ship(
@@ -434,11 +555,20 @@ public sealed class SensorObservationCommandTests
             repair
         );
 
-    private static ShipDefinitionCatalog CreateCatalog() =>
+    private static ShipDefinitionCatalog CreateCatalog(
+        double passiveRange = 10,
+        long sensorRepairDurationMilliseconds = 8_000
+    ) =>
         new(
             new Dictionary<ShipDefinitionId, ShipDefinition>
             {
-                [ObserverDefinitionId] = Definition(ObserverDefinitionId, "Observer design", 10, 100),
+                [ObserverDefinitionId] = Definition(
+                    ObserverDefinitionId,
+                    "Observer design",
+                    passiveRange,
+                    100,
+                    sensorRepairDurationMilliseconds
+                ),
                 [TargetDefinitionId] = Definition(TargetDefinitionId, "Target design", 4, 20),
             }
         );
@@ -447,7 +577,8 @@ public sealed class SensorObservationCommandTests
         ShipDefinitionId id,
         string name,
         double passiveRange,
-        double maximumSpeed
+        double maximumSpeed,
+        long sensorRepairDurationMilliseconds = 8_000
     ) =>
         new(
             id,
@@ -455,6 +586,6 @@ public sealed class SensorObservationCommandTests
             new SpeedKilometersPerSecond(maximumSpeed),
             new DistanceKilometers(passiveRange),
             new SimulationDuration(2_000),
-            new SimulationDuration(8_000)
+            new SimulationDuration(sensorRepairDurationMilliseconds)
         );
 }
