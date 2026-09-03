@@ -27,6 +27,12 @@ public partial class TacticalMapView : Control
     /// <summary>Notifies the workspace that a live actor-safe contact was selected.</summary>
     public event EventHandler<ContactEventArgs>? ContactSelected;
 
+    /// <inheritdoc />
+    public override void _Ready()
+    {
+        FocusMode = FocusModeEnum.All;
+    }
+
     /// <summary>Displays one fresh tactical projection.</summary>
     public void Present(TacticalProjection projection)
     {
@@ -69,14 +75,32 @@ public partial class TacticalMapView : Control
     /// <inheritdoc />
     public override void _GuiInput(InputEvent @event)
     {
+        if (_projection is null)
+        {
+            return;
+        }
+
         if (
-            _projection is not null
-            && @event is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } click
+            @event is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } click
             && FindContact(click.Position) is SensorContactId contactId
         )
         {
             AcceptEvent();
-            ContactSelected?.Invoke(this, new ContactEventArgs(contactId));
+            SelectContact(contactId);
+            return;
+        }
+
+        if (@event.IsActionPressed("ui_accept") && SelectFocusedContact())
+        {
+            AcceptEvent();
+        }
+        else if (@event.IsActionPressed("ui_left") && SelectAdjacentContact(-1))
+        {
+            AcceptEvent();
+        }
+        else if (@event.IsActionPressed("ui_right") && SelectAdjacentContact(1))
+        {
+            AcceptEvent();
         }
     }
 
@@ -88,8 +112,50 @@ public partial class TacticalMapView : Control
             return false;
         }
 
-        ContactSelected?.Invoke(this, new ContactEventArgs(contactId));
+        SelectContact(contactId);
         return true;
+    }
+
+    private bool SelectFocusedContact()
+    {
+        SensorContactId? contactId =
+            _selectedContactId is SensorContactId selected && _contacts.Any(contact => contact.Id == selected)
+                ? selected
+                : _contacts
+                    .OrderBy(contact => contact.Id.Value)
+                    .Select(contact => (SensorContactId?)contact.Id)
+                    .FirstOrDefault();
+        if (contactId is not SensorContactId resolved)
+        {
+            return false;
+        }
+
+        SelectContact(resolved);
+        return true;
+    }
+
+    private bool SelectAdjacentContact(int offset)
+    {
+        SensorContactId[] ordered = [.. _contacts.Select(contact => contact.Id).OrderBy(id => id.Value)];
+        if (ordered.Length == 0)
+        {
+            return false;
+        }
+
+        int current =
+            _selectedContactId is SensorContactId selected ? Array.IndexOf(ordered, selected)
+            : offset > 0 ? -1
+            : 0;
+        int next = (current + offset + ordered.Length) % ordered.Length;
+        SelectContact(ordered[next]);
+        return true;
+    }
+
+    private void SelectContact(SensorContactId contactId)
+    {
+        _selectedContactId = contactId;
+        QueueRedraw();
+        ContactSelected?.Invoke(this, new ContactEventArgs(contactId));
     }
 
     /// <summary>Returns the hit contact value for the GDScript integration-test boundary, or zero.</summary>

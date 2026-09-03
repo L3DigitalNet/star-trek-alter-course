@@ -510,6 +510,26 @@ func test_live_contact_marker_hit_selects_actor_safe_inspector_context() -> void
 	assert_bool((_find_action_button(screen, "hail") as Button).disabled).is_true()
 
 
+func test_tactical_map_keyboard_focus_selects_contact_through_typed_path() -> void:
+	var screen := _create_screen()
+	screen.call("AdvanceUntilNextPlayerRelevantEvent")
+	screen.call("ShowTacticalView")
+	await get_tree().process_frame
+	var tactical_map := _command_deck(screen).get_node("%TacticalMap") as Control
+	tactical_map.grab_focus()
+
+	assert_bool(tactical_map.has_focus()).is_true()
+	assert_bool(tactical_map.focus_next.is_empty()).is_false()
+	var accept := InputEventAction.new()
+	accept.action = "ui_accept"
+	accept.pressed = true
+	tactical_map.call("_GuiInput", accept)
+
+	assert_int(screen.get_meta("selected_contact", 0)).is_equal(1)
+	assert_bool(tactical_map.has_focus()).is_true()
+	assert_bool((_find_action_button(screen, "active-scan") as Button).disabled).is_false()
+
+
 func test_tactical_contact_hit_test_uses_distance_then_lowest_local_id() -> void:
 	var screen := _create_screen()
 	var tactical_map := _command_deck(screen).get_node("%TacticalMap")

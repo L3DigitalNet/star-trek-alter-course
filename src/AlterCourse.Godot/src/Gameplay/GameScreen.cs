@@ -1213,6 +1213,11 @@ public partial class GameScreen : Control
         }
         else
         {
+            if (_commandDeck.TacticalMap.IsVisibleInTree())
+            {
+                controls.Add(_commandDeck.TacticalMap);
+            }
+
             controls.AddRange(_commandDeck.GetVisibleFocusControls());
             controls.AddRange(
                 new Button[]

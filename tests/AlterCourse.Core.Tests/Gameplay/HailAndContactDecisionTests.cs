@@ -2,6 +2,7 @@ using AlterCourse.Core.AI;
 using AlterCourse.Core.Content;
 using AlterCourse.Core.Gameplay;
 using AlterCourse.Core.Identity;
+using AlterCourse.Core.Player;
 using AlterCourse.Core.Quantities;
 using AlterCourse.Core.Sensors;
 using AlterCourse.Core.Ships;
@@ -84,6 +85,11 @@ public sealed class HailAndContactDecisionTests
         ShipState movingNpc = game.CaptureState().GetRequiredShip(NpcId);
         ShipState playerBefore = game.CaptureState().GetRequiredShip(PlayerId);
         Assert.Equal(0.5, movingNpc.TacticalMotion.Speed.Value);
+        SensorContactActionProjection contactActions = Assert.Single(
+            game.GetPlayerProjection().Ship.Sensors.ContactActions
+        );
+        Assert.Equal(new SensorContactId(1), contactActions.ContactId);
+        Assert.Equal([SensorContactAction.Hail], contactActions.AvailableActions);
 
         HailResult result = game.RequestHail(new SensorContactId(1));
 

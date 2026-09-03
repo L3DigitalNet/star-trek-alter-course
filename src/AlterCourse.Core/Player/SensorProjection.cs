@@ -10,13 +10,15 @@ public sealed record SensorProjection
         double repairProgress,
         bool isRepairing,
         IReadOnlyList<SensorContactSnapshot> contacts,
+        IReadOnlyList<SensorContactActionProjection> contactActions,
         SensorContactId? activeScanContactId
     ) =>
-        (Integrity, RepairProgress, IsRepairing, Contacts, ActiveScanContactId) = (
+        (Integrity, RepairProgress, IsRepairing, Contacts, ContactActions, ActiveScanContactId) = (
             integrity,
             repairProgress,
             isRepairing,
             contacts,
+            contactActions,
             activeScanContactId
         );
 
@@ -31,6 +33,9 @@ public sealed record SensorProjection
 
     /// <summary>Gets retained contacts using identities local to the player ship.</summary>
     public IReadOnlyList<SensorContactSnapshot> Contacts { get; }
+
+    /// <summary>Gets Core-authorized player commands grouped by observer-local contact.</summary>
+    public IReadOnlyList<SensorContactActionProjection> ContactActions { get; }
 
     /// <summary>Gets the local contact currently being scanned, when a scan is active.</summary>
     public SensorContactId? ActiveScanContactId { get; }

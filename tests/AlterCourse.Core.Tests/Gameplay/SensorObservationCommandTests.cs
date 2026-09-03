@@ -69,6 +69,9 @@ public sealed class SensorObservationCommandTests
             contact => contact.TargetShipId == new ShipInstanceId(1)
         );
         Assert.Contains(PlayerAction.ActiveSensorScan, result.Projection.AvailableActions);
+        SensorContactActionProjection contactActions = Assert.Single(result.Projection.Ship.Sensors.ContactActions);
+        Assert.Equal(new SensorContactId(1), contactActions.ContactId);
+        Assert.Equal([SensorContactAction.ActiveScan], contactActions.AvailableActions);
     }
 
     /// <summary>Confirms unseen targets are admitted by truth identity until the no-eviction cap.</summary>
@@ -238,6 +241,10 @@ public sealed class SensorObservationCommandTests
             game.RequestActiveSensorScan(new SensorContactId(2)).Outcome
         );
         Assert.DoesNotContain(PlayerAction.ActiveSensorScan, game.GetPlayerProjection().AvailableActions);
+        Assert.All(
+            game.GetPlayerProjection().Ship.Sensors.ContactActions,
+            contactActions => Assert.Empty(contactActions.AvailableActions)
+        );
 
         SimulationAdvanceResult completion = game.AdvanceFixedSteps(20);
         PlayerAdvanceEvent completed = Assert.Single(completion.ResolvedEvents);
@@ -248,11 +255,22 @@ public sealed class SensorObservationCommandTests
         Assert.Equal("USS Known", identified.KnownVesselDisplayName);
         Assert.Equal("Target design", identified.KnownDesignDisplayName);
         Assert.Equal(
+            [SensorContactAction.Hail],
+            completion
+                .Projection.Ship.Sensors.ContactActions.Single(actions => actions.ContactId == new SensorContactId(1))
+                .AvailableActions
+        );
+        Assert.Equal(
             ActiveSensorScanOutcome.AlreadyIdentified,
             game.RequestActiveSensorScan(new SensorContactId(1)).Outcome
         );
         game.SetTacticalCourse(new SetTacticalCourseIntent(new HeadingDegrees(270), new SpeedKilometersPerSecond(10)));
         game.AdvanceFixedSteps(6);
+        Assert.Empty(
+            game.GetPlayerProjection()
+                .Ship.Sensors.ContactActions.Single(actions => actions.ContactId == new SensorContactId(1))
+                .AvailableActions
+        );
         Assert.Equal(
             ActiveSensorScanOutcome.ContactNotCurrent,
             game.RequestActiveSensorScan(new SensorContactId(1)).Outcome

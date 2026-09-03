@@ -1554,9 +1554,41 @@ public sealed class GameSimulation
                 new ReadOnlyValueList<SensorContactSnapshot>(
                     playerShip.SensorKnowledge.Contacts.Select(contact => contact.ToActorSafeSnapshot())
                 ),
+                new ReadOnlyValueList<SensorContactActionProjection>(
+                    playerShip.SensorKnowledge.Contacts.Select(contact => new SensorContactActionProjection(
+                        contact.Id,
+                        new ReadOnlyValueList<SensorContactAction>(GetAvailableContactActions(playerShip, contact))
+                    ))
+                ),
                 playerShip.SensorKnowledge.ActiveScan?.TargetContactId
             )
         );
+    }
+
+    private static SensorContactAction[] GetAvailableContactActions(ShipState playerShip, SensorContactTrack contact)
+    {
+        if (contact.Status != SensorContactStatus.Current)
+        {
+            return [];
+        }
+
+        var actions = new List<SensorContactAction>();
+        if (
+            contact.Identification == SensorContactIdentification.Detected
+            && playerShip.SensorIntegrity.Value > 0
+            && playerShip.StrategicState is AtLocationState
+            && playerShip.SensorKnowledge.ActiveScan is null
+        )
+        {
+            actions.Add(SensorContactAction.ActiveScan);
+        }
+
+        if (contact.Identification == SensorContactIdentification.Identified)
+        {
+            actions.Add(SensorContactAction.Hail);
+        }
+
+        return [.. actions];
     }
 
     private static PlayerAction[] GetAvailableActions(ShipState playerShip)
@@ -1568,11 +1600,8 @@ public sealed class GameSimulation
 
         List<PlayerAction> actions = [PlayerAction.Travel, PlayerAction.SetTacticalCourse, PlayerAction.AdvanceTime];
         if (
-            playerShip.SensorIntegrity.Value > 0
-            && playerShip.SensorKnowledge.ActiveScan is null
-            && playerShip.SensorKnowledge.Contacts.Any(contact =>
-                contact.Status == SensorContactStatus.Current
-                && contact.Identification == SensorContactIdentification.Detected
+            playerShip.SensorKnowledge.Contacts.Any(contact =>
+                GetAvailableContactActions(playerShip, contact).Contains(SensorContactAction.ActiveScan)
             )
         )
         {

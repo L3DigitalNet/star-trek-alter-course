@@ -174,7 +174,15 @@ public static class CommandInterfacePresenter
         PlayerProjection projection,
         StrategicLocationProjection? selectedLocation,
         SensorContactSnapshot? selectedContact
-    ) =>
+    )
+    {
+        bool activeScanAvailable = IsContactActionAvailable(
+            projection,
+            selectedContact,
+            SensorContactAction.ActiveScan
+        );
+        bool hailAvailable = IsContactActionAvailable(projection, selectedContact, SensorContactAction.Hail);
+        return
         [
             LiveAction(
                 "travel",
@@ -202,28 +210,24 @@ public static class CommandInterfacePresenter
                 selectedContact is null ? "Active scan" : $"Active scan {ContactLabel(selectedContact)}",
                 CommandInterfaceTone.Caution,
                 CommandInterfaceIntent.ActiveScan,
-                selectedContact is not null
-                    && selectedContact.Status == SensorContactStatus.Current
-                    && selectedContact.Identification == SensorContactIdentification.Detected
-                    && projection.AvailableActions.Contains(PlayerAction.ActiveSensorScan),
+                activeScanAvailable,
                 selectedContact?.Id,
-                ActiveScanTooltip(projection, selectedContact)
+                ContactActionTooltip(selectedContact, SensorContactAction.ActiveScan, activeScanAvailable)
             ),
             LiveAction(
                 "hail",
                 selectedContact is null ? "Hail" : $"Hail {ContactLabel(selectedContact)}",
                 CommandInterfaceTone.Command,
                 CommandInterfaceIntent.Hail,
-                selectedContact is not null
-                    && selectedContact.Status == SensorContactStatus.Current
-                    && selectedContact.Identification == SensorContactIdentification.Identified,
+                hailAvailable,
                 selectedContact?.Id,
-                HailTooltip(selectedContact)
+                ContactActionTooltip(selectedContact, SensorContactAction.Hail, hailAvailable)
             ),
             DisabledAction("fire-phasers", "Fire phasers", CommandInterfaceTone.Critical),
             DisabledAction("allocate-power", "Prioritize power", CommandInterfaceTone.Engineering),
             DisabledAction("assign-repair", "Assign repair team…", CommandInterfaceTone.Engineering),
         ];
+    }
 
     private static ImmutableArray<CommandInterfaceEventRow> BuildEvents(
         PlayerProjection projection,
@@ -421,25 +425,32 @@ public static class CommandInterfacePresenter
             ? contact.KnownVesselDisplayName ?? contact.KnownDesignDisplayName ?? $"Contact {contact.Id.Value}"
             : $"Contact {contact.Id.Value}";
 
-    private static string ActiveScanTooltip(PlayerProjection projection, SensorContactSnapshot? contact) =>
-        contact switch
-        {
-            null => "Select a live sensor contact to request an active scan.",
-            { Status: not SensorContactStatus.Current } => "Active scan requires a current sensor contact.",
-            { Identification: SensorContactIdentification.Identified } => "This contact is already identified.",
-            _ when projection.Ship.Sensors.ActiveScanContactId is not null => "Another active scan is in progress.",
-            _ when !projection.AvailableActions.Contains(PlayerAction.ActiveSensorScan) =>
-                "Active scan is unavailable from the current Core projection.",
-            _ => "Request active identification of this contact.",
-        };
+    private static bool IsContactActionAvailable(
+        PlayerProjection projection,
+        SensorContactSnapshot? contact,
+        SensorContactAction action
+    ) =>
+        contact is not null
+        && projection.Ship.Sensors.ContactActions.Any(candidate =>
+            candidate.ContactId == contact.Id && candidate.AvailableActions.Contains(action)
+        );
 
-    private static string HailTooltip(SensorContactSnapshot? contact) =>
-        contact switch
+    private static string ContactActionTooltip(
+        SensorContactSnapshot? contact,
+        SensorContactAction action,
+        bool isAvailable
+    ) =>
+        (contact, action, isAvailable) switch
         {
-            null => "Select an identified live sensor contact to hail.",
-            { Status: not SensorContactStatus.Current } => "Hail requires a current sensor contact.",
-            { Identification: not SensorContactIdentification.Identified } => "Identify this contact before hailing.",
-            _ => "Request a bounded hail to this identified contact.",
+            (null, SensorContactAction.ActiveScan, _) => "Select a live sensor contact to request an active scan.",
+            (null, SensorContactAction.Hail, _) => "Select an identified live sensor contact to hail.",
+            (not null, SensorContactAction.ActiveScan, true) => "Request active identification of this contact.",
+            (not null, SensorContactAction.Hail, true) => "Request a bounded hail to this identified contact.",
+            (not null, SensorContactAction.ActiveScan, false) =>
+                "Active scan is unavailable for this contact in the current Core projection.",
+            (not null, SensorContactAction.Hail, false) =>
+                "Hail is unavailable for this contact in the current Core projection.",
+            _ => throw new ArgumentOutOfRangeException(nameof(action), action, "Unknown contact action."),
         };
 
     private static ImmutableArray<CommandInterfaceStation> BuildStations(CommandInterfaceMode mode)
