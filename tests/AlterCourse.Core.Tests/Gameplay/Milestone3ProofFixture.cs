@@ -22,7 +22,7 @@ internal sealed class Milestone3ProofFixture
     {
         string root = FindRepositoryRoot();
         string schema = File.ReadAllText(
-            Path.Combine(root, "src/AlterCourse.Godot/content/schemas/ship-definition-v3.schema.json")
+            Path.Combine(root, "src/AlterCourse.Godot/content/schemas/ship-definition-v4.schema.json")
         );
         string definition = File.ReadAllText(Path.Combine(root, "src/AlterCourse.Godot/content/ships/pathfinder.json"));
         Catalog = new ShipDefinitionCatalogLoader(schema).LoadCatalog([

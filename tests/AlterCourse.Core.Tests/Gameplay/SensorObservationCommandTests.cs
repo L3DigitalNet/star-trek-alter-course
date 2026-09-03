@@ -39,6 +39,7 @@ public sealed class SensorObservationCommandTests
                 nameof(PlayerAdvanceEvent.Kind),
                 nameof(PlayerAdvanceEvent.OccurredAt),
                 nameof(PlayerAdvanceEvent.SensorContactId),
+                nameof(PlayerAdvanceEvent.ShipSystemId),
             ],
             typeof(PlayerAdvanceEvent).GetProperties().Select(property => property.Name),
             StringComparer.Ordinal
@@ -379,7 +380,13 @@ public sealed class SensorObservationCommandTests
         observed.AdvanceFixedSteps(1);
         SimulationState state = observed.CaptureState();
         ShipState player = state.GetRequiredShip(state.PlayerShipId);
-        state = state.ReplaceShip(player.InstanceId, player with { SensorIntegrity = new SensorIntegrity(0) });
+        state = state.ReplaceShip(
+            player.InstanceId,
+            player with
+            {
+                Engineering = player.Engineering with { SensorCondition = new SystemCondition(0) },
+            }
+        );
         var unavailable = GameSimulation.RestoreState(state, CreateCatalog());
         PlayerProjection before = unavailable.GetPlayerProjection();
 
@@ -633,7 +640,7 @@ public sealed class SensorObservationCommandTests
         Assert.Equal(SetTacticalCourseOutcome.Accepted, accepted.Outcome);
         Assert.Equal(20, accepted.CandidateState.GetRequiredShip(new ShipInstanceId(2)).TacticalMotion.Speed.Value);
         Assert.Equal(default, accepted.CandidateState.GetRequiredShip(new ShipInstanceId(1)).TacticalMotion);
-        Assert.Equal(SetTacticalCourseOutcome.SpeedExceedsMaximum, rejected.Outcome);
+        Assert.Equal(SetTacticalCourseOutcome.SpeedExceedsCurrentCapability, rejected.Outcome);
         Assert.Same(initial, rejected.CandidateState);
     }
 

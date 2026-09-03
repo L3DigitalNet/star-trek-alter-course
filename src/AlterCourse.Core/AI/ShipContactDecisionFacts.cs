@@ -14,7 +14,7 @@ public sealed record ShipContactDecisionFacts
         TacticalPosition ownPosition,
         TacticalMotion ownMotion,
         bool isAtLocation,
-        SpeedKilometersPerSecond maximumTacticalSpeed,
+        SpeedKilometersPerSecond effectiveMaximumTacticalSpeed,
         IEnumerable<SensorContactSnapshot> contacts,
         IncomingHailFact? incomingHail = null
     )
@@ -37,7 +37,7 @@ public sealed record ShipContactDecisionFacts
         OwnPosition = ownPosition;
         OwnMotion = ownMotion;
         IsAtLocation = isAtLocation;
-        MaximumTacticalSpeed = maximumTacticalSpeed;
+        EffectiveMaximumTacticalSpeed = effectiveMaximumTacticalSpeed;
         _contacts = new ReadOnlyDecisionList<SensorContactSnapshot>(materialized.OrderBy(contact => contact.Id.Value));
         IncomingHail = incomingHail;
     }
@@ -51,8 +51,8 @@ public sealed record ShipContactDecisionFacts
     /// <summary>Gets whether the deciding ship can accept a tactical course.</summary>
     public bool IsAtLocation { get; }
 
-    /// <summary>Gets the deciding ship's maximum tactical speed.</summary>
-    public SpeedKilometersPerSecond MaximumTacticalSpeed { get; }
+    /// <summary>Gets the deciding ship's current effective tactical-speed limit.</summary>
+    public SpeedKilometersPerSecond EffectiveMaximumTacticalSpeed { get; }
 
     /// <summary>Gets canonically ordered observer-local contacts without truth identities.</summary>
     public IReadOnlyList<SensorContactSnapshot> Contacts => _contacts;

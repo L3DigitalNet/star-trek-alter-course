@@ -242,9 +242,9 @@ public sealed class OrderExecutionTests
         (scheduler, ScheduledWork repairWork) = scheduler.Schedule(
             new SimulationTime(800),
             PlayerId,
-            ScheduledWorkKind.SensorRepairCompletion
+            ScheduledWorkKind.SystemRepairCompletion
         );
-        var repair = new SensorRepairState(
+        var repair = new SystemRepairState(
             new SensorIntegrity(0.5),
             new SensorIntegrity(1),
             new SimulationTime(0),
@@ -253,8 +253,11 @@ public sealed class OrderExecutionTests
         );
         ShipState player = CreateShip(PlayerId, Alpha) with
         {
-            SensorIntegrity = new SensorIntegrity(0.5),
-            SensorRepair = repair,
+            Engineering = CreateShip(PlayerId, Alpha).Engineering with
+            {
+                SensorCondition = new SystemCondition(0.5),
+                ActiveRepair = repair,
+            },
         };
         ShipState npc = CreateShip(NpcId, Beta) with
         {
@@ -293,7 +296,13 @@ public sealed class OrderExecutionTests
 
         Assert.Equal(800, result.StoppedAt.Milliseconds);
         Assert.Equal(
-            [new PlayerAdvanceEvent(PlayerAdvanceEventKind.SensorRepairCompleted, new SimulationTime(800))],
+            [
+                new PlayerAdvanceEvent(
+                    PlayerAdvanceEventKind.SystemRepairCompleted,
+                    new SimulationTime(800),
+                    ShipSystemId: ShipSystemId.Sensors
+                ),
+            ],
             result.ResolvedEvents
         );
         Assert.Null(game.CaptureState().GetRequiredShip(NpcId).ActiveOrder);
@@ -321,7 +330,13 @@ public sealed class OrderExecutionTests
 
         Assert.Equal(new SimulationTime(1000), result.StoppedAt);
         Assert.Equal(
-            [new PlayerAdvanceEvent(PlayerAdvanceEventKind.SensorRepairCompleted, new SimulationTime(1000))],
+            [
+                new PlayerAdvanceEvent(
+                    PlayerAdvanceEventKind.SystemRepairCompleted,
+                    new SimulationTime(1000),
+                    ShipSystemId: ShipSystemId.Sensors
+                ),
+            ],
             result.ResolvedEvents
         );
         Assert.Null(game.CaptureState().GetRequiredShip(PlayerId).SensorRepair);
@@ -360,9 +375,9 @@ public sealed class OrderExecutionTests
         (scheduler, ScheduledWork work) = scheduler.Schedule(
             new SimulationTime(duration.Milliseconds),
             PlayerId,
-            ScheduledWorkKind.SensorRepairCompletion
+            ScheduledWorkKind.SystemRepairCompletion
         );
-        var repair = new SensorRepairState(
+        var repair = new SystemRepairState(
             new SensorIntegrity(0.25),
             new SensorIntegrity(1),
             new SimulationTime(0),
@@ -371,8 +386,11 @@ public sealed class OrderExecutionTests
         );
         ShipState player = CreateShip(PlayerId, Alpha) with
         {
-            SensorIntegrity = new SensorIntegrity(0.25),
-            SensorRepair = repair,
+            Engineering = CreateShip(PlayerId, Alpha).Engineering with
+            {
+                SensorCondition = new SystemCondition(0.25),
+                ActiveRepair = repair,
+            },
         };
         ShipState stationaryNpc = CreateShip(NpcId, Beta) with
         {
@@ -451,9 +469,9 @@ public sealed class OrderExecutionTests
         (scheduler, ScheduledWork repairWork) = scheduler.Schedule(
             new SimulationTime(800),
             PlayerId,
-            ScheduledWorkKind.SensorRepairCompletion
+            ScheduledWorkKind.SystemRepairCompletion
         );
-        var repair = new SensorRepairState(
+        var repair = new SystemRepairState(
             new SensorIntegrity(0.5),
             new SensorIntegrity(1),
             new SimulationTime(0),
@@ -462,8 +480,11 @@ public sealed class OrderExecutionTests
         );
         ShipState player = CreateShip(PlayerId, Alpha) with
         {
-            SensorIntegrity = new SensorIntegrity(0.5),
-            SensorRepair = repair,
+            Engineering = CreateShip(PlayerId, Alpha).Engineering with
+            {
+                SensorCondition = new SystemCondition(0.5),
+                ActiveRepair = repair,
+            },
         };
         ShipState npc = CreateShip(NpcId, Beta) with
         {
@@ -486,9 +507,9 @@ public sealed class OrderExecutionTests
         (scheduler, ScheduledWork repairWork) = scheduler.Schedule(
             new SimulationTime(1000),
             PlayerId,
-            ScheduledWorkKind.SensorRepairCompletion
+            ScheduledWorkKind.SystemRepairCompletion
         );
-        var repair = new SensorRepairState(
+        var repair = new SystemRepairState(
             new SensorIntegrity(0.5),
             new SensorIntegrity(1),
             new SimulationTime(0),
@@ -497,8 +518,11 @@ public sealed class OrderExecutionTests
         );
         ShipState player = CreateShip(PlayerId, Alpha) with
         {
-            SensorIntegrity = new SensorIntegrity(0.5),
-            SensorRepair = repair,
+            Engineering = CreateShip(PlayerId, Alpha).Engineering with
+            {
+                SensorCondition = new SystemCondition(0.5),
+                ActiveRepair = repair,
+            },
         };
         ShipState npc = CreatePatrollingShip(NpcId, new ShipOrderId(1), Alpha, Beta, 1, arrival);
         return (

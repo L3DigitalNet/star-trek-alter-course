@@ -1,7 +1,7 @@
 namespace AlterCourse.Core.Ships;
 
 /// <summary>Represents bounded ship-system integrity.</summary>
-public readonly record struct SensorIntegrity
+internal readonly record struct SensorIntegrity
 {
     /// <summary>Initializes integrity on the inclusive unit interval.</summary>
     public SensorIntegrity(double value)

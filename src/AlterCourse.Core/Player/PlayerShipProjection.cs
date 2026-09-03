@@ -11,14 +11,16 @@ public sealed record PlayerShipProjection
         ShipDefinitionId definitionId,
         string displayName,
         TacticalProjection tactical,
-        SensorProjection sensors
+        SensorProjection sensors,
+        EngineeringProjection engineering
     ) =>
-        (InstanceId, DefinitionId, DisplayName, Tactical, Sensors) = (
+        (InstanceId, DefinitionId, DisplayName, Tactical, Sensors, Engineering) = (
             instanceId,
             definitionId,
             displayName,
             tactical,
-            sensors
+            sensors,
+            engineering
         );
 
     /// <summary>Gets deterministic runtime identity.</summary>
@@ -35,4 +37,7 @@ public sealed record PlayerShipProjection
 
     /// <summary>Gets sensor state.</summary>
     public SensorProjection Sensors { get; }
+
+    /// <summary>Gets player-owned Engineering state and derived capability.</summary>
+    public EngineeringProjection Engineering { get; }
 }

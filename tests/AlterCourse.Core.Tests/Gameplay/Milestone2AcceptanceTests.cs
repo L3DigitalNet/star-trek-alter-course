@@ -261,20 +261,16 @@ public sealed class Milestone2AcceptanceTests
         (SimulationScheduler scheduler, ScheduledWork repairWork) = proof.Scheduler.Schedule(
             Time(6),
             PlayerId,
-            ScheduledWorkKind.SensorRepairCompletion
+            ScheduledWorkKind.SystemRepairCompletion
         );
-        var repair = new SensorRepairState(
+        var repair = new SystemRepairState(
             new SensorIntegrity(0.25),
             new SensorIntegrity(1),
             Time(3),
             Time(6),
             repairWork.Id
         );
-        ShipState player = proof.GetRequiredShip(PlayerId) with
-        {
-            SensorIntegrity = new SensorIntegrity(0.25),
-            SensorRepair = repair,
-        };
+        ShipState player = WithSensorRepair(proof.GetRequiredShip(PlayerId), repair, 0.25);
         var game = GameSimulation.RestoreState(
             proof.ReplaceShip(PlayerId, player) with
             {
@@ -282,7 +278,6 @@ public sealed class Milestone2AcceptanceTests
             },
             catalog
         );
-
         Assert.Equal(
             SetTacticalCourseOutcome.Accepted,
             game.SetTacticalCourse(
@@ -306,7 +301,13 @@ public sealed class Milestone2AcceptanceTests
 
         Assert.Equal(Time(9), result.FinalTime);
         Assert.Equal(
-            [new PlayerAdvanceEvent(PlayerAdvanceEventKind.SensorRepairCompleted, Time(6))],
+            [
+                new PlayerAdvanceEvent(
+                    PlayerAdvanceEventKind.SystemRepairCompleted,
+                    Time(6),
+                    ShipSystemId: ShipSystemId.Sensors
+                ),
+            ],
             result.ResolvedEvents
         );
         Assert.Equal(afterMotion, final.GetRequiredShip(PlayerId).TacticalPosition);
@@ -469,6 +470,16 @@ public sealed class Milestone2AcceptanceTests
         Assert.Equal(departure, traveling.Travel.Departure);
         Assert.Equal(arrival, traveling.Travel.ExpectedArrival);
     }
+
+    private static ShipState WithSensorRepair(ShipState ship, SystemRepairState repair, double condition) =>
+        ship with
+        {
+            Engineering = ship.Engineering with
+            {
+                SensorCondition = new SystemCondition(condition),
+                ActiveRepair = repair,
+            },
+        };
 
     private static SimulationTime Time(long hours) => new(hours * HourMilliseconds);
 }

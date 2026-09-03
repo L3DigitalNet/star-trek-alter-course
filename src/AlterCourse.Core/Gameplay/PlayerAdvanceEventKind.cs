@@ -6,8 +6,8 @@ public enum PlayerAdvanceEventKind
     /// <summary>The player ship completed strategic travel.</summary>
     TravelArrived = 1,
 
-    /// <summary>The player ship completed sensor repair.</summary>
-    SensorRepairCompleted = 2,
+    /// <summary>The player ship completed one system repair.</summary>
+    SystemRepairCompleted = 2,
 
     /// <summary>A new observer-local contact was admitted.</summary>
     SensorContactDetected = 3,

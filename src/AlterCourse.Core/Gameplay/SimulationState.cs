@@ -141,10 +141,13 @@ internal sealed record SimulationState
         foreach (ShipState ship in Ships)
         {
             ShipDefinition definition = catalog.GetRequired(ship.DefinitionId);
-            if (ship.TacticalMotion.Speed.Value > definition.MaximumTacticalSpeed.Value)
+            ship.Engineering.Validate(definition.Engineering);
+            double effectiveMaximumSpeed =
+                definition.MaximumTacticalSpeed.Value * ship.Engineering.ImpulseCapability(definition.Engineering);
+            if (ship.TacticalMotion.Speed.Value > effectiveMaximumSpeed)
             {
                 throw new InvalidOperationException(
-                    $"Ship '{ship.InstanceId.Value}' tactical speed exceeds its definition maximum."
+                    $"Ship '{ship.InstanceId.Value}' tactical speed exceeds current effective propulsion."
                 );
             }
 
@@ -222,7 +225,7 @@ internal sealed record SimulationState
         // separately retainable work category requires that bound to grow with the world maximum.
         bool correlated = work.Kind switch
         {
-            ScheduledWorkKind.SensorRepairCompletion => target.SensorRepair is SensorRepairState repair
+            ScheduledWorkKind.SystemRepairCompletion => target.Engineering.ActiveRepair is SystemRepairState repair
                 && repair.ScheduledCompletionId == work.Id
                 && repair.ExpectedCompletion == work.DueTime,
             ScheduledWorkKind.TravelArrival => target.StrategicState is TravelingState traveling
@@ -412,6 +415,11 @@ internal sealed record SimulationState
 
     private void ValidateActiveScan(ShipState observer, ActiveSensorScanState scan, ShipDefinition observerDefinition)
     {
+        if (observer.Engineering.SensorCapability(observerDefinition.Engineering) <= 0)
+        {
+            throw new InvalidOperationException("An active scan requires effective sensor capability.");
+        }
+
         if (scan.TargetContactId.Value <= 0 || scan.ScheduledCompletionId.Value <= 0)
         {
             throw new InvalidOperationException("An active scan requires initialized contact and work identities.");
@@ -619,7 +627,7 @@ internal sealed record SimulationState
 
     private void ValidateRepair(ShipState ship, ShipDefinition definition)
     {
-        if (ship.SensorRepair is not SensorRepairState repair)
+        if (ship.Engineering.ActiveRepair is not SystemRepairState repair)
         {
             return;
         }
@@ -629,27 +637,27 @@ internal sealed record SimulationState
             || Time.Milliseconds >= repair.ExpectedCompletion.Milliseconds
         )
         {
-            throw new InvalidOperationException("Active sensor repair must contain the current simulation time.");
+            throw new InvalidOperationException("Active system repair must contain the current simulation time.");
         }
 
         if (
             repair.ExpectedCompletion.Milliseconds - repair.StartedAt.Milliseconds
-            != definition.SensorRepairDuration.Milliseconds
+            != definition.Engineering.RepairDurationFor(repair.TargetSystem).Milliseconds
         )
         {
-            throw new InvalidOperationException("Active sensor repair duration must match its ship definition.");
+            throw new InvalidOperationException("Active system repair duration must match its ship definition.");
         }
 
-        if (ship.SensorIntegrity != repair.IntegrityAt(Time))
+        if (ship.Engineering.ConditionFor(repair.TargetSystem) != repair.ConditionAt(Time))
         {
-            throw new InvalidOperationException("Sensor integrity must match its active repair at the current time.");
+            throw new InvalidOperationException("System condition must match its active repair at the current time.");
         }
 
         EnsureExactlyCorrelated(
             ship.InstanceId,
             repair.ScheduledCompletionId,
             repair.ExpectedCompletion,
-            ScheduledWorkKind.SensorRepairCompletion
+            ScheduledWorkKind.SystemRepairCompletion
         );
     }
 

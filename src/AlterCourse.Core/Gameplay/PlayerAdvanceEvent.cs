@@ -1,4 +1,5 @@
 using AlterCourse.Core.Sensors;
+using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 
 namespace AlterCourse.Core.Gameplay;
@@ -7,5 +8,6 @@ namespace AlterCourse.Core.Gameplay;
 public sealed record PlayerAdvanceEvent(
     PlayerAdvanceEventKind Kind,
     SimulationTime OccurredAt,
-    SensorContactId? SensorContactId = null
+    SensorContactId? SensorContactId = null,
+    ShipSystemId? ShipSystemId = null
 );

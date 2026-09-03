@@ -1,0 +1,59 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://l3digital.net/star-trek-alter-course/schemas/ship-definition-v4.schema.json",
+	"title": "Ship Definition Version 4",
+	"type": "object",
+	"required": [
+		"schemaVersion",
+		"id",
+		"designDisplayName",
+		"maximumTacticalSpeedKilometersPerSecond",
+		"passiveSensorRangeKilometers",
+		"activeScanDurationMilliseconds",
+		"engineering"
+	],
+	"properties": {
+		"schemaVersion": { "const": 4 },
+		"id": {
+			"type": "string",
+			"minLength": 1,
+			"maxLength": 128,
+			"pattern": "^[A-Za-z0-9._-]+$"
+		},
+		"designDisplayName": { "type": "string", "minLength": 1, "maxLength": 64 },
+		"maximumTacticalSpeedKilometersPerSecond": { "type": "number", "minimum": 0 },
+		"passiveSensorRangeKilometers": { "type": "number", "minimum": 0 },
+		"activeScanDurationMilliseconds": { "type": "integer", "minimum": 1 },
+		"engineering": {
+			"type": "object",
+			"required": [
+				"nominalGenerationPowerUnits",
+				"nominalSensorDemandPowerUnits",
+				"nominalImpulseDemandPowerUnits",
+				"sensorRepairDurationMilliseconds",
+				"impulseRepairDurationMilliseconds"
+			],
+			"properties": {
+				"nominalGenerationPowerUnits": {
+					"type": "integer",
+					"minimum": 1,
+					"maximum": 1000000
+				},
+				"nominalSensorDemandPowerUnits": {
+					"type": "integer",
+					"minimum": 1,
+					"maximum": 1000000
+				},
+				"nominalImpulseDemandPowerUnits": {
+					"type": "integer",
+					"minimum": 1,
+					"maximum": 1000000
+				},
+				"sensorRepairDurationMilliseconds": { "type": "integer", "minimum": 1 },
+				"impulseRepairDurationMilliseconds": { "type": "integer", "minimum": 1 }
+			},
+			"additionalProperties": false
+		}
+	},
+	"additionalProperties": false
+}

@@ -140,7 +140,13 @@ public sealed class WorldBootstrapSignatureTests
         AdvanceUntilResult repairs = game.AdvanceUntilNextPlayerRelevantEvent();
         Assert.Equal(8000, repairs.StoppedAt.Milliseconds);
         Assert.Equal(
-            [new PlayerAdvanceEvent(PlayerAdvanceEventKind.SensorRepairCompleted, new SimulationTime(8000))],
+            [
+                new PlayerAdvanceEvent(
+                    PlayerAdvanceEventKind.SystemRepairCompleted,
+                    new SimulationTime(8000),
+                    ShipSystemId: ShipSystemId.Sensors
+                ),
+            ],
             repairs.ResolvedEvents
         );
         JsonArray afterRepairs = Ships(Parse(game));
@@ -295,16 +301,17 @@ public sealed class WorldBootstrapSignatureTests
                 .CreateSimulation(CreateCatalog())
         );
         Assert.Throws<ArgumentException>(() =>
-            CreateBootstrap([valid with { SensorIntegrity = new SensorIntegrity(0.5) }])
+            CreateBootstrap([valid with { SensorCondition = new SystemCondition(0.5) }])
                 .CreateSimulation(CreateCatalog())
         );
         Assert.Throws<ArgumentException>(() =>
             CreateBootstrap([
                     valid with
                     {
-                        SensorRepair = new SensorRepairStart(
-                            new SensorIntegrity(0.4),
-                            new SensorIntegrity(0.4),
+                        SystemRepair = new SystemRepairStart(
+                            ShipSystemId.Sensors,
+                            new SystemCondition(0.4),
+                            new SystemCondition(0.4),
                             new SimulationTime(0)
                         ),
                     },
@@ -520,17 +527,17 @@ public sealed class WorldBootstrapSignatureTests
     {
         string definition = $$"""
             {
-              "schemaVersion": 3,
+              "schemaVersion": 4,
               "id": "{{definitionId}}",
               "designDisplayName": "Pathfinder class",
               "maximumTacticalSpeedKilometersPerSecond": 10,
               "passiveSensorRangeKilometers": 30.0,
               "activeScanDurationMilliseconds": 2000,
-              "sensorRepairDurationMilliseconds": 8000
+              "engineering": { "nominalGenerationPowerUnits": 120, "nominalSensorDemandPowerUnits": 70, "nominalImpulseDemandPowerUnits": 50, "sensorRepairDurationMilliseconds": 8000, "impulseRepairDurationMilliseconds": 6000 }
             }
             """;
         string schema = File.ReadAllText(
-            Path.Combine(FindRepositoryRoot(), "src/AlterCourse.Godot/content/schemas/ship-definition-v3.schema.json")
+            Path.Combine(FindRepositoryRoot(), "src/AlterCourse.Godot/content/schemas/ship-definition-v4.schema.json")
         );
         return new ShipDefinitionCatalogLoader(schema).LoadCatalog([
             ShipDefinitionContent.FromText("pathfinder.json", definition),

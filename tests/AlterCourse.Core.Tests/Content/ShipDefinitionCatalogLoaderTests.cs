@@ -11,13 +11,19 @@ public sealed class ShipDefinitionCatalogLoaderTests
 {
     private const string ValidDefinition = """
         {
-          "schemaVersion": 3,
+          "schemaVersion": 4,
           "id": "pathfinder",
           "designDisplayName": "Pathfinder class",
           "maximumTacticalSpeedKilometersPerSecond": 10,
           "passiveSensorRangeKilometers": 30.0,
           "activeScanDurationMilliseconds": 2000,
-          "sensorRepairDurationMilliseconds": 8000
+          "engineering": {
+            "nominalGenerationPowerUnits": 120,
+            "nominalSensorDemandPowerUnits": 70,
+            "nominalImpulseDemandPowerUnits": 50,
+            "sensorRepairDurationMilliseconds": 8000,
+            "impulseRepairDurationMilliseconds": 6000
+          }
         }
         """;
 
@@ -47,7 +53,7 @@ public sealed class ShipDefinitionCatalogLoaderTests
     public void LoadsSchemaValidIntegralNumericForms()
     {
         string json = ValidDefinition
-            .Replace("\"schemaVersion\": 3", "\"schemaVersion\": 3.0", StringComparison.Ordinal)
+            .Replace("\"schemaVersion\": 4", "\"schemaVersion\": 4.0", StringComparison.Ordinal)
             .Replace(
                 "\"activeScanDurationMilliseconds\": 2000",
                 "\"activeScanDurationMilliseconds\": 2e3",
@@ -86,7 +92,7 @@ public sealed class ShipDefinitionCatalogLoaderTests
     {
         string root = FindRepositoryRoot();
         string schema = File.ReadAllText(
-            Path.Combine(root, "src/AlterCourse.Godot/content/schemas/ship-definition-v3.schema.json")
+            Path.Combine(root, "src/AlterCourse.Godot/content/schemas/ship-definition-v4.schema.json")
         );
         string definition = File.ReadAllText(Path.Combine(root, "src/AlterCourse.Godot/content/ships/pathfinder.json"));
 
@@ -201,8 +207,8 @@ public sealed class ShipDefinitionCatalogLoaderTests
     public void RejectsUnknownMembers()
     {
         string json = ValidDefinition.Replace(
-            "\"schemaVersion\": 3,",
-            "\"schemaVersion\": 3,\n  \"unconsumed\": true,",
+            "\"schemaVersion\": 4,",
+            "\"schemaVersion\": 4,\n  \"unconsumed\": true,",
             StringComparison.Ordinal
         );
 
@@ -215,9 +221,9 @@ public sealed class ShipDefinitionCatalogLoaderTests
 
     /// <summary>Confirms missing and unsupported schema versions are structural failures.</summary>
     [Theory]
-    [InlineData("\"schemaVersion\": 3,", "")]
-    [InlineData("\"schemaVersion\": 3", "\"schemaVersion\": 2")]
-    [InlineData("\"schemaVersion\": 3", "\"schemaVersion\": 4")]
+    [InlineData("\"schemaVersion\": 4,", "")]
+    [InlineData("\"schemaVersion\": 4", "\"schemaVersion\": 3")]
+    [InlineData("\"schemaVersion\": 4", "\"schemaVersion\": 5")]
     public void RejectsWrongOrMissingSchemaVersion(string original, string replacement)
     {
         string json = ValidDefinition.Replace(original, replacement, StringComparison.Ordinal);
@@ -421,7 +427,7 @@ public sealed class ShipDefinitionCatalogLoaderTests
             File.ReadAllText(
                 Path.Combine(
                     FindRepositoryRoot(),
-                    "src/AlterCourse.Godot/content/schemas/ship-definition-v3.schema.json"
+                    "src/AlterCourse.Godot/content/schemas/ship-definition-v4.schema.json"
                 )
             )
         );

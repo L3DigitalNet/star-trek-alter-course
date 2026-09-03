@@ -475,7 +475,7 @@ public static class GamePersistence
         kind switch
         {
             ScheduledWorkKind.TravelArrival => TravelArrivalKind,
-            ScheduledWorkKind.SensorRepairCompletion => SensorRepairCompletionKind,
+            ScheduledWorkKind.SystemRepairCompletion => SensorRepairCompletionKind,
             ScheduledWorkKind.OrderWake => OrderWakeKind,
             ScheduledWorkKind.SensorContactLoss => SensorContactLossKind,
             ScheduledWorkKind.ActiveSensorScanCompletion => ActiveSensorScanCompletionKind,
@@ -1849,7 +1849,7 @@ public static class GamePersistence
         ScheduledWorkKind parsed = kind switch
         {
             TravelArrivalKind => ScheduledWorkKind.TravelArrival,
-            SensorRepairCompletionKind => ScheduledWorkKind.SensorRepairCompletion,
+            SensorRepairCompletionKind => ScheduledWorkKind.SystemRepairCompletion,
             OrderWakeKind => ScheduledWorkKind.OrderWake,
             SensorContactLossKind => ScheduledWorkKind.SensorContactLoss,
             ActiveSensorScanCompletionKind => ScheduledWorkKind.ActiveSensorScanCompletion,
@@ -1861,14 +1861,14 @@ public static class GamePersistence
         {
             V1SchemaVersion or V2SchemaVersion => parsed
                 is ScheduledWorkKind.TravelArrival
-                    or ScheduledWorkKind.SensorRepairCompletion,
+                    or ScheduledWorkKind.SystemRepairCompletion,
             V3SchemaVersion => parsed
                 is ScheduledWorkKind.TravelArrival
-                    or ScheduledWorkKind.SensorRepairCompletion
+                    or ScheduledWorkKind.SystemRepairCompletion
                     or ScheduledWorkKind.OrderWake,
             CurrentSchemaVersion => parsed
                 is ScheduledWorkKind.TravelArrival
-                    or ScheduledWorkKind.SensorRepairCompletion
+                    or ScheduledWorkKind.SystemRepairCompletion
                     or ScheduledWorkKind.OrderWake
                     or ScheduledWorkKind.SensorContactLoss
                     or ScheduledWorkKind.ActiveSensorScanCompletion

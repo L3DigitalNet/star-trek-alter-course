@@ -155,6 +155,10 @@ public sealed class GameSimulationTests
     {
         GameSimulation game = CreateGame();
         Assert.Equal(
+            PowerAllocationOutcome.Accepted,
+            game.ApplyPowerAllocationPreset(PowerAllocationPreset.PrioritizePropulsion).Outcome
+        );
+        Assert.Equal(
             SetTacticalCourseOutcome.Accepted,
             game.SetTacticalCourse(
                 new SetTacticalCourseIntent(new HeadingDegrees(heading), new SpeedKilometersPerSecond(10))
@@ -202,7 +206,7 @@ public sealed class GameSimulationTests
         PlayerProjection initial = game.GetPlayerProjection();
 
         Assert.Equal(
-            SetTacticalCourseOutcome.SpeedExceedsMaximum,
+            SetTacticalCourseOutcome.SpeedExceedsCurrentCapability,
             game.SetTacticalCourse(
                 new SetTacticalCourseIntent(new HeadingDegrees(10), new SpeedKilometersPerSecond(10.01))
             ).Outcome
@@ -229,6 +233,10 @@ public sealed class GameSimulationTests
     public void MaximumTacticalSpeedIsAccepted()
     {
         GameSimulation game = CreateGame();
+        Assert.Equal(
+            PowerAllocationOutcome.Accepted,
+            game.ApplyPowerAllocationPreset(PowerAllocationPreset.PrioritizePropulsion).Outcome
+        );
 
         SetTacticalCourseResult result = game.SetTacticalCourse(
             new SetTacticalCourseIntent(new HeadingDegrees(0), new SpeedKilometersPerSecond(10))
@@ -278,7 +286,7 @@ public sealed class GameSimulationTests
         Assert.Equal(AdvanceUntilOutcome.PlayerEventResolved, repair.Outcome);
         Assert.Equal(8000, repair.StoppedAt.Milliseconds);
         var repairCompleted = new PlayerAdvanceEvent(
-            PlayerAdvanceEventKind.SensorRepairCompleted,
+            PlayerAdvanceEventKind.SystemRepairCompleted,
             new SimulationTime(8000)
         );
         Assert.Equal([repairCompleted], repair.ResolvedEvents);
@@ -526,17 +534,17 @@ public sealed class GameSimulationTests
     {
         const string definition = """
             {
-              "schemaVersion": 3,
+              "schemaVersion": 4,
               "id": "pathfinder",
               "designDisplayName": "Pathfinder class",
               "maximumTacticalSpeedKilometersPerSecond": 10,
               "passiveSensorRangeKilometers": 30.0,
               "activeScanDurationMilliseconds": 2000,
-              "sensorRepairDurationMilliseconds": 8000
+              "engineering": { "nominalGenerationPowerUnits": 120, "nominalSensorDemandPowerUnits": 70, "nominalImpulseDemandPowerUnits": 50, "sensorRepairDurationMilliseconds": 8000, "impulseRepairDurationMilliseconds": 6000 }
             }
             """;
         string schema = File.ReadAllText(
-            Path.Combine(FindRepositoryRoot(), "src/AlterCourse.Godot/content/schemas/ship-definition-v3.schema.json")
+            Path.Combine(FindRepositoryRoot(), "src/AlterCourse.Godot/content/schemas/ship-definition-v4.schema.json")
         );
         ShipDefinitionCatalog catalog = new ShipDefinitionCatalogLoader(schema).LoadCatalog([
             ShipDefinitionContent.FromText("pathfinder.json", definition),

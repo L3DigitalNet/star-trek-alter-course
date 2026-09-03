@@ -16,7 +16,7 @@ public static class CautiousContactDecisionPolicy
         ArgumentNullException.ThrowIfNull(input);
         SensorContactSnapshot? primary = SelectPrimaryContact(input.Facts);
         bool incomingHail = primary is not null && IsValidIncomingHail(input.Facts, primary);
-        double movementSpeed = Math.Min(ProofSpeedKilometersPerSecond, input.Facts.MaximumTacticalSpeed.Value);
+        double movementSpeed = Math.Min(ProofSpeedKilometersPerSecond, input.Facts.EffectiveMaximumTacticalSpeed.Value);
         ShipContactConstraintEvaluation[] movementConstraints = MovementConstraints(
             input.Facts,
             primary,

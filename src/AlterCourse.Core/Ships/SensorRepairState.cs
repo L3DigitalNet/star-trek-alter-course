@@ -4,7 +4,7 @@ using AlterCourse.Core.Simulation;
 namespace AlterCourse.Core.Ships;
 
 /// <summary>Correlates an active time-derived sensor repair with its scheduled completion.</summary>
-public sealed record SensorRepairState
+internal sealed record SensorRepairState
 {
     internal SensorRepairState(
         SensorIntegrity startingIntegrity,
