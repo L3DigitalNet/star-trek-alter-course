@@ -533,7 +533,7 @@ func test_normal_shell_never_projects_hidden_vessel_or_scheduler_truth() -> void
 	assert_str(presented).not_contains("ScheduledWork")
 
 
-func test_default_quick_save_writes_schema_v3_without_touching_legacy_slot() -> void:
+func test_default_quick_save_writes_schema_v4_without_touching_legacy_slot() -> void:
 	_write_text(LEGACY_DEFAULT_QUICK_SAVE_PATH, "legacy-slot-sentinel")
 	var screen := _create_default_screen()
 
@@ -544,14 +544,16 @@ func test_default_quick_save_writes_schema_v3_without_touching_legacy_slot() -> 
 	var save_json: Dictionary = JSON.parse_string(
 		FileAccess.get_file_as_string(DEFAULT_QUICK_SAVE_PATH)
 	)
-	assert_int(int(save_json.get("schemaVersion", -1))).is_equal(3)
-	assert_str(save_json.get("simulationRulesVersion", "")).is_equal("active-world-orders-v1")
+	assert_int(int(save_json.get("schemaVersion", -1))).is_equal(4)
+	assert_str(save_json.get("simulationRulesVersion", "")).is_equal(
+		"sensor-knowledge-first-contact-v1"
+	)
 	assert_str(FileAccess.get_file_as_string(LEGACY_DEFAULT_QUICK_SAVE_PATH)).is_equal(
 		"legacy-slot-sentinel"
 	)
 
 
-func test_default_quick_load_discovers_legacy_slot_path_then_saves_generic_v3() -> void:
+func test_default_quick_load_discovers_legacy_slot_path_then_saves_generic_v4() -> void:
 	var snapshot_screen := _create_screen()
 	snapshot_screen.call("ProcessSyntheticDelta", 0.6)
 	snapshot_screen.call("QuickSave")
@@ -570,8 +572,10 @@ func test_default_quick_load_discovers_legacy_slot_path_then_saves_generic_v3() 
 	var save_json: Dictionary = JSON.parse_string(
 		FileAccess.get_file_as_string(DEFAULT_QUICK_SAVE_PATH)
 	)
-	assert_int(int(save_json.get("schemaVersion", -1))).is_equal(3)
-	assert_str(save_json.get("simulationRulesVersion", "")).is_equal("active-world-orders-v1")
+	assert_int(int(save_json.get("schemaVersion", -1))).is_equal(4)
+	assert_str(save_json.get("simulationRulesVersion", "")).is_equal(
+		"sensor-knowledge-first-contact-v1"
+	)
 	assert_str(FileAccess.get_file_as_string(LEGACY_DEFAULT_QUICK_SAVE_PATH)).is_equal(
 		legacy_contents
 	)
