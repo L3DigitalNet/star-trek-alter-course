@@ -12,6 +12,20 @@ skills=(
   godot-ui-control
   godot-signals-groups
   stac-architecture
+  figma-code-connect
+  figma-create-new-file
+  figma-design-to-code
+  figma-generate-design
+  figma-generate-diagram
+  figma-generate-library
+  figma-generative-plugins
+  figma-implement-motion
+  figma-shaders
+  figma-swiftui
+  figma-use
+  figma-use-figjam
+  figma-use-motion
+  figma-use-slides
 )
 
 for skill in "${skills[@]}"; do

@@ -15,4 +15,8 @@ jobs:
     with:
       prettier: true
       globs: "**/*.md\n**/*.json\n**/*.jsonc\n**/*.yml\n**/*.yaml"
-      exclusions: ".agents/skills/agent-handoff/**\n.claude/skills/agent-handoff/**"
+      exclusions: |-
+        .agents/skills/agent-handoff/**
+        .claude/skills/agent-handoff/**
+        .claude/skills/figma-*/**
+        .codex/skills/figma-*/**

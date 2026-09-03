@@ -3,7 +3,7 @@ schema_version = "1.1"
 catalog = "5"
 release = "5.29.0"
 catalog_digest = "sha256:0c5d933bf61fd25de917f5eb906b0bbf600f432fb901f537ab625245a8a3b5fa"
-config_digest = "sha256:5047d0f30b63966243b872ea1318f867b1aa460a1f36fb82bb409c0e225018e0"
+config_digest = "sha256:f248e5f89554ce88b46c43b223ffd62abfa5bad16f2d146020c5dbd436635019"
 
 [standards.adr]
 requested = "1.6"
@@ -38,7 +38,7 @@ requested = "1.15"
 resolved = "1.15"
 selection = "exact"
 payload_digest = "sha256:aa3e3ae249cf2720355b1b33c987af11a546be4bf456c9e977903e5f9fe00f03"
-effective_config_digest = "sha256:b6d2a2cd6cc71ad02cef8ce844cd3be8c15a100f09ce21ac5f038f6d639180ab"
+effective_config_digest = "sha256:a297fe9d0459e0e3087b616164a447a3b0e0b6024d9e704767b0a061e1376d6f"
 
 [[artifacts]]
 path = ".agents/hooks/agent-handoff/session-start"
@@ -540,8 +540,8 @@ owners = ["markdown-tooling"]
 versions = { markdown-tooling = "1.15" }
 provenance = "provider"
 policy = "managed"
-semantic_digest = "sha256:6cbce5af5ddad5459f05477a521149d9617e9b197ee7678028944af7e5ec2501"
-content_digest = "sha256:6cbce5af5ddad5459f05477a521149d9617e9b197ee7678028944af7e5ec2501"
+semantic_digest = "sha256:6e9b527238eb0641e06085e5caf52ea0c9e0722273b42e9dd46882e4d3bdad75"
+content_digest = "sha256:6e9b527238eb0641e06085e5caf52ea0c9e0722273b42e9dd46882e4d3bdad75"
 created_container = true
 
 [[artifacts]]
@@ -552,8 +552,8 @@ owners = ["markdown-tooling"]
 versions = { markdown-tooling = "1.15" }
 provenance = "provider"
 policy = "managed"
-semantic_digest = "sha256:3e7477052d8479fe07c2c9ba737d195e4609aed0972c4334be6a7e2803538730"
-content_digest = "sha256:3e7477052d8479fe07c2c9ba737d195e4609aed0972c4334be6a7e2803538730"
+semantic_digest = "sha256:f5ffab753d1161d2ce12030e92619bf031dba7ab6d9cc5e01f1796b2d97d933b"
+content_digest = "sha256:f5ffab753d1161d2ce12030e92619bf031dba7ab6d9cc5e01f1796b2d97d933b"
 created_container = true
 
 [[artifacts]]
@@ -796,8 +796,8 @@ owners = ["markdown-tooling"]
 versions = { markdown-tooling = "1.15" }
 provenance = "provider"
 policy = "managed"
-semantic_digest = "sha256:27084e1a93c79494336c5d63678367ff8d8157006ce07c4959725f60cc00cb3a"
-content_digest = "sha256:27084e1a93c79494336c5d63678367ff8d8157006ce07c4959725f60cc00cb3a"
+semantic_digest = "sha256:99819d175ebcc6e60bbd9ef496411e7311fb5dcb2f441f3e3022752362e4166d"
+content_digest = "sha256:99819d175ebcc6e60bbd9ef496411e7311fb5dcb2f441f3e3022752362e4166d"
 created_container = true
 
 [[artifacts]]
@@ -844,8 +844,8 @@ owners = ["markdown-tooling"]
 versions = { markdown-tooling = "1.15" }
 provenance = "provider"
 policy = "managed"
-semantic_digest = "sha256:27084e1a93c79494336c5d63678367ff8d8157006ce07c4959725f60cc00cb3a"
-content_digest = "sha256:27084e1a93c79494336c5d63678367ff8d8157006ce07c4959725f60cc00cb3a"
+semantic_digest = "sha256:99819d175ebcc6e60bbd9ef496411e7311fb5dcb2f441f3e3022752362e4166d"
+content_digest = "sha256:99819d175ebcc6e60bbd9ef496411e7311fb5dcb2f441f3e3022752362e4166d"
 created_container = true
 
 [[artifacts]]
