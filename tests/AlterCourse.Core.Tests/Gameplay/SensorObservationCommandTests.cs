@@ -103,7 +103,11 @@ public sealed class SensorObservationCommandTests
             new SetTacticalCourseIntent(new HeadingDegrees(270), new SpeedKilometersPerSecond(100))
         );
         ascending.AdvanceFixedSteps(51);
-        Assert.Equal(12, ascending.GetPlayerProjection().Ship.Sensors.Contacts.Count);
+        Assert.Empty(ascending.GetPlayerProjection().Ship.Sensors.Contacts);
+        Assert.Equal(
+            12,
+            ascending.CaptureState().GetRequiredShip(new ShipInstanceId(1)).SensorKnowledge.Contacts.Length
+        );
     }
 
     /// <summary>Confirms exact stale, reacquire, and loss transitions retain one local identity.</summary>
@@ -125,6 +129,7 @@ public sealed class SensorObservationCommandTests
         SimulationAdvanceResult current = reacquired.AdvanceFixedSteps(2);
 
         Assert.Equal(PlayerAdvanceEventKind.SensorContactStale, Assert.Single(stale.ResolvedEvents).Kind);
+        Assert.Equal(SensorContactStatus.Stale, Assert.Single(stale.Projection.Ship.Sensors.Contacts).Status);
         Assert.Equal(PlayerAdvanceEventKind.SensorContactReacquired, Assert.Single(current.ResolvedEvents).Kind);
         SensorContactSnapshot reacquiredContact = Assert.Single(current.Projection.Ship.Sensors.Contacts);
         Assert.Equal(new SensorContactId(1), reacquiredContact.Id);
@@ -143,7 +148,12 @@ public sealed class SensorObservationCommandTests
             [PlayerAdvanceEventKind.SensorContactStale, PlayerAdvanceEventKind.SensorContactLost],
             loss.ResolvedEvents.Select(playerEvent => playerEvent.Kind)
         );
-        Assert.Equal(SensorContactStatus.Lost, Assert.Single(loss.Projection.Ship.Sensors.Contacts).Status);
+        Assert.Empty(loss.Projection.Ship.Sensors.Contacts);
+        Assert.Empty(loss.Projection.Ship.Sensors.ContactActions);
+        Assert.Equal(
+            SensorContactStatus.Lost,
+            Assert.Single(lost.CaptureState().GetRequiredShip(new ShipInstanceId(1)).SensorKnowledge.Contacts).Status
+        );
     }
 
     /// <summary>Confirms reacquisition invalidates already-dequeued loss work without a false loss event.</summary>
@@ -241,12 +251,17 @@ public sealed class SensorObservationCommandTests
             game.RequestActiveSensorScan(new SensorContactId(2)).Outcome
         );
         Assert.DoesNotContain(PlayerAction.ActiveSensorScan, game.GetPlayerProjection().AvailableActions);
+        Assert.Equal(0, game.GetPlayerProjection().Ship.Sensors.ActiveScanProgress);
         Assert.All(
             game.GetPlayerProjection().Ship.Sensors.ContactActions,
             contactActions => Assert.Empty(contactActions.AvailableActions)
         );
 
-        SimulationAdvanceResult completion = game.AdvanceFixedSteps(20);
+        SimulationAdvanceResult halfway = game.AdvanceFixedSteps(10);
+        Assert.Empty(halfway.ResolvedEvents);
+        Assert.Equal(0.5, halfway.Projection.Ship.Sensors.ActiveScanProgress);
+
+        SimulationAdvanceResult completion = game.AdvanceFixedSteps(10);
         PlayerAdvanceEvent completed = Assert.Single(completion.ResolvedEvents);
         SensorContactSnapshot identified = completion.Projection.Ship.Sensors.Contacts[0];
         Assert.Equal(PlayerAdvanceEventKind.ActiveSensorScanCompleted, completed.Kind);
@@ -254,6 +269,7 @@ public sealed class SensorObservationCommandTests
         Assert.Equal(SensorContactIdentification.Identified, identified.Identification);
         Assert.Equal("USS Known", identified.KnownVesselDisplayName);
         Assert.Equal("Target design", identified.KnownDesignDisplayName);
+        Assert.Null(completion.Projection.Ship.Sensors.ActiveScanProgress);
         Assert.Equal(
             [SensorContactAction.Hail],
             completion

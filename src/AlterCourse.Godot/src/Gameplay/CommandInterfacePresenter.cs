@@ -414,7 +414,15 @@ public static class CommandInterfacePresenter
 
         if (projection.Ship.Sensors.ActiveScanContactId == selectedContact.Id)
         {
-            fields.Add(Available("ACTIVE SCAN", "IN PROGRESS", CommandInterfaceTone.Caution));
+            fields.Add(
+                Available(
+                    "ACTIVE SCAN",
+                    projection.Ship.Sensors.ActiveScanProgress is double progress
+                        ? FormatPercent(progress)
+                        : "IN PROGRESS",
+                    CommandInterfaceTone.Caution
+                )
+            );
         }
 
         return fields.ToImmutable();

@@ -614,7 +614,11 @@ func test_active_scan_and_hail_actions_translate_typed_contact_and_reconcile_but
 	assert_int(screen.get_meta("active_scan_contact", 0)).is_equal(1)
 	assert_bool((_find_action_button(screen, "active-scan") as Button).disabled).is_true()
 	assert_str(_collect_control_text(_command_deck(screen).get_node("%InspectorContent"))).contains(
-		"IN PROGRESS"
+		"0 %"
+	)
+	assert_int(screen.call("ProcessSyntheticDelta", 0.5)).is_equal(5)
+	assert_str(_collect_control_text(_command_deck(screen).get_node("%InspectorContent"))).contains(
+		"25 %"
 	)
 	screen.call("AdvanceUntilNextPlayerRelevantEvent")
 	assert_str(screen.get_meta("first_contact_identification", "")).is_equal("Identified")

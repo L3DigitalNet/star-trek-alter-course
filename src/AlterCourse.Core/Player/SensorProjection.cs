@@ -11,15 +11,17 @@ public sealed record SensorProjection
         bool isRepairing,
         IReadOnlyList<SensorContactSnapshot> contacts,
         IReadOnlyList<SensorContactActionProjection> contactActions,
-        SensorContactId? activeScanContactId
+        SensorContactId? activeScanContactId,
+        double? activeScanProgress
     ) =>
-        (Integrity, RepairProgress, IsRepairing, Contacts, ContactActions, ActiveScanContactId) = (
+        (Integrity, RepairProgress, IsRepairing, Contacts, ContactActions, ActiveScanContactId, ActiveScanProgress) = (
             integrity,
             repairProgress,
             isRepairing,
             contacts,
             contactActions,
-            activeScanContactId
+            activeScanContactId,
+            activeScanProgress
         );
 
     /// <summary>Gets bounded sensor integrity.</summary>
@@ -39,4 +41,7 @@ public sealed record SensorProjection
 
     /// <summary>Gets the local contact currently being scanned, when a scan is active.</summary>
     public SensorContactId? ActiveScanContactId { get; }
+
+    /// <summary>Gets bounded active-scan progress derived at the projection time.</summary>
+    public double? ActiveScanProgress { get; }
 }

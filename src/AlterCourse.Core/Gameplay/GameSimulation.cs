@@ -1535,6 +1535,11 @@ public sealed class GameSimulation
     private static PlayerShipProjection ProjectShip(SimulationState state, ShipState playerShip)
     {
         SensorRepairState? repair = playerShip.SensorRepair;
+        ActiveSensorScanState? activeScan = playerShip.SensorKnowledge.ActiveScan;
+        SensorContactTrack[] activeContacts =
+        [
+            .. playerShip.SensorKnowledge.Contacts.Where(contact => contact.Status != SensorContactStatus.Lost),
+        ];
         return new PlayerShipProjection(
             playerShip.InstanceId,
             playerShip.DefinitionId,
@@ -1552,17 +1557,30 @@ public sealed class GameSimulation
                 repair?.ProgressAt(state.Time) ?? 1,
                 repair is not null,
                 new ReadOnlyValueList<SensorContactSnapshot>(
-                    playerShip.SensorKnowledge.Contacts.Select(contact => contact.ToActorSafeSnapshot())
+                    activeContacts.Select(contact => contact.ToActorSafeSnapshot())
                 ),
                 new ReadOnlyValueList<SensorContactActionProjection>(
-                    playerShip.SensorKnowledge.Contacts.Select(contact => new SensorContactActionProjection(
+                    activeContacts.Select(contact => new SensorContactActionProjection(
                         contact.Id,
                         new ReadOnlyValueList<SensorContactAction>(GetAvailableContactActions(playerShip, contact))
                     ))
                 ),
-                playerShip.SensorKnowledge.ActiveScan?.TargetContactId
+                activeScan?.TargetContactId,
+                ActiveScanProgressAt(state.Time, activeScan)
             )
         );
+    }
+
+    private static double? ActiveScanProgressAt(SimulationTime currentTime, ActiveSensorScanState? activeScan)
+    {
+        if (activeScan is null)
+        {
+            return null;
+        }
+
+        long duration = activeScan.ExpectedCompletion.Milliseconds - activeScan.StartedAt.Milliseconds;
+        long elapsed = currentTime.Milliseconds - activeScan.StartedAt.Milliseconds;
+        return Math.Clamp((double)elapsed / duration, 0, 1);
     }
 
     private static SensorContactAction[] GetAvailableContactActions(ShipState playerShip, SensorContactTrack contact)
