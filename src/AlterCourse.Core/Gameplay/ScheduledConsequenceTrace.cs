@@ -1,3 +1,4 @@
+using AlterCourse.Core.AI;
 using AlterCourse.Core.Identity;
 using AlterCourse.Core.Orders;
 using AlterCourse.Core.Sensors;
@@ -16,5 +17,6 @@ internal sealed record ScheduledConsequenceTrace(
     ScheduledConsequenceAction Action,
     bool Completed,
     bool RandomnessUsed,
-    SensorContactId? ContactId = null
+    SensorContactId? ContactId = null,
+    ShipContactDecisionExplanation? ContactDecision = null
 );

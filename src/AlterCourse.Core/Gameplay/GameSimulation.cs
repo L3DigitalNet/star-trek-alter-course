@@ -39,6 +39,9 @@ public sealed class GameSimulation
     /// <summary>Returns a fresh read-only projection of player-known simulation state.</summary>
     public PlayerProjection GetPlayerProjection() => Project(_state);
 
+    /// <summary>Gets the latest autonomous contact explanation produced during this live session.</summary>
+    public ShipContactDecisionExplanation? LastContactDecisionExplanation { get; private set; }
+
     /// <summary>Validates and schedules persistent strategic travel for the player ship.</summary>
     public TravelRequestResult RequestTravel(TravelIntent intent)
     {
@@ -112,6 +115,73 @@ public sealed class GameSimulation
         }
 
         return new SetTacticalCourseResult(application.Outcome);
+    }
+
+    /// <summary>Validates and sends the player's identity to one identified current contact.</summary>
+    public HailResult RequestHail(SensorContactId contactId)
+    {
+        ShipState player = _state.GetRequiredShip(_state.PlayerShipId);
+        SensorContactTrack? contact = player.SensorKnowledge.Contacts.FirstOrDefault(candidate =>
+            candidate.Id == contactId
+        );
+        if (contact is null)
+        {
+            return new HailResult(HailOutcome.ContactNotFound);
+        }
+
+        if (contact.Status != SensorContactStatus.Current)
+        {
+            return new HailResult(HailOutcome.ContactNotCurrent);
+        }
+
+        if (contact.Identification != SensorContactIdentification.Identified)
+        {
+            return new HailResult(HailOutcome.ContactNotIdentified);
+        }
+
+        return RespondToHail(player, contact);
+    }
+
+    private HailResult RespondToHail(ShipState player, SensorContactTrack contact)
+    {
+        ShipState target = _state.GetRequiredShip(contact.TargetShipId);
+        SensorContactTrack? reciprocal = target.SensorKnowledge.Contacts.FirstOrDefault(candidate =>
+            candidate.TargetShipId == player.InstanceId && candidate.Status == SensorContactStatus.Current
+        );
+        if (target.AutonomousState.ContactPosture != ShipContactPosture.CautiousContact || reciprocal is null)
+        {
+            return new HailResult(HailOutcome.NoResponse);
+        }
+
+        ShipDefinition playerDefinition = _shipCatalog.GetRequired(player.DefinitionId);
+        var incomingHail = new IncomingHailFact(
+            reciprocal.Id,
+            player.VesselDisplayName,
+            playerDefinition.DesignDisplayName
+        );
+        SensorContactTrack identifiedPlayer = reciprocal with
+        {
+            Identification = SensorContactIdentification.Identified,
+            KnownVesselDisplayName = incomingHail.TransmittedVesselDisplayName,
+            KnownDesignDisplayName = incomingHail.TransmittedDesignDisplayName,
+        };
+        SensorKnowledge updatedKnowledge = new(
+            target.SensorKnowledge.NextContactId,
+            target.SensorKnowledge.Contacts.Replace(reciprocal, identifiedPlayer),
+            target.SensorKnowledge.ActiveScan
+        );
+        ShipState informedTarget = target with { SensorKnowledge = updatedKnowledge };
+        SimulationState informedState = _state.ReplaceShip(target.InstanceId, informedTarget);
+        ShipContactDecisionExplanation decision = DecideContact(
+            informedState,
+            informedTarget,
+            _shipCatalog,
+            incomingHail
+        );
+        SimulationState candidate = ApplyContactDecision(informedState, informedTarget, _shipCatalog, decision);
+        Commit(candidate);
+        LastContactDecisionExplanation = decision;
+        return new HailResult(HailOutcome.Acknowledged);
     }
 
     internal static TacticalCourseApplicationResult ApplyTacticalCourse(
@@ -207,6 +277,7 @@ public sealed class GameSimulation
         SimulationTime target = _state.Time.AdvanceBy(new SimulationDuration(milliseconds));
         SimulationAdvanceTraceResult advance = AdvanceTo(_state, target, _shipCatalog);
         Commit(advance.State);
+        RememberLatestContactDecision(advance.Traces);
         return new SimulationAdvanceResult(_state.Time, advance.PlayerEvents, Project(_state));
     }
 
@@ -230,6 +301,7 @@ public sealed class GameSimulation
         SimulationTime boundary = nextPlayerWork.Value.DueTime;
         SimulationAdvanceTraceResult advance = AdvanceTo(_state, boundary, _shipCatalog, true);
         Commit(advance.State);
+        RememberLatestContactDecision(advance.Traces);
         return new AdvanceUntilResult(
             AdvanceUntilOutcome.PlayerEventResolved,
             _state.Time,
@@ -921,7 +993,7 @@ public sealed class GameSimulation
             ScheduledWorkKind.OrderWake => CompleteHold(state, work),
             ScheduledWorkKind.SensorContactLoss => LoseSensorContact(state, work),
             ScheduledWorkKind.ActiveSensorScanCompletion => CompleteActiveSensorScan(state, work, shipCatalog),
-            ScheduledWorkKind.ShipContactDecisionWake => CompleteShipContactDecisionWake(state, work),
+            ScheduledWorkKind.ShipContactDecisionWake => CompleteShipContactDecisionWake(state, work, shipCatalog),
             _ => throw new InvalidOperationException("Scheduled work kind is unsupported."),
         };
 
@@ -1174,7 +1246,8 @@ public sealed class GameSimulation
 
     private static (SimulationState State, ScheduledConsequenceTrace Trace) CompleteShipContactDecisionWake(
         SimulationState state,
-        ScheduledWork work
+        ScheduledWork work,
+        ShipDefinitionCatalog shipCatalog
     )
     {
         ShipState ship = state.GetRequiredShip(work.TargetShipId);
@@ -1184,13 +1257,16 @@ public sealed class GameSimulation
             return (state, InvalidatedContactTrace(state, work, ScheduledConsequenceRule.ShipContactDecisionWake));
         }
 
-        SimulationState candidate = state.ReplaceShip(
+        SimulationState cleared = state.ReplaceShip(
             ship.InstanceId,
             ship with
             {
                 AutonomousState = ship.AutonomousState with { PendingContactDecisionWake = null },
             }
         );
+        ShipState clearedShip = cleared.GetRequiredShip(ship.InstanceId);
+        ShipContactDecisionExplanation decision = DecideContact(cleared, clearedShip, shipCatalog);
+        SimulationState candidate = ApplyContactDecision(cleared, clearedShip, shipCatalog, decision);
         return (
             candidate,
             Trace(
@@ -1199,9 +1275,61 @@ public sealed class GameSimulation
                 null,
                 ScheduledConsequenceRule.ShipContactDecisionWake,
                 ScheduledConsequenceAction.WakeShipContactDecision,
-                true
+                true,
+                contactDecision: decision
             )
         );
+    }
+
+    private static ShipContactDecisionExplanation DecideContact(
+        SimulationState state,
+        ShipState ship,
+        ShipDefinitionCatalog shipCatalog,
+        IncomingHailFact? incomingHail = null
+    )
+    {
+        ShipDefinition definition = shipCatalog.GetRequired(ship.DefinitionId);
+        var facts = new ShipContactDecisionFacts(
+            ship.TacticalPosition,
+            ship.TacticalMotion,
+            ship.StrategicState is AtLocationState,
+            definition.MaximumTacticalSpeed,
+            ship.SensorKnowledge.Contacts.Select(contact => contact.ToActorSafeSnapshot()),
+            incomingHail
+        );
+        var input = new ShipContactDecisionInput(
+            ship.InstanceId,
+            state.Time,
+            ShipContactDecisionGoal.RespondCautiously,
+            ShipContactPosture.CautiousContact,
+            facts
+        );
+        return CautiousContactDecisionPolicy.Evaluate(input);
+    }
+
+    private static SimulationState ApplyContactDecision(
+        SimulationState state,
+        ShipState ship,
+        ShipDefinitionCatalog shipCatalog,
+        ShipContactDecisionExplanation decision
+    )
+    {
+        if (decision.ResultingCourse is not { } course)
+        {
+            return state;
+        }
+
+        TacticalCourseApplicationResult application = ApplyTacticalCourse(
+            state,
+            shipCatalog,
+            new TargetableTacticalCourseCommand(ship.InstanceId, course.Heading, course.Speed)
+        );
+        if (application.Outcome != SetTacticalCourseOutcome.Accepted)
+        {
+            throw new InvalidOperationException("A validated autonomous course was rejected during application.");
+        }
+
+        return application.CandidateState;
     }
 
     private static ScheduledConsequenceTrace InvalidatedContactTrace(
@@ -1210,8 +1338,8 @@ public sealed class GameSimulation
         ScheduledConsequenceRule rule
     ) => Trace(state, work, null, rule, ScheduledConsequenceAction.IgnoreInvalidatedWork, false);
 
-    // Milestone 2 order rules never consult a random source; the trace records that contract explicitly
-    // so later randomized behavior cannot appear without changing observable diagnostic data.
+    // Current scheduled rules, including cautious-contact decisions, never consult a random source. The
+    // trace keeps later randomized behavior from appearing without changing observable diagnostic data.
     private static ScheduledConsequenceTrace Trace(
         SimulationState state,
         ScheduledWork work,
@@ -1219,7 +1347,8 @@ public sealed class GameSimulation
         ScheduledConsequenceRule rule,
         ScheduledConsequenceAction action,
         bool completed,
-        SensorContactId? contactId = null
+        SensorContactId? contactId = null,
+        ShipContactDecisionExplanation? contactDecision = null
     ) =>
         new(
             work.Id,
@@ -1232,8 +1361,20 @@ public sealed class GameSimulation
             action,
             completed,
             false,
-            contactId
+            contactId,
+            contactDecision
         );
+
+    private void RememberLatestContactDecision(IReadOnlyList<ScheduledConsequenceTrace> traces)
+    {
+        ShipContactDecisionExplanation? latest = traces
+            .Select(trace => trace.ContactDecision)
+            .LastOrDefault(decision => decision is not null);
+        if (latest is not null)
+        {
+            LastContactDecisionExplanation = latest;
+        }
+    }
 
     private static void AddPlayerScheduledEvent(
         ScheduledConsequenceTrace trace,
