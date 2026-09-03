@@ -14,10 +14,10 @@ tags:
 aliases: []
 related:
   - 'ROADMAP.md'
-  - 'docs/adr/0001-core-domain-and-godot-presentation-boundary.md'
-  - 'docs/adr/0006-versioned-save-snapshots-and-validated-migration.md'
-  - 'docs/adr/0007-deterministic-time-and-event-scheduling.md'
-  - 'docs/adr/0010-explainable-ai-from-actor-appropriate-information.md'
+  - 'docs/adr/0001-separate-simulation-from-godot.md'
+  - 'docs/adr/0006-use-versioned-json-snapshot-saves.md'
+  - 'docs/adr/0007-use-deterministic-simulation-time-scheduling-and-randomness.md'
+  - 'docs/adr/0010-use-explainable-domain-ai-and-demand-driven-state-machines.md'
 ---
 
 # First Observed Contact
