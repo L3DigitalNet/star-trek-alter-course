@@ -716,7 +716,7 @@ func test_live_unsupported_values_and_engineering_actions_are_explicitly_unavail
 
 func test_invalid_content_bootstrap_is_fail_closed_and_player_safe() -> void:
 	_write_text(INVALID_CONTENT_PATH, "not-json")
-	var scene := load("res://Main.tscn") as PackedScene
+	var scene := _load_main_scene()
 	var screen := _track_screen(scene.instantiate())
 	screen.set("ShipDefinitionResourcePath", INVALID_CONTENT_PATH)
 	add_child(screen)
@@ -851,7 +851,7 @@ func test_custom_quick_save_path_never_consults_legacy_slot() -> void:
 
 
 func test_quick_save_path_cannot_escape_user_boundary() -> void:
-	var scene := load("res://Main.tscn") as PackedScene
+	var scene := _load_main_scene()
 	var screen := _track_screen(scene.instantiate())
 	screen.set("QuickSaveUserPath", "user://../outside.json")
 	add_child(screen)
@@ -1173,7 +1173,7 @@ func _collect_control_text(node: Node) -> String:
 
 
 func _create_screen() -> Node:
-	var scene := load("res://Main.tscn") as PackedScene
+	var scene := _load_main_scene()
 	var screen := _track_screen(scene.instantiate())
 	screen.set("QuickSaveUserPath", TEST_QUICK_SAVE_PATH)
 	add_child(screen)
@@ -1182,7 +1182,7 @@ func _create_screen() -> Node:
 
 
 func _create_default_screen() -> Node:
-	var scene := load("res://Main.tscn") as PackedScene
+	var scene := _load_main_scene()
 	var screen := _track_screen(scene.instantiate())
 	add_child(screen)
 	screen.set_process(false)
@@ -1194,6 +1194,14 @@ func _track_screen(screen: Node) -> Node:
 	# Queueing the owned scene and awaiting one frame in after_test preserves the normal engine lifecycle.
 	_screens_to_free.append(screen)
 	return screen
+
+
+func _load_main_scene() -> PackedScene:
+	# Repeated cached mixed-language scene instantiation can race Godot's managed-handle replacement during teardown.
+	# Tests need isolated scene resources; production still loads its one ordinary cached startup scene.
+	return ResourceLoader.load(
+		"res://Main.tscn", "", ResourceLoader.CACHE_MODE_IGNORE_DEEP
+	) as PackedScene
 
 
 func _command_deck(screen: Node) -> Node:
