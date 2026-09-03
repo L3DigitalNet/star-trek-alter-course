@@ -1,6 +1,7 @@
 using AlterCourse.Core.Content;
 using AlterCourse.Core.Gameplay;
 using AlterCourse.Core.Identity;
+using AlterCourse.Core.Persistence;
 using AlterCourse.Core.Player;
 using AlterCourse.Core.Quantities;
 using AlterCourse.Core.Sensors;
@@ -237,6 +238,29 @@ public sealed class EngineeringBackboneTests
         Assert.Equal(before, game.GetPlayerProjection());
     }
 
+    /// <summary>Confirms each direct allocation bound rejects without replacing or changing the aggregate.</summary>
+    [Theory]
+    [InlineData(71, 0, PowerAllocationOutcome.SensorDemandExceeded)]
+    [InlineData(0, 51, PowerAllocationOutcome.ImpulseDemandExceeded)]
+    [InlineData(70, 50, PowerAllocationOutcome.AvailablePowerExceeded)]
+    public void InvalidDirectAllocationPreservesCompleteAggregateIdentity(
+        int sensors,
+        int impulse,
+        PowerAllocationOutcome expectedOutcome
+    )
+    {
+        GameSimulation game = CreateDefault();
+        SimulationState before = game.CaptureState();
+
+        PowerAllocationResult result = game.SetPowerAllocation(
+            new PowerAllocation(new PowerUnits(sensors), new PowerUnits(impulse))
+        );
+
+        Assert.Equal(expectedOutcome, result.Outcome);
+        Assert.Empty(result.ResolvedEvents);
+        Assert.Same(before, game.CaptureState());
+    }
+
     /// <summary>Confirms a zero sensor boundary interrupts its exact scan at the command time.</summary>
     [Fact]
     public void ZeroSensorAllocationCancelsExactScanAndReconcilesContactsAtSameTime()
@@ -282,6 +306,70 @@ public sealed class EngineeringBackboneTests
         Assert.Equal(ShipSystemId.Sensors, resolved.ShipSystemId);
         Assert.Equal(1, completion.Projection.Ship.Engineering.SensorCondition.Value);
         Assert.Null(completion.Projection.Ship.Engineering.ActiveRepair);
+    }
+
+    /// <summary>Confirms impulse repair timing, identity, single completion, and save continuation.</summary>
+    [Fact]
+    public void ImpulseRepairProgressesAndResumesThroughExactAuthoredCompletion()
+    {
+        GameSimulation uninterrupted = CreateSingleShip(new SystemCondition(0.5), new SystemCondition(0.5));
+        Assert.Equal(
+            SystemRepairOutcome.Accepted,
+            uninterrupted.BeginSystemRepair(ShipSystemId.ImpulsePropulsion, new SystemCondition(1)).Outcome
+        );
+        SystemRepairState started = Assert.IsType<SystemRepairState>(
+            uninterrupted.CaptureState().GetRequiredShip(new ShipInstanceId(1)).Engineering.ActiveRepair
+        );
+        Assert.Equal(new SimulationTime(0), started.StartedAt);
+        Assert.Equal(new SimulationTime(6_000), started.ExpectedCompletion);
+        Assert.Contains(
+            uninterrupted.CaptureState().Scheduler.OutstandingWork,
+            work =>
+                work.Id == started.ScheduledCompletionId
+                && work.DueTime == new SimulationTime(6_000)
+                && work.Kind == ScheduledWorkKind.SystemRepairCompletion
+        );
+
+        SimulationAdvanceResult midpoint = uninterrupted.AdvanceFixedSteps(30);
+        Assert.Equal(new SimulationTime(3_000), midpoint.FinalTime);
+        Assert.Equal(0.5, midpoint.Projection.Ship.Engineering.SensorCondition.Value, 12);
+        Assert.Equal(0.75, midpoint.Projection.Ship.Engineering.ImpulseCondition.Value, 12);
+        Assert.Equal(0.5, midpoint.Projection.Ship.Engineering.ActiveRepair!.Progress, 12);
+
+        GameSaveMetadata metadata = ImpulseRepairMetadata();
+        LoadedGameSave loaded = GamePersistence.Deserialize(
+            GamePersistence.Serialize(uninterrupted, metadata),
+            CreateCatalog(),
+            "impulse-midpoint.json"
+        );
+
+        SimulationAdvanceResult completion = uninterrupted.AdvanceFixedSteps(30);
+        SimulationAdvanceResult resumedCompletion = loaded.Simulation.AdvanceFixedSteps(30);
+        Assert.Equal(completion, resumedCompletion);
+        Assert.Equal(new SimulationTime(6_000), completion.FinalTime);
+        PlayerAdvanceEvent resolved = Assert.Single(completion.ResolvedEvents);
+        Assert.Equal(PlayerAdvanceEventKind.SystemRepairCompleted, resolved.Kind);
+        Assert.Equal(new SimulationTime(6_000), resolved.OccurredAt);
+        Assert.Equal(ShipSystemId.ImpulsePropulsion, resolved.ShipSystemId);
+        Assert.Equal(0.5, completion.Projection.Ship.Engineering.SensorCondition.Value, 12);
+        Assert.Equal(1, completion.Projection.Ship.Engineering.ImpulseCondition.Value);
+        Assert.Null(completion.Projection.Ship.Engineering.ActiveRepair);
+        Assert.DoesNotContain(
+            uninterrupted.CaptureState().Scheduler.OutstandingWork,
+            work => work.Kind == ScheduledWorkKind.SystemRepairCompletion
+        );
+        Assert.Equal(
+            GamePersistence.Serialize(uninterrupted, metadata),
+            GamePersistence.Serialize(loaded.Simulation, loaded.Metadata)
+        );
+
+        SimulationAdvanceResult afterCompletion = uninterrupted.AdvanceFixedSteps(1);
+        SimulationAdvanceResult resumedAfterCompletion = loaded.Simulation.AdvanceFixedSteps(1);
+        Assert.Equal(afterCompletion, resumedAfterCompletion);
+        Assert.DoesNotContain(
+            afterCompletion.ResolvedEvents,
+            item => item.Kind == PlayerAdvanceEventKind.SystemRepairCompleted
+        );
     }
 
     /// <summary>Confirms one repair slot and the deliberate generator-repair exclusion.</summary>
@@ -441,4 +529,10 @@ public sealed class EngineeringBackboneTests
                 ),
             }
         );
+
+    private static GameSaveMetadata ImpulseRepairMetadata()
+    {
+        var timestamp = new DateTimeOffset(2026, 9, 3, 0, 0, 0, TimeSpan.Zero);
+        return new GameSaveMetadata("impulse-repair", "Impulse Repair", timestamp, timestamp);
+    }
 }
