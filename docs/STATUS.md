@@ -29,5 +29,9 @@
 - `scripts/verify.sh` is the canonical read-only gate for formatting, analysis, policy, builds, tests, Godot integration, security, and smoke checks.
 - AssetCtl remains an isolated .NET 10 tool with bounded inputs, offline-first defaults, safe publication, provenance, and Godot import validation.
 - `main` holds v0.2.0. Sync PR #44 merged it back into protected `dev` as `851845f`; significant work follows ADR 0013.
+- Feature #47 is implemented on `feature/47-command-interface` and remains In progress; its branch is not yet pushed and no PR has been created.
+- The Command Deck now retains live strategic travel, tactical-map continuity, persistent Engineering navigation, rate controls, selection, and save/load.
+- Command, combat, and Engineering previews use deterministic non-authoritative presentation fixtures; live unavailable systems remain labelled `Unavailable`.
+- The Godot Theme and owned font assets are the runtime presentation source; the Figma nodes and repository PNGs remain visual references only.
 - Actor knowledge, contacts, first contact, faction strategy, general mission assignment, and tactical AI remain deferred.
-- Combat, engineering depth, diplomacy, economy, narrative, networking, and final art remain deferred.
+- Combat rules, engineering depth, diplomacy, economy, narrative, networking, and final art remain deferred.

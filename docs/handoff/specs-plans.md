@@ -9,3 +9,4 @@
 | Task #40 | Merged / Done | Consolidated the Milestone 1-2 gameplay shell; Final PR #41 merged as `ed8ca4b` into `dev`. |
 | Task #42 | Merged / Done | Released source-only v0.2.0; Final PR #43 merged as `163b8e2` into `main`, then PR #44 synced `main` to `dev`. |
 | Task #45 | Merged / Done | Tracked owner-supplied non-runtime command-shell mockups; Final PR #46 merged as `8d3876b` into `dev`. |
+| Feature #47 | Implemented / In progress | Command Deck and Engineering UI are verified on `feature/47-command-interface`; no PR exists yet. |
