@@ -181,11 +181,7 @@ public sealed record CommandInterfaceHierarchyRow(
 );
 
 /// <summary>Represents a directed engineering schematic connection.</summary>
-public sealed record CommandInterfaceEngineeringLink(
-    string OriginId,
-    string DestinationId,
-    CommandInterfaceTone Tone
-);
+public sealed record CommandInterfaceEngineeringLink(string OriginId, string DestinationId, CommandInterfaceTone Tone);
 
 /// <summary>Represents one repair or engineering action queue row.</summary>
 public sealed record CommandInterfaceQueueRow(

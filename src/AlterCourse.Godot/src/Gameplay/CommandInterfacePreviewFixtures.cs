@@ -21,7 +21,11 @@ public static class CommandInterfacePreviewFixtures
                 "Live presentation requires a fresh Core PlayerProjection.",
                 nameof(dataMode)
             ),
-            _ => throw new ArgumentOutOfRangeException(nameof(dataMode), dataMode, "Unknown command-interface data mode."),
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(dataMode),
+                dataMode,
+                "Unknown command-interface data mode."
+            ),
         };
 
     private static CommandInterfacePresentation CreateTravel() =>
@@ -167,19 +171,60 @@ public static class CommandInterfacePreviewFixtures
             ],
             Events =
             [
-                Event("18:06:51", "SENSORS", "Cardassian contacts changed course to intercept.", CommandInterfaceTone.Caution),
-                Event("18:07:03", "TACTICAL", "Galor-01 raised shields and charged weapons.", CommandInterfaceTone.Critical),
+                Event(
+                    "18:06:51",
+                    "SENSORS",
+                    "Cardassian contacts changed course to intercept.",
+                    CommandInterfaceTone.Caution
+                ),
+                Event(
+                    "18:07:03",
+                    "TACTICAL",
+                    "Galor-01 raised shields and charged weapons.",
+                    CommandInterfaceTone.Critical
+                ),
                 Event("18:07:15", "COMMAND", "Red alert. Shields raised.", CommandInterfaceTone.Command),
-                Event("18:07:29", "DAMAGE", "Port impulse manifold hit. Propulsion degraded.", CommandInterfaceTone.Critical),
-                Event("18:07:36", "ENGINEER", "EPS Bus A load at 91%. Forward shields affected.", CommandInterfaceTone.Caution),
+                Event(
+                    "18:07:29",
+                    "DAMAGE",
+                    "Port impulse manifold hit. Propulsion degraded.",
+                    CommandInterfaceTone.Critical
+                ),
+                Event(
+                    "18:07:36",
+                    "ENGINEER",
+                    "EPS Bus A load at 91%. Forward shields affected.",
+                    CommandInterfaceTone.Caution
+                ),
                 Event("18:07:43", "TACTICAL", "Phaser solution available on Galor-01.", CommandInterfaceTone.Critical),
             ],
             Stations = Stations("command", tacticalAttention: 2, engineeringAttention: 1),
             MapItems =
             [
-                new("enterprise", "ENTERPRISE / IMPULSE 0.68c", CommandInterfaceMapItemKind.PlayerShip, 31, 49, CommandInterfaceTone.Command),
-                new("galor-01", "GALOR-01 / 7.3 Mm / HOSTILE", CommandInterfaceMapItemKind.Contact, 61, 45, CommandInterfaceTone.Critical),
-                new("galor-02", "GALOR-02 / 11.8 Mm / HOSTILE", CommandInterfaceMapItemKind.Contact, 72, 67, CommandInterfaceTone.Critical),
+                new(
+                    "enterprise",
+                    "ENTERPRISE / IMPULSE 0.68c",
+                    CommandInterfaceMapItemKind.PlayerShip,
+                    31,
+                    49,
+                    CommandInterfaceTone.Command
+                ),
+                new(
+                    "galor-01",
+                    "GALOR-01 / 7.3 Mm / HOSTILE",
+                    CommandInterfaceMapItemKind.Contact,
+                    61,
+                    45,
+                    CommandInterfaceTone.Critical
+                ),
+                new(
+                    "galor-02",
+                    "GALOR-02 / 11.8 Mm / HOSTILE",
+                    CommandInterfaceMapItemKind.Contact,
+                    72,
+                    67,
+                    CommandInterfaceTone.Critical
+                ),
                 MapLocation(CeltrisId, "CELTRIS III", 84, 23, CommandInterfaceTone.Muted),
             ],
             MapLinks =
@@ -250,11 +295,31 @@ public static class CommandInterfacePreviewFixtures
             ],
             Events =
             [
-                Event("18:07:29", "DAMAGE", "Port impulse manifold struck. EPS load redistributed.", CommandInterfaceTone.Critical),
-                Event("18:07:32", "POWER", "EPS Bus A exceeded 88% continuous-load threshold.", CommandInterfaceTone.Caution),
-                Event("18:07:36", "SHIELDS", "Forward shield feed voltage fluctuating ±11%.", CommandInterfaceTone.Critical),
+                Event(
+                    "18:07:29",
+                    "DAMAGE",
+                    "Port impulse manifold struck. EPS load redistributed.",
+                    CommandInterfaceTone.Critical
+                ),
+                Event(
+                    "18:07:32",
+                    "POWER",
+                    "EPS Bus A exceeded 88% continuous-load threshold.",
+                    CommandInterfaceTone.Caution
+                ),
+                Event(
+                    "18:07:36",
+                    "SHIELDS",
+                    "Forward shield feed voltage fluctuating ±11%.",
+                    CommandInterfaceTone.Critical
+                ),
                 Event("18:07:40", "AUTO", "Auxiliary batteries placed in standby.", CommandInterfaceTone.Nominal),
-                Event("18:07:43", "COMMAND", "Engineering incident opened from Command Deck.", CommandInterfaceTone.Command),
+                Event(
+                    "18:07:43",
+                    "COMMAND",
+                    "Engineering incident opened from Command Deck.",
+                    CommandInterfaceTone.Command
+                ),
             ],
             Stations = Stations("engineering"),
             MapItems = [],
@@ -281,14 +346,61 @@ public static class CommandInterfacePreviewFixtures
             ],
             [
                 Section("warp-core", "WARP CORE", CommandInterfaceTone.Nominal, Field("OUTPUT", "88.4 GW")),
-                Section("eps-bus-a", "EPS BUS A", CommandInterfaceTone.Caution, Field("LOAD", "91%"), Field("STATE", "DEG")),
-                Section("forward-shields", "FORWARD SHIELDS", CommandInterfaceTone.Caution, Field("OUTPUT", "41%"), Field("PRIORITY", "2")),
-                Section("phaser-banks", "PHASER BANKS", CommandInterfaceTone.Neutral, Field("STATE", "READY"), Field("OUTPUT", "18 GW")),
-                Section("aux-batteries", "AUX BATTERIES", CommandInterfaceTone.Neutral, Field("CHARGE", "74%"), Field("STATE", "STANDBY")),
-                Section("eps-bus-b", "EPS BUS B", CommandInterfaceTone.Nominal, Field("LOAD", "54%"), Field("STATE", "NOM")),
-                Section("impulse-drive", "IMPULSE DRIVE", CommandInterfaceTone.Caution, Field("STATE", "PORT DEGRADED")),
-                Section("fusion-reactors", "FUSION REACTORS", CommandInterfaceTone.Nominal, Field("OUTPUT", "92%"), Field("STATE", "NOMINAL")),
-                Section("sensors", "SENSORS", CommandInterfaceTone.Muted, Field("STATE", "NOMINAL"), Field("OUTPUT", "8 GW")),
+                Section(
+                    "eps-bus-a",
+                    "EPS BUS A",
+                    CommandInterfaceTone.Caution,
+                    Field("LOAD", "91%"),
+                    Field("STATE", "DEG")
+                ),
+                Section(
+                    "forward-shields",
+                    "FORWARD SHIELDS",
+                    CommandInterfaceTone.Caution,
+                    Field("OUTPUT", "41%"),
+                    Field("PRIORITY", "2")
+                ),
+                Section(
+                    "phaser-banks",
+                    "PHASER BANKS",
+                    CommandInterfaceTone.Neutral,
+                    Field("STATE", "READY"),
+                    Field("OUTPUT", "18 GW")
+                ),
+                Section(
+                    "aux-batteries",
+                    "AUX BATTERIES",
+                    CommandInterfaceTone.Neutral,
+                    Field("CHARGE", "74%"),
+                    Field("STATE", "STANDBY")
+                ),
+                Section(
+                    "eps-bus-b",
+                    "EPS BUS B",
+                    CommandInterfaceTone.Nominal,
+                    Field("LOAD", "54%"),
+                    Field("STATE", "NOM")
+                ),
+                Section(
+                    "impulse-drive",
+                    "IMPULSE DRIVE",
+                    CommandInterfaceTone.Caution,
+                    Field("STATE", "PORT DEGRADED")
+                ),
+                Section(
+                    "fusion-reactors",
+                    "FUSION REACTORS",
+                    CommandInterfaceTone.Nominal,
+                    Field("OUTPUT", "92%"),
+                    Field("STATE", "NOMINAL")
+                ),
+                Section(
+                    "sensors",
+                    "SENSORS",
+                    CommandInterfaceTone.Muted,
+                    Field("STATE", "NOMINAL"),
+                    Field("OUTPUT", "8 GW")
+                ),
             ],
             [
                 new("warp-core", "eps-bus-a", CommandInterfaceTone.Nominal),
@@ -358,12 +470,8 @@ public static class CommandInterfacePreviewFixtures
         params CommandInterfaceField[] fields
     ) => new(id, title, tone, [.. fields]);
 
-    private static CommandInterfaceSystemRow System(
-        string id,
-        string label,
-        string value,
-        CommandInterfaceTone tone
-    ) => new(id, label, Field("STATUS", value, tone));
+    private static CommandInterfaceSystemRow System(string id, string label, string value, CommandInterfaceTone tone) =>
+        new(id, label, Field("STATUS", value, tone));
 
     private static CommandInterfaceAction PreviewAction(string id, string label, CommandInterfaceTone tone) =>
         new(id, label, tone, CommandInterfaceActionAvailability.PreviewOnly);

@@ -62,9 +62,8 @@ public static class CommandInterfacePresenter
 
     private static ImmutableArray<CommandInterfaceSystemRow> BuildSystems(PlayerProjection projection)
     {
-        CommandInterfaceTone sensorTone = projection.Ship.Sensors.Integrity >= 0.8
-            ? CommandInterfaceTone.Nominal
-            : CommandInterfaceTone.Caution;
+        CommandInterfaceTone sensorTone =
+            projection.Ship.Sensors.Integrity >= 0.8 ? CommandInterfaceTone.Nominal : CommandInterfaceTone.Caution;
         return
         [
             SystemUnavailable("hull", "HULL"),
@@ -191,22 +190,24 @@ public static class CommandInterfacePresenter
         IReadOnlyList<PlayerAdvanceEvent> events
     ) =>
         [
-            .. events.Select(@event => @event switch
-            {
-                PlayerAdvanceEvent.TravelArrived => new CommandInterfaceEventRow(
-                    FormatClock(projection.SimulationTime.Milliseconds),
-                    "NAV",
-                    "Strategic travel arrived at destination.",
-                    CommandInterfaceTone.Navigation
-                ),
-                PlayerAdvanceEvent.SensorRepairCompleted => new CommandInterfaceEventRow(
-                    FormatClock(projection.SimulationTime.Milliseconds),
-                    "ENGINEER",
-                    "Sensor repair completed.",
-                    CommandInterfaceTone.Nominal
-                ),
-                _ => throw new ArgumentOutOfRangeException(nameof(events), @event, "Unknown player event."),
-            }),
+            .. events.Select(@event =>
+                @event switch
+                {
+                    PlayerAdvanceEvent.TravelArrived => new CommandInterfaceEventRow(
+                        FormatClock(projection.SimulationTime.Milliseconds),
+                        "NAV",
+                        "Strategic travel arrived at destination.",
+                        CommandInterfaceTone.Navigation
+                    ),
+                    PlayerAdvanceEvent.SensorRepairCompleted => new CommandInterfaceEventRow(
+                        FormatClock(projection.SimulationTime.Milliseconds),
+                        "ENGINEER",
+                        "Sensor repair completed.",
+                        CommandInterfaceTone.Nominal
+                    ),
+                    _ => throw new ArgumentOutOfRangeException(nameof(events), @event, "Unknown player event."),
+                }
+            ),
         ];
 
     private static ImmutableArray<CommandInterfaceStation> BuildStations(CommandInterfaceMode mode)
@@ -255,9 +256,8 @@ public static class CommandInterfacePresenter
 
     private static CommandInterfaceEngineeringPresentation BuildEngineering(PlayerProjection projection)
     {
-        CommandInterfaceTone sensorTone = projection.Ship.Sensors.Integrity >= 0.8
-            ? CommandInterfaceTone.Nominal
-            : CommandInterfaceTone.Caution;
+        CommandInterfaceTone sensorTone =
+            projection.Ship.Sensors.Integrity >= 0.8 ? CommandInterfaceTone.Nominal : CommandInterfaceTone.Caution;
         return new CommandInterfaceEngineeringPresentation(
             [
                 HierarchyUnavailable("power", null, "POWER"),
@@ -287,7 +287,9 @@ public static class CommandInterfacePresenter
                         Available(
                             "REPAIR STATE",
                             projection.Ship.Sensors.IsRepairing ? "REPAIRING" : "INACTIVE",
-                            projection.Ship.Sensors.IsRepairing ? CommandInterfaceTone.Caution : CommandInterfaceTone.Muted
+                            projection.Ship.Sensors.IsRepairing
+                                ? CommandInterfaceTone.Caution
+                                : CommandInterfaceTone.Muted
                         ),
                         Available("REPAIR PROGRESS", FormatPercent(projection.Ship.Sensors.RepairProgress), sensorTone),
                     ]
@@ -315,9 +317,7 @@ public static class CommandInterfacePresenter
             id,
             label,
             isAvailable ? tone : CommandInterfaceTone.Muted,
-            isAvailable
-                ? CommandInterfaceActionAvailability.Submittable
-                : CommandInterfaceActionAvailability.Disabled,
+            isAvailable ? CommandInterfaceActionAvailability.Submittable : CommandInterfaceActionAvailability.Disabled,
             isAvailable ? intent : null
         );
 
@@ -348,8 +348,7 @@ public static class CommandInterfacePresenter
     private static string FormatSeconds(long milliseconds) =>
         string.Create(CultureInfo.InvariantCulture, $"{milliseconds / 1000.0:0.0} s");
 
-    private static string FormatPercent(double fraction) =>
-        fraction.ToString("P0", CultureInfo.InvariantCulture);
+    private static string FormatPercent(double fraction) => fraction.ToString("P0", CultureInfo.InvariantCulture);
 
     private static string FormatKilometers(double kilometers) =>
         string.Create(CultureInfo.InvariantCulture, $"{kilometers:0.0} km");
