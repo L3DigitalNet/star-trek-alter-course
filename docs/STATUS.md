@@ -8,7 +8,8 @@
 - Feature #58's unreleased Milestone 3A slice adds first observed contact on `dev`; it is not a new release and does not complete all of Milestone 3.
 - The shell retains strategic travel, local tactical movement, sensor repair, deterministic time controls, player-relevant advance-until, and quick save/load.
 - The tracked launch script restores and builds before Godot starts, preventing stale local Debug content after branch changes.
-- The proof world has four vessels: USS Pathfinder at Dawn Anchor, USS Wayfarer repairing at Vesper Reach, USS Horizon traveling to Meridian Drift, and Survey Vessel Kestrel at Dawn Anchor.
+- The proof world retains USS Pathfinder at Dawn Anchor, USS Wayfarer repairing at Vesper Reach, and USS Horizon traveling to Meridian Drift.
+- Survey Vessel Kestrel is the fourth durable vessel at Dawn Anchor and owns the focused cautious-contact posture.
 - Core owns an immutable ship-definition catalog and plural ordinary `ShipState`; `PlayerShipId` selects one ship for commands and projection.
 - Strategic, tactical, sensor, repair, and scheduled consequence state is ship-owned. Targeted same-kind work cannot cross ship identities.
 - Ships use stable identity order, removing collection insertion order from simulation semantics.
@@ -17,19 +18,28 @@
 - NPC ships can own one stable `ShipOrder`: one-shot `TravelTo`, bounded cyclic `PatrolRoute`, or time-only `HoldUntil`.
 - The player ship cannot execute an autonomous order. Order execution reuses the same targetable Core travel command as player travel.
 - Cancellation removes only the identified order and its exact hold wake while preserving a physical journey already underway.
-- Ship-definition schema V3 adds explicit passive sensor range and active-scan duration to reusable Pathfinder-class capability, while vessel names and starting sensor condition remain bootstrap state.
+- Ship-definition schema V3 adds explicit passive sensor range and active-scan duration to reusable Pathfinder-class capability.
+- Vessel names and starting sensor condition remain bootstrap state rather than authored design capability.
 - The proof world reuses one validated Pathfinder-class definition for four vessel instances.
-- Each ship owns bounded observer-local contact knowledge. Current, stale, and lost contacts preserve a local ID and learned identity without exposing the correlated ship ID through player or AI projections.
-- Passive detection is local to ships at the same strategic location and scales authored sensor range by sensor integrity. A current contact can be scanned, and an identified current contact can be hailed through typed Core commands.
-- The Kestrel proof vessel initially detects the damaged player ship, withdraws through the bounded explainable `CautiousContact` posture, and holds after an identified valid hail. Hidden NPC decisions remain off the player event stream.
-- Save schema V4 persists bounded plural world state, definitions, orders, sensor knowledge, active scans, contact posture, allocators, and exact scheduled correlations; authored definitions remain external.
-- Historical `first-playable-v1` is validated at its source schema. V2-to-V3 writes `active-world-orders-v1`; V3-to-V4 writes `sensor-knowledge-first-contact-v1` with empty knowledge, next local contact ID 1, and no scan, posture, or decision wake.
+- Each ship owns bounded observer-local contact knowledge; Current, Stale, and Lost contacts preserve a local ID and learned identity.
+- The internal correlated ship ID is absent from player and AI projections.
+- Passive detection is local to ships at the same strategic location and scales authored sensor range by sensor integrity.
+- Current contacts support typed Core scan commands; identified Current contacts also support typed hail commands.
+- Kestrel detects the damaged player first, then withdraws through its bounded explainable `CautiousContact` posture.
+- An identified valid hail causes Kestrel to hold. Hidden NPC decisions remain off the player event stream.
+- Save schema V4 persists plural world state, orders, sensor knowledge, active scans, contact posture, allocators, and exact scheduled correlations.
+- Authored definitions remain external to save data.
+- Historical `first-playable-v1` is validated at its source schema; V2-to-V3 writes `active-world-orders-v1`.
+- V3-to-V4 writes `sensor-knowledge-first-contact-v1` with empty knowledge, next contact ID 1, and no scan, posture, or decision wake.
 - The generic quick-save slot is `user://quick-save.json`. Only the unchanged default path may discover the legacy `user://quick-save-v1.json` file when the generic slot is absent.
 - World admission is capped at 256 ships. Each advancement allows 1,000,000 moving-ship steps and 10,000 scheduled consequences.
 - Strategic-only intervals jump event-to-event and update repairs analytically; ships with active local tactical motion retain deterministic 100 ms integration.
-- Contact-sensitive local intervals evaluate observations at deterministic 100 ms boundaries. Contact-loss, scan-completion, and contact-decision work use exact scheduler correlations and revalidate their prerequisites at resolution.
+- Contact-sensitive local intervals evaluate observations at deterministic 100 ms boundaries.
+- Contact-loss, scan-completion, and contact-decision work use exact correlations and revalidate prerequisites at resolution.
 - Godot projects player-visible state and adapts coordinates, input, and elapsed presentation time; it neither owns authoritative ships nor exposes unrestricted NPC truth.
-- The tactical plot is player-centered and local, keeping legitimate sustained movement visible while numeric Core coordinates remain status truth. It renders only actor-safe current or stale contacts, supports deterministic contact selection, and keeps contact actions stable across refreshes.
+- The tactical plot is player-centered and local; numeric Core coordinates remain status truth during sustained movement.
+- It renders only actor-safe Current or Stale contacts and supports deterministic contact selection.
+- Contact action nodes and focus remain stable across presentation refreshes.
 - The solution uses a one-way Godot-to-Core project reference, exact .NET SDK 10.0.111, C# 12, Godot 4.7.2 .NET, .NET 8 runtime support, Node 24, xUnit, and GdUnit4 6.2.0.
 - `scripts/verify.sh` is the canonical read-only gate for formatting, analysis, policy, builds, tests, Godot integration, security, and smoke checks.
 - Figma's remote MCP endpoint and 14 official Figma skills are project-scoped for Codex and Claude; `codex mcp login figma` performs user authorization.
