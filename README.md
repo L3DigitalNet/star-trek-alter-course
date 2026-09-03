@@ -6,7 +6,7 @@
 
 ## Project status
 
-The current immutable source-only release is v0.3.0 — Command Interface; no packaged game artifact is published. The `dev` line also contains the unreleased Milestone 3A first-observed-contact slice, alongside the project architecture, pinned development environment, and quality gates.
+The current immutable source-only release is v0.3.0 — Command Interface; no packaged game artifact is published. Active Feature #58 development adds the unreleased Milestone 3A first-observed-contact slice alongside the project architecture, pinned development environment, and quality gates.
 
 The command screen proves a small, persistent, deterministic slice of play: a captain selects a connected destination on an open strategic map, begins travel, and sees the ship's damaged sensors repair as simulation time passes. Arrival is scheduled rather than immediate. A separate local tactical view displays continuous position and accepts a demonstration course command; neither map is governed by square or hex movement.
 

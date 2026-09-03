@@ -5,7 +5,7 @@
 - Features #36 and #38 completed Milestones 1 and 2 through merged Final PRs #37 (`eb3c976`) and #39 (`fba9b438`) on `dev`.
 - Task #40 consolidated their gameplay shell through Final PR #41 (`ed8ca4b`); owner gameplay evaluation found the shell working well.
 - Release Task #53 is Done; v0.3.0 is the current immutable source-only GitHub Release, tagged at `fae21bd`; no packaged gameplay artifact is published.
-- Feature #58's unreleased Milestone 3A slice adds first observed contact on `dev`; it is not a new release and does not complete all of Milestone 3.
+- Feature #58's unreleased Milestone 3A slice adds first observed contact; it is not a new release and does not complete all of Milestone 3.
 - The shell retains strategic travel, local tactical movement, sensor repair, deterministic time controls, player-relevant advance-until, and quick save/load.
 - The tracked launch script restores and builds before Godot starts, preventing stale local Debug content after branch changes.
 - The proof world retains USS Pathfinder at Dawn Anchor, USS Wayfarer repairing at Vesper Reach, and USS Horizon traveling to Meridian Drift.
