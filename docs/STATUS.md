@@ -6,7 +6,8 @@
 - Task #40 consolidated their gameplay shell through Final PR #41 (`ed8ca4b`); owner gameplay evaluation found the shell working well.
 - Release Task #53 is Done; v0.3.0 is the current immutable source-only GitHub Release, tagged at `fae21bd`; no packaged gameplay artifact is published.
 - Feature #58's unreleased Milestone 3A slice adds first observed contact; it is not a new release and does not complete all of Milestone 3.
-- The shell retains strategic travel, local tactical movement, sensor repair, deterministic time controls, player-relevant advance-until, and quick save/load.
+- Feature #62 and draft Final PR #63 contain the unreleased Milestone 4 Engineering Backbone implementation; it is not merged, released, or on `main`.
+- The shell retains strategic travel, local tactical movement, Engineering power allocation and system repair, deterministic time controls, player-relevant advance-until, and quick save/load.
 - The tracked launch script restores and builds before Godot starts, preventing stale local Debug content after branch changes.
 - The proof world retains USS Pathfinder at Dawn Anchor, USS Wayfarer repairing at Vesper Reach, and USS Horizon traveling to Meridian Drift.
 - Survey Vessel Kestrel is the fourth durable vessel at Dawn Anchor and owns the focused cautious-contact posture.
@@ -18,19 +19,19 @@
 - NPC ships can own one stable `ShipOrder`: one-shot `TravelTo`, bounded cyclic `PatrolRoute`, or time-only `HoldUntil`.
 - The player ship cannot execute an autonomous order. Order execution reuses the same targetable Core travel command as player travel.
 - Cancellation removes only the identified order and its exact hold wake while preserving a physical journey already underway.
-- Ship-definition schema V3 adds explicit passive sensor range and active-scan duration to reusable Pathfinder-class capability.
-- Vessel names and starting sensor condition remain bootstrap state rather than authored design capability.
+- Ship-definition schema V4 adds explicit Engineering generation, consumer demand, and repair durations alongside reusable Pathfinder-class sensor and tactical capability.
+- Vessel names and starting Engineering conditions/allocation remain bootstrap state rather than authored design capability.
 - The proof world reuses one validated Pathfinder-class definition for four vessel instances.
 - Each ship owns up to 255 observer-local contacts; Current, Stale, and Lost tracks preserve a local ID and learned identity.
 - The internal correlated ship ID is absent from player and AI projections.
-- Passive detection is local to ships at the same strategic location and scales authored sensor range by sensor integrity.
+- Passive detection is local to ships at the same strategic location and scales authored sensor range by effective sensor capability.
 - Current contacts support typed Core scan commands; identified Current contacts also support typed hail commands.
 - Kestrel detects the damaged player first, then withdraws through its bounded explainable `CautiousContact` posture.
 - An identified valid hail causes Kestrel to hold. Hidden NPC decisions remain off the player event stream.
-- Save schema V4 persists plural world state, orders, sensor knowledge, active scans, contact posture, allocators, and exact scheduled correlations.
+- Save schema V5 persists plural world state, Engineering conditions/allocation/repair, orders, sensor knowledge, active scans, contact posture, allocators, and exact scheduled correlations.
 - Authored definitions remain external to save data.
 - Historical `first-playable-v1` is validated at its source schema; V2-to-V3 writes `active-world-orders-v1`.
-- V3-to-V4 writes `sensor-knowledge-first-contact-v1` with empty knowledge, next contact ID 1, and no scan, posture, or decision wake.
+- V3-to-V4 writes `sensor-knowledge-first-contact-v1` with empty knowledge, next contact ID 1, and no scan, posture, or decision wake; V4-to-V5 writes `engineering-backbone-v1` with migrated sensor state and nominal generation/impulse defaults.
 - The generic quick-save slot is `user://quick-save.json`. Only the unchanged default path may discover the legacy `user://quick-save-v1.json` file when the generic slot is absent.
 - World admission is capped at 256 ships. Each advancement allows 1,000,000 moving-ship steps and 10,000 scheduled consequences.
 - Strategic-only intervals jump event-to-event and update repairs analytically; ships with active local tactical motion retain deterministic 100 ms integration.
@@ -40,6 +41,7 @@
 - The tactical plot is player-centered and local; numeric Core coordinates remain status truth during sustained movement.
 - It renders only actor-safe Current or Stale contacts and supports deterministic contact selection.
 - Contact action nodes and focus remain stable across presentation refreshes.
+- The Engineering station receives only immutable player projections and reconciles live hierarchy/actions by stable ID; NPC Engineering state remains unavailable.
 - The solution uses a one-way Godot-to-Core project reference, exact .NET SDK 10.0.111, C# 12, Godot 4.7.2 .NET, .NET 8 runtime support, Node 24, xUnit, and GdUnit4 6.2.0.
 - `scripts/verify.sh` is the canonical read-only gate for formatting, analysis, policy, builds, tests, Godot integration, security, and smoke checks.
 - Figma's remote MCP endpoint and 14 official Figma skills are project-scoped for Codex and Claude; `codex mcp login figma` performs user authorization.
@@ -54,5 +56,6 @@
 - Owner accepted the command interface for v0.3.0: it runs smoothly with no errors.
 - Bug #49's PR #50 merged as `2064822`; the launcher imports Godot assets before loading the command theme.
 - Bug #51 merged through Final PR #52 as `c5602cc`; live context actions now retain pointer interaction and keyboard focus across refreshes.
+- Focused Milestone 4 verification is green: combined Core 370/370 and GameplayShell 60/60. Canonical verification, manual gameplay review, and final review remain pending.
 - Remaining Milestone 3 work includes richer uncertainty, strategic contacts, additional postures, affiliation and intent knowledge, and broader encounter transitions.
-- Milestone 4+ work remains deferred: sensor power allocation, engineering depth, faction strategy, combat, diplomacy, economy, narrative, networking, and final art.
+- Engineering depth beyond this backbone, faction strategy, combat, diplomacy, economy, narrative, networking, and final art remain deferred.

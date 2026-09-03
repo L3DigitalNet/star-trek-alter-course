@@ -4,7 +4,7 @@ id: 'concept-34m8xl-engineering-backbone'
 title: 'Engineering Backbone'
 description: 'Defines the authoritative power, condition, repair, capability, persistence, and live Engineering boundary for Milestone 4.'
 doc_type: 'concept'
-status: 'draft'
+status: 'active'
 created: '2026-09-03'
 updated: '2026-09-03'
 tags:
@@ -108,9 +108,9 @@ The four ordinary ships and Survey Vessel Kestrel's cautious posture remain. USS
 
 Save V5 uses a new explicit model and simulation-rules version. Each ship stores three conditions, exact sensor/impulse allocation, and optional system repair target/conditions/times/exact work identity. It does not store derived power, reserve, capability, range, speed, labels, progress, presentation, preview, or cached projections.
 
-The adjacent V4-to-V5 migration maps `SensorIntegrity` to sensor condition and an active V4 sensor repair to a V5 repair targeting `sensors`, preserving all times and exact scheduled-work identity while changing the known work kind. It initializes generator and impulse condition to one and allocates both consumers at full nominal demand. Because the V4 definition's migrated V4 content has nominal generation equal to total demand, historical passive range and tactical speed are preserved. The migration validates the complete V5 candidate against the resolved definition before constructing live state; impossible allocations or content mismatch fail clearly.
+The adjacent V4-to-V5 migration maps `SensorIntegrity` to sensor condition and an active V4 sensor repair to a V5 repair targeting `sensors`, preserving all times and exact scheduled-work identity while changing the known work kind. It initializes generator and impulse condition to one and allocates both consumers at full nominal demand. Because migrated V4 content has nominal generation equal to total demand, historical passive range and tactical speed are preserved. The migration validates the complete V5 candidate against the resolved definition before constructing live state; impossible allocations or content mismatch fail clearly.
 
-The V1-to-V2-to-V3-to-V4-to-V5 chain remains adjacent. Simulation time, contact knowledge and local IDs, active scans, autonomous posture/wakes, orders, scheduler ordering, and allocator continuation are preserved. Maximum-shape serialization is measured under the existing 128 MiB envelope, and failed load never replaces live state.
+The V1-to-V2-to-V3-to-V4-to-V5 chain remains adjacent. Simulation time, contact knowledge and local IDs, active scans, autonomous posture/wakes, orders, scheduler ordering, and allocator continuation are preserved. Maximum-shape V5 serialization measures 95,677,740 bytes under the 134,217,728-byte (128 MiB) envelope, and failed load never replaces live state.
 
 ## Player projection and live Engineering
 
@@ -124,6 +124,6 @@ Engineering hierarchy, component selection, and action controls reconcile by sta
 
 ## Verification and deliberate deferrals
 
-Lowest-layer tests cover bounded quantities, independent allocation/capability models, commands and atomicity, contact/scan consequences, tactical/AI limits, analytical repair/correlation, strict content, V5 migrations/envelope/continuation, the full headless Kestrel sequence, public API/architecture boundaries, and Godot live refresh/intent/isolation. Final proof uses the canonical gate and tracked production launcher on the exact reviewed head.
+Lowest-layer tests cover bounded quantities, independent allocation/capability models, commands and atomicity, contact/scan consequences, tactical/AI limits, analytical repair/correlation, strict V4 content, V5 migrations/envelope/continuation, the full headless Kestrel sequence, public API/architecture boundaries, and Godot live refresh/intent/isolation. The combined scenario acquires Kestrel at 3,500 ms, saves during the active scan at 4,500 ms, completes the scan and later reacquires the same local contact ID at 5,500 ms, completes the sensor repair at 8,000 ms, and proves USS Horizon's strategic arrival at 14,000 ms. Focused Core and GameplayShell suites are green; canonical verification, manual gameplay review, and final review remain pending.
 
 This milestone does not start strategic contacts, affiliations or intent knowledge, additional postures, factions, diplomacy, dialogue, shields, weapons, combat, life support, computers, transporters, structural damage, warp Engineering, dynamic travel recalculation, fuel, heat/coolant, EPS topology, batteries, crew, repair teams/queues, parts/inventory, economy, arbitrary damage, generalized component definitions, a universal system interface, ECS, event bus, behavior tree, state-machine framework, dependency-injection container, database, service architecture, LLM authority, release, packaging, or `main` work.
