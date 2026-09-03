@@ -145,6 +145,22 @@ public partial class GameScreen : Control
     }
 
     /// <inheritdoc />
+    public override void _Input(InputEvent @event)
+    {
+        if (!@event.IsAction(ActionTogglePause))
+        {
+            return;
+        }
+
+        if (@event.IsActionPressed(ActionTogglePause))
+        {
+            TogglePause();
+        }
+
+        GetViewport().SetInputAsHandled();
+    }
+
+    /// <inheritdoc />
     public override void _UnhandledInput(InputEvent @event)
     {
         if (@event.IsActionPressed(ActionViewStrategic))

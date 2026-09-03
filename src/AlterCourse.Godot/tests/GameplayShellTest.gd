@@ -664,6 +664,36 @@ func test_active_scan_and_hail_actions_translate_typed_contact_and_reconcile_but
 	assert_bool((_find_action_button(screen, "hail-target") as Button).disabled).is_true()
 
 
+func test_space_pause_does_not_activate_the_focused_hail_action() -> void:
+	var screen := _create_screen()
+	screen.call("AdvanceUntilNextPlayerRelevantEvent")
+	screen.call("ShowTacticalView")
+	screen.call("SelectContact", 1)
+	screen.call("RequestSelectedActiveScan")
+	screen.call("AdvanceUntilNextPlayerRelevantEvent")
+	var hail_button := _find_action_button(screen, "hail") as Button
+	hail_button.grab_focus()
+	assert_bool(hail_button.has_focus()).is_true()
+	var log_before := _collect_control_text(screen.get_node("%EventLogContent"))
+	var command_before: String = screen.get_meta("last_contact_command", "")
+
+	var press := InputEventKey.new()
+	press.physical_keycode = KEY_SPACE
+	press.unicode = KEY_SPACE
+	press.pressed = true
+	screen.call("_Input", press)
+	assert_bool(screen.get_viewport().is_input_handled()).is_true()
+	var release := press.duplicate() as InputEventKey
+	release.pressed = false
+	screen.call("_Input", release)
+	assert_bool(screen.get_viewport().is_input_handled()).is_true()
+
+	assert_float(screen.get_meta("simulation_rate", -1.0)).is_equal(0.0)
+	assert_str(screen.get_meta("last_contact_command", "")).is_equal(command_before)
+	assert_str(_collect_control_text(screen.get_node("%EventLogContent"))).is_equal(log_before)
+	assert_bool(hail_button.has_focus()).is_true()
+
+
 func test_travel_departure_presents_contact_and_scan_events_in_log() -> void:
 	var screen := _create_screen()
 	screen.call("AdvanceUntilNextPlayerRelevantEvent")
