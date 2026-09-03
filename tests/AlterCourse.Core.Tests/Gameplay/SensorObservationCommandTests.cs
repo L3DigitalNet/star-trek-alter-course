@@ -143,6 +143,80 @@ public sealed class SensorObservationCommandTests
         Assert.Equal(SensorContactStatus.Lost, Assert.Single(loss.Projection.Ship.Sensors.Contacts).Status);
     }
 
+    /// <summary>Confirms reacquisition invalidates already-dequeued loss work without a false loss event.</summary>
+    [Fact]
+    public void SameBoundaryReacquisitionRevalidatesDequeuedLossWork()
+    {
+        GameSimulation game = CreateSameBoundaryReacquisitionGame();
+
+        SimulationAdvanceResult result = game.AdvanceFixedSteps(20);
+
+        Assert.Equal(
+            [PlayerAdvanceEventKind.TravelArrived, PlayerAdvanceEventKind.SensorContactReacquired],
+            result.ResolvedEvents.Select(playerEvent => playerEvent.Kind)
+        );
+        Assert.Equal(SensorContactStatus.Current, Assert.Single(result.Projection.Ship.Sensors.Contacts).Status);
+        Assert.Empty(game.CaptureState().Scheduler.OutstandingWork);
+    }
+
+    private static GameSimulation CreateSameBoundaryReacquisitionGame()
+    {
+        (SimulationScheduler scheduler, ScheduledWork arrivalWork) = SimulationScheduler
+            .Create()
+            .Schedule(new SimulationTime(2_000), new ShipInstanceId(1), ScheduledWorkKind.TravelArrival);
+        (scheduler, ScheduledWork lossWork) = scheduler.Schedule(
+            new SimulationTime(2_000),
+            new ShipInstanceId(1),
+            ScheduledWorkKind.SensorContactLoss
+        );
+        var contact = new SensorContactTrack(
+            new SensorContactId(1),
+            new ShipInstanceId(2),
+            default,
+            new SimulationTime(0),
+            SensorContactStatus.Stale,
+            SensorContactIdentification.Detected,
+            LossWorkId: lossWork.Id,
+            LossDueTime: lossWork.DueTime
+        );
+        var player = new ShipState(
+            new ShipInstanceId(1),
+            ObserverDefinitionId,
+            "Player",
+            default,
+            default,
+            new SensorIntegrity(1),
+            null,
+            new TravelingState(
+                new TravelState(Remote, Local, new SimulationTime(0), arrivalWork.DueTime, arrivalWork.Id)
+            ),
+            sensorKnowledge: new SensorKnowledge(2, [contact])
+        );
+        var target = new ShipState(
+            new ShipInstanceId(2),
+            TargetDefinitionId,
+            "Target",
+            default,
+            default,
+            new SensorIntegrity(1),
+            null,
+            new AtLocationState(Local)
+        );
+        var map = new StrategicMap(
+            [new StrategicLocation(Local, "Local", default), new StrategicLocation(Remote, "Remote", default)],
+            [new StrategicRoute(Remote, Local, new SimulationDuration(2_000))]
+        );
+        var state = new SimulationState(
+            new SimulationTime(0),
+            scheduler,
+            ShipInstanceIdAllocator.Restore(3),
+            map,
+            player.InstanceId,
+            [player, target]
+        );
+        return GameSimulation.RestoreState(state, CreateCatalog());
+    }
+
     /// <summary>Confirms scan admission precedence, completion, identification, and action legality.</summary>
     [Fact]
     public void ActiveScanUsesLockedOutcomesAndCompletesAgainstLocalContact()
