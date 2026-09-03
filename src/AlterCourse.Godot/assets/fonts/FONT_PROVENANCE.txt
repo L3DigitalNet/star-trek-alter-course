@@ -1,0 +1,43 @@
+Project-owned UI font provenance
+
+All files listed below are unmodified upstream TrueType font files. The source
+URLs are pinned to immutable Git commit IDs. SHA-256 values cover the committed
+files in this directory.
+
+Rajdhani
+Copyright: Copyright (c) 2014, Indian Type Foundry (info@indiantypefoundry.com).
+License: SIL Open Font License 1.1; see LICENSES/Rajdhani-OFL-1.1.txt.
+License source: https://raw.githubusercontent.com/google/fonts/f6b2b7e8545e086ad3f821af21895d732b6485cf/ofl/rajdhani/OFL.txt
+Upstream: https://github.com/google/fonts
+Commit: f6b2b7e8545e086ad3f821af21895d732b6485cf
+
+Rajdhani-SemiBold.ttf
+Source: https://raw.githubusercontent.com/google/fonts/f6b2b7e8545e086ad3f821af21895d732b6485cf/ofl/rajdhani/Rajdhani-SemiBold.ttf
+SHA-256: 94bbd25a18ca665999feb05a537de9fd2b860dcfb78bbe9ca00270825bf235da
+
+Rajdhani-Bold.ttf
+Source: https://raw.githubusercontent.com/google/fonts/f6b2b7e8545e086ad3f821af21895d732b6485cf/ofl/rajdhani/Rajdhani-Bold.ttf
+SHA-256: 691470dd3286a14e9677940d0bf75796179841ba5215cbda1a2c8910a3226afd
+
+IBM Plex Sans and IBM Plex Mono
+Copyright: Copyright © 2017 IBM Corp. with Reserved Font Name "Plex".
+License: SIL Open Font License 1.1; see LICENSES/IBM-Plex-OFL-1.1.txt.
+License source: https://raw.githubusercontent.com/IBM/plex/bf260093582f04622aacc1e9f9ca604d7ccd0c42/LICENSE.txt
+Upstream: https://github.com/IBM/plex
+Commit: bf260093582f04622aacc1e9f9ca604d7ccd0c42
+
+IBMPlexSans-Regular.ttf
+Source: https://raw.githubusercontent.com/IBM/plex/bf260093582f04622aacc1e9f9ca604d7ccd0c42/packages/plex-sans/fonts/complete/ttf/IBMPlexSans-Regular.ttf
+SHA-256: 975dcda37d80f038dcd143c22e33ca2d97a0cc5a929aace1c749153b0fe1afa5
+
+IBMPlexSans-Medium.ttf
+Source: https://raw.githubusercontent.com/IBM/plex/bf260093582f04622aacc1e9f9ca604d7ccd0c42/packages/plex-sans/fonts/complete/ttf/IBMPlexSans-Medium.ttf
+SHA-256: 331c8639d7598b2cde62a911a71db195e30cb655cd6bdf2e324a7e984955f907
+
+IBMPlexMono-Regular.ttf
+Source: https://raw.githubusercontent.com/IBM/plex/bf260093582f04622aacc1e9f9ca604d7ccd0c42/packages/plex-mono/fonts/complete/ttf/IBMPlexMono-Regular.ttf
+SHA-256: 7c6fbddca4b700be918f5f6183d9bd4464fa427fe435f0b480d77fe2bb8c5a43
+
+IBMPlexMono-Medium.ttf
+Source: https://raw.githubusercontent.com/IBM/plex/bf260093582f04622aacc1e9f9ca604d7ccd0c42/packages/plex-mono/fonts/complete/ttf/IBMPlexMono-Medium.ttf
+SHA-256: 98fbd727aae340b236955879dabed4d991aac9e8e90b3b2a67ce4a59221cc97c
