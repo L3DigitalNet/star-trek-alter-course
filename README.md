@@ -6,7 +6,7 @@
 
 ## Project status
 
-The current immutable source-only release is v0.3.0 — Command Interface; no packaged game artifact is published. Feature #62 and its draft Final PR #63 contain the unreleased Milestone 4 Engineering Backbone implementation. It is not merged, released, or on `main`.
+The current immutable source-only release is v0.3.0 — Command Interface; no packaged game artifact is published. The development line adds Milestone 3A first observed contact and the Milestone 4 Engineering Backbone while release-only `main` remains at v0.3.0.
 
 The command screen proves a small, persistent, deterministic slice of play: a captain selects a connected destination on an open strategic map, begins travel, allocates constrained power between sensors and impulse propulsion, and sees a damaged system repair as simulation time passes. Arrival is scheduled rather than immediate. A separate local tactical view displays continuous position and accepts a demonstration course command; neither map is governed by square or hex movement.
 
