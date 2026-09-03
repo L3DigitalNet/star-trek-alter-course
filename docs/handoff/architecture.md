@@ -25,6 +25,9 @@
 - Player-relevant advance processes hidden NPC work but reports and stops only on `PlayerShipId`; Godot results stay filtered.
 - Public advancement outcomes use player-semantic event names at the Godot boundary; scheduler consequences and proof traces remain internal surfaces.
 - The Godot command shell owns stable player controls and projections, while `GameSimulation` remains the command and state authority.
+- `GameScreen` owns one session-lifetime `GameSimulation`; Command and Engineering workspaces are persistent views over that same state.
+- Command Deck map views reuse the strategic and tactical adapters. Godot owns display transforms, selection, and context presentation.
+- Command-interface fixtures are deterministic presentation data only. They cannot submit commands, persist state, or invent Core truth.
 - `scripts/launch-game.sh` is the safe direct-launch boundary: it restores and builds the Godot project before starting the editor.
 
 ## Standing backlog

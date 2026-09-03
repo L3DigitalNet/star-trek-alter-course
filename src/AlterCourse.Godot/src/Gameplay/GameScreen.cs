@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using AlterCourse.Core.Content;
 using AlterCourse.Core.Gameplay;
 using AlterCourse.Core.Persistence;
@@ -9,7 +10,9 @@ using GodotFile = Godot.FileAccess;
 
 namespace AlterCourse.Godot.Gameplay;
 
-/// <summary>Owns one scene-lifetime simulation and projects player-known state into the command shell.</summary>
+/// <summary>
+/// Owns one scene-lifetime simulation and adapts its player-known projection to persistent command workspaces.
+/// </summary>
 public partial class GameScreen : Control
 {
     private const string SchemaPath = "res://content/schemas/ship-definition-v2.schema.json";
@@ -31,7 +34,7 @@ public partial class GameScreen : Control
     private static readonly double[] RunningRates = [0.5, 1, 2, 4];
 
     private readonly SimulationRateController _rateController = new();
-    private readonly Dictionary<LocationId, Button> _destinationButtonByLocation = [];
+    private readonly List<PlayerAdvanceEvent> _recentEvents = [];
     private GameSimulation? _simulation;
     private ShipDefinitionCatalog? _shipCatalog;
     private PlayerProjection? _projection;
@@ -39,30 +42,32 @@ public partial class GameScreen : Control
     private DateTimeOffset? _quickSaveCreatedAtUtc;
     private string _quickSavePath = null!;
     private bool _quickSaveUsesDefaultPath;
-    private bool _strategicViewActive = true;
+    private bool _engineeringWorkspaceActive;
     private double _lastRunningRate = 1;
-    private StrategicMapView _strategicMap = null!;
-    private TacticalMapView _tacticalMap = null!;
-    private VBoxContainer _strategicCommands = null!;
-    private VBoxContainer _tacticalCommands = null!;
-    private VBoxContainer _destinationButtons = null!;
+    private CommandInterfaceMode _commandMode = CommandInterfaceMode.Travel;
+    private CommandInterfaceDataMode _dataMode = CommandInterfaceDataMode.Live;
+    private CommandDeckWorkspace _commandDeck = null!;
+    private EngineeringWorkspace _engineering = null!;
+    private Label _eventLogHeading = null!;
+    private VBoxContainer _eventLog = null!;
+    private VBoxContainer _captainActions = null!;
+    private VBoxContainer _engineeringBottomActions = null!;
+    private VBoxContainer _engineeringQueue = null!;
+    private VBoxContainer _engineeringQueueActions = null!;
     private Label _timeLabel = null!;
     private Label _vesselStatusLabel = null!;
     private Label _rateStatusLabel = null!;
     private Label _viewStatusLabel = null!;
-    private Label _mapTitleLabel = null!;
-    private Label _mapScaleLabel = null!;
-    private Label _contextTitleLabel = null!;
-    private Label _shipLabel = null!;
-    private Label _sensorLabel = null!;
-    private Label _travelLabel = null!;
-    private Label _courseLabel = null!;
+    private Label _alertStatusLabel = null!;
     private Label _messageLabel = null!;
     private Button _travelButton = null!;
     private Button _courseButton = null!;
     private Button _advanceUntilButton = null!;
     private Button _strategicButton = null!;
     private Button _tacticalButton = null!;
+    private Button _commandStationButton = null!;
+    private Button _engineeringStationButton = null!;
+    private Button _engineeringBottomReturnButton = null!;
     private Button _quickSaveButton = null!;
     private Button _quickLoadButton = null!;
     private Button _pauseButton = null!;
@@ -73,6 +78,9 @@ public partial class GameScreen : Control
 
     /// <summary>Gets whether canonical content produced a complete playable simulation.</summary>
     public bool IsGameplayReady => _simulation is not null;
+
+    /// <summary>Gets a process-local identity used to prove workspace switches retain the same simulation.</summary>
+    public int SimulationIdentity => _simulation is null ? 0 : RuntimeHelpers.GetHashCode(_simulation);
 
     /// <summary>Gets or sets the Godot user-data path for the one quick-save slot.</summary>
     [Export]
@@ -107,11 +115,9 @@ public partial class GameScreen : Control
             _shipCatalog = catalog;
             _simulation = simulation;
             SetMeta("quick_save_user_path", QuickSaveUserPath);
-            RefreshProjection();
-            BuildDestinationButtons();
             SetSimulationRate(1);
+            ShowStrategicView();
             _messageLabel.Text = "Command systems ready.";
-            _strategicButton.CallDeferred(Control.MethodName.GrabFocus);
         }
         catch (Exception exception)
         {
@@ -185,6 +191,13 @@ public partial class GameScreen : Control
     /// <summary>Consumes controlled presentation elapsed time and returns submitted Core steps.</summary>
     public int ProcessSyntheticDelta(double elapsedSeconds)
     {
+        // Preview is a frozen presentation fixture. It must neither consume fractional live time nor
+        // let the regular frame loop overwrite the fixture with an authoritative projection.
+        if (_dataMode != CommandInterfaceDataMode.Live)
+        {
+            return 0;
+        }
+
         int steps = _rateController.ConsumeElapsed(elapsedSeconds);
         if (_simulation is null || steps == 0)
         {
@@ -195,15 +208,13 @@ public partial class GameScreen : Control
         {
             SimulationAdvanceResult result = _simulation.AdvanceFixedSteps(steps);
             SetMeta("advance_status", "advanced");
-            RefreshProjection();
-            PresentResolvedEvents(result.ResolvedEvents, announce: false);
             if (result.ResolvedEvents.Contains(PlayerAdvanceEvent.TravelArrived))
             {
-                _selectedDestination = null;
-                SetMeta("selected_destination", string.Empty);
-                BuildDestinationButtons();
+                ClearSelectedDestination();
             }
 
+            PresentResolvedEvents(result.ResolvedEvents, announce: false);
+            RefreshProjection();
             return steps;
         }
         catch (Exception exception)
@@ -216,7 +227,7 @@ public partial class GameScreen : Control
     /// <summary>Selects one of the five supported presentation time rates.</summary>
     public void SetSimulationRate(double rate)
     {
-        if (_simulation is null)
+        if (_simulation is null || _dataMode != CommandInterfaceDataMode.Live)
         {
             return;
         }
@@ -259,7 +270,7 @@ public partial class GameScreen : Control
     /// <summary>Saves the current simulation to the one application-owned quick-save slot.</summary>
     public void QuickSave()
     {
-        if (_simulation is null || _quickSaveButton.Disabled)
+        if (_simulation is null || _quickSaveButton.Disabled || _dataMode != CommandInterfaceDataMode.Live)
         {
             return;
         }
@@ -286,7 +297,12 @@ public partial class GameScreen : Control
     /// <summary>Loads a new validated simulation from the quick-save slot.</summary>
     public void QuickLoad()
     {
-        if (_simulation is null || _shipCatalog is null || _quickLoadButton.Disabled)
+        if (
+            _simulation is null
+            || _shipCatalog is null
+            || _quickLoadButton.Disabled
+            || _dataMode != CommandInterfaceDataMode.Live
+        )
         {
             return;
         }
@@ -300,18 +316,17 @@ public partial class GameScreen : Control
             // boundary so an unreadable or invalid save cannot damage the playable aggregate.
             _simulation = loaded.Simulation;
             _quickSaveCreatedAtUtc = loaded.Metadata.CreatedAtUtc;
-            _selectedDestination = null;
-            SetMeta("selected_destination", string.Empty);
+            _recentEvents.Clear();
+            ClearSelectedDestination();
 
             // Rate is a current player preference, so it survives load. Fractional carry is dropped
             // because presentation time accumulated before the snapshot must not advance restored truth.
             _rateController.ResetAccumulatedTime();
             RefreshProjection();
-            BuildDestinationButtons();
             _messageLabel.Text =
                 $"Quick load restored time {loaded.Simulation.GetPlayerProjection().SimulationTime.Milliseconds / 1000.0:0.0} s.";
             SetMeta("quick_save_status", "loaded");
-            CurrentViewButton().CallDeferred(Control.MethodName.GrabFocus);
+            CurrentWorkspaceButton().CallDeferred(Control.MethodName.GrabFocus);
         }
         catch (Exception exception)
         {
@@ -322,18 +337,29 @@ public partial class GameScreen : Control
     /// <summary>Selects a strategic destination by stable Core identifier.</summary>
     public void SelectDestination(string destinationId)
     {
-        if (_simulation is null || _projection is null)
+        if (_simulation is null || _projection is null || _dataMode != CommandInterfaceDataMode.Live)
         {
             return;
         }
 
-        OnDestinationSelected(new LocationId(destinationId));
+        var destination = new LocationId(destinationId);
+        if (_projection.Strategic.Locations.All(location => location.Id != destination))
+        {
+            return;
+        }
+
+        OnDestinationSelected(destination);
     }
 
     /// <summary>Submits selected strategic travel through the typed Core command.</summary>
     public void RequestSelectedTravel()
     {
-        if (_simulation is null || _travelButton.Disabled || _selectedDestination is not LocationId destination)
+        if (
+            _simulation is null
+            || _dataMode != CommandInterfaceDataMode.Live
+            || _travelButton.Disabled
+            || _selectedDestination is not LocationId destination
+        )
         {
             return;
         }
@@ -350,7 +376,6 @@ public partial class GameScreen : Control
                 _ => "Travel request was not accepted.",
             };
             RefreshProjection();
-            BuildDestinationButtons();
         }
         catch (Exception exception)
         {
@@ -361,7 +386,7 @@ public partial class GameScreen : Control
     /// <summary>Advances through Core to the next player-relevant event boundary.</summary>
     public void AdvanceUntilNextPlayerRelevantEvent()
     {
-        if (_simulation is null || _advanceUntilButton.Disabled)
+        if (_simulation is null || _advanceUntilButton.Disabled || _dataMode != CommandInterfaceDataMode.Live)
         {
             return;
         }
@@ -369,17 +394,17 @@ public partial class GameScreen : Control
         try
         {
             AdvanceUntilResult result = _simulation.AdvanceUntilNextPlayerRelevantEvent();
+            if (result.ResolvedEvents.Contains(PlayerAdvanceEvent.TravelArrived))
+            {
+                ClearSelectedDestination();
+            }
+
+            PresentResolvedEvents(result.ResolvedEvents, announce: false);
+            RefreshProjection();
             string resolved = DescribeAdvanceResult(result);
             _messageLabel.Text = resolved;
             SetMeta("advance_status", "advanced");
             SetMeta("last_advance_event", resolved);
-            RefreshProjection();
-            if (result.ResolvedEvents.Contains(PlayerAdvanceEvent.TravelArrived))
-            {
-                _selectedDestination = null;
-                SetMeta("selected_destination", string.Empty);
-                BuildDestinationButtons();
-            }
         }
         catch (Exception exception)
         {
@@ -390,7 +415,7 @@ public partial class GameScreen : Control
     /// <summary>Submits a visible north-east tactical course through the typed Core command.</summary>
     public void SetDemonstrationCourse()
     {
-        if (_simulation is null || _courseButton.Disabled)
+        if (_simulation is null || _courseButton.Disabled || _dataMode != CommandInterfaceDataMode.Live)
         {
             return;
         }
@@ -416,62 +441,97 @@ public partial class GameScreen : Control
         }
     }
 
-    /// <summary>Shows the strategic route projection and its matching command context.</summary>
+    /// <summary>Shows the live strategic route projection in the persistent Command Deck.</summary>
     public void ShowStrategicView()
     {
-        _strategicViewActive = true;
-        _strategicMap.Visible = true;
-        _tacticalMap.Visible = false;
-        _strategicCommands.Visible = true;
-        _tacticalCommands.Visible = false;
-        _strategicButton.ButtonPressed = true;
-        _tacticalButton.ButtonPressed = false;
-        _viewStatusLabel.Text = "VIEW STRATEGIC";
-        _mapTitleLabel.Text = "STRATEGIC SENSOR PLOT";
-        _mapScaleLabel.Text = "SEMANTIC ROUTES";
-        _contextTitleLabel.Text = "STRATEGIC COMMAND";
-        SetMeta("active_view", "strategic");
-        UpdateFocusTraversal();
+        _commandMode = CommandInterfaceMode.Travel;
+        ActivateLiveWorkspace(engineering: false);
     }
 
-    /// <summary>Shows the tactical motion projection and its matching command context.</summary>
+    /// <summary>Shows the live tactical motion projection in the persistent Command Deck.</summary>
     public void ShowTacticalView()
     {
-        _strategicViewActive = false;
-        _strategicMap.Visible = false;
-        _tacticalMap.Visible = true;
-        _strategicCommands.Visible = false;
-        _tacticalCommands.Visible = true;
-        _strategicButton.ButtonPressed = false;
-        _tacticalButton.ButtonPressed = true;
-        _viewStatusLabel.Text = "VIEW TACTICAL";
-        _mapTitleLabel.Text = "TACTICAL MOTION PLOT";
-        _mapScaleLabel.Text = "LOCAL KILOMETERS";
-        _contextTitleLabel.Text = "TACTICAL COMMAND";
-        SetMeta("active_view", "tactical");
-        UpdateFocusTraversal();
+        _commandMode = CommandInterfaceMode.Combat;
+        ActivateLiveWorkspace(engineering: false);
+    }
+
+    /// <summary>Shows the live engineering projection without replacing the running simulation.</summary>
+    public void ShowEngineeringWorkspace()
+    {
+        ActivateLiveWorkspace(engineering: true);
+    }
+
+    /// <summary>Returns to the last live Command Deck context without replacing the running simulation.</summary>
+    public void ShowCommandWorkspace()
+    {
+        ActivateLiveWorkspace(engineering: false);
+    }
+
+    /// <summary>Displays an approved deterministic preview through the instantiated production workspace.</summary>
+    public void ShowPreview(CommandInterfaceDataMode dataMode)
+    {
+        if (dataMode == CommandInterfaceDataMode.Live)
+        {
+            throw new ArgumentException(
+                "Use RestoreLiveMode to return to authoritative presentation.",
+                nameof(dataMode)
+            );
+        }
+
+        CommandInterfacePresentation presentation = CommandInterfacePreviewFixtures.Create(dataMode);
+        _dataMode = dataMode;
+        _engineeringWorkspaceActive = presentation.Mode == CommandInterfaceMode.Engineering;
+        if (!_engineeringWorkspaceActive)
+        {
+            _commandMode = presentation.Mode;
+        }
+
+        SetWorkspaceVisibility();
+        PresentWorkspace(presentation);
+        PresentShell(presentation);
+        _messageLabel.Text = "Illustrative preview — no command can change the running simulation.";
+        FocusCurrentWorkspace();
+    }
+
+    /// <summary>Restores the authoritative projection for the currently selected workspace.</summary>
+    public void RestoreLiveMode()
+    {
+        ActivateLiveWorkspace(_engineeringWorkspaceActive);
     }
 
     /// <summary>Maps a continuous Core tactical position for integration verification.</summary>
     public Vector2 MapTacticalPosition(double xKilometers, double yKilometers) =>
-        _tacticalMap.MapPosition(xKilometers, yKilometers);
+        _commandDeck.TacticalMap.MapPosition(xKilometers, yKilometers);
 
     private void BindScene()
     {
-        _strategicMap = GetNode<StrategicMapView>("%StrategicMap");
-        _tacticalMap = GetNode<TacticalMapView>("%TacticalMap");
-        _strategicCommands = GetNode<VBoxContainer>("%StrategicCommands");
-        _tacticalCommands = GetNode<VBoxContainer>("%TacticalCommands");
-        _destinationButtons = GetNode<VBoxContainer>("%DestinationButtons");
-        BindLabels();
+        _commandDeck = GetNode<CommandDeckWorkspace>("%CommandDeckWorkspace");
+        _engineering = GetNode<EngineeringWorkspace>("%EngineeringWorkspace");
+        _eventLogHeading = GetNode<Label>("%EventLogHeading");
+        _eventLog = GetNode<VBoxContainer>("%EventLogContent");
+        _captainActions = GetNode<VBoxContainer>("%CaptainActions");
+        _engineeringBottomActions = GetNode<VBoxContainer>("%EngineeringBottomActions");
+        _engineeringQueue = GetNode<VBoxContainer>("%EngineeringQueueContent");
+        _engineeringQueueActions = GetNode<VBoxContainer>("%EngineeringQueueActions");
+        _timeLabel = GetNode<Label>("%SimulationTime");
+        _vesselStatusLabel = GetNode<Label>("%VesselStatus");
+        _rateStatusLabel = GetNode<Label>("%RateStatus");
+        _viewStatusLabel = GetNode<Label>("%ViewStatus");
+        _alertStatusLabel = GetNode<Label>("%AlertStatus");
+        _messageLabel = GetNode<Label>("%Message");
         BindButtons();
 
-        _strategicMap.DestinationSelected = OnDestinationSelected;
+        _commandDeck.DestinationSelected += OnWorkspaceDestinationSelected;
+        _commandDeck.PresentationActionRequested += OnPresentationActionRequested;
+        _engineering.EngineeringCommandRequested += OnEngineeringCommandRequested;
         _travelButton.Pressed += RequestSelectedTravel;
         _courseButton.Pressed += SetDemonstrationCourse;
         _advanceUntilButton.Pressed += AdvanceUntilNextPlayerRelevantEvent;
         _strategicButton.Pressed += ShowStrategicView;
         _tacticalButton.Pressed += ShowTacticalView;
+        _commandStationButton.Pressed += ShowCommandWorkspace;
+        _engineeringStationButton.Pressed += ShowEngineeringWorkspace;
+        _engineeringBottomReturnButton.Pressed += ShowCommandWorkspace;
         _quickSaveButton.Pressed += QuickSave;
         _quickLoadButton.Pressed += QuickLoad;
         _pauseButton.Pressed += TogglePause;
@@ -479,23 +539,7 @@ public partial class GameScreen : Control
         ConfigureRateButton(_normalRateButton, 1);
         ConfigureRateButton(_doubleRateButton, 2);
         ConfigureRateButton(_quadRateButton, 4);
-        ShowStrategicView();
-    }
-
-    private void BindLabels()
-    {
-        _timeLabel = GetNode<Label>("%SimulationTime");
-        _vesselStatusLabel = GetNode<Label>("%VesselStatus");
-        _rateStatusLabel = GetNode<Label>("%RateStatus");
-        _viewStatusLabel = GetNode<Label>("%ViewStatus");
-        _mapTitleLabel = GetNode<Label>("%MapTitle");
-        _mapScaleLabel = GetNode<Label>("%MapScale");
-        _contextTitleLabel = GetNode<Label>("%ContextTitle");
-        _shipLabel = GetNode<Label>("%ShipStatus");
-        _sensorLabel = GetNode<Label>("%SensorStatus");
-        _travelLabel = GetNode<Label>("%TravelStatus");
-        _courseLabel = GetNode<Label>("%CourseStatus");
-        _messageLabel = GetNode<Label>("%Message");
+        SetWorkspaceVisibility();
     }
 
     private void BindButtons()
@@ -505,6 +549,9 @@ public partial class GameScreen : Control
         _advanceUntilButton = GetNode<Button>("%AdvanceUntilButton");
         _strategicButton = GetNode<Button>("%StrategicButton");
         _tacticalButton = GetNode<Button>("%TacticalButton");
+        _commandStationButton = GetNode<Button>("%CommandStationButton");
+        _engineeringStationButton = GetNode<Button>("%EngineeringStationButton");
+        _engineeringBottomReturnButton = GetNode<Button>("%EngineeringBottomReturnButton");
         _quickSaveButton = GetNode<Button>("%QuickSaveButton");
         _quickLoadButton = GetNode<Button>("%QuickLoadButton");
         _pauseButton = GetNode<Button>("%PauseRate");
@@ -580,83 +627,298 @@ public partial class GameScreen : Control
         button.Pressed += () => SetSimulationRate(rate);
     }
 
+    private void ActivateLiveWorkspace(bool engineering)
+    {
+        _dataMode = CommandInterfaceDataMode.Live;
+        _engineeringWorkspaceActive = engineering;
+        SetWorkspaceVisibility();
+        if (_simulation is not null)
+        {
+            RefreshProjection();
+        }
+
+        FocusCurrentWorkspace();
+    }
+
+    private void SetWorkspaceVisibility()
+    {
+        _commandDeck.Visible = !_engineeringWorkspaceActive;
+        _engineering.Visible = _engineeringWorkspaceActive;
+    }
+
+    private void RefreshProjection()
+    {
+        _projection = _simulation!.GetPlayerProjection();
+        CommandInterfaceMode mode = _engineeringWorkspaceActive ? CommandInterfaceMode.Engineering : _commandMode;
+        CommandInterfacePresentation presentation = CommandInterfacePresenter.PresentLive(
+            _projection,
+            _selectedDestination,
+            _recentEvents,
+            mode
+        );
+        PresentWorkspace(presentation);
+        PresentShell(presentation);
+        SetProjectionMetadata(_projection);
+    }
+
+    private void PresentWorkspace(CommandInterfacePresentation presentation)
+    {
+        if (presentation.Mode == CommandInterfaceMode.Engineering)
+        {
+            _engineering.Present(presentation);
+        }
+        else
+        {
+            _commandDeck.Present(presentation);
+        }
+    }
+
+    private void PresentShell(CommandInterfacePresentation presentation)
+    {
+        bool live = presentation.DataMode == CommandInterfaceDataMode.Live && _simulation is not null;
+        string activeView = presentation.Mode switch
+        {
+            CommandInterfaceMode.Travel => "strategic",
+            CommandInterfaceMode.Combat => "tactical",
+            CommandInterfaceMode.Engineering => "engineering",
+            _ => "unavailable",
+        };
+        SetMeta("data_mode", presentation.DataMode.ToString());
+        SetMeta("active_workspace", presentation.Mode == CommandInterfaceMode.Engineering ? "engineering" : "command");
+        SetMeta("active_view", activeView);
+        SetMeta("simulation_identity", SimulationIdentity);
+
+        if (live)
+        {
+            _vesselStatusLabel.Text = $"VESSEL {_projection!.Ship.DisplayName}";
+            _timeLabel.Text = $"TIME {_projection.SimulationTime.Milliseconds / 1000.0:0.0} s";
+            _rateStatusLabel.Text = _rateController.Rate == 0 ? "RATE PAUSED" : $"RATE {_rateController.Rate:0.0#}x";
+            _alertStatusLabel.Text = "ALERT UNAVAILABLE";
+        }
+        else
+        {
+            _vesselStatusLabel.Text = $"PREVIEW / {HeaderValue(presentation, "VESSEL")}";
+            _timeLabel.Text = $"PREVIEW / {HeaderValue(presentation, "CLOCK", "TIME UNAVAILABLE")}";
+            _rateStatusLabel.Text = "RATE FROZEN / PREVIEW";
+            _alertStatusLabel.Text = HeaderValue(presentation, "ALERT", "ALERT UNAVAILABLE");
+        }
+
+        _viewStatusLabel.Text = presentation.Mode switch
+        {
+            CommandInterfaceMode.Travel => "COMMAND DECK / TRAVEL",
+            CommandInterfaceMode.Combat => "COMMAND DECK / COMBAT",
+            CommandInterfaceMode.Engineering => "ENGINEERING WORKSPACE",
+            _ => "WORKSPACE UNAVAILABLE",
+        };
+        RenderBottomArea(presentation);
+        UpdateStationButtons(presentation);
+        UpdateContextControls(presentation, live);
+        UpdateFocusTraversal();
+    }
+
+    private void RenderEventLog(IReadOnlyList<CommandInterfaceEventRow> events)
+    {
+        ClearChildren(_eventLog);
+        if (events.Count == 0)
+        {
+            _eventLog.AddChild(new Label { Text = "NO PLAYER-RESOLVED EVENTS", ThemeTypeVariation = "MutedTelemetry" });
+            return;
+        }
+
+        foreach (CommandInterfaceEventRow row in events)
+        {
+            _eventLog.AddChild(
+                new Label
+                {
+                    Text = $"{row.Time}  {row.Source}  {row.Message}",
+                    AutowrapMode = TextServer.AutowrapMode.WordSmart,
+                    ThemeTypeVariation = EventVariation(row.Tone),
+                }
+            );
+        }
+    }
+
+    private void RenderBottomArea(CommandInterfacePresentation presentation)
+    {
+        bool engineering = presentation.Mode == CommandInterfaceMode.Engineering;
+        _captainActions.Visible = !engineering;
+        _engineeringBottomActions.Visible = engineering;
+        _eventLogHeading.Text = engineering ? "ENGINEERING EVENT LOG" : "EVENT / ORDER LOG";
+        SetMeta("bottom_area_mode", engineering ? "engineering" : "command");
+        RenderEventLog(presentation.Events);
+
+        if (!engineering)
+        {
+            ClearChildren(_engineeringQueue);
+            ClearChildren(_engineeringQueueActions);
+            return;
+        }
+
+        RenderEngineeringQueue(presentation.Engineering?.Queue ?? []);
+        RenderEngineeringQueueActions(presentation.Actions);
+    }
+
+    private void RenderEngineeringQueue(IReadOnlyList<CommandInterfaceQueueRow> queue)
+    {
+        ClearChildren(_engineeringQueue);
+        if (queue.Count == 0)
+        {
+            _engineeringQueue.AddChild(
+                new Label { Text = "REPAIR QUEUE UNAVAILABLE", ThemeTypeVariation = "MutedTelemetry" }
+            );
+            return;
+        }
+
+        foreach (CommandInterfaceQueueRow row in queue)
+        {
+            _engineeringQueue.AddChild(
+                new Label
+                {
+                    Text = $"{row.Priority}  {row.Label}  {DisplayQueueEstimate(row.Estimate)}",
+                    AutowrapMode = TextServer.AutowrapMode.WordSmart,
+                    ThemeTypeVariation = EventVariation(row.Tone),
+                }
+            );
+        }
+    }
+
+    private void RenderEngineeringQueueActions(IReadOnlyList<CommandInterfaceAction> actions)
+    {
+        ClearChildren(_engineeringQueueActions);
+        foreach (
+            CommandInterfaceAction action in actions.Where(action =>
+                string.Equals(action.Id, "reorder-repairs", StringComparison.Ordinal)
+            )
+        )
+        {
+            _engineeringQueueActions.AddChild(
+                new Button
+                {
+                    Name = $"BottomAction_{action.Id.Replace('-', '_')}",
+                    Text = $"{action.Label} [PREVIEW ONLY]",
+                    Disabled = true,
+                    FocusMode = FocusModeEnum.All,
+                    ThemeTypeVariation = "CommandButton",
+                    TooltipText = "Illustrative queue control; no simulation command will be submitted.",
+                }
+            );
+        }
+    }
+
+    private void UpdateStationButtons(CommandInterfacePresentation presentation)
+    {
+        CommandInterfaceStation command = presentation.Stations.Single(station =>
+            string.Equals(station.Id, "command", StringComparison.Ordinal)
+        );
+        CommandInterfaceStation engineering = presentation.Stations.Single(station =>
+            string.Equals(station.Id, "engineering", StringComparison.Ordinal)
+        );
+        _commandStationButton.Text = StationText(command);
+        _engineeringStationButton.Text = StationText(engineering);
+        _commandStationButton.ButtonPressed = presentation.Mode != CommandInterfaceMode.Engineering;
+        _engineeringStationButton.ButtonPressed = presentation.Mode == CommandInterfaceMode.Engineering;
+        _commandStationButton.ThemeTypeVariation = _commandStationButton.ButtonPressed
+            ? "StationTabActive"
+            : "StationTab";
+        _engineeringStationButton.ThemeTypeVariation = _engineeringStationButton.ButtonPressed
+            ? "StationTabActive"
+            : "StationTab";
+        bool workspaceNavigationAvailable = _simulation is not null;
+        _commandStationButton.Disabled = !workspaceNavigationAvailable;
+        _engineeringStationButton.Disabled = !workspaceNavigationAvailable;
+    }
+
+    private void UpdateContextControls(CommandInterfacePresentation presentation, bool live)
+    {
+        bool travel = presentation.Mode == CommandInterfaceMode.Travel;
+        bool combat = presentation.Mode == CommandInterfaceMode.Combat;
+        _strategicButton.ButtonPressed = travel;
+        _tacticalButton.ButtonPressed = combat;
+        bool workspaceNavigationAvailable = _simulation is not null;
+        _strategicButton.Disabled = !workspaceNavigationAvailable;
+        _tacticalButton.Disabled = !workspaceNavigationAvailable;
+        _travelButton.Visible = travel;
+        _courseButton.Visible = combat;
+        _travelButton.Disabled = !live || !IsSubmittable(presentation, "travel");
+        _courseButton.Disabled = !live || !IsSubmittable(presentation, "set-tactical-course");
+        _advanceUntilButton.Disabled = !live || !IsSubmittable(presentation, "advance-time");
+        _quickSaveButton.Disabled = !live;
+        _quickLoadButton.Disabled = !live;
+        foreach (Button button in GetNode<HBoxContainer>("%RateControls").GetChildren().OfType<Button>())
+        {
+            button.Disabled = !live;
+        }
+
+        _travelButton.TooltipText = _travelButton.Disabled
+            ? "Travel is unavailable until a live destination is selected."
+            : $"Submit travel intent to {FindLocationName(_selectedDestination!.Value)}. Shortcut: E.";
+        _courseButton.TooltipText = _courseButton.Disabled
+            ? "Course changes are unavailable during strategic travel or preview."
+            : "Submit heading 045° and speed 2 km/s. Shortcut: C.";
+    }
+
+    private void OnWorkspaceDestinationSelected(object? sender, CommandDeckWorkspace.DestinationEventArgs args)
+    {
+        if (_dataMode == CommandInterfaceDataMode.Live)
+        {
+            OnDestinationSelected(args.LocationId);
+        }
+    }
+
     private void OnDestinationSelected(LocationId destination)
     {
-        if (_projection is null)
+        if (_projection is null || _dataMode != CommandInterfaceDataMode.Live)
         {
             return;
         }
 
         _selectedDestination = destination;
         SetMeta("selected_destination", destination.Value);
-        UpdateDestinationButtonStates();
-        _strategicMap.Present(_projection.Strategic, destination);
-        bool available =
-            IsConnectedDestination(destination) && _projection.AvailableActions.Contains(PlayerAction.Travel);
-        _travelButton.Disabled = !available;
-        _travelButton.TooltipText = available
-            ? $"Engage direct travel to {FindLocationName(destination)}. Shortcut: E."
-            : "Travel is unavailable for this location or current vessel state.";
+        RefreshProjection();
         _messageLabel.Text = $"Selected destination: {FindLocationName(destination)}.";
-        UpdateFocusTraversal();
     }
 
-    private bool IsConnectedDestination(LocationId destination)
+    private void OnPresentationActionRequested(object? sender, CommandDeckWorkspace.ActionEventArgs args)
     {
-        StrategicLocationProjection? current = _projection?.Strategic.CurrentLocation;
-        return current is not null
-            && _projection!.Strategic.Routes.Any(route =>
-                (route.Origin == current.Id && route.Destination == destination)
-                || (route.Destination == current.Id && route.Origin == destination)
-            );
+        if (_dataMode != CommandInterfaceDataMode.Live || args.Action.Intent is not CommandInterfaceIntent intent)
+        {
+            return;
+        }
+
+        SubmitIntent(intent);
+    }
+
+    private void OnEngineeringCommandRequested(
+        object? sender,
+        EngineeringWorkspace.EngineeringCommandRequestedEventArgs args
+    )
+    {
+        if (_dataMode == CommandInterfaceDataMode.Live)
+        {
+            SubmitIntent(args.Intent);
+        }
+    }
+
+    private void SubmitIntent(CommandInterfaceIntent intent)
+    {
+        switch (intent)
+        {
+            case CommandInterfaceIntent.Travel:
+                RequestSelectedTravel();
+                break;
+            case CommandInterfaceIntent.SetTacticalCourse:
+                SetDemonstrationCourse();
+                break;
+            case CommandInterfaceIntent.AdvanceTime:
+                AdvanceUntilNextPlayerRelevantEvent();
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(intent), intent, "Unknown command-interface intent.");
+        }
     }
 
     private string FindLocationName(LocationId id) =>
         _projection!.Strategic.Locations.Single(location => location.Id == id).DisplayName;
-
-    private void RefreshProjection()
-    {
-        _projection = _simulation!.GetPlayerProjection();
-        PlayerProjection projection = _projection;
-        _strategicMap.Present(projection.Strategic, _selectedDestination);
-        _tacticalMap.Present(projection.Ship.Tactical);
-        _timeLabel.Text = $"TIME {projection.SimulationTime.Milliseconds / 1000.0:0.0} s";
-        _vesselStatusLabel.Text = $"VESSEL {projection.Ship.DisplayName}";
-        _shipLabel.Text = $"VESSEL\n{projection.Ship.DisplayName}\nRegistry {projection.Ship.InstanceId.Value}";
-        string repairState =
-            projection.Ship.Sensors.IsRepairing ? $"REPAIRING {projection.Ship.Sensors.RepairProgress:P0}"
-            : projection.Ship.Sensors.Integrity >= 1 ? "REPAIR COMPLETE"
-            : "REPAIR INACTIVE";
-        _sensorLabel.Text = $"SENSORS\nIntegrity {projection.Ship.Sensors.Integrity:P0}\n{repairState}";
-        _courseLabel.Text =
-            $"TACTICAL\nPosition {projection.Ship.Tactical.Position.XKilometers:0.0}, {projection.Ship.Tactical.Position.YKilometers:0.0} km\nHeading {projection.Ship.Tactical.HeadingDegrees:000.#}°\nSpeed {projection.Ship.Tactical.SpeedKilometersPerSecond:0.#} km/s";
-        if (projection.Strategic.Travel is TravelProjection travel)
-        {
-            _travelLabel.Text =
-                $"STRATEGIC — UNDERWAY\n{FindLocationName(travel.Origin)} → {FindLocationName(travel.Destination)}\nETA {travel.ExpectedArrival.Milliseconds / 1000.0:0.0} s";
-        }
-        else
-        {
-            _travelLabel.Text = $"STRATEGIC — AT LOCATION\n{projection.Strategic.CurrentLocation!.DisplayName}";
-        }
-
-        bool travelAvailable =
-            _selectedDestination is LocationId selected
-            && IsConnectedDestination(selected)
-            && projection.AvailableActions.Contains(PlayerAction.Travel);
-        _travelButton.Disabled = !travelAvailable;
-        _travelButton.TooltipText =
-            travelAvailable ? $"Engage direct travel to {FindLocationName(_selectedDestination!.Value)}. Shortcut: E."
-            : projection.Strategic.Travel is not null ? "Travel is unavailable while the vessel is already underway."
-            : "Select a directly connected destination before engaging travel.";
-        _courseButton.Disabled = !projection.AvailableActions.Contains(PlayerAction.SetTacticalCourse);
-        _courseButton.TooltipText = _courseButton.Disabled
-            ? "Course changes are unavailable during strategic travel."
-            : "Submit heading 045° and speed 2 km/s. Shortcut: C.";
-        _advanceUntilButton.Disabled = !projection.AvailableActions.Contains(PlayerAction.AdvanceTime);
-        SetProjectionMetadata(projection);
-        UpdateFocusTraversal();
-    }
 
     private void SetProjectionMetadata(PlayerProjection projection)
     {
@@ -677,63 +939,37 @@ public partial class GameScreen : Control
         SetMeta("tactical_speed", projection.Ship.Tactical.SpeedKilometersPerSecond);
     }
 
-    private void BuildDestinationButtons()
+    private void ClearSelectedDestination()
     {
-        _destinationButtonByLocation.Clear();
-        foreach (Node child in _destinationButtons.GetChildren())
-        {
-            _destinationButtons.RemoveChild(child);
-            child.QueueFree();
-        }
-
-        StrategicLocationProjection? current = _projection!.Strategic.CurrentLocation;
-        bool travelActionAvailable = _projection.AvailableActions.Contains(PlayerAction.Travel);
-        foreach (StrategicLocationProjection location in _projection.Strategic.Locations)
-        {
-            bool connected = current is not null && IsConnectedDestination(location.Id);
-            var button = new Button
-            {
-                Text = location.DisplayName,
-                Disabled = !travelActionAvailable || location.Id == current?.Id || !connected,
-                FocusMode = FocusModeEnum.All,
-                ToggleMode = true,
-                ButtonPressed = location.Id == _selectedDestination,
-                TooltipText = connected
-                    ? $"Select {location.DisplayName} by stable navigation identity."
-                    : $"{location.DisplayName} is not directly reachable from the current location.",
-            };
-            LocationId destination = location.Id;
-            button.Pressed += () => OnDestinationSelected(destination);
-            _destinationButtons.AddChild(button);
-            _destinationButtonByLocation.Add(destination, button);
-        }
-
-        UpdateFocusTraversal();
-    }
-
-    private void UpdateDestinationButtonStates()
-    {
-        foreach ((LocationId location, Button button) in _destinationButtonByLocation)
-        {
-            button.ButtonPressed = location == _selectedDestination;
-        }
+        _selectedDestination = null;
+        SetMeta("selected_destination", string.Empty);
     }
 
     private void SetGameplayEnabled(bool enabled)
     {
-        _travelButton.Disabled = !enabled;
-        _courseButton.Disabled = !enabled;
-        _advanceUntilButton.Disabled = !enabled;
-        _quickSaveButton.Disabled = !enabled;
-        _quickLoadButton.Disabled = !enabled;
-        foreach (Button button in GetNode<HBoxContainer>("%RateControls").GetChildren().OfType<Button>())
+        foreach (
+            Button button in new[]
+            {
+                _travelButton,
+                _courseButton,
+                _advanceUntilButton,
+                _quickSaveButton,
+                _quickLoadButton,
+                _strategicButton,
+                _tacticalButton,
+                _commandStationButton,
+                _engineeringStationButton,
+                _engineeringBottomReturnButton,
+                _pauseButton,
+                _halfRateButton,
+                _normalRateButton,
+                _doubleRateButton,
+                _quadRateButton,
+            }
+        )
         {
             button.Disabled = !enabled;
-        }
-
-        foreach (Button button in _destinationButtons.GetChildren().OfType<Button>())
-        {
-            button.Disabled = !enabled;
+            button.ButtonPressed = false;
         }
 
         UpdateFocusTraversal();
@@ -755,35 +991,42 @@ public partial class GameScreen : Control
             return;
         }
 
-        var controls = new List<Control> { _strategicButton, _tacticalButton };
-        if (_strategicViewActive)
+        var controls = new List<Control>();
+        if (_engineeringWorkspaceActive)
+        {
+            controls.Add(_commandStationButton);
+            controls.Add(_engineeringStationButton);
+            controls.AddRange(_engineering.GetVisibleFocusControls());
+            controls.Add(_engineeringBottomReturnButton);
+        }
+        else
         {
             controls.AddRange(
-                _destinationButtons.GetChildren().OfType<Button>().Where(button => button.Visible && !button.Disabled)
+                new Button[]
+                {
+                    _commandStationButton,
+                    _engineeringStationButton,
+                    _strategicButton,
+                    _tacticalButton,
+                    _travelButton,
+                    _courseButton,
+                    _pauseButton,
+                    _halfRateButton,
+                    _normalRateButton,
+                    _doubleRateButton,
+                    _quadRateButton,
+                    _advanceUntilButton,
+                    _quickSaveButton,
+                    _quickLoadButton,
+                }
             );
-            if (!_travelButton.Disabled)
-            {
-                controls.Add(_travelButton);
-            }
-        }
-        else if (!_courseButton.Disabled)
-        {
-            controls.Add(_courseButton);
         }
 
-        controls.AddRange(
-            new Button[]
-            {
-                _pauseButton,
-                _halfRateButton,
-                _normalRateButton,
-                _doubleRateButton,
-                _quadRateButton,
-                _advanceUntilButton,
-                _quickSaveButton,
-                _quickLoadButton,
-            }.Where(button => !button.Disabled)
-        );
+        controls = controls.Where(IsFocusable).ToList();
+        if (controls.Count == 0)
+        {
+            return;
+        }
 
         for (int index = 0; index < controls.Count; index++)
         {
@@ -796,7 +1039,67 @@ public partial class GameScreen : Control
         }
     }
 
-    private Button CurrentViewButton() => _strategicViewActive ? _strategicButton : _tacticalButton;
+    private static bool IsFocusable(Control control) =>
+        control.IsVisibleInTree()
+        && control.FocusMode != FocusModeEnum.None
+        && (control is not BaseButton button || !button.Disabled);
+
+    private Button CurrentWorkspaceButton() =>
+        _engineeringWorkspaceActive ? _engineeringStationButton : _commandStationButton;
+
+    private void FocusCurrentWorkspace()
+    {
+        if (_engineeringWorkspaceActive)
+        {
+            _engineering.GrabEntryFocus();
+        }
+        else
+        {
+            _commandStationButton.CallDeferred(Control.MethodName.GrabFocus);
+        }
+    }
+
+    private static string DisplayQueueEstimate(CommandInterfaceField estimate) =>
+        estimate.Availability == CommandInterfaceAvailability.Available ? estimate.Value : "UNAVAILABLE";
+
+    private static bool IsSubmittable(CommandInterfacePresentation presentation, string actionId) =>
+        presentation.Actions.Any(action =>
+            string.Equals(action.Id, actionId, StringComparison.Ordinal)
+            && action.Availability == CommandInterfaceActionAvailability.Submittable
+            && action.Intent is not null
+        );
+
+    private static string HeaderValue(
+        CommandInterfacePresentation presentation,
+        string label,
+        string fallback = "UNAVAILABLE"
+    ) =>
+        presentation.Header.FirstOrDefault(field => string.Equals(field.Label, label, StringComparison.Ordinal))
+            is CommandInterfaceField field
+            ? field.Value
+            : fallback;
+
+    private static string StationText(CommandInterfaceStation station) =>
+        station.AttentionCount > 0 ? $"{station.Label} [{station.AttentionCount} !]" : station.Label;
+
+    private static StringName EventVariation(CommandInterfaceTone tone) =>
+        tone switch
+        {
+            CommandInterfaceTone.Critical => "StatusCritical",
+            CommandInterfaceTone.Caution or CommandInterfaceTone.Engineering => "StatusCaution",
+            CommandInterfaceTone.Nominal => "StatusNominal",
+            CommandInterfaceTone.Muted => "MutedTelemetry",
+            _ => "TelemetryValue",
+        };
+
+    private static void ClearChildren(Node parent)
+    {
+        foreach (Node child in parent.GetChildren())
+        {
+            parent.RemoveChild(child);
+            child.QueueFree();
+        }
+    }
 
     private static string DescribeAdvanceResult(AdvanceUntilResult result)
     {
@@ -815,6 +1118,7 @@ public partial class GameScreen : Control
             return;
         }
 
+        _recentEvents.AddRange(events);
         string description = string.Join(", ", events.Select(DescribePlayerEvent));
         SetMeta("last_advance_event", description);
         if (announce)

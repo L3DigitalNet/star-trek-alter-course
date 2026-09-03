@@ -4,11 +4,15 @@ using Godot;
 
 namespace AlterCourse.Godot.Gameplay;
 
-/// <summary>Draws continuous strategic locations and routes from a fresh Core projection.</summary>
+/// <summary>Draws strategic Core projections or explicitly illustrative map previews.</summary>
 public partial class StrategicMapView : Control
 {
+    private const float MapPadding = 64;
+
     private StrategicProjection? _projection;
     private LocationId? _selectedDestination;
+    private IReadOnlyList<CommandInterfaceMapItem> _previewItems = [];
+    private IReadOnlyList<CommandInterfaceMapLink> _previewLinks = [];
 
     /// <summary>Gets or sets the owning screen's direct map-selection callback.</summary>
     public Action<LocationId>? DestinationSelected { get; set; }
@@ -18,6 +22,24 @@ public partial class StrategicMapView : Control
     {
         _projection = projection;
         _selectedDestination = selectedDestination;
+        _previewItems = [];
+        _previewLinks = [];
+        QueueRedraw();
+    }
+
+    /// <summary>Displays immutable illustrative map data without promoting it to a Core projection.</summary>
+    public void PresentPreview(
+        IReadOnlyList<CommandInterfaceMapItem> items,
+        IReadOnlyList<CommandInterfaceMapLink> links,
+        LocationId? selectedDestination
+    )
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        ArgumentNullException.ThrowIfNull(links);
+        _projection = null;
+        _selectedDestination = selectedDestination;
+        _previewItems = items.ToArray();
+        _previewLinks = links.ToArray();
         QueueRedraw();
     }
 
@@ -29,17 +51,21 @@ public partial class StrategicMapView : Control
             return;
         }
 
-        StrategicLocationProjection? selected = _projection
-            ?.Locations.Select(location =>
-                (Location: location, Distance: ToScreen(location.Position).DistanceTo(click.Position))
-            )
-            .Where(candidate => candidate.Distance <= 24)
-            .OrderBy(candidate => candidate.Distance)
-            .Select(candidate => candidate.Location)
-            .FirstOrDefault();
-        if (selected is not null)
+        LocationId? selected = _projection is null
+            ? FindPreviewDestination(click.Position)
+            : _projection
+                .Locations.Select(location =>
+                    (Location: location, Distance: ToScreen(location.Position).DistanceTo(click.Position))
+                )
+                .Where(candidate => candidate.Distance <= 24)
+                .OrderBy(candidate => candidate.Distance)
+                .Select(candidate => (LocationId?)candidate.Location.Id)
+                .FirstOrDefault();
+        if (selected is LocationId locationId)
         {
-            DestinationSelected?.Invoke(selected.Id);
+            _selectedDestination = locationId;
+            QueueRedraw();
+            DestinationSelected?.Invoke(locationId);
             AcceptEvent();
         }
     }
@@ -49,6 +75,7 @@ public partial class StrategicMapView : Control
     {
         if (_projection is null)
         {
+            DrawPreview();
             return;
         }
 
@@ -86,15 +113,98 @@ public partial class StrategicMapView : Control
 
     private Vector2 ToScreen(StrategicMapPosition position)
     {
-        const float Padding = 64;
         double minX = _projection!.Locations.Min(location => location.Position.X);
         double maxX = _projection.Locations.Max(location => location.Position.X);
         double minY = _projection.Locations.Min(location => location.Position.Y);
         double maxY = _projection.Locations.Max(location => location.Position.Y);
-        double width = Math.Max(1, Size.X - Padding * 2);
-        double height = Math.Max(1, Size.Y - Padding * 2);
+        double width = Math.Max(1, Size.X - MapPadding * 2);
+        double height = Math.Max(1, Size.Y - MapPadding * 2);
         double normalizedX = (position.X - minX) / Math.Max(1, maxX - minX);
         double normalizedY = (position.Y - minY) / Math.Max(1, maxY - minY);
-        return new Vector2((float)(Padding + normalizedX * width), (float)(Padding + (1 - normalizedY) * height));
+        return new Vector2((float)(MapPadding + normalizedX * width), (float)(MapPadding + (1 - normalizedY) * height));
     }
+
+    private void DrawPreview()
+    {
+        foreach (CommandInterfaceMapLink link in _previewLinks)
+        {
+            CommandInterfaceMapItem? origin = _previewItems.FirstOrDefault(item =>
+                string.Equals(item.Id, link.OriginId, StringComparison.Ordinal)
+            );
+            CommandInterfaceMapItem? destination = _previewItems.FirstOrDefault(item =>
+                string.Equals(item.Id, link.DestinationId, StringComparison.Ordinal)
+            );
+            if (origin is not null && destination is not null)
+            {
+                DrawLine(ToPreviewScreen(origin), ToPreviewScreen(destination), ToneColor(link.Tone), 2);
+            }
+        }
+
+        foreach (CommandInterfaceMapItem item in _previewItems)
+        {
+            Vector2 point = ToPreviewScreen(item);
+            Color color = ToneColor(item.Tone);
+            bool selected = item.StrategicLocationId == _selectedDestination;
+            if (item.Kind == CommandInterfaceMapItemKind.PlayerShip)
+            {
+                Vector2[] ship =
+                [
+                    point + new Vector2(-12, -9),
+                    point + new Vector2(12, 0),
+                    point + new Vector2(-12, 9),
+                ];
+                DrawColoredPolygon(ship, color);
+            }
+            else
+            {
+                if (selected)
+                {
+                    DrawCircle(point, 12, color, filled: false, width: 2);
+                }
+                else
+                {
+                    DrawCircle(point, 8, color);
+                }
+            }
+
+            DrawString(
+                GetThemeFont("font", "TelemetryValue"),
+                point + new Vector2(16, 5),
+                item.Label,
+                HorizontalAlignment.Left,
+                -1,
+                GetThemeFontSize("font_size", "TelemetryValue"),
+                color
+            );
+        }
+    }
+
+    private LocationId? FindPreviewDestination(Vector2 clickPosition) =>
+        _previewItems
+            .Where(item => item.StrategicLocationId is not null)
+            .Select(item => (Item: item, Distance: ToPreviewScreen(item).DistanceTo(clickPosition)))
+            .Where(candidate => candidate.Distance <= 24)
+            .OrderBy(candidate => candidate.Distance)
+            .Select(candidate => candidate.Item.StrategicLocationId)
+            .FirstOrDefault();
+
+    private Vector2 ToPreviewScreen(CommandInterfaceMapItem item) =>
+        new(
+            MapPadding + (float)(item.X / 100) * Math.Max(1, Size.X - MapPadding * 2),
+            MapPadding + (float)(item.Y / 100) * Math.Max(1, Size.Y - MapPadding * 2)
+        );
+
+    private Color ToneColor(CommandInterfaceTone tone) => GetThemeColor("font_color", ToneVariation(tone));
+
+    private static StringName ToneVariation(CommandInterfaceTone tone) =>
+        tone switch
+        {
+            CommandInterfaceTone.Muted => "MutedTelemetry",
+            CommandInterfaceTone.Nominal => "StatusNominal",
+            CommandInterfaceTone.Caution => "StatusCaution",
+            CommandInterfaceTone.Critical => "StatusCritical",
+            CommandInterfaceTone.Command or CommandInterfaceTone.Navigation => "StationTabActive",
+            CommandInterfaceTone.Engineering => "StatusCaution",
+            _ => "TelemetryValue",
+        };
 }
