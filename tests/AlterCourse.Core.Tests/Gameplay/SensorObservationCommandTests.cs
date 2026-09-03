@@ -49,11 +49,21 @@ public sealed class SensorObservationCommandTests
     [Fact]
     public void PassiveObservationUsesLocationRangeAndObserverIntegrity()
     {
+        var travelingTarget = new ShipStart(
+            new ShipInstanceId(5),
+            TargetDefinitionId,
+            "Traveling target",
+            new TacticalPosition(1, 0),
+            default,
+            new SensorIntegrity(1),
+            new TravelingStart(Local, Remote, new SimulationTime(0))
+        );
         GameSimulation game = CreateGame(
             Ship(1, ObserverDefinitionId, default, integrity: 0.5),
             Ship(2, TargetDefinitionId, new TacticalPosition(5, 0)),
             Ship(3, TargetDefinitionId, new TacticalPosition(4, 0), Remote),
-            Ship(4, TargetDefinitionId, new TacticalPosition(6, 0))
+            Ship(4, TargetDefinitionId, new TacticalPosition(6, 0)),
+            travelingTarget
         );
 
         SimulationAdvanceResult result = game.AdvanceFixedSteps(1);
@@ -74,40 +84,95 @@ public sealed class SensorObservationCommandTests
         Assert.Equal([SensorContactAction.ActiveScan], contactActions.AvailableActions);
     }
 
-    /// <summary>Confirms unseen targets are admitted by truth identity until the no-eviction cap.</summary>
+    /// <summary>Confirms identification survives every freshness transition and reacquisition.</summary>
+    [Fact]
+    public void IdentificationNeverDecreasesThroughStaleLostAndReacquiredStates()
+    {
+        GameSimulation game = CreateGame(
+            Ship(1, ObserverDefinitionId, default),
+            Ship(2, TargetDefinitionId, new TacticalPosition(5, 0))
+        );
+        game.AdvanceFixedSteps(1);
+        Assert.Equal(ActiveSensorScanOutcome.Accepted, game.RequestActiveSensorScan(new SensorContactId(1)).Outcome);
+        game.AdvanceFixedSteps(20);
+        Assert.Equal(
+            SensorContactIdentification.Identified,
+            Assert.Single(game.GetPlayerProjection().Ship.Sensors.Contacts).Identification
+        );
+
+        game.SetTacticalCourse(new SetTacticalCourseIntent(new HeadingDegrees(270), new SpeedKilometersPerSecond(10)));
+        game.AdvanceFixedSteps(6);
+        SensorContactSnapshot stale = Assert.Single(game.GetPlayerProjection().Ship.Sensors.Contacts);
+        Assert.Equal(SensorContactStatus.Stale, stale.Status);
+        Assert.Equal(SensorContactIdentification.Identified, stale.Identification);
+
+        game.SetTacticalCourse(new SetTacticalCourseIntent(new HeadingDegrees(270), new SpeedKilometersPerSecond(0)));
+        game.AdvanceFixedSteps(50);
+        SensorContactTrack lost = Assert.Single(
+            game.CaptureState().GetRequiredShip(new ShipInstanceId(1)).SensorKnowledge.Contacts
+        );
+        Assert.Equal(SensorContactStatus.Lost, lost.Status);
+        Assert.Equal(SensorContactIdentification.Identified, lost.Identification);
+
+        game.SetTacticalCourse(new SetTacticalCourseIntent(new HeadingDegrees(90), new SpeedKilometersPerSecond(10)));
+        game.AdvanceFixedSteps(2);
+        SensorContactSnapshot reacquired = Assert.Single(game.GetPlayerProjection().Ship.Sensors.Contacts);
+        Assert.Equal(new SensorContactId(1), reacquired.Id);
+        Assert.Equal(SensorContactStatus.Current, reacquired.Status);
+        Assert.Equal(SensorContactIdentification.Identified, reacquired.Identification);
+    }
+
+    /// <summary>Confirms one observer's freshness transition cannot alter another observer's contact.</summary>
+    [Fact]
+    public void ObserverKnowledgeTransitionsRemainIsolated()
+    {
+        GameSimulation game = CreateGame(
+            CreateCatalog(passiveRange: 30),
+            Ship(1, ObserverDefinitionId, default),
+            Ship(2, TargetDefinitionId, new TacticalPosition(20, 0)),
+            Ship(3, TargetDefinitionId, new TacticalPosition(23, 0))
+        );
+        game.AdvanceFixedSteps(1);
+        SensorContactTrack secondObserverContact = Assert.Single(
+            game.CaptureState().GetRequiredShip(new ShipInstanceId(2)).SensorKnowledge.Contacts
+        );
+        Assert.Equal(new ShipInstanceId(3), secondObserverContact.TargetShipId);
+
+        game.SetTacticalCourse(new SetTacticalCourseIntent(new HeadingDegrees(270), new SpeedKilometersPerSecond(100)));
+        game.AdvanceFixedSteps(11);
+
+        Assert.All(
+            game.CaptureState().GetRequiredShip(new ShipInstanceId(1)).SensorKnowledge.Contacts,
+            contact => Assert.Equal(SensorContactStatus.Stale, contact.Status)
+        );
+        SensorContactTrack unchangedCorrelation = Assert.Single(
+            game.CaptureState().GetRequiredShip(new ShipInstanceId(2)).SensorKnowledge.Contacts
+        );
+        Assert.Equal(secondObserverContact.Id, unchangedCorrelation.Id);
+        Assert.Equal(secondObserverContact.TargetShipId, unchangedCorrelation.TargetShipId);
+        Assert.Equal(SensorContactStatus.Current, unchangedCorrelation.Status);
+    }
+
+    /// <summary>Confirms all other ships are admitted in truth order without eviction.</summary>
     [Fact]
     public void ContactAllocationIsInsertionIndependentAndNeverEvicts()
     {
         ShipStart observer = Ship(1, ObserverDefinitionId, default);
         ShipStart[] targets =
         [
-            .. Enumerable.Range(2, 14).Select(id => Ship(id, TargetDefinitionId, new TacticalPosition(id / 10.0, 0))),
+            .. Enumerable
+                .Range(2, SimulationState.MaximumShips - 1)
+                .Select(id => Ship(id, TargetDefinitionId, new TacticalPosition(id / 100.0, 0))),
         ];
-        GameSimulation ascending = CreateGame([observer, .. targets]);
-        GameSimulation descending = CreateGame([observer, .. targets.Reverse()]);
+        GameSimulation game = CreateGame([observer, .. targets.Reverse()]);
 
-        ascending.AdvanceFixedSteps(1);
-        descending.AdvanceFixedSteps(1);
+        game.AdvanceFixedSteps(1);
 
-        SensorKnowledge first = ascending.CaptureState().GetRequiredShip(new ShipInstanceId(1)).SensorKnowledge;
-        SensorKnowledge second = descending.CaptureState().GetRequiredShip(new ShipInstanceId(1)).SensorKnowledge;
-        Assert.Equal(first.NextContactId, second.NextContactId);
-        Assert.Equal(
-            first.Contacts.Select(contact => (contact.Id, contact.TargetShipId, contact.LastObservedPosition)),
-            second.Contacts.Select(contact => (contact.Id, contact.TargetShipId, contact.LastObservedPosition))
-        );
-        Assert.Equal(12, first.Contacts.Length);
-        Assert.Equal(Enumerable.Range(2, 12), first.Contacts.Select(contact => (int)contact.TargetShipId.Value));
-
-        ascending.SetTacticalCourse(
-            new SetTacticalCourseIntent(new HeadingDegrees(270), new SpeedKilometersPerSecond(100))
-        );
-        ascending.AdvanceFixedSteps(51);
-        Assert.Empty(ascending.GetPlayerProjection().Ship.Sensors.Contacts);
-        Assert.Equal(
-            12,
-            ascending.CaptureState().GetRequiredShip(new ShipInstanceId(1)).SensorKnowledge.Contacts.Length
-        );
+        SensorKnowledge knowledge = game.CaptureState().GetRequiredShip(new ShipInstanceId(1)).SensorKnowledge;
+        Assert.Equal(256, knowledge.NextContactId);
+        Assert.Equal(255, knowledge.Contacts.Length);
+        Assert.Equal(Enumerable.Range(2, 255), knowledge.Contacts.Select(contact => (int)contact.TargetShipId.Value));
+        Assert.Equal(Enumerable.Range(1, 255), knowledge.Contacts.Select(contact => (int)contact.Id.Value));
     }
 
     /// <summary>Confirms exact stale, reacquire, and loss transitions retain one local identity.</summary>

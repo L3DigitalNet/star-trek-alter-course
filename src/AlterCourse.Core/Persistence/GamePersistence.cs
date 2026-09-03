@@ -74,7 +74,7 @@ public static class GamePersistence
     private const string CautiousContactPosture = "cautiousContact";
     private const string AtLocationKind = "atLocation";
     private const string TravelingKind = "traveling";
-    private const int MaximumSaveBytes = 1024 * 1024;
+    private const int MaximumSaveBytes = 128 * 1024 * 1024;
     private const int MaximumJsonDepth = 32;
     private const int MaximumMetadataTextLength = 128;
 

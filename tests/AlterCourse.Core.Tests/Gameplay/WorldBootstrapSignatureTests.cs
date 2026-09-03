@@ -107,7 +107,7 @@ public sealed class WorldBootstrapSignatureTests
         );
         JsonNode simulation = JsonNode.Parse(saved)!["simulation"]!;
 
-        Assert.InRange(saved.Length, 1, 1024 * 1024);
+        Assert.InRange(saved.Length, 1, 128 * 1024 * 1024);
         Assert.Equal(256, simulation["ships"]!.AsArray().Count);
         Assert.Equal(256, simulation["strategicMap"]!["locations"]!.AsArray().Count);
         Assert.Equal(1024, simulation["strategicMap"]!["routes"]!.AsArray().Count);

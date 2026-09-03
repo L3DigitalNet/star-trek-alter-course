@@ -660,7 +660,7 @@ public sealed class GamePersistenceTests
             "duplicate.json",
             "duplicate"
         );
-        AssertFailure(new byte[(1024 * 1024) + 1], "oversized.json", "byte");
+        AssertFailure(new byte[(128 * 1024 * 1024) + 1], "oversized.json", "byte");
         AssertFailure(Encoding.UTF8.GetBytes(new string('[', 40) + new string(']', 40)), "deep.json", "depth");
         AssertFailure(MutateV2(root => root["unexpected"] = true), "unknown.json", "incompatible");
     }

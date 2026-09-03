@@ -218,6 +218,8 @@ internal sealed record SimulationState
     private void ValidateScheduledWork(ScheduledWork work)
     {
         ShipState target = GetRequiredShip(work.TargetShipId);
+        // These five non-loss correlations define the per-ship scheduler allowance in SimulationScheduler; adding a
+        // separately retainable work category requires that bound to grow with the world maximum.
         bool correlated = work.Kind switch
         {
             ScheduledWorkKind.SensorRepairCompletion => target.SensorRepair is SensorRepairState repair
@@ -658,10 +660,7 @@ internal sealed record SimulationState
         ScheduledWorkKind kind
     )
     {
-        int count = Scheduler.OutstandingWork.Count(work =>
-            work.TargetShipId == targetShipId && work.Id == id && work.DueTime == dueTime && work.Kind == kind
-        );
-        if (count != 1)
+        if (!Scheduler.ContainsExact(id, targetShipId, dueTime, kind))
         {
             throw new InvalidOperationException("Runtime ship state lacks exactly one correlated scheduled work item.");
         }

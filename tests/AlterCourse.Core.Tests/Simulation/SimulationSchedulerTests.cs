@@ -452,6 +452,15 @@ public sealed class SimulationSchedulerTests
             maximum
         );
 
+        Assert.Equal(66_560, SimulationScheduler.MaximumOutstandingWork);
+        Assert.Equal(SimulationScheduler.MaximumOutstandingWork, restored.OutstandingWork.Length);
+        Assert.Throws<InvalidOperationException>(() =>
+            restored.Schedule(
+                new SimulationTime(SimulationScheduler.MaximumOutstandingWork + 1L),
+                Target(),
+                ScheduledWorkKind.TravelArrival
+            )
+        );
         Assert.Equal(SimulationScheduler.MaximumOutstandingWork, restored.OutstandingWork.Length);
         Assert.Throws<ArgumentException>(() =>
             SimulationScheduler.Restore(2, 1, OverflowAfter(Work(1, 0), SimulationScheduler.MaximumOutstandingWork + 1))

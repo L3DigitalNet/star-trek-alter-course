@@ -1,11 +1,12 @@
 using System.Collections.Immutable;
+using AlterCourse.Core.Gameplay;
 
 namespace AlterCourse.Core.Sensors;
 
 /// <summary>Owns one ship's bounded, canonically ordered sensor knowledge.</summary>
 internal sealed record SensorKnowledge
 {
-    internal const int MaximumContactsPerObserver = 12;
+    internal const int MaximumContactsPerObserver = SimulationState.MaximumShips - 1;
 
     internal SensorKnowledge(
         long nextContactId,

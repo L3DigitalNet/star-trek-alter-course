@@ -48,9 +48,13 @@ public sealed class SensorDomainTests
 
         var accepted = new SensorKnowledge(SensorKnowledge.MaximumContactsPerObserver + 1, maximum);
 
-        Assert.Equal(SensorKnowledge.MaximumContactsPerObserver, accepted.Contacts.Length);
+        Assert.Equal(255, SensorKnowledge.MaximumContactsPerObserver);
+        Assert.Equal(255, accepted.Contacts.Length);
         Assert.Throws<ArgumentException>(() =>
-            new SensorKnowledge(SensorKnowledge.MaximumContactsPerObserver + 2, [.. maximum, Track(13, 113)])
+            new SensorKnowledge(
+                SensorKnowledge.MaximumContactsPerObserver + 2,
+                [.. maximum, Track(SensorKnowledge.MaximumContactsPerObserver + 1, 1000)]
+            )
         );
     }
 
