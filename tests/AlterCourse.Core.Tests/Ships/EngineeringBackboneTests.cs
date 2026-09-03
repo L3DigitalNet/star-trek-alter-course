@@ -292,6 +292,10 @@ public sealed class EngineeringBackboneTests
 
         Assert.Equal(
             SystemRepairOutcome.UnsupportedSystem,
+            game.BeginSystemRepair(default, new SystemCondition(1)).Outcome
+        );
+        Assert.Equal(
+            SystemRepairOutcome.UnsupportedSystem,
             game.BeginSystemRepair(ShipSystemId.PowerGeneration, new SystemCondition(1)).Outcome
         );
         Assert.Equal(
@@ -302,6 +306,19 @@ public sealed class EngineeringBackboneTests
             SystemRepairOutcome.RepairAlreadyActive,
             game.BeginSystemRepair(ShipSystemId.Sensors, new SystemCondition(1)).Outcome
         );
+    }
+
+    /// <summary>Confirms a nominal system cannot consume the sole repair slot.</summary>
+    [Fact]
+    public void RepairOfNominalSystemIsRejectedWithoutStateChange()
+    {
+        GameSimulation game = CreateSingleShip(new SystemCondition(1), new SystemCondition(1));
+        PlayerProjection before = game.GetPlayerProjection();
+
+        SystemRepairResult result = game.BeginSystemRepair(ShipSystemId.Sensors, new SystemCondition(1));
+
+        Assert.Equal(SystemRepairOutcome.TargetDoesNotImproveCondition, result.Outcome);
+        Assert.Equal(before, game.GetPlayerProjection());
     }
 
     /// <summary>Confirms an impulse repair does not masquerade as sensor repair state.</summary>
