@@ -2,7 +2,9 @@ using System.Collections.Immutable;
 using System.Globalization;
 using AlterCourse.Core.Gameplay;
 using AlterCourse.Core.Player;
+using AlterCourse.Core.Quantities;
 using AlterCourse.Core.Sensors;
+using AlterCourse.Core.Ships;
 using AlterCourse.Core.Strategic;
 
 namespace AlterCourse.Godot.Gameplay;
@@ -53,7 +55,7 @@ public static class CommandInterfacePresenter
             Header = BuildHeader(projection),
             Systems = BuildSystems(projection),
             Telemetry = BuildTelemetry(projection, selectedLocation, selectedContact, mode),
-            Actions = BuildActions(projection, selectedLocation, selectedContact),
+            Actions = BuildActions(projection, selectedLocation, selectedContact, mode),
             Events = BuildEvents(projection, recentEvents),
             Stations = BuildStations(mode),
             MapItems = BuildMapItems(projection),
@@ -113,6 +115,11 @@ public static class CommandInterfacePresenter
         CommandInterfaceMode mode
     )
     {
+        if (mode == CommandInterfaceMode.Engineering)
+        {
+            return BuildEngineeringTelemetry(projection.Ship.Engineering);
+        }
+
         if (mode == CommandInterfaceMode.Combat)
         {
             return BuildTacticalTelemetry(projection, selectedContact);
@@ -188,9 +195,15 @@ public static class CommandInterfacePresenter
     private static ImmutableArray<CommandInterfaceAction> BuildActions(
         PlayerProjection projection,
         StrategicLocationProjection? selectedLocation,
-        SensorContactSnapshot? selectedContact
+        SensorContactSnapshot? selectedContact,
+        CommandInterfaceMode mode
     )
     {
+        if (mode == CommandInterfaceMode.Engineering)
+        {
+            return [.. projection.Ship.Engineering.Actions.Select(BuildEngineeringAction)];
+        }
+
         bool activeScanAvailable = IsContactActionAvailable(
             projection,
             selectedContact,
@@ -239,8 +252,6 @@ public static class CommandInterfacePresenter
                 ContactActionTooltip(selectedContact, SensorContactAction.Hail, hailAvailable)
             ),
             DisabledAction("fire-phasers", "Fire phasers", CommandInterfaceTone.Critical),
-            DisabledAction("allocate-power", "Prioritize power", CommandInterfaceTone.Engineering),
-            DisabledAction("assign-repair", "Assign repair team…", CommandInterfaceTone.Engineering),
         ];
     }
 
@@ -259,11 +270,11 @@ public static class CommandInterfacePresenter
                             "Strategic travel arrived at destination.",
                             CommandInterfaceTone.Navigation
                         ),
-                    ResolvedActivityEvent { Event.Kind: PlayerAdvanceEventKind.SensorRepairCompleted } =>
+                    ResolvedActivityEvent { Event.Kind: PlayerAdvanceEventKind.SystemRepairCompleted } resolved =>
                         new CommandInterfaceEventRow(
                             FormatClock(activity.SimulationTimeMilliseconds),
                             "ENGINEER",
-                            "Sensor repair completed.",
+                            $"{SystemLabel(resolved.Event.ShipSystemId)} repair completed.",
                             CommandInterfaceTone.Nominal
                         ),
                     ResolvedActivityEvent { Event.Kind: PlayerAdvanceEventKind.SensorContactDetected } resolved =>
@@ -538,55 +549,218 @@ public static class CommandInterfacePresenter
 
     private static CommandInterfaceEngineeringPresentation BuildEngineering(PlayerProjection projection)
     {
-        CommandInterfaceTone sensorTone =
-            projection.Ship.Sensors.Integrity >= 0.8 ? CommandInterfaceTone.Nominal : CommandInterfaceTone.Caution;
+        EngineeringProjection engineering = projection.Ship.Engineering;
+        CommandInterfaceTone powerTone = ConditionTone(engineering.GenerationCondition);
+        CommandInterfaceTone sensorTone = ConditionTone(engineering.SensorCondition);
+        CommandInterfaceTone impulseTone = ConditionTone(engineering.ImpulseCondition);
+        bool repairing = engineering.ActiveRepair is not null;
         return new CommandInterfaceEngineeringPresentation(
             [
-                HierarchyUnavailable("power", null, "POWER"),
-                HierarchyUnavailable("propulsion", null, "PROPULSION"),
-                HierarchyUnavailable("shields", null, "SHIELDS"),
-                HierarchyUnavailable("weapons", null, "WEAPONS"),
-                new CommandInterfaceHierarchyRow(
-                    "sensors",
-                    null,
-                    "SENSORS",
-                    true,
-                    projection.Ship.Sensors.IsRepairing ? 1 : 0,
-                    CommandInterfaceAvailability.Available,
-                    sensorTone
-                ),
-                HierarchyUnavailable("computer", null, "COMPUTER"),
-                HierarchyUnavailable("life-support", null, "LIFE SUPPORT"),
-                HierarchyUnavailable("structural", null, "STRUCTURAL"),
-            ],
-            [
-                new CommandInterfaceTelemetrySection(
-                    "sensors",
-                    "SENSORS",
-                    sensorTone,
-                    [
-                        Available("INTEGRITY", FormatPercent(projection.Ship.Sensors.Integrity), sensorTone),
-                        Available(
-                            "REPAIR STATE",
-                            projection.Ship.Sensors.IsRepairing ? "REPAIRING" : "INACTIVE",
-                            projection.Ship.Sensors.IsRepairing
-                                ? CommandInterfaceTone.Caution
-                                : CommandInterfaceTone.Muted
-                        ),
-                        Available("REPAIR PROGRESS", FormatPercent(projection.Ship.Sensors.RepairProgress), sensorTone),
-                    ]
-                ),
-                new CommandInterfaceTelemetrySection(
-                    "engineering-unsupported",
-                    "ENGINEERING",
-                    CommandInterfaceTone.Engineering,
-                    [Unavailable("POWER"), Unavailable("EPS"), Unavailable("DAMAGE"), Unavailable("GENERAL REPAIR")]
+                Hierarchy("overview", "OVERVIEW", selected: true, CommandInterfaceTone.Engineering),
+                Hierarchy("power", "POWER", false, powerTone),
+                Hierarchy("sensors", "SENSORS", false, sensorTone),
+                Hierarchy("propulsion", "PROPULSION", false, impulseTone),
+                Hierarchy(
+                    "repairs",
+                    "REPAIRS",
+                    false,
+                    repairing ? CommandInterfaceTone.Caution : CommandInterfaceTone.Neutral,
+                    repairing ? 1 : 0
                 ),
             ],
+            BuildEngineeringComponents(engineering, powerTone, sensorTone, impulseTone),
             [],
             []
         );
     }
+
+    private static ImmutableArray<CommandInterfaceTelemetrySection> BuildEngineeringComponents(
+        EngineeringProjection engineering,
+        CommandInterfaceTone powerTone,
+        CommandInterfaceTone sensorTone,
+        CommandInterfaceTone impulseTone
+    ) =>
+        [
+            EngineeringOverview(engineering),
+            EngineeringPower(engineering, powerTone),
+            EngineeringSensors(engineering, sensorTone),
+            EngineeringPropulsion(engineering, impulseTone),
+            EngineeringRepair(engineering),
+        ];
+
+    private static CommandInterfaceTelemetrySection EngineeringOverview(EngineeringProjection engineering) =>
+        new(
+            "overview",
+            "ENGINEERING OVERVIEW",
+            CommandInterfaceTone.Engineering,
+            [
+                Available("AVAILABLE POWER", FormatPower(engineering.AvailablePower)),
+                Available("RESERVE", FormatPower(engineering.Reserve)),
+                Available("SENSOR RANGE", FormatKilometers(engineering.EffectivePassiveSensorRange.Value)),
+                Available("MAX TACTICAL SPEED", FormatSpeed(engineering.EffectiveMaximumTacticalSpeed.Value)),
+            ]
+        );
+
+    private static CommandInterfaceTelemetrySection EngineeringPower(
+        EngineeringProjection engineering,
+        CommandInterfaceTone tone
+    ) =>
+        new(
+            "power",
+            "POWER GENERATION",
+            tone,
+            [
+                Available("NOMINAL", FormatPower(engineering.NominalGeneration)),
+                Available("AVAILABLE", FormatPower(engineering.AvailablePower), tone),
+                Available("CONDITION", FormatCondition(engineering.GenerationCondition), tone),
+                Available("RESERVE", FormatPower(engineering.Reserve)),
+            ]
+        );
+
+    private static CommandInterfaceTelemetrySection EngineeringSensors(
+        EngineeringProjection engineering,
+        CommandInterfaceTone tone
+    ) =>
+        new(
+            "sensors",
+            "SENSORS",
+            tone,
+            [
+                Available("CONDITION", FormatCondition(engineering.SensorCondition), tone),
+                Available("ALLOCATION", FormatPower(engineering.SensorAllocation)),
+                Available("CAPABILITY", FormatPercent(engineering.SensorCapability), tone),
+                Available("PASSIVE RANGE", FormatKilometers(engineering.EffectivePassiveSensorRange.Value)),
+            ]
+        );
+
+    private static CommandInterfaceTelemetrySection EngineeringPropulsion(
+        EngineeringProjection engineering,
+        CommandInterfaceTone tone
+    ) =>
+        new(
+            "propulsion",
+            "IMPULSE PROPULSION",
+            tone,
+            [
+                Available("CONDITION", FormatCondition(engineering.ImpulseCondition), tone),
+                Available("ALLOCATION", FormatPower(engineering.ImpulseAllocation)),
+                Available("CAPABILITY", FormatPercent(engineering.ImpulseCapability), tone),
+                Available("MAX TACTICAL SPEED", FormatSpeed(engineering.EffectiveMaximumTacticalSpeed.Value)),
+            ]
+        );
+
+    private static CommandInterfaceTelemetrySection EngineeringRepair(EngineeringProjection engineering) =>
+        new(
+            "repairs",
+            "ACTIVE REPAIR",
+            engineering.ActiveRepair is null ? CommandInterfaceTone.Neutral : CommandInterfaceTone.Caution,
+            [
+                Available(
+                    "TARGET",
+                    engineering.ActiveRepair is null ? "NONE" : SystemLabel(engineering.ActiveRepair.TargetSystem)
+                ),
+                Available(
+                    "PROGRESS",
+                    engineering.ActiveRepair is null ? "INACTIVE" : FormatPercent(engineering.ActiveRepair.Progress)
+                ),
+                Available(
+                    "COMPLETION",
+                    engineering.ActiveRepair is null
+                        ? "NOT SCHEDULED"
+                        : FormatSeconds(engineering.ActiveRepair.ExpectedCompletion.Milliseconds)
+                ),
+            ]
+        );
+
+    private static ImmutableArray<CommandInterfaceTelemetrySection> BuildEngineeringTelemetry(
+        EngineeringProjection engineering
+    ) =>
+        [
+            new CommandInterfaceTelemetrySection(
+                "connected-loads",
+                "CONNECTED LOADS",
+                CommandInterfaceTone.Engineering,
+                [
+                    Available("SENSORS", FormatPower(engineering.SensorAllocation)),
+                    Available("IMPULSE PROPULSION", FormatPower(engineering.ImpulseAllocation)),
+                ]
+            ),
+            new CommandInterfaceTelemetrySection(
+                "power-allocation",
+                "POWER ALLOCATION SUMMARY",
+                CommandInterfaceTone.Engineering,
+                [
+                    Available("NOMINAL GENERATION", FormatPower(engineering.NominalGeneration)),
+                    Available("AVAILABLE POWER", FormatPower(engineering.AvailablePower)),
+                    Available("SENSORS", FormatPower(engineering.SensorAllocation)),
+                    Available("PROPULSION", FormatPower(engineering.ImpulseAllocation)),
+                    Available("RESERVE", FormatPower(engineering.Reserve)),
+                ]
+            ),
+        ];
+
+    private static CommandInterfaceAction BuildEngineeringAction(EngineeringActionProjection action)
+    {
+        (string id, string label) = action.Action switch
+        {
+            EngineeringAction.Balanced => ("allocate-balanced", "Balance power allocation"),
+            EngineeringAction.PrioritizeSensors => ("prioritize-sensors", "Prioritize sensors"),
+            EngineeringAction.PrioritizePropulsion => ("prioritize-propulsion", "Prioritize propulsion"),
+            EngineeringAction.BeginSensorRepair => ("repair-sensors", "Begin sensor repair"),
+            EngineeringAction.BeginImpulseRepair => ("repair-propulsion", "Begin impulse repair"),
+            EngineeringAction.ReturnToCommand => ("return-command", "Return to Command Deck"),
+            _ => throw new ArgumentOutOfRangeException(nameof(action), action.Action, "Unknown Engineering action."),
+        };
+        return new CommandInterfaceAction(
+            id,
+            label,
+            action.IsAvailable ? CommandInterfaceTone.Engineering : CommandInterfaceTone.Muted,
+            action.IsAvailable
+                ? CommandInterfaceActionAvailability.Submittable
+                : CommandInterfaceActionAvailability.Disabled,
+            Tooltip: EngineeringActionTooltip(action),
+            EngineeringCommand: action.Action
+        );
+    }
+
+    private static string EngineeringActionTooltip(EngineeringActionProjection action) =>
+        (action.IsAvailable, action.UnavailableReason) switch
+        {
+            (true, _) => "Submit this Engineering intent for authoritative Core validation.",
+            (false, EngineeringActionUnavailableReason.CurrentSpeedTooHigh) =>
+                "Unavailable: current speed exceeds the resulting propulsion margin.",
+            (false, EngineeringActionUnavailableReason.RepairAlreadyActive) =>
+                "Unavailable: another system repair is active.",
+            (false, EngineeringActionUnavailableReason.SystemAlreadyNominal) =>
+                "Unavailable: this system is already nominal.",
+            _ => "Unavailable: Core does not currently support this Engineering action.",
+        };
+
+    private static CommandInterfaceHierarchyRow Hierarchy(
+        string id,
+        string label,
+        bool selected,
+        CommandInterfaceTone tone,
+        int attention = 0
+    ) => new(id, null, label, selected, attention, CommandInterfaceAvailability.Available, tone);
+
+    private static CommandInterfaceTone ConditionTone(SystemCondition condition) =>
+        condition.Status == SystemConditionStatus.Nominal ? CommandInterfaceTone.Nominal : CommandInterfaceTone.Caution;
+
+    private static string FormatCondition(SystemCondition condition) =>
+        $"{condition.Status.ToString().ToUpperInvariant()} / {FormatPercent(condition.Value)}";
+
+    private static string FormatPower(PowerUnits power) =>
+        $"{power.Value.ToString(CultureInfo.InvariantCulture)} units";
+
+    private static string SystemLabel(ShipSystemId? system) =>
+        system switch
+        {
+            ShipSystemId id when id == ShipSystemId.PowerGeneration => "Power generation",
+            ShipSystemId id when id == ShipSystemId.Sensors => "Sensors",
+            ShipSystemId id when id == ShipSystemId.ImpulsePropulsion => "Impulse propulsion",
+            _ => "System",
+        };
 
     private static CommandInterfaceAction LiveAction(
         string id,

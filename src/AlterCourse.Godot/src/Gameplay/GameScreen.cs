@@ -5,6 +5,7 @@ using AlterCourse.Core.Persistence;
 using AlterCourse.Core.Player;
 using AlterCourse.Core.Quantities;
 using AlterCourse.Core.Sensors;
+using AlterCourse.Core.Ships;
 using AlterCourse.Core.Strategic;
 using Godot;
 using GodotFile = Godot.FileAccess;
@@ -16,7 +17,7 @@ namespace AlterCourse.Godot.Gameplay;
 /// </summary>
 public partial class GameScreen : Control
 {
-    private const string SchemaPath = "res://content/schemas/ship-definition-v3.schema.json";
+    private const string SchemaPath = "res://content/schemas/ship-definition-v4.schema.json";
     private const string ShipPath = "res://content/ships/pathfinder.json";
     private const string DefaultQuickSaveUserPath = "user://quick-save.json";
     private const string LegacyDefaultQuickSaveUserPath = "user://quick-save-v1.json";
@@ -491,7 +492,9 @@ public partial class GameScreen : Control
                 SetTacticalCourseOutcome.Accepted => "Tactical course set: heading 045°, speed 2 km/s.",
                 SetTacticalCourseOutcome.UnavailableWhileTraveling =>
                     "Course unavailable while strategic travel is active.",
-                SetTacticalCourseOutcome.SpeedExceedsMaximum => "Course unavailable: requested speed exceeds limits.",
+                SetTacticalCourseOutcome.PropulsionOffline => "Course unavailable: impulse propulsion is offline.",
+                SetTacticalCourseOutcome.SpeedExceedsCurrentCapability =>
+                    "Course unavailable: requested speed exceeds current propulsion capability.",
                 _ => "Tactical course was not accepted.",
             };
             RefreshProjection();
@@ -905,7 +908,14 @@ public partial class GameScreen : Control
         _courseButton.Visible = combat;
         _travelButton.Disabled = !live || !IsSubmittable(presentation, "travel");
         _courseButton.Disabled = !live || !IsSubmittable(presentation, "set-tactical-course");
-        _advanceUntilButton.Disabled = !live || !IsSubmittable(presentation, "advance-time");
+        bool canAdvance =
+            live
+            && (
+                _engineeringWorkspaceActive
+                    ? _projection!.AvailableActions.Contains(PlayerAction.AdvanceTime)
+                    : IsSubmittable(presentation, "advance-time")
+            );
+        _advanceUntilButton.Disabled = !canAdvance;
         _quickSaveButton.Disabled = !live;
         _quickLoadButton.Disabled = !live;
         foreach (Button button in GetNode<HBoxContainer>("%RateControls").GetChildren().OfType<Button>())
@@ -983,10 +993,94 @@ public partial class GameScreen : Control
         EngineeringWorkspace.EngineeringCommandRequestedEventArgs args
     )
     {
-        if (_dataMode == CommandInterfaceDataMode.Live)
+        if (
+            _dataMode == CommandInterfaceDataMode.Live
+            && args.Action.EngineeringCommand is EngineeringAction engineeringAction
+        )
         {
-            SubmitIntent(args.Intent);
+            SubmitEngineeringAction(engineeringAction);
         }
+    }
+
+    private void SubmitEngineeringAction(EngineeringAction action)
+    {
+        if (_simulation is null || _dataMode != CommandInterfaceDataMode.Live)
+        {
+            return;
+        }
+
+        try
+        {
+            switch (action)
+            {
+                case EngineeringAction.Balanced:
+                    ApplyPowerAllocationPreset(PowerAllocationPreset.Balanced, "Balanced allocation");
+                    break;
+                case EngineeringAction.PrioritizeSensors:
+                    ApplyPowerAllocationPreset(PowerAllocationPreset.PrioritizeSensors, "Sensor-priority allocation");
+                    break;
+                case EngineeringAction.PrioritizePropulsion:
+                    ApplyPowerAllocationPreset(
+                        PowerAllocationPreset.PrioritizePropulsion,
+                        "Propulsion-priority allocation"
+                    );
+                    break;
+                case EngineeringAction.BeginSensorRepair:
+                    BeginSystemRepair(ShipSystemId.Sensors);
+                    break;
+                case EngineeringAction.BeginImpulseRepair:
+                    BeginSystemRepair(ShipSystemId.ImpulsePropulsion);
+                    break;
+                case EngineeringAction.ReturnToCommand:
+                    ShowCommandWorkspace();
+                    _messageLabel.Text = "Returned to Command Deck.";
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(action), action, "Unknown Engineering action.");
+            }
+        }
+        catch (Exception exception)
+        {
+            ReportCommandFailure("Engineering command failed safely.", exception);
+        }
+    }
+
+    private void ApplyPowerAllocationPreset(PowerAllocationPreset preset, string label)
+    {
+        PowerAllocationResult result = _simulation!.ApplyPowerAllocationPreset(preset);
+        PresentResolvedEvents(result.ResolvedEvents, announce: false);
+        RefreshProjection();
+        _messageLabel.Text = result.Outcome switch
+        {
+            PowerAllocationOutcome.Accepted => $"{label} applied.",
+            PowerAllocationOutcome.CurrentSpeedExceedsResultingMaximum =>
+                "Allocation unavailable: reduce current speed before lowering propulsion power.",
+            PowerAllocationOutcome.SensorDemandExceeded => "Allocation unavailable: sensor demand would be exceeded.",
+            PowerAllocationOutcome.ImpulseDemandExceeded =>
+                "Allocation unavailable: propulsion demand would be exceeded.",
+            PowerAllocationOutcome.AvailablePowerExceeded =>
+                "Allocation unavailable: requested load exceeds available power.",
+            _ => "Power allocation was not accepted.",
+        };
+        SetMeta("last_engineering_command", $"allocation:{preset}:{result.Outcome}");
+    }
+
+    private void BeginSystemRepair(ShipSystemId targetSystem)
+    {
+        // Each projected repair action means a complete repair; Core still validates the nominal target against
+        // current condition and the one-repair constraint at submission time.
+        SystemRepairResult result = _simulation!.BeginSystemRepair(targetSystem, new SystemCondition(1));
+        RefreshProjection();
+        _messageLabel.Text = result.Outcome switch
+        {
+            SystemRepairOutcome.Accepted => $"{EngineeringSystemLabel(targetSystem)} repair started.",
+            SystemRepairOutcome.RepairAlreadyActive => "Repair unavailable: another system repair is active.",
+            SystemRepairOutcome.UnsupportedSystem => "Repair unavailable: that system is unsupported.",
+            SystemRepairOutcome.TargetDoesNotImproveCondition =>
+                "Repair unavailable: the selected system is already nominal.",
+            _ => "System repair was not accepted.",
+        };
+        SetMeta("last_engineering_command", $"repair:{targetSystem.Value}:{result.Outcome}");
     }
 
     private void SubmitIntent(CommandInterfaceIntent intent)
@@ -1103,6 +1197,7 @@ public partial class GameScreen : Control
         SetMeta("sensor_integrity", projection.Ship.Sensors.Integrity);
         SetMeta("sensor_repair_progress", projection.Ship.Sensors.RepairProgress);
         SetMeta("sensor_repairing", projection.Ship.Sensors.IsRepairing);
+        SetEngineeringMetadata(projection.Ship.Engineering);
         SetMeta("map_location_count", projection.Strategic.Locations.Count);
         SetMeta("map_route_count", projection.Strategic.Routes.Count);
         SetMeta("travel_active", projection.Strategic.Travel is not null);
@@ -1113,6 +1208,23 @@ public partial class GameScreen : Control
         SetMeta("tactical_y", projection.Ship.Tactical.Position.YKilometers);
         SetMeta("tactical_heading", projection.Ship.Tactical.HeadingDegrees);
         SetMeta("tactical_speed", projection.Ship.Tactical.SpeedKilometersPerSecond);
+        SetContactMetadata(projection);
+    }
+
+    private void SetEngineeringMetadata(EngineeringProjection engineering)
+    {
+        SetMeta("engineering_nominal_power", engineering.NominalGeneration.Value);
+        SetMeta("engineering_available_power", engineering.AvailablePower.Value);
+        SetMeta("engineering_sensor_allocation", engineering.SensorAllocation.Value);
+        SetMeta("engineering_impulse_allocation", engineering.ImpulseAllocation.Value);
+        SetMeta("engineering_reserve", engineering.Reserve.Value);
+        SetMeta("engineering_sensor_capability", engineering.SensorCapability);
+        SetMeta("engineering_impulse_capability", engineering.ImpulseCapability);
+        SetMeta("engineering_repair_target", engineering.ActiveRepair?.TargetSystem.Value ?? string.Empty);
+    }
+
+    private void SetContactMetadata(PlayerProjection projection)
+    {
         CommandInterfaceContact[] visibleContacts =
         [
             .. projection
@@ -1399,7 +1511,8 @@ public partial class GameScreen : Control
         @event.Kind switch
         {
             PlayerAdvanceEventKind.TravelArrived => "arrival complete",
-            PlayerAdvanceEventKind.SensorRepairCompleted => "sensor repair complete",
+            PlayerAdvanceEventKind.SystemRepairCompleted =>
+                $"{EngineeringSystemLabel(@event.ShipSystemId).ToLowerInvariant()} repair complete",
             PlayerAdvanceEventKind.SensorContactDetected => $"{DescribeContact(@event)} detected",
             PlayerAdvanceEventKind.SensorContactStale => $"{DescribeContact(@event)} stale",
             PlayerAdvanceEventKind.SensorContactReacquired => $"{DescribeContact(@event)} reacquired",
@@ -1421,6 +1534,15 @@ public partial class GameScreen : Control
             ? contact.KnownVesselDisplayName ?? contact.KnownDesignDisplayName ?? $"Contact {contactId.Value}"
             : $"Contact {contactId.Value}";
     }
+
+    private static string EngineeringSystemLabel(ShipSystemId? system) =>
+        system switch
+        {
+            ShipSystemId id when id == ShipSystemId.Sensors => "Sensor",
+            ShipSystemId id when id == ShipSystemId.ImpulsePropulsion => "Impulse propulsion",
+            ShipSystemId id when id == ShipSystemId.PowerGeneration => "Power generation",
+            _ => "System",
+        };
 
     private void ReportPersistenceFailure(string operation, string status, string category, Exception exception)
     {
