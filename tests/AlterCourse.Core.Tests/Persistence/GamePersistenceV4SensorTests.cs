@@ -33,8 +33,8 @@ public sealed class GamePersistenceV4SensorTests
         JsonArray ships = root["simulation"]!["ships"]!.AsArray();
 
         Assert.Equal(first, second);
-        Assert.Equal(4, root["schemaVersion"]!.GetValue<int>());
-        Assert.Equal("sensor-knowledge-first-contact-v1", root["simulationRulesVersion"]!.GetValue<string>());
+        Assert.Equal(5, root["schemaVersion"]!.GetValue<int>());
+        Assert.Equal("engineering-backbone-v1", root["simulationRulesVersion"]!.GetValue<string>());
         Assert.Equal(
             "identified",
             ships[0]!["sensorKnowledge"]!["contacts"]![0]!["identification"]!.GetValue<string>()
@@ -58,7 +58,7 @@ public sealed class GamePersistenceV4SensorTests
         JsonNode simulation = current["simulation"]!;
         JsonNode npc = simulation["ships"]![1]!;
 
-        Assert.Equal(4, current["schemaVersion"]!.GetValue<int>());
+        Assert.Equal(5, current["schemaVersion"]!.GetValue<int>());
         Assert.Equal("holdUntil", npc["activeOrder"]!["kind"]!.GetValue<string>());
         Assert.Equal("orderWake", simulation["scheduler"]!["outstandingWork"]![0]!["kind"]!.GetValue<string>());
         Assert.Equal(1, npc["sensorKnowledge"]!["nextContactId"]!.GetValue<long>());
@@ -147,7 +147,7 @@ public sealed class GamePersistenceV4SensorTests
         byte[] saved = GamePersistence.Serialize(simulation, metadata);
         LoadedGameSave loaded = GamePersistence.Deserialize(saved, catalog, "maximum-contacts-v4.json");
 
-        Assert.Equal(95_632_438, saved.Length);
+        Assert.Equal(95_677_740, saved.Length);
         Assert.InRange(saved.Length, 1, 128 * 1024 * 1024);
         Assert.Equal(256, loaded.Simulation.CaptureState().Ships.Length);
         Assert.All(
@@ -259,8 +259,7 @@ public sealed class GamePersistenceV4SensorTests
             maximumName,
             new TacticalPosition(observerIndex, -observerIndex),
             default,
-            new SensorIntegrity(1),
-            null,
+            new ShipEngineeringState(new SystemCondition(1), new SystemCondition(1), new SystemCondition(1), new PowerAllocation(new(70), new(50))),
             new AtLocationState(locationId),
             sensorKnowledge: new SensorKnowledge(SensorKnowledge.MaximumContactsPerObserver + 1L, contacts)
         );
@@ -362,7 +361,8 @@ public sealed class GamePersistenceV4SensorTests
         );
 
     private static ShipState Ship(ShipInstanceId id, string name) =>
-        new(id, DefinitionId, name, default, default, new SensorIntegrity(1), null, new AtLocationState(Location));
+        new(id, DefinitionId, name, default, default, new ShipEngineeringState(new SystemCondition(1), new SystemCondition(1), new SystemCondition(1), new PowerAllocation(new(70), new(50))),
+            new AtLocationState(Location));
 
     private static void ApplyMutation(JsonObject root, string mutation)
     {

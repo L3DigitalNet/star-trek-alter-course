@@ -407,7 +407,7 @@ public sealed class HailAndContactDecisionTests
         ShipDefinitionId definitionId,
         string vesselName,
         TacticalPosition position
-    ) => new(id, definitionId, vesselName, position, default, new SensorIntegrity(1), new AtLocationStart(Local));
+    ) => new(id, definitionId, vesselName, position, default, new SystemCondition(1), new AtLocationStart(Local));
 
     private static ShipDefinitionCatalog CreateCatalog() =>
         new(

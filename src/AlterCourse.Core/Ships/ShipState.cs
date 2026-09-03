@@ -61,65 +61,12 @@ internal sealed record ShipState
         AutonomousState = autonomousState ?? ShipAutonomousState.Empty;
     }
 
-    // Save V4 restoration remains a sensor-shaped translation until the adjacent V5 persistence leg lands.
-    internal ShipState(
-        ShipInstanceId instanceId,
-        ShipDefinitionId definitionId,
-        string vesselDisplayName,
-        TacticalPosition tacticalPosition,
-        TacticalMotion tacticalMotion,
-        SensorIntegrity sensorIntegrity,
-        SensorRepairState? sensorRepair,
-        ShipStrategicState strategicState,
-        ShipOrder? activeOrder = null,
-        SensorKnowledge? sensorKnowledge = null,
-        ShipAutonomousState? autonomousState = null
-    )
-        : this(
-            instanceId,
-            definitionId,
-            vesselDisplayName,
-            tacticalPosition,
-            tacticalMotion,
-            new ShipEngineeringState(
-                new SystemCondition(1),
-                new SystemCondition(sensorIntegrity.Value),
-                new SystemCondition(1),
-                new PowerAllocation(new Quantities.PowerUnits(70), new Quantities.PowerUnits(50)),
-                sensorRepair is null
-                    ? null
-                    : new SystemRepairState(
-                        ShipSystemId.Sensors,
-                        new SystemCondition(sensorRepair.StartingIntegrity.Value),
-                        new SystemCondition(sensorRepair.TargetIntegrity.Value),
-                        sensorRepair.StartedAt,
-                        sensorRepair.ExpectedCompletion,
-                        sensorRepair.ScheduledCompletionId
-                    )
-            ),
-            strategicState,
-            activeOrder,
-            sensorKnowledge,
-            autonomousState
-        ) { }
-
     internal ShipInstanceId InstanceId { get; }
     internal ShipDefinitionId DefinitionId { get; }
     internal string VesselDisplayName { get; }
     internal TacticalPosition TacticalPosition { get; init; }
     internal TacticalMotion TacticalMotion { get; init; }
     internal ShipEngineeringState Engineering { get; init; }
-    internal SensorIntegrity SensorIntegrity => new(Engineering.SensorCondition.Value);
-    internal SensorRepairState? SensorRepair =>
-        Engineering.ActiveRepair is not { TargetSystem: var target } repair || target != ShipSystemId.Sensors
-            ? null
-            : new SensorRepairState(
-                new SensorIntegrity(repair.StartingCondition.Value),
-                new SensorIntegrity(repair.TargetCondition.Value),
-                repair.StartedAt,
-                repair.ExpectedCompletion,
-                repair.ScheduledCompletionId
-            );
     internal ShipStrategicState StrategicState { get; init; }
     internal ShipOrder? ActiveOrder { get; init; }
     internal SensorKnowledge SensorKnowledge { get; init; }

@@ -60,7 +60,7 @@ public sealed class SensorObservationCommandTests
             "Traveling target",
             new TacticalPosition(1, 0),
             default,
-            new SensorIntegrity(1),
+            new SystemCondition(1),
             new TravelingStart(Local, Remote, new SimulationTime(0))
         );
         GameSimulation game = CreateGame(
@@ -274,8 +274,7 @@ public sealed class SensorObservationCommandTests
             "Player",
             default,
             default,
-            new SensorIntegrity(1),
-            null,
+            new ShipEngineeringState(new SystemCondition(1), new SystemCondition(1), new SystemCondition(1), new PowerAllocation(new(70), new(50))),
             new TravelingState(
                 new TravelState(Remote, Local, new SimulationTime(0), arrivalWork.DueTime, arrivalWork.Id)
             ),
@@ -287,8 +286,7 @@ public sealed class SensorObservationCommandTests
             "Target",
             default,
             default,
-            new SensorIntegrity(1),
-            null,
+            new ShipEngineeringState(new SystemCondition(1), new SystemCondition(1), new SystemCondition(1), new PowerAllocation(new(70), new(50))),
             new AtLocationState(Local)
         );
         var map = new StrategicMap(
@@ -513,7 +511,7 @@ public sealed class SensorObservationCommandTests
                 ObserverDefinitionId,
                 default,
                 integrity: 0.5,
-                repair: new SensorRepairStart(new SensorIntegrity(0.5), new SensorIntegrity(1), new SimulationTime(0))
+                repair: new SystemRepairStart(ShipSystemId.Sensors, new SystemCondition(0.5), new SystemCondition(1), new SimulationTime(0))
             ),
             Ship(2, TargetDefinitionId, new TacticalPosition(5, 0))
         );
@@ -595,7 +593,7 @@ public sealed class SensorObservationCommandTests
                 ObserverDefinitionId,
                 default,
                 integrity: 0.5,
-                repair: new SensorRepairStart(new SensorIntegrity(0.5), new SensorIntegrity(1), new SimulationTime(0))
+                repair: new SystemRepairStart(ShipSystemId.Sensors, new SystemCondition(0.5), new SystemCondition(1), new SimulationTime(0))
             ),
             Ship(2, TargetDefinitionId, new TacticalPosition(5, 0))
         );
@@ -679,7 +677,7 @@ public sealed class SensorObservationCommandTests
         LocationId? location = null,
         double integrity = 1,
         string? vesselName = null,
-        SensorRepairStart? repair = null
+        SystemRepairStart? repair = null
     ) =>
         new(
             new ShipInstanceId(id),
@@ -687,7 +685,7 @@ public sealed class SensorObservationCommandTests
             vesselName ?? $"Ship {id}",
             position,
             default,
-            new SensorIntegrity(integrity),
+            new SystemCondition(integrity),
             new AtLocationStart(location ?? Local),
             repair
         );

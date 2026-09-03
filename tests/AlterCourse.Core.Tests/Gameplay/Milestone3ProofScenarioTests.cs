@@ -38,20 +38,20 @@ public sealed class Milestone3ProofScenarioTests
         );
         Assert.Equal(5, state.ShipIdAllocator.NextId);
         Assert.Equal(new LocationId("dawn-anchor"), Assert.IsType<AtLocationState>(player.StrategicState).LocationId);
-        Assert.NotNull(player.SensorRepair);
+        Assert.NotNull(player.Engineering.ActiveRepair);
         Assert.Equal(
             new LocationId("vesper-reach"),
             Assert.IsType<AtLocationState>(wayfarer.StrategicState).LocationId
         );
-        Assert.Null(wayfarer.SensorRepair);
+        Assert.Null(wayfarer.Engineering.ActiveRepair);
         TravelingState horizonTravel = Assert.IsType<TravelingState>(horizon.StrategicState);
         Assert.Equal(new LocationId("vesper-reach"), horizonTravel.Travel.Origin);
         Assert.Equal(new LocationId("meridian-drift"), horizonTravel.Travel.Destination);
 
         Assert.Equal(new TacticalPosition(21.25, -7.5), kestrel.TacticalPosition);
         Assert.Equal(default, kestrel.TacticalMotion);
-        Assert.Equal(1, kestrel.SensorIntegrity.Value);
-        Assert.Null(kestrel.SensorRepair);
+        Assert.Equal(1, kestrel.Engineering.SensorCondition.Value);
+        Assert.Null(kestrel.Engineering.ActiveRepair);
         Assert.Null(kestrel.ActiveOrder);
         Assert.Equal(new LocationId("dawn-anchor"), Assert.IsType<AtLocationState>(kestrel.StrategicState).LocationId);
         Assert.Equal(ShipContactPosture.CautiousContact, kestrel.AutonomousState.ContactPosture);
@@ -69,7 +69,7 @@ public sealed class Milestone3ProofScenarioTests
         );
 
         JsonObject root = JsonNode.Parse(GamePersistence.Serialize(game, Milestone3ProofFixture.Metadata))!.AsObject();
-        Assert.Equal(4, root["schemaVersion"]!.GetValue<int>());
+        Assert.Equal(5, root["schemaVersion"]!.GetValue<int>());
         Assert.Equal(5, root["simulation"]!["shipAllocatorNextId"]!.GetValue<long>());
         Assert.Equal(4, root["simulation"]!["ships"]!.AsArray().Count);
     }

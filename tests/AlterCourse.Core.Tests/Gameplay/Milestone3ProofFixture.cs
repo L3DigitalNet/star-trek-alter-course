@@ -65,8 +65,8 @@ internal sealed class Milestone3ProofFixture
     {
         var initialTime = new SimulationTime(0);
         var definitionId = new ShipDefinitionId("pathfinder");
-        var damaged = new SensorIntegrity(0.4);
-        var repaired = new SensorIntegrity(1);
+        var damaged = new SystemCondition(0.4);
+        var repaired = new SystemCondition(1);
         TacticalMotion stopped = default;
         return
         [
@@ -78,7 +78,7 @@ internal sealed class Milestone3ProofFixture
                 stopped,
                 damaged,
                 new AtLocationStart(new LocationId("dawn-anchor")),
-                new SensorRepairStart(damaged, repaired, initialTime)
+                new SystemRepairStart(ShipSystemId.Sensors, damaged, repaired, initialTime)
             ),
             new(
                 new ShipInstanceId(2),
@@ -88,7 +88,7 @@ internal sealed class Milestone3ProofFixture
                 stopped,
                 damaged,
                 new AtLocationStart(new LocationId("vesper-reach")),
-                new SensorRepairStart(damaged, repaired, initialTime)
+                new SystemRepairStart(ShipSystemId.Sensors, damaged, repaired, initialTime)
             ),
             new(
                 new ShipInstanceId(3),

@@ -287,7 +287,8 @@ public sealed class GameSimulationTests
         Assert.Equal(8000, repair.StoppedAt.Milliseconds);
         var repairCompleted = new PlayerAdvanceEvent(
             PlayerAdvanceEventKind.SystemRepairCompleted,
-            new SimulationTime(8000)
+            new SimulationTime(8000),
+            ShipSystemId: ShipSystemId.Sensors
         );
         Assert.Equal([repairCompleted], repair.ResolvedEvents);
         Assert.NotNull(repair.Projection.Strategic.Travel);
@@ -445,12 +446,12 @@ public sealed class GameSimulationTests
                         $"USS Test {index}",
                         isMover ? default : new TacticalPosition(index, -index),
                         isMover ? new TacticalMotion(new HeadingDegrees(90), new SpeedKilometersPerSecond(1)) : default,
-                        new SensorIntegrity(isRepairing ? 0.4 : 1),
+                        new SystemCondition(isRepairing ? 0.4 : 1),
                         new AtLocationStart(location.Id),
                         isRepairing
-                            ? new SensorRepairStart(
-                                new SensorIntegrity(0.4),
-                                new SensorIntegrity(1),
+                            ? new SystemRepairStart(ShipSystemId.Sensors,
+                                new SystemCondition(0.4),
+                                new SystemCondition(1),
                                 new SimulationTime(0)
                             )
                             : null
@@ -473,8 +474,8 @@ public sealed class GameSimulationTests
         Assert.Equal(stepCount * 100, result.FinalTime.Milliseconds);
         Assert.Equal(500, final.GetRequiredShip(new ShipInstanceId(1)).TacticalPosition.XKilometers, 8);
         Assert.Equal(inactivePosition, final.GetRequiredShip(new ShipInstanceId(shipCount)).TacticalPosition);
-        Assert.Equal(1, final.GetRequiredShip(new ShipInstanceId(2)).SensorIntegrity.Value);
-        Assert.Null(final.GetRequiredShip(new ShipInstanceId(2)).SensorRepair);
+        Assert.Equal(1, final.GetRequiredShip(new ShipInstanceId(2)).Engineering.SensorCondition.Value);
+        Assert.Null(final.GetRequiredShip(new ShipInstanceId(2)).Engineering.ActiveRepair);
     }
 
     /// <summary>Confirms bootstrap cannot admit scheduled work that persistence would reject for time exhaustion.</summary>
@@ -493,7 +494,7 @@ public sealed class GameSimulationTests
             "USS Boundary",
             default,
             default,
-            new SensorIntegrity(1),
+            new SystemCondition(1),
             new TravelingStart(origin.Id, destination.Id, new SimulationTime(0))
         );
 
@@ -519,7 +520,7 @@ public sealed class GameSimulationTests
             "USS Pathfinder",
             new TacticalPosition(3.25, -7.5),
             default,
-            new SensorIntegrity(1),
+            new SystemCondition(1),
             new AtLocationStart(location.Id)
         );
         return new GameBootstrap(

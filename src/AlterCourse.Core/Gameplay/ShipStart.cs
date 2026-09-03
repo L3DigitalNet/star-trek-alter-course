@@ -57,9 +57,9 @@ public sealed record ShipStart
         string vesselDisplayName,
         TacticalPosition tacticalPosition,
         TacticalMotion tacticalMotion,
-        SensorIntegrity sensorIntegrity,
+        SystemCondition sensorCondition,
         ShipStrategicStart strategic,
-        SensorRepairStart? sensorRepair = null,
+        SystemRepairStart? sensorRepair = null,
         ShipOrderStart? ActiveOrder = null
     )
         : this(
@@ -69,20 +69,16 @@ public sealed record ShipStart
             tacticalPosition,
             tacticalMotion,
             new SystemCondition(1),
-            new SystemCondition(sensorIntegrity.Value),
+            sensorCondition,
             new SystemCondition(1),
             new PowerAllocation(new PowerUnits(70), new PowerUnits(50)),
             strategic,
             sensorRepair is null
                 ? null
-                : new SystemRepairStart(
-                    ShipSystemId.Sensors,
-                    new SystemCondition(sensorRepair.StartingIntegrity.Value),
-                    new SystemCondition(sensorRepair.TargetIntegrity.Value),
-                    sensorRepair.StartedAt
-                ),
+                : sensorRepair,
             ActiveOrder
-        ) { }
+        )
+    { }
 
     /// <summary>Gets deterministic runtime identity.</summary>
     public ShipInstanceId InstanceId { get; init; }

@@ -7,22 +7,6 @@ namespace AlterCourse.Core.Ships;
 public sealed record SystemRepairState
 {
     internal SystemRepairState(
-        SensorIntegrity startingIntegrity,
-        SensorIntegrity targetIntegrity,
-        SimulationTime startedAt,
-        SimulationTime expectedCompletion,
-        ScheduledWorkId scheduledCompletionId
-    )
-        : this(
-            ShipSystemId.Sensors,
-            new SystemCondition(startingIntegrity.Value),
-            new SystemCondition(targetIntegrity.Value),
-            startedAt,
-            expectedCompletion,
-            scheduledCompletionId
-        ) { }
-
-    internal SystemRepairState(
         ShipSystemId targetSystem,
         SystemCondition startingCondition,
         SystemCondition targetCondition,

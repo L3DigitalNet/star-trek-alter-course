@@ -26,16 +26,16 @@ public sealed class GamePersistenceTests
         JsonArray ships = simulation["ships"]!.AsArray();
         JsonArray work = simulation["scheduler"]!["outstandingWork"]!.AsArray();
 
-        Assert.Equal(4, root["schemaVersion"]!.GetValue<int>());
-        Assert.Equal("sensor-knowledge-first-contact-v1", root["simulationRulesVersion"]!.GetValue<string>());
+        Assert.Equal(5, root["schemaVersion"]!.GetValue<int>());
+        Assert.Equal("engineering-backbone-v1", root["simulationRulesVersion"]!.GetValue<string>());
         Assert.Equal(1, simulation["orderAllocatorNextId"]!.GetValue<long>());
         Assert.Equal(2, simulation["playerShipId"]!.GetValue<long>());
         Assert.Equal([1L, 2L, 3L], ships.Select(ship => ship!["instanceId"]!.GetValue<long>()));
         Assert.Equal([1L, 2L, 3L], work.Select(item => item!["targetShipId"]!.GetValue<long>()));
         Assert.Equal("Alpha", ships[0]!["displayName"]!.GetValue<string>());
         Assert.Equal("Player Vessel", ships[1]!["displayName"]!.GetValue<string>());
-        Assert.NotNull(ships[0]!["sensorRepair"]);
-        Assert.NotNull(ships[1]!["sensorRepair"]);
+        Assert.NotNull(ships[0]!["engineering"]!["activeRepair"]);
+        Assert.NotNull(ships[1]!["engineering"]!["activeRepair"]);
         Assert.Equal("traveling", ships[2]!["strategicState"]!["kind"]!.GetValue<string>());
         Assert.Equal(2, loaded.Simulation.GetPlayerProjection().Ship.InstanceId.Value);
     }
@@ -101,7 +101,7 @@ public sealed class GamePersistenceTests
             "scheduler"
         ]!["outstandingWork"]!.AsArray();
         Assert.Equal(
-            [(1L, "sensorRepairCompletion"), (2L, "sensorRepairCompletion")],
+            [(1L, "systemRepairCompletion"), (2L, "systemRepairCompletion")],
             work.Take(2).Select(item => (item!["targetShipId"]!.GetValue<long>(), item["kind"]!.GetValue<string>()))
         );
 
@@ -466,7 +466,10 @@ public sealed class GamePersistenceTests
 
         Assert.Equal(normalized, GamePersistence.Serialize(LoadV2(normalized).Simulation, loaded.Metadata));
         Assert.Equal(0, normalizedSimulation["timeMilliseconds"]!.GetValue<long>());
-        Assert.Equal(0, normalizedSimulation["ships"]![0]!["sensorRepair"]!["startedAtMilliseconds"]!.GetValue<long>());
+        Assert.Equal(
+            0,
+            normalizedSimulation["ships"]![0]!["engineering"]!["activeRepair"]!["startedAtMilliseconds"]!.GetValue<long>()
+        );
         Assert.Equal(
             0,
             normalizedSimulation["ships"]![2]!["strategicState"]!["travel"]!["departureMilliseconds"]!.GetValue<long>()
@@ -485,7 +488,7 @@ public sealed class GamePersistenceTests
             "ships"
         ]!.AsArray();
 
-        Assert.All(ships, ship => Assert.Null(ship!["sensorRepair"]));
+        Assert.All(ships, ship => Assert.Null(ship!["engineering"]!["activeRepair"]));
         Assert.Equal("atLocation", ships[2]!["strategicState"]!["kind"]!.GetValue<string>());
     }
 
@@ -566,8 +569,8 @@ public sealed class GamePersistenceTests
         JsonObject simulation = v4["simulation"]!.AsObject();
         JsonObject ship = simulation["ships"]![0]!.AsObject();
 
-        Assert.Equal(4, v4["schemaVersion"]!.GetValue<int>());
-        Assert.Equal("sensor-knowledge-first-contact-v1", v4["simulationRulesVersion"]!.GetValue<string>());
+        Assert.Equal(5, v4["schemaVersion"]!.GetValue<int>());
+        Assert.Equal("engineering-backbone-v1", v4["simulationRulesVersion"]!.GetValue<string>());
         Assert.Equal(1, simulation["orderAllocatorNextId"]!.GetValue<long>());
         Assert.All(simulation["ships"]!.AsArray(), candidate => Assert.Null(candidate!["activeOrder"]));
         Assert.Equal(7, simulation["playerShipId"]!.GetValue<long>());
@@ -580,7 +583,18 @@ public sealed class GamePersistenceTests
                 .Select(work => work!["targetShipId"]!.GetValue<long>())
         );
         Assert.Equal("traveling", ship["strategicState"]!["kind"]!.GetValue<string>());
-        Assert.NotNull(ship["sensorRepair"]);
+        Assert.NotNull(ship["engineering"]!["activeRepair"]);
+        Assert.Equal("sensors", ship["engineering"]!["activeRepair"]!["targetSystem"]!.GetValue<string>());
+        Assert.Equal(70, ship["engineering"]!["sensorAllocation"]!.GetValue<int>());
+        Assert.Equal(50, ship["engineering"]!["impulseAllocation"]!.GetValue<int>());
+        Assert.Contains(
+            simulation["scheduler"]!["outstandingWork"]!.AsArray(),
+            work => string.Equals(
+                work!["kind"]!.GetValue<string>(),
+                "systemRepairCompletion",
+                StringComparison.Ordinal
+            )
+        );
     }
 
     /// <summary>Confirms V1 migration cannot preserve repair timing that contradicts resolved content.</summary>
@@ -614,7 +628,7 @@ public sealed class GamePersistenceTests
 
         Assert.Empty(v4["simulation"]!["scheduler"]!["outstandingWork"]!.AsArray());
         Assert.Equal("atLocation", v4["simulation"]!["ships"]![0]!["strategicState"]!["kind"]!.GetValue<string>());
-        Assert.Null(v4["simulation"]!["ships"]![0]!["sensorRepair"]);
+        Assert.Null(v4["simulation"]!["ships"]![0]!["engineering"]!["activeRepair"]);
     }
 
     /// <summary>Confirms migrated V1 continuation equals its explicitly materialized current semantics.</summary>
@@ -650,7 +664,7 @@ public sealed class GamePersistenceTests
     public void RejectsUnsupportedDuplicateOversizedDeepAndUnknownInput()
     {
         AssertFailure(
-            MutateV2(root => root["schemaVersion"] = 5),
+            MutateV2(root => root["schemaVersion"] = 6),
             "future.json",
             "unsupported",
             GamePersistenceFailure.UnsupportedVersion
@@ -672,8 +686,8 @@ public sealed class GamePersistenceTests
         GameSimulation game = FirstGameSetup.Create(CreateCatalog());
         JsonObject root = Parse(GamePersistence.Serialize(game, CreateMetadata()));
 
-        Assert.Equal(4, root["schemaVersion"]!.GetValue<int>());
-        Assert.Equal("sensor-knowledge-first-contact-v1", root["simulationRulesVersion"]!.GetValue<string>());
+        Assert.Equal(5, root["schemaVersion"]!.GetValue<int>());
+        Assert.Equal("engineering-backbone-v1", root["simulationRulesVersion"]!.GetValue<string>());
         Assert.Equal(1, root["simulation"]!["orderAllocatorNextId"]!.GetValue<long>());
         Assert.NotNull(root["simulation"]!["ships"]);
         Assert.Null(root["simulation"]!["playerShip"]);

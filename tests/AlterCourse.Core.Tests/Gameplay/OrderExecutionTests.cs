@@ -244,9 +244,9 @@ public sealed class OrderExecutionTests
             PlayerId,
             ScheduledWorkKind.SystemRepairCompletion
         );
-        var repair = new SystemRepairState(
-            new SensorIntegrity(0.5),
-            new SensorIntegrity(1),
+        var repair = new SystemRepairState(ShipSystemId.Sensors,
+            new SystemCondition(0.5),
+            new SystemCondition(1),
             new SimulationTime(0),
             new SimulationTime(800),
             repairWork.Id
@@ -306,7 +306,7 @@ public sealed class OrderExecutionTests
             result.ResolvedEvents
         );
         Assert.Null(game.CaptureState().GetRequiredShip(NpcId).ActiveOrder);
-        Assert.Null(game.CaptureState().GetRequiredShip(PlayerId).SensorRepair);
+        Assert.Null(game.CaptureState().GetRequiredShip(PlayerId).Engineering.ActiveRepair);
 
         SimulationState hiddenOnly = state.ReplaceShip(PlayerId, CreateShip(PlayerId, Alpha)) with
         {
@@ -339,7 +339,7 @@ public sealed class OrderExecutionTests
             ],
             result.ResolvedEvents
         );
-        Assert.Null(game.CaptureState().GetRequiredShip(PlayerId).SensorRepair);
+        Assert.Null(game.CaptureState().GetRequiredShip(PlayerId).Engineering.ActiveRepair);
         AssertPatrolLeg(game.CaptureState(), NpcId, new ShipOrderId(1), 2, Beta, Gamma);
     }
 
@@ -377,9 +377,9 @@ public sealed class OrderExecutionTests
             PlayerId,
             ScheduledWorkKind.SystemRepairCompletion
         );
-        var repair = new SystemRepairState(
-            new SensorIntegrity(0.25),
-            new SensorIntegrity(1),
+        var repair = new SystemRepairState(ShipSystemId.Sensors,
+            new SystemCondition(0.25),
+            new SystemCondition(1),
             new SimulationTime(0),
             work.DueTime,
             work.Id
@@ -471,9 +471,9 @@ public sealed class OrderExecutionTests
             PlayerId,
             ScheduledWorkKind.SystemRepairCompletion
         );
-        var repair = new SystemRepairState(
-            new SensorIntegrity(0.5),
-            new SensorIntegrity(1),
+        var repair = new SystemRepairState(ShipSystemId.Sensors,
+            new SystemCondition(0.5),
+            new SystemCondition(1),
             new SimulationTime(0),
             repairWork.DueTime,
             repairWork.Id
@@ -509,9 +509,9 @@ public sealed class OrderExecutionTests
             PlayerId,
             ScheduledWorkKind.SystemRepairCompletion
         );
-        var repair = new SystemRepairState(
-            new SensorIntegrity(0.5),
-            new SensorIntegrity(1),
+        var repair = new SystemRepairState(ShipSystemId.Sensors,
+            new SystemCondition(0.5),
+            new SystemCondition(1),
             new SimulationTime(0),
             repairWork.DueTime,
             repairWork.Id
@@ -642,8 +642,7 @@ public sealed class OrderExecutionTests
             $"Ship {id.Value}",
             default,
             default,
-            new SensorIntegrity(1),
-            null,
+            new ShipEngineeringState(new SystemCondition(1), new SystemCondition(1), new SystemCondition(1), new PowerAllocation(new(70), new(50))),
             new AtLocationState(location)
         );
 

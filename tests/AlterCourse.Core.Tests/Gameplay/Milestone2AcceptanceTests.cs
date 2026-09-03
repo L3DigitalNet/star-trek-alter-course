@@ -263,9 +263,9 @@ public sealed class Milestone2AcceptanceTests
             PlayerId,
             ScheduledWorkKind.SystemRepairCompletion
         );
-        var repair = new SystemRepairState(
-            new SensorIntegrity(0.25),
-            new SensorIntegrity(1),
+        var repair = new SystemRepairState(ShipSystemId.Sensors,
+            new SystemCondition(0.25),
+            new SystemCondition(1),
             Time(3),
             Time(6),
             repairWork.Id
@@ -311,8 +311,8 @@ public sealed class Milestone2AcceptanceTests
             result.ResolvedEvents
         );
         Assert.Equal(afterMotion, final.GetRequiredShip(PlayerId).TacticalPosition);
-        Assert.Equal(1, final.GetRequiredShip(PlayerId).SensorIntegrity.Value);
-        Assert.Null(final.GetRequiredShip(PlayerId).SensorRepair);
+        Assert.Equal(1, final.GetRequiredShip(PlayerId).Engineering.SensorCondition.Value);
+        Assert.Null(final.GetRequiredShip(PlayerId).Engineering.ActiveRepair);
         AssertPatrolLeg(final, Beta, Alpha, 0, Time(6), Time(12));
         Assert.Null(final.GetRequiredShip(HoldId).ActiveOrder);
     }
@@ -361,7 +361,7 @@ public sealed class Milestone2AcceptanceTests
             $"Ship {id.Value}",
             default,
             default,
-            new SensorIntegrity(1),
+            new SystemCondition(1),
             strategic,
             ActiveOrder: order
         );
@@ -434,8 +434,8 @@ public sealed class Milestone2AcceptanceTests
             Assert.Equal(expectedShip.VesselDisplayName, actualShip.VesselDisplayName);
             Assert.Equal(expectedShip.TacticalPosition, actualShip.TacticalPosition);
             Assert.Equal(expectedShip.TacticalMotion, actualShip.TacticalMotion);
-            Assert.Equal(expectedShip.SensorIntegrity, actualShip.SensorIntegrity);
-            Assert.Equal(expectedShip.SensorRepair, actualShip.SensorRepair);
+            Assert.Equal(expectedShip.Engineering.SensorCondition, actualShip.Engineering.SensorCondition);
+            Assert.Equal(expectedShip.Engineering.ActiveRepair, actualShip.Engineering.ActiveRepair);
             Assert.Equal(expectedShip.StrategicState, actualShip.StrategicState);
             if (expectedShip.ActiveOrder is PatrolRouteOrder expectedPatrol)
             {
