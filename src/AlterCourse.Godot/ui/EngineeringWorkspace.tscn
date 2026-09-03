@@ -1,0 +1,265 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://src/Gameplay/EngineeringWorkspace.cs" id="1_script"]
+[ext_resource type="Theme" path="res://assets/ui/command_theme.tres" id="2_theme"]
+
+[node name="EngineeringWorkspace" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("2_theme")
+script = ExtResource("1_script")
+
+[node name="WorkspaceMargin" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 8.0
+offset_top = 8.0
+offset_right = -8.0
+offset_bottom = -8.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="WorkspaceStack" type="VBoxContainer" parent="WorkspaceMargin"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="WorkspaceHeader" type="PanelContainer" parent="WorkspaceMargin/WorkspaceStack"]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+
+[node name="HeaderRow" type="HBoxContainer" parent="WorkspaceMargin/WorkspaceStack/WorkspaceHeader"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Title" type="Label" parent="WorkspaceMargin/WorkspaceStack/WorkspaceHeader/HeaderRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"StationHeading"
+text = "ENGINEERING WORKSPACE"
+
+[node name="DataModeStatus" type="Label" parent="WorkspaceMargin/WorkspaceStack/WorkspaceHeader/HeaderRow"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"StatusCaution"
+text = "AWAITING PRESENTATION"
+vertical_alignment = 1
+
+[node name="ReturnToCommandButton" type="Button" parent="WorkspaceMargin/WorkspaceStack/WorkspaceHeader/HeaderRow"]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 2
+theme_type_variation = &"CommandButton"
+text = "RETURN TO COMMAND"
+tooltip_text = "Return to the Command Deck."
+
+[node name="PrimaryAndInspector" type="HBoxContainer" parent="WorkspaceMargin/WorkspaceStack"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 8
+
+[node name="HierarchyPanel" type="PanelContainer" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector"]
+custom_minimum_size = Vector2(230, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 1.0
+
+[node name="HierarchyStack" type="VBoxContainer" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/HierarchyPanel"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="HierarchyHeading" type="Label" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/HierarchyPanel/HierarchyStack"]
+layout_mode = 2
+theme_type_variation = &"PanelHeading"
+text = "ENGINEERING SYSTEMS"
+
+[node name="HierarchyScroll" type="ScrollContainer" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/HierarchyPanel/HierarchyStack"]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="EngineeringHierarchy" type="VBoxContainer" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/HierarchyPanel/HierarchyStack/HierarchyScroll"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 4
+
+[node name="TechnicalWorkspace" type="VBoxContainer" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector"]
+custom_minimum_size = Vector2(520, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 5.0
+theme_override_constants/separation = 8
+
+[node name="EngineeringTabs" type="HBoxContainer" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/TechnicalWorkspace"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 5
+
+[node name="OverviewTab" type="Button" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/TechnicalWorkspace/EngineeringTabs"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 2
+theme_type_variation = &"StationTab"
+disabled = true
+text = "OVERVIEW"
+
+[node name="PowerTab" type="Button" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/TechnicalWorkspace/EngineeringTabs"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 2
+theme_type_variation = &"StationTabActive"
+toggle_mode = true
+button_pressed = true
+text = "POWER"
+
+[node name="DamageTab" type="Button" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/TechnicalWorkspace/EngineeringTabs"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 2
+theme_type_variation = &"StationTab"
+disabled = true
+text = "DAMAGE"
+
+[node name="RepairsTab" type="Button" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/TechnicalWorkspace/EngineeringTabs"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 2
+theme_type_variation = &"StationTab"
+disabled = true
+text = "REPAIRS"
+
+[node name="PropulsionTab" type="Button" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/TechnicalWorkspace/EngineeringTabs"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 2
+theme_type_variation = &"StationTab"
+disabled = true
+text = "PROPULSION"
+
+[node name="ShieldsTab" type="Button" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/TechnicalWorkspace/EngineeringTabs"]
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 2
+theme_type_variation = &"StationTab"
+disabled = true
+text = "SHIELDS"
+
+[node name="SchematicPanel" type="PanelContainer" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/TechnicalWorkspace"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="SchematicStack" type="VBoxContainer" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/TechnicalWorkspace/SchematicPanel"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="SchematicHeading" type="Label" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/TechnicalWorkspace/SchematicPanel/SchematicStack"]
+layout_mode = 2
+theme_type_variation = &"PanelHeading"
+text = "POWER / EPS DISTRIBUTION"
+
+[node name="SchematicScroll" type="ScrollContainer" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/TechnicalWorkspace/SchematicPanel/SchematicStack"]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="EngineeringSchematic" type="VBoxContainer" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/TechnicalWorkspace/SchematicPanel/SchematicStack/SchematicScroll"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 10
+
+[node name="SchematicComponents" type="GridContainer" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/TechnicalWorkspace/SchematicPanel/SchematicStack/SchematicScroll/EngineeringSchematic"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/h_separation = 8
+theme_override_constants/v_separation = 8
+columns = 3
+
+[node name="SchematicLinks" type="VBoxContainer" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/TechnicalWorkspace/SchematicPanel/SchematicStack/SchematicScroll/EngineeringSchematic"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 3
+
+[node name="PowerAllocationSummary" type="PanelContainer" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/TechnicalWorkspace"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 118)
+layout_mode = 2
+
+[node name="PowerAllocationContent" type="VBoxContainer" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/TechnicalWorkspace/PowerAllocationSummary"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 3
+
+[node name="InspectorColumn" type="VBoxContainer" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector"]
+custom_minimum_size = Vector2(340, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 2.0
+theme_override_constants/separation = 8
+
+[node name="ComponentInspector" type="PanelContainer" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/InspectorColumn"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+theme_type_variation = &"InspectorPanel"
+
+[node name="ComponentInspectorContent" type="VBoxContainer" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/InspectorColumn/ComponentInspector"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 5
+
+[node name="ConnectedLoads" type="PanelContainer" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/InspectorColumn"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 120)
+layout_mode = 2
+
+[node name="ConnectedLoadsContent" type="VBoxContainer" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/InspectorColumn/ConnectedLoads"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 3
+
+[node name="EngineeringActions" type="PanelContainer" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/InspectorColumn"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 160)
+layout_mode = 2
+
+[node name="EngineeringActionsContent" type="VBoxContainer" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/InspectorColumn/EngineeringActions"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 5
+
+[node name="ActivityRegion" type="HBoxContainer" parent="WorkspaceMargin/WorkspaceStack"]
+custom_minimum_size = Vector2(0, 150)
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="EngineeringEventLog" type="PanelContainer" parent="WorkspaceMargin/WorkspaceStack/ActivityRegion"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 3.0
+
+[node name="EngineeringEventLogContent" type="VBoxContainer" parent="WorkspaceMargin/WorkspaceStack/ActivityRegion/EngineeringEventLog"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 3
+
+[node name="RepairQueue" type="PanelContainer" parent="WorkspaceMargin/WorkspaceStack/ActivityRegion"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(340, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 1.0
+
+[node name="RepairQueueContent" type="VBoxContainer" parent="WorkspaceMargin/WorkspaceStack/ActivityRegion/RepairQueue"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 3
