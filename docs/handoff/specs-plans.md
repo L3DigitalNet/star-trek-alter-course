@@ -16,3 +16,4 @@
 | Task #56 | Merged / Done | Project-scoped Figma tooling merged through Final PR #57 as `24cf7b0` into `dev`; it did not change gameplay. |
 | Feature #58 | Merged / Done | Milestone 3A merged to `dev` through Final PR #61 as squash `a104e3f`; unreleased. |
 | Task #59 | Merged / Done | Godot UID and import metadata merged through Final PR #60 as `ce454f5` into `dev`. |
+| Feature #62 | In progress | Milestone 4 Engineering backbone; design `docs/design/engineering-backbone.md`, base `25cecf8`, draft Final PR #63 targets `dev`. |
