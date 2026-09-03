@@ -401,10 +401,10 @@ public sealed class GamePersistenceV3OrderTests
     private static ShipDefinitionCatalog CreateCatalog()
     {
         const string definition = """
-            { "schemaVersion": 2, "id": "pathfinder", "designDisplayName": "Pathfinder", "maximumTacticalSpeedKilometersPerSecond": 10, "sensorRepairDurationMilliseconds": 8000 }
+            { "schemaVersion": 3, "id": "pathfinder", "designDisplayName": "Pathfinder", "maximumTacticalSpeedKilometersPerSecond": 10, "passiveSensorRangeKilometers": 30.0, "activeScanDurationMilliseconds": 2000, "sensorRepairDurationMilliseconds": 8000 }
             """;
         string schema = File.ReadAllText(
-            Path.Combine(FindRepositoryRoot(), "src/AlterCourse.Godot/content/schemas/ship-definition-v2.schema.json")
+            Path.Combine(FindRepositoryRoot(), "src/AlterCourse.Godot/content/schemas/ship-definition-v3.schema.json")
         );
         return new ShipDefinitionCatalogLoader(schema).LoadCatalog([
             ShipDefinitionContent.FromText("pathfinder.json", definition),

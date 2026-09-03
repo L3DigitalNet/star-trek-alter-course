@@ -11,6 +11,8 @@ public sealed record ShipDefinition
         ShipDefinitionId id,
         string designDisplayName,
         SpeedKilometersPerSecond maximumTacticalSpeed,
+        DistanceKilometers passiveSensorRange,
+        SimulationDuration activeScanDuration,
         SimulationDuration sensorRepairDuration
     )
     {
@@ -20,6 +22,19 @@ public sealed record ShipDefinition
         }
 
         ArgumentException.ThrowIfNullOrWhiteSpace(designDisplayName);
+        if (activeScanDuration.Milliseconds <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(activeScanDuration), "Active scan duration must be positive.");
+        }
+
+        if (activeScanDuration.Milliseconds % SimulationFixedStep.Duration.Milliseconds != 0)
+        {
+            throw new ArgumentException(
+                "Active scan duration must align to the fixed simulation step.",
+                nameof(activeScanDuration)
+            );
+        }
+
         if (sensorRepairDuration.Milliseconds <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(sensorRepairDuration), "Repair duration must be positive.");
@@ -36,6 +51,8 @@ public sealed record ShipDefinition
         Id = id;
         DesignDisplayName = designDisplayName;
         MaximumTacticalSpeed = maximumTacticalSpeed;
+        PassiveSensorRange = passiveSensorRange;
+        ActiveScanDuration = activeScanDuration;
         SensorRepairDuration = sensorRepairDuration;
     }
 
@@ -47,6 +64,12 @@ public sealed record ShipDefinition
 
     /// <summary>Gets the maximum tactical speed.</summary>
     public SpeedKilometersPerSecond MaximumTacticalSpeed { get; }
+
+    /// <summary>Gets the maximum distance at which passive sensors can maintain a contact.</summary>
+    public DistanceKilometers PassiveSensorRange { get; }
+
+    /// <summary>Gets the simulation duration required to complete an active scan.</summary>
+    public SimulationDuration ActiveScanDuration { get; }
 
     /// <summary>Gets the duration of a complete active sensor repair.</summary>
     public SimulationDuration SensorRepairDuration { get; }

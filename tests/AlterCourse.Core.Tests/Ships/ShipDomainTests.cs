@@ -28,7 +28,7 @@ public sealed class ShipDomainTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new SensorIntegrity(value));
     }
 
-    /// <summary>Confirms ship definitions require stable identity, name, and aligned repair timing.</summary>
+    /// <summary>Confirms ship definitions require stable identity, name, and aligned sensor timing.</summary>
     [Fact]
     public void ShipDefinitionRejectsInvalidIdentityAndUnalignedRepairDuration()
     {
@@ -38,6 +38,8 @@ public sealed class ShipDomainTests
                 new ShipDefinitionId("ship"),
                 " ",
                 new SpeedKilometersPerSecond(1),
+                new DistanceKilometers(30),
+                new SimulationDuration(2000),
                 new SimulationDuration(8000)
             )
         );
@@ -46,6 +48,18 @@ public sealed class ShipDomainTests
                 new ShipDefinitionId("ship"),
                 "Ship",
                 new SpeedKilometersPerSecond(1),
+                new DistanceKilometers(30),
+                new SimulationDuration(2050),
+                new SimulationDuration(8000)
+            )
+        );
+        Assert.Throws<ArgumentException>(() =>
+            new ShipDefinition(
+                new ShipDefinitionId("ship"),
+                "Ship",
+                new SpeedKilometersPerSecond(1),
+                new DistanceKilometers(30),
+                new SimulationDuration(2000),
                 new SimulationDuration(8050)
             )
         );

@@ -376,6 +376,8 @@ public sealed class Milestone2AcceptanceTests
             DefinitionId,
             "Pathfinder",
             new SpeedKilometersPerSecond(10),
+            new DistanceKilometers(30),
+            new SimulationDuration(2000),
             repairDuration ?? new SimulationDuration(6 * HourMilliseconds)
         );
         return new ShipDefinitionCatalog(

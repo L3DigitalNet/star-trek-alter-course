@@ -339,6 +339,8 @@ public sealed class GameBootstrapOrderTests
             new ShipDefinitionId(definitionId),
             "Test ship",
             new SpeedKilometersPerSecond(10),
+            new DistanceKilometers(30),
+            new SimulationDuration(2000),
             Duration(6)
         );
         return new ShipDefinitionCatalog(

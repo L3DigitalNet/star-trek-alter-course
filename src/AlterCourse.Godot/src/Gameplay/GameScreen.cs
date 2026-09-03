@@ -15,7 +15,7 @@ namespace AlterCourse.Godot.Gameplay;
 /// </summary>
 public partial class GameScreen : Control
 {
-    private const string SchemaPath = "res://content/schemas/ship-definition-v2.schema.json";
+    private const string SchemaPath = "res://content/schemas/ship-definition-v3.schema.json";
     private const string ShipPath = "res://content/ships/pathfinder.json";
     private const string DefaultQuickSaveUserPath = "user://quick-save.json";
     private const string LegacyDefaultQuickSaveUserPath = "user://quick-save-v1.json";

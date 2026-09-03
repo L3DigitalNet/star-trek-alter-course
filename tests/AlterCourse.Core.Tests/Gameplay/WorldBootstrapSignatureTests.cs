@@ -517,15 +517,17 @@ public sealed class WorldBootstrapSignatureTests
     {
         string definition = $$"""
             {
-              "schemaVersion": 2,
+              "schemaVersion": 3,
               "id": "{{definitionId}}",
               "designDisplayName": "Pathfinder class",
               "maximumTacticalSpeedKilometersPerSecond": 10,
+              "passiveSensorRangeKilometers": 30.0,
+              "activeScanDurationMilliseconds": 2000,
               "sensorRepairDurationMilliseconds": 8000
             }
             """;
         string schema = File.ReadAllText(
-            Path.Combine(FindRepositoryRoot(), "src/AlterCourse.Godot/content/schemas/ship-definition-v2.schema.json")
+            Path.Combine(FindRepositoryRoot(), "src/AlterCourse.Godot/content/schemas/ship-definition-v3.schema.json")
         );
         return new ShipDefinitionCatalogLoader(schema).LoadCatalog([
             ShipDefinitionContent.FromText("pathfinder.json", definition),
