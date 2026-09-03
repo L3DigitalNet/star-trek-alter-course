@@ -25,7 +25,7 @@ related:
 
 # Engineering Backbone
 
-Milestone 4 establishes one concrete Engineering chain: generated power constrains allocation; allocation and condition derive sensor and impulse capability; those capabilities alter contacts, scans, tactical courses, and cautious AI; one analytical repair changes a selected system over simulation time. The ordinary Kestrel encounter is the player-visible proof. This is an unreleased `dev` feature governed by Feature #62.
+Milestone 4 establishes one concrete Engineering chain: generated power constrains allocation; allocation and condition derive sensor and impulse capability; those capabilities alter contacts, scans, tactical courses, and cautious AI; one analytical repair changes a selected system over simulation time. The ordinary Kestrel encounter is the player-visible proof. It is included in the source-only v0.4.0 release.
 
 ## Authority and scope
 

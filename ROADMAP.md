@@ -367,7 +367,7 @@ A strong acceptance scenario is:
 
 ### Implementation outcome — Milestone 3A: First Observed Contact
 
-Feature #58 implements the first governed slice of this milestone. It does **not** mark Milestone 3 complete.
+Feature #58 implements the first governed slice of this milestone. It does **not** mark Milestone 3 complete. This implementation outcome is included in the source-only v0.4.0 release.
 
 Each `ShipState` now owns bounded sensor knowledge with observer-local `SensorContactId` values. The aggregate retains target-ship correlation only for Core rule resolution; player projections and autonomous decision input receive actor-safe contact snapshots without the target's ship ID. Local passive observation applies only to distinct ships at the same strategic location. Effective range is the authored passive sensor range multiplied by the observing ship's sensor integrity. Contacts are observed as Current, become Stale when no longer detectable, become Lost after a fixed retention interval, and can be reacquired with their existing observer-local ID and learned identity.
 
@@ -504,7 +504,7 @@ The player should be able to meet another ship, initially know less than Core tr
 
 ### Implementation outcome
 
-Feature #62 implements this milestone through Final PR #63. Release status is governed separately under ADR 0013. `AlterCourse.Core` now owns concrete `ShipSystemId` values for power generation, sensors, and impulse propulsion; `SystemCondition`; bounded `PowerUnits`; exact allocation; and one `SystemRepairState` per ship. Available power is `floor(nominal generation × generation condition)`, and sensor/impulse capability is condition multiplied by the allocated-to-nominal-demand ratio, capped at one. The V4 Pathfinder definition supplies 120 nominal generation units, 70 sensor-demand units, 50 impulse-demand units, an 8,000 ms sensor repair, and a 6,000 ms impulse repair.
+Feature #62 implements this milestone. Its implementation outcome is included in the source-only v0.4.0 release; release status is governed separately under ADR 0013. `AlterCourse.Core` now owns concrete `ShipSystemId` values for power generation, sensors, and impulse propulsion; `SystemCondition`; bounded `PowerUnits`; exact allocation; and one `SystemRepairState` per ship. Available power is `floor(nominal generation × generation condition)`, and sensor/impulse capability is condition multiplied by the allocated-to-nominal-demand ratio, capped at one. The V4 Pathfinder definition supplies 120 nominal generation units, 70 sensor-demand units, 50 impulse-demand units, an 8,000 ms sensor repair, and a 6,000 ms impulse repair.
 
 The player can submit deterministic Balanced, Prioritize Sensors, and Prioritize Propulsion allocations. Allocation changes reconcile observations immediately, can stale or reacquire a local contact, and cannot commit when the current tactical speed would exceed the resulting impulse limit. The same effective impulse limit constrains player courses and the bounded cautious-contact AI; strategic travel remains unchanged. A sensor scan still uses its authored duration, but Core interrupts it if committed Engineering state makes sensor capability zero.
 
