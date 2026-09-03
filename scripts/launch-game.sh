@@ -22,4 +22,9 @@ dotnet build "${godot_project}/AlterCourse.Godot.csproj" -c Debug --no-restore -
 
 godot_bin="$(./scripts/resolve-godot.sh)"
 readonly godot_bin
+
+# A game-mode start cannot import newly tracked source assets. Import first so
+# missing cache mappings cannot cascade into theme and scene load failures.
+"${godot_bin}" --headless --path "${godot_project}" --import
+
 exec "${godot_bin}" --path "${godot_project}" "$@"

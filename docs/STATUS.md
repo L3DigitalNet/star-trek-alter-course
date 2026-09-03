@@ -34,5 +34,6 @@
 - Command, combat, and Engineering previews use deterministic non-authoritative presentation fixtures; live unavailable systems remain labelled `Unavailable`.
 - The Godot Theme and owned font assets are the runtime presentation source; the Figma nodes and repository PNGs remain visual references only.
 - No release or deployment followed Feature #47. Owner manual gameplay testing is required before any later release decision.
+- Bug #49's verified PR #50 imports Godot assets before launch, preventing missing fonts from disabling the command theme on a fresh checkout.
 - Actor knowledge, contacts, first contact, faction strategy, general mission assignment, and tactical AI remain deferred.
 - Combat rules, engineering depth, diplomacy, economy, narrative, networking, and final art remain deferred.
