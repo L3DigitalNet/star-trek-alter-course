@@ -459,6 +459,29 @@ func test_live_workspace_actions_translate_to_existing_typed_commands() -> void:
 	assert_str(screen.get_meta("advance_status", "")).is_equal("advanced")
 
 
+func test_live_context_action_identity_and_focus_survive_projection_refresh() -> void:
+	var screen := _create_screen()
+	screen.call("ShowTacticalView")
+	await get_tree().process_frame
+	var course_button := _find_action_button(screen, "set-tactical-course") as Button
+	var advance_button := _find_action_button(screen, "advance-time") as Button
+	var course_instance_id := course_button.get_instance_id()
+	var advance_instance_id := advance_button.get_instance_id()
+	course_button.grab_focus()
+	assert_bool(course_button.has_focus()).is_true()
+
+	assert_int(screen.call("ProcessSyntheticDelta", 0.1)).is_equal(1)
+	await get_tree().process_frame
+
+	var refreshed_course := _find_action_button(screen, "set-tactical-course") as Button
+	var refreshed_advance := _find_action_button(screen, "advance-time") as Button
+	assert_int(refreshed_course.get_instance_id()).is_equal(course_instance_id)
+	assert_int(refreshed_advance.get_instance_id()).is_equal(advance_instance_id)
+	assert_bool(refreshed_course.has_focus()).is_true()
+	refreshed_advance.emit_signal("pressed")
+	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(8000)
+
+
 func test_live_unsupported_values_and_engineering_actions_are_explicitly_unavailable() -> void:
 	var screen := _create_screen()
 	assert_str(_collect_control_text(_command_deck(screen))).contains("UNAVAILABLE")

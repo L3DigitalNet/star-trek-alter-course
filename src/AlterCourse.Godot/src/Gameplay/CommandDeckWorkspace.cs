@@ -23,6 +23,7 @@ public partial class CommandDeckWorkspace : Control
     }
 
     private readonly Dictionary<string, Button> _actionButtons = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, CommandInterfaceAction> _presentedActions = new(StringComparer.Ordinal);
     private VBoxContainer _systemRows = null!;
     private Label _systemsSummary = null!;
     private Label _mapTitle = null!;
@@ -235,37 +236,83 @@ public partial class CommandDeckWorkspace : Control
 
     private void PresentActions(CommandInterfacePresentation presentation)
     {
-        ClearChildren(_contextActions);
-        _actionButtons.Clear();
-
-        foreach (CommandInterfaceAction action in presentation.Actions)
+        var retainedActionIds = new HashSet<string>(StringComparer.Ordinal);
+        for (int index = 0; index < presentation.Actions.Length; index++)
         {
-            bool canSubmit =
-                presentation.DataMode == CommandInterfaceDataMode.Live
-                && action.Availability == CommandInterfaceActionAvailability.Submittable;
-            string suffix = action.Availability switch
+            CommandInterfaceAction action = presentation.Actions[index];
+            if (!retainedActionIds.Add(action.Id))
             {
-                CommandInterfaceActionAvailability.PreviewOnly => " [PREVIEW]",
-                CommandInterfaceActionAvailability.Disabled => " [UNAVAILABLE]",
-                CommandInterfaceActionAvailability.Submittable when !canSubmit => " [NON-SUBMITTING]",
-                _ => string.Empty,
-            };
-            var button = new Button
-            {
-                Name = $"Action_{action.Id}",
-                Text = action.Label + suffix,
-                Disabled = !canSubmit,
-                FocusMode = FocusModeEnum.All,
-                ThemeTypeVariation = ActionVariation(action.Tone),
-                TooltipText = canSubmit
-                    ? "Requests presentation intent; the shell and Core remain authoritative."
-                    : "Displayed for context only; this control cannot submit an intent.",
-            };
-            button.Pressed += () => OnActionPressed(action);
-            _contextActions.AddChild(button);
-            _actionButtons.Add(action.Id, button);
+                throw new InvalidOperationException($"Duplicate command-interface action id '{action.Id}'.");
+            }
+
+            ReconcileActionButton(action, presentation.DataMode, index);
+        }
+
+        foreach (string removedActionId in _actionButtons.Keys.Where(id => !retainedActionIds.Contains(id)).ToArray())
+        {
+            Button button = _actionButtons[removedActionId];
+            _actionButtons.Remove(removedActionId);
+            _presentedActions.Remove(removedActionId);
+            _contextActions.RemoveChild(button);
+            button.QueueFree();
         }
     }
+
+    private void ReconcileActionButton(CommandInterfaceAction action, CommandInterfaceDataMode dataMode, int index)
+    {
+        bool canSubmit =
+            dataMode == CommandInterfaceDataMode.Live
+            && action.Availability == CommandInterfaceActionAvailability.Submittable;
+        if (!_actionButtons.TryGetValue(action.Id, out Button? button))
+        {
+            string actionId = action.Id;
+            button = new Button { Name = $"Action_{actionId}", FocusMode = FocusModeEnum.All };
+            button.Pressed += () => OnActionPressed(actionId);
+            _contextActions.AddChild(button);
+            _actionButtons.Add(actionId, button);
+        }
+
+        string text = action.Label + ActionSuffix(action.Availability, canSubmit);
+        bool disabled = !canSubmit;
+        string tooltip = canSubmit
+            ? "Requests presentation intent; the shell and Core remain authoritative."
+            : "Displayed for context only; this control cannot submit an intent.";
+        StringName variation = ActionVariation(action.Tone);
+        if (!string.Equals(button.Text, text, StringComparison.Ordinal))
+        {
+            button.Text = text;
+        }
+
+        if (button.Disabled != disabled)
+        {
+            button.Disabled = disabled;
+        }
+
+        if (!string.Equals(button.TooltipText, tooltip, StringComparison.Ordinal))
+        {
+            button.TooltipText = tooltip;
+        }
+
+        if (button.ThemeTypeVariation != variation)
+        {
+            button.ThemeTypeVariation = variation;
+        }
+
+        _presentedActions[action.Id] = action;
+        if (button.GetIndex() != index)
+        {
+            _contextActions.MoveChild(button, index);
+        }
+    }
+
+    private static string ActionSuffix(CommandInterfaceActionAvailability availability, bool canSubmit) =>
+        availability switch
+        {
+            CommandInterfaceActionAvailability.PreviewOnly => " [PREVIEW]",
+            CommandInterfaceActionAvailability.Disabled => " [UNAVAILABLE]",
+            CommandInterfaceActionAvailability.Submittable when !canSubmit => " [NON-SUBMITTING]",
+            _ => string.Empty,
+        };
 
     private void OnDestinationSelected(LocationId locationId)
     {
@@ -273,9 +320,13 @@ public partial class CommandDeckWorkspace : Control
         DestinationSelected?.Invoke(this, new DestinationEventArgs(locationId));
     }
 
-    private void OnActionPressed(CommandInterfaceAction action)
+    private void OnActionPressed(string actionId)
     {
-        if (CurrentDataMode == CommandInterfaceDataMode.Live && IsActionEnabled(action.Id))
+        if (
+            CurrentDataMode == CommandInterfaceDataMode.Live
+            && IsActionEnabled(actionId)
+            && _presentedActions.TryGetValue(actionId, out CommandInterfaceAction? action)
+        )
         {
             PresentationActionRequested?.Invoke(this, new ActionEventArgs(action));
         }
