@@ -7,7 +7,7 @@
 - Release Task #53 is Done; v0.3.0 is the current immutable source-only GitHub Release, tagged at `fae21bd`; no packaged gameplay artifact is published.
 - Feature #58's unreleased Milestone 3A slice adds first observed contact; it is not a new release and does not complete all of Milestone 3.
 - Feature #62 and draft Final PR #63 contain the unreleased Milestone 4 Engineering Backbone implementation; it is not merged, released, or on `main`.
-- The shell retains strategic travel, local tactical movement, Engineering power allocation and system repair, deterministic time controls, player-relevant advance-until, and quick save/load.
+- The shell retains strategic travel, tactical movement, Engineering power and repair, deterministic time controls, advance-until, and quick save/load.
 - The tracked launch script restores and builds before Godot starts, preventing stale local Debug content after branch changes.
 - The proof world retains USS Pathfinder at Dawn Anchor, USS Wayfarer at Vesper Reach, and USS Horizon traveling to Meridian Drift.
 - Survey Vessel Kestrel is the fourth durable vessel at Dawn Anchor and owns the focused cautious-contact posture.
@@ -28,10 +28,10 @@
 - Current contacts support typed Core scan commands; identified Current contacts also support typed hail commands.
 - Kestrel detects the damaged player first, then withdraws through its bounded explainable `CautiousContact` posture.
 - An identified valid hail causes Kestrel to hold. Hidden NPC decisions remain off the player event stream.
-- Save schema V5 persists plural world state, Engineering conditions/allocation/repair, orders, sensor knowledge, active scans, contact posture, allocators, and exact scheduled correlations.
+- Save V5 persists Engineering state, orders, sensor knowledge, active scans, contact posture, allocators, and exact scheduled correlations.
 - Authored definitions remain external to save data.
 - Historical `first-playable-v1` is validated at its source schema; V2-to-V3 writes `active-world-orders-v1`.
-- V3-to-V4 writes `sensor-knowledge-first-contact-v1` with empty knowledge, next contact ID 1, and no scan, posture, or decision wake; V4-to-V5 writes `engineering-backbone-v1` with migrated sensor state and nominal generation/impulse defaults.
+- V3-to-V4 writes empty `sensor-knowledge-first-contact-v1`; V4-to-V5 writes `engineering-backbone-v1` with migrated sensors and nominal generator/impulse defaults.
 - The generic quick-save slot is `user://quick-save.json`. Only the unchanged default path may discover the legacy `user://quick-save-v1.json` file when the generic slot is absent.
 - World admission is capped at 256 ships. Each advancement allows 1,000,000 moving-ship steps and 10,000 scheduled consequences.
 - Strategic-only intervals jump event-to-event and update repairs analytically; ships with active local tactical motion retain deterministic 100 ms integration.
@@ -48,7 +48,6 @@
 - Godot UID sidecars and asset import descriptors are tracked for stable clean-checkout identity; `.godot/` cache output remains ignored.
 - AssetCtl remains an isolated .NET 10 tool with bounded inputs, offline-first defaults, safe publication, provenance, and Godot import validation.
 - `main` holds v0.3.0. Supporting sync PR #55 merged it back into protected `dev` as `b1f2eb7`; significant work follows ADR 0013.
-- Final PR #54 and supporting sync PR #55 both passed CI; no deployment occurred beyond the source-only release.
 - Feature #47 merged through Final PR #48 as squash commit `b80c669` on `dev`; Issue #47 is closed Done and all CI passed.
 - The Command Deck now retains live strategic travel, tactical-map continuity, persistent Engineering navigation, rate controls, selection, and save/load.
 - Command, combat, and Engineering previews use deterministic non-authoritative presentation fixtures; live unavailable systems remain labelled `Unavailable`.
@@ -56,6 +55,6 @@
 - Owner accepted the command interface for v0.3.0: it runs smoothly with no errors.
 - Bug #49's PR #50 merged as `2064822`; the launcher imports Godot assets before loading the command theme.
 - Bug #51 merged through Final PR #52 as `c5602cc`; live context actions now retain pointer interaction and keyboard focus across refreshes.
-- Focused Milestone 4 verification is green: combined Core 376/376 and GameplayShell 60/60. Manual production-scene acceptance and an independent native adversarial review are complete; canonical verification and hosted PR checks remain pending.
+- Milestone 4 focused checks are green: Core 376/376 and GameplayShell 60/60; manual and adversarial review passed. Canonical and hosted checks remain.
 - Remaining Milestone 3 work includes richer uncertainty, strategic contacts, additional postures, affiliation and intent knowledge, and broader encounter transitions.
 - Engineering depth beyond this backbone, faction strategy, combat, diplomacy, economy, narrative, networking, and final art remain deferred.
