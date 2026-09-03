@@ -6,6 +6,8 @@ const DEFAULT_QUICK_SAVE_PATH := "user://quick-save.json"
 const LEGACY_DEFAULT_QUICK_SAVE_PATH := "user://quick-save-v1.json"
 const INVALID_CONTENT_PATH := "user://gameplay-shell-invalid-content.json"
 
+var _screens_to_free: Array[Node] = []
+
 
 func before_test() -> void:
 	_remove_quick_save_files()
@@ -13,6 +15,11 @@ func before_test() -> void:
 
 
 func after_test() -> void:
+	for screen in _screens_to_free:
+		if is_instance_valid(screen):
+			screen.queue_free()
+	_screens_to_free.clear()
+	await get_tree().process_frame
 	_remove_quick_save_files()
 	_remove_file(INVALID_CONTENT_PATH)
 
@@ -710,7 +717,7 @@ func test_live_unsupported_values_and_engineering_actions_are_explicitly_unavail
 func test_invalid_content_bootstrap_is_fail_closed_and_player_safe() -> void:
 	_write_text(INVALID_CONTENT_PATH, "not-json")
 	var scene := load("res://Main.tscn") as PackedScene
-	var screen: Node = auto_free(scene.instantiate())
+	var screen := _track_screen(scene.instantiate())
 	screen.set("ShipDefinitionResourcePath", INVALID_CONTENT_PATH)
 	add_child(screen)
 	screen.set_process(false)
@@ -845,7 +852,7 @@ func test_custom_quick_save_path_never_consults_legacy_slot() -> void:
 
 func test_quick_save_path_cannot_escape_user_boundary() -> void:
 	var scene := load("res://Main.tscn") as PackedScene
-	var screen: Node = auto_free(scene.instantiate())
+	var screen := _track_screen(scene.instantiate())
 	screen.set("QuickSaveUserPath", "user://../outside.json")
 	add_child(screen)
 	screen.set_process(false)
@@ -1167,7 +1174,7 @@ func _collect_control_text(node: Node) -> String:
 
 func _create_screen() -> Node:
 	var scene := load("res://Main.tscn") as PackedScene
-	var screen: Node = auto_free(scene.instantiate())
+	var screen := _track_screen(scene.instantiate())
 	screen.set("QuickSaveUserPath", TEST_QUICK_SAVE_PATH)
 	add_child(screen)
 	screen.set_process(false)
@@ -1176,9 +1183,16 @@ func _create_screen() -> Node:
 
 func _create_default_screen() -> Node:
 	var scene := load("res://Main.tscn") as PackedScene
-	var screen: Node = auto_free(scene.instantiate())
+	var screen := _track_screen(scene.instantiate())
 	add_child(screen)
 	screen.set_process(false)
+	return screen
+
+
+func _track_screen(screen: Node) -> Node:
+	# GdUnit's immediate free path can invalidate child C# wrappers before Godot's managed bridge observes teardown.
+	# Queueing the owned scene and awaiting one frame in after_test preserves the normal engine lifecycle.
+	_screens_to_free.append(screen)
 	return screen
 
 
