@@ -28,6 +28,7 @@
 - The solution uses a one-way Godot-to-Core project reference, exact .NET SDK 10.0.111, C# 12, Godot 4.7.2 .NET, .NET 8 runtime support, Node 24, xUnit, and GdUnit4 6.2.0.
 - `scripts/verify.sh` is the canonical read-only gate for formatting, analysis, policy, builds, tests, Godot integration, security, and smoke checks.
 - Figma's remote MCP endpoint and 14 official Figma skills are project-scoped for Codex and Claude; `codex mcp login figma` performs user authorization.
+- Godot UID sidecars and asset import descriptors are tracked for stable clean-checkout identity; `.godot/` cache output remains ignored.
 - AssetCtl remains an isolated .NET 10 tool with bounded inputs, offline-first defaults, safe publication, provenance, and Godot import validation.
 - `main` holds v0.3.0. Supporting sync PR #55 merged it back into protected `dev` as `b1f2eb7`; significant work follows ADR 0013.
 - Final PR #54 and supporting sync PR #55 both passed CI; no deployment occurred beyond the source-only release.
