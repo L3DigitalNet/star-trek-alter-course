@@ -271,7 +271,7 @@ public sealed class Milestone2AcceptanceTests
             Time(6),
             repairWork.Id
         );
-        ShipState player = WithSensorRepair(proof.GetRequiredShip(PlayerId), repair, 0.25);
+        ShipState player = WithSensorRepair(proof.GetRequiredShip(PlayerId), repair);
         var game = GameSimulation.RestoreState(
             proof.ReplaceShip(PlayerId, player) with
             {
@@ -296,8 +296,7 @@ public sealed class Milestone2AcceptanceTests
                 new SetTacticalCourseIntent(new HeadingDegrees(237), new SpeedKilometersPerSecond(0))
             ).Outcome
         );
-        int remainingSteps = checked((int)((Time(9).Milliseconds - game.CaptureState().Time.Milliseconds) / 100));
-        SimulationAdvanceResult result = game.AdvanceFixedSteps(remainingSteps);
+        SimulationAdvanceResult result = AdvanceTo(game, Time(9));
         SimulationState final = game.CaptureState();
 
         Assert.Equal(Time(9), result.FinalTime);
@@ -472,15 +471,17 @@ public sealed class Milestone2AcceptanceTests
         Assert.Equal(arrival, traveling.Travel.ExpectedArrival);
     }
 
-    private static ShipState WithSensorRepair(ShipState ship, SystemRepairState repair, double condition) =>
+    private static ShipState WithSensorRepair(ShipState ship, SystemRepairState repair) =>
         ship with
         {
-            Engineering = ship.Engineering with
-            {
-                SensorCondition = new SystemCondition(condition),
-                ActiveRepair = repair,
-            },
+            Engineering = ship.Engineering with { SensorCondition = repair.StartingCondition, ActiveRepair = repair },
         };
+
+    private static SimulationAdvanceResult AdvanceTo(GameSimulation game, SimulationTime target)
+    {
+        int steps = checked((int)((target.Milliseconds - game.CaptureState().Time.Milliseconds) / 100));
+        return game.AdvanceFixedSteps(steps);
+    }
 
     private static SimulationTime Time(long hours) => new(hours * HourMilliseconds);
 }

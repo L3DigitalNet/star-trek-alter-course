@@ -274,12 +274,7 @@ public sealed class SensorObservationCommandTests
             "Player",
             default,
             default,
-            new ShipEngineeringState(
-                new SystemCondition(1),
-                new SystemCondition(1),
-                new SystemCondition(1),
-                new PowerAllocation(new(70), new(50))
-            ),
+            NominalEngineering(),
             new TravelingState(
                 new TravelState(Remote, Local, new SimulationTime(0), arrivalWork.DueTime, arrivalWork.Id)
             ),
@@ -291,12 +286,7 @@ public sealed class SensorObservationCommandTests
             "Target",
             default,
             default,
-            new ShipEngineeringState(
-                new SystemCondition(1),
-                new SystemCondition(1),
-                new SystemCondition(1),
-                new PowerAllocation(new(70), new(50))
-            ),
+            NominalEngineering(),
             new AtLocationState(Local)
         );
         var map = new StrategicMap(
@@ -663,6 +653,14 @@ public sealed class SensorObservationCommandTests
     }
 
     private static GameSimulation CreateGame(params ShipStart[] starts) => CreateGame((IEnumerable<ShipStart>)starts);
+
+    private static ShipEngineeringState NominalEngineering() =>
+        new(
+            new SystemCondition(1),
+            new SystemCondition(1),
+            new SystemCondition(1),
+            new PowerAllocation(new(70), new(50))
+        );
 
     private static GameSimulation CreateGame(IEnumerable<ShipStart> starts) => CreateGame(CreateCatalog(), starts);
 
