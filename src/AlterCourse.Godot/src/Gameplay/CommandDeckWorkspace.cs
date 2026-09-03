@@ -191,7 +191,10 @@ public partial class CommandDeckWorkspace : Control
     private void PresentInspector(CommandInterfacePresentation presentation)
     {
         ClearChildren(_inspectorContent);
-        _inspectorHeading.Text = presentation.Mode == CommandInterfaceMode.Combat ? "COMBAT CONTEXT" : "TRAVEL CONTEXT";
+        _inspectorHeading.Text =
+            presentation.Mode == CommandInterfaceMode.Combat
+                ? "SELECTED CONTACT / TACTICAL SUMMARY"
+                : "DESTINATION / ROUTE";
         _inspectorHeading.ThemeTypeVariation =
             presentation.Mode == CommandInterfaceMode.Combat ? "StatusCritical" : "PanelHeading";
 
@@ -203,12 +206,21 @@ public partial class CommandDeckWorkspace : Control
             content.AddChild(heading);
             foreach (CommandInterfaceField field in section.Fields)
             {
-                var fieldRow = new VBoxContainer();
-                fieldRow.AddChild(new Label { Text = field.Label, ThemeTypeVariation = "TelemetryLabel" });
+                var fieldRow = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+                fieldRow.AddChild(
+                    new Label
+                    {
+                        Text = field.Label,
+                        CustomMinimumSize = new Vector2(112, 0),
+                        ThemeTypeVariation = "TelemetryLabel",
+                    }
+                );
                 fieldRow.AddChild(
                     new Label
                     {
                         Text = FormatField(field),
+                        SizeFlagsHorizontal = SizeFlags.ExpandFill,
+                        HorizontalAlignment = HorizontalAlignment.Right,
                         ThemeTypeVariation = ToneVariation(field.Tone),
                         AutowrapMode = TextServer.AutowrapMode.WordSmart,
                     }

@@ -48,7 +48,12 @@ public partial class GameScreen : Control
     private CommandInterfaceDataMode _dataMode = CommandInterfaceDataMode.Live;
     private CommandDeckWorkspace _commandDeck = null!;
     private EngineeringWorkspace _engineering = null!;
+    private Label _eventLogHeading = null!;
     private VBoxContainer _eventLog = null!;
+    private VBoxContainer _captainActions = null!;
+    private VBoxContainer _engineeringBottomActions = null!;
+    private VBoxContainer _engineeringQueue = null!;
+    private VBoxContainer _engineeringQueueActions = null!;
     private Label _timeLabel = null!;
     private Label _vesselStatusLabel = null!;
     private Label _rateStatusLabel = null!;
@@ -62,6 +67,7 @@ public partial class GameScreen : Control
     private Button _tacticalButton = null!;
     private Button _commandStationButton = null!;
     private Button _engineeringStationButton = null!;
+    private Button _engineeringBottomReturnButton = null!;
     private Button _quickSaveButton = null!;
     private Button _quickLoadButton = null!;
     private Button _pauseButton = null!;
@@ -505,7 +511,12 @@ public partial class GameScreen : Control
     {
         _commandDeck = GetNode<CommandDeckWorkspace>("%CommandDeckWorkspace");
         _engineering = GetNode<EngineeringWorkspace>("%EngineeringWorkspace");
+        _eventLogHeading = GetNode<Label>("%EventLogHeading");
         _eventLog = GetNode<VBoxContainer>("%EventLogContent");
+        _captainActions = GetNode<VBoxContainer>("%CaptainActions");
+        _engineeringBottomActions = GetNode<VBoxContainer>("%EngineeringBottomActions");
+        _engineeringQueue = GetNode<VBoxContainer>("%EngineeringQueueContent");
+        _engineeringQueueActions = GetNode<VBoxContainer>("%EngineeringQueueActions");
         _timeLabel = GetNode<Label>("%SimulationTime");
         _vesselStatusLabel = GetNode<Label>("%VesselStatus");
         _rateStatusLabel = GetNode<Label>("%RateStatus");
@@ -525,6 +536,7 @@ public partial class GameScreen : Control
         _tacticalButton.Pressed += ShowTacticalView;
         _commandStationButton.Pressed += ShowCommandWorkspace;
         _engineeringStationButton.Pressed += ShowEngineeringWorkspace;
+        _engineeringBottomReturnButton.Pressed += ShowCommandWorkspace;
         _quickSaveButton.Pressed += QuickSave;
         _quickLoadButton.Pressed += QuickLoad;
         _pauseButton.Pressed += TogglePause;
@@ -544,6 +556,7 @@ public partial class GameScreen : Control
         _tacticalButton = GetNode<Button>("%TacticalButton");
         _commandStationButton = GetNode<Button>("%CommandStationButton");
         _engineeringStationButton = GetNode<Button>("%EngineeringStationButton");
+        _engineeringBottomReturnButton = GetNode<Button>("%EngineeringBottomReturnButton");
         _quickSaveButton = GetNode<Button>("%QuickSaveButton");
         _quickLoadButton = GetNode<Button>("%QuickLoadButton");
         _pauseButton = GetNode<Button>("%PauseRate");
@@ -702,7 +715,7 @@ public partial class GameScreen : Control
             CommandInterfaceMode.Engineering => "ENGINEERING",
             _ => "WORKSPACE UNAVAILABLE",
         };
-        RenderEventLog(presentation.Events);
+        RenderBottomArea(presentation);
         UpdateStationButtons(presentation);
         UpdateContextControls(presentation, live);
         UpdateFocusTraversal();
@@ -725,6 +738,73 @@ public partial class GameScreen : Control
                     Text = $"{row.Time}  {row.Source}  {row.Message}",
                     AutowrapMode = TextServer.AutowrapMode.WordSmart,
                     ThemeTypeVariation = EventVariation(row.Tone),
+                }
+            );
+        }
+    }
+
+    private void RenderBottomArea(CommandInterfacePresentation presentation)
+    {
+        bool engineering = presentation.Mode == CommandInterfaceMode.Engineering;
+        _captainActions.Visible = !engineering;
+        _engineeringBottomActions.Visible = engineering;
+        _eventLogHeading.Text = engineering ? "ENGINEERING EVENT LOG" : "EVENT / ORDER LOG";
+        SetMeta("bottom_area_mode", engineering ? "engineering" : "command");
+        RenderEventLog(presentation.Events);
+
+        if (!engineering)
+        {
+            ClearChildren(_engineeringQueue);
+            ClearChildren(_engineeringQueueActions);
+            return;
+        }
+
+        RenderEngineeringQueue(presentation.Engineering?.Queue ?? []);
+        RenderEngineeringQueueActions(presentation.Actions);
+    }
+
+    private void RenderEngineeringQueue(IReadOnlyList<CommandInterfaceQueueRow> queue)
+    {
+        ClearChildren(_engineeringQueue);
+        if (queue.Count == 0)
+        {
+            _engineeringQueue.AddChild(
+                new Label { Text = "REPAIR QUEUE UNAVAILABLE", ThemeTypeVariation = "MutedTelemetry" }
+            );
+            return;
+        }
+
+        foreach (CommandInterfaceQueueRow row in queue)
+        {
+            _engineeringQueue.AddChild(
+                new Label
+                {
+                    Text = $"{row.Priority}  {row.Label}  {DisplayQueueEstimate(row.Estimate)}",
+                    AutowrapMode = TextServer.AutowrapMode.WordSmart,
+                    ThemeTypeVariation = EventVariation(row.Tone),
+                }
+            );
+        }
+    }
+
+    private void RenderEngineeringQueueActions(IReadOnlyList<CommandInterfaceAction> actions)
+    {
+        ClearChildren(_engineeringQueueActions);
+        foreach (
+            CommandInterfaceAction action in actions.Where(action =>
+                string.Equals(action.Id, "reorder-repairs", StringComparison.Ordinal)
+            )
+        )
+        {
+            _engineeringQueueActions.AddChild(
+                new Button
+                {
+                    Name = $"BottomAction_{action.Id.Replace('-', '_')}",
+                    Text = $"{action.Label} [PREVIEW ONLY]",
+                    Disabled = true,
+                    FocusMode = FocusModeEnum.All,
+                    ThemeTypeVariation = "CommandButton",
+                    TooltipText = "Illustrative queue control; no simulation command will be submitted.",
                 }
             );
         }
@@ -889,6 +969,7 @@ public partial class GameScreen : Control
                 _tacticalButton,
                 _commandStationButton,
                 _engineeringStationButton,
+                _engineeringBottomReturnButton,
                 _pauseButton,
                 _halfRateButton,
                 _normalRateButton,
@@ -926,6 +1007,7 @@ public partial class GameScreen : Control
             {
                 _commandStationButton,
                 _engineeringStationButton,
+                _engineeringBottomReturnButton,
                 _strategicButton,
                 _tacticalButton,
                 _travelButton,
@@ -938,7 +1020,7 @@ public partial class GameScreen : Control
                 _advanceUntilButton,
                 _quickSaveButton,
                 _quickLoadButton,
-            }.Where(button => button.Visible && !button.Disabled)
+            }.Where(button => button.IsVisibleInTree() && !button.Disabled)
         );
         if (controls.Count == 0)
         {
@@ -958,6 +1040,9 @@ public partial class GameScreen : Control
 
     private Button CurrentWorkspaceButton() =>
         _engineeringWorkspaceActive ? _engineeringStationButton : _commandStationButton;
+
+    private static string DisplayQueueEstimate(CommandInterfaceField estimate) =>
+        estimate.Availability == CommandInterfaceAvailability.Available ? estimate.Value : "UNAVAILABLE";
 
     private static bool IsSubmittable(CommandInterfacePresentation presentation, string actionId) =>
         presentation.Actions.Any(action =>

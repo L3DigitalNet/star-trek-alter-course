@@ -26,7 +26,7 @@ theme_override_constants/separation = 8
 
 [node name="SystemsSpine" type="PanelContainer" parent="WorkspaceColumns"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(132, 0)
+custom_minimum_size = Vector2(122, 0)
 layout_mode = 2
 
 [node name="SystemsContent" type="VBoxContainer" parent="WorkspaceColumns/SystemsSpine"]
@@ -126,7 +126,7 @@ text = "SELECT A DESTINATION TO REQUEST TRAVEL"
 
 [node name="ContextInspector" type="PanelContainer" parent="WorkspaceColumns"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(336, 0)
+custom_minimum_size = Vector2(356, 0)
 layout_mode = 2
 theme_type_variation = &"InspectorPanel"
 
@@ -154,7 +154,7 @@ theme_override_constants/separation = 10
 [node name="ActionsHeading" type="Label" parent="WorkspaceColumns/ContextInspector/InspectorLayout"]
 layout_mode = 2
 theme_type_variation = &"PanelHeading"
-text = "PRESENTATION ACTIONS"
+text = "QUICK ACTIONS"
 
 [node name="ContextActions" type="VBoxContainer" parent="WorkspaceColumns/ContextInspector/InspectorLayout"]
 unique_name_in_owner = true

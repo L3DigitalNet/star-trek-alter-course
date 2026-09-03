@@ -32,11 +32,9 @@ public partial class EngineeringWorkspace : Control
     private CommandInterfacePresentation? _presentation;
     private VBoxContainer _actions = null!;
     private VBoxContainer _connectedLoads = null!;
-    private VBoxContainer _eventLog = null!;
     private VBoxContainer _hierarchy = null!;
     private VBoxContainer _inspector = null!;
     private VBoxContainer _powerAllocation = null!;
-    private VBoxContainer _queue = null!;
     private GridContainer _schematicComponents = null!;
     private VBoxContainer _schematicLinks = null!;
     private Label _dataModeStatus = null!;
@@ -95,8 +93,6 @@ public partial class EngineeringWorkspace : Control
         RebuildSection(_connectedLoads, "CONNECTED LOADS", FindTelemetry("connected-loads"));
         RebuildSection(_powerAllocation, "POWER ALLOCATION SUMMARY", FindTelemetry("power-allocation"));
         RebuildActions(presentation.Actions);
-        RebuildEvents(presentation.Events);
-        RebuildQueue(presentation.Engineering?.Queue ?? []);
         UpdateFocusTraversal();
     }
 
@@ -121,8 +117,6 @@ public partial class EngineeringWorkspace : Control
         _connectedLoads = GetNode<VBoxContainer>("%ConnectedLoadsContent");
         _actions = GetNode<VBoxContainer>("%EngineeringActionsContent");
         _powerAllocation = GetNode<VBoxContainer>("%PowerAllocationContent");
-        _eventLog = GetNode<VBoxContainer>("%EngineeringEventLogContent");
-        _queue = GetNode<VBoxContainer>("%RepairQueueContent");
     }
 
     private void RebuildHierarchy(CommandInterfaceEngineeringPresentation? engineering)
@@ -292,38 +286,6 @@ public partial class EngineeringWorkspace : Control
         if (!any)
         {
             AddUnavailable(_actions, "ENGINEERING CONTROLS");
-        }
-    }
-
-    private void RebuildEvents(ImmutableArray<CommandInterfaceEventRow> events)
-    {
-        ClearChildren(_eventLog);
-        AddHeading(_eventLog, "ENGINEERING EVENT LOG");
-        if (events.IsDefaultOrEmpty)
-        {
-            AddUnavailable(_eventLog, "ENGINEERING EVENTS");
-            return;
-        }
-
-        foreach (CommandInterfaceEventRow row in events)
-        {
-            AddValueLabel(_eventLog, $"{row.Time}  {row.Source}  {row.Message}", row.Tone);
-        }
-    }
-
-    private void RebuildQueue(ImmutableArray<CommandInterfaceQueueRow> queue)
-    {
-        ClearChildren(_queue);
-        AddHeading(_queue, "REPAIR / ACTION QUEUE");
-        if (queue.IsDefaultOrEmpty)
-        {
-            AddUnavailable(_queue, "REPAIR QUEUE");
-            return;
-        }
-
-        foreach (CommandInterfaceQueueRow row in queue)
-        {
-            AddValueLabel(_queue, $"{row.Priority}  {row.Label}  {DisplayValue(row.Estimate)}", row.Tone);
         }
     }
 

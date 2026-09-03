@@ -247,6 +247,64 @@ func test_station_tabs_expose_only_implemented_workspaces_and_track_selection() 
 	assert_bool((screen.get_node("%CommandStationButton") as Button).button_pressed).is_true()
 
 
+func test_engineering_reuses_persistent_bottom_area_and_return_restores_command_mode() -> void:
+	var screen := _create_screen()
+	var captain_actions := screen.get_node("%CaptainActions") as Control
+	var engineering_actions := screen.get_node("%EngineeringBottomActions") as Control
+
+	assert_str(screen.get_meta("bottom_area_mode", "")).is_equal("command")
+	assert_str((screen.get_node("%EventLogHeading") as Label).text).is_equal("EVENT / ORDER LOG")
+	assert_bool(captain_actions.visible).is_true()
+	assert_bool(engineering_actions.visible).is_false()
+	assert_object(
+		_engineering_workspace(screen).get_node_or_null(
+			"WorkspaceMargin/WorkspaceStack/ActivityRegion"
+		)
+	).is_null()
+
+	screen.call("ShowPreview", 3)
+	assert_str(screen.get_meta("bottom_area_mode", "")).is_equal("engineering")
+	assert_str((screen.get_node("%EventLogHeading") as Label).text).is_equal(
+		"ENGINEERING EVENT LOG"
+	)
+	assert_bool(captain_actions.visible).is_false()
+	assert_bool(engineering_actions.visible).is_true()
+	assert_str(_collect_control_text(screen.get_node("%EngineeringQueueContent"))).contains(
+		"EPS Bus A-4 inspection"
+	)
+	var preview_action := screen.get_node("%EngineeringQueueActions").get_node(
+		"BottomAction_reorder_repairs"
+	) as Button
+	assert_bool(preview_action.disabled).is_true()
+	assert_str(preview_action.text).contains("PREVIEW ONLY")
+
+	(screen.get_node("%EngineeringBottomReturnButton") as Button).emit_signal("pressed")
+	assert_str(screen.get_meta("active_workspace", "")).is_equal("command")
+	assert_str(screen.get_meta("bottom_area_mode", "")).is_equal("command")
+	assert_bool(captain_actions.visible).is_true()
+	assert_bool(engineering_actions.visible).is_false()
+
+
+func test_command_inspector_keeps_mode_sections_above_quick_actions() -> void:
+	var screen := _create_screen()
+
+	screen.call("ShowPreview", 1)
+	assert_str((_command_deck(screen).get_node("%InspectorHeading") as Label).text).is_equal(
+		"DESTINATION / ROUTE"
+	)
+	assert_int(_command_deck(screen).get_node("%InspectorContent").get_child_count()).is_equal(2)
+	assert_object(_command_deck(screen).get_node_or_null("%ContextActions")).is_instanceof(
+		VBoxContainer
+	)
+
+	screen.call("ShowPreview", 2)
+	assert_str((_command_deck(screen).get_node("%InspectorHeading") as Label).text).is_equal(
+		"SELECTED CONTACT / TACTICAL SUMMARY"
+	)
+	assert_int(_command_deck(screen).get_node("%InspectorContent").get_child_count()).is_equal(2)
+	assert_bool((_find_action_button(screen, "fire-phasers") as Button).disabled).is_true()
+
+
 func test_command_engineering_command_preserves_simulation_time_selection_and_context() -> void:
 	var screen := _create_screen()
 	screen.call("SelectDestination", "vesper-reach")

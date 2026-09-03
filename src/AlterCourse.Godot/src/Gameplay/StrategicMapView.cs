@@ -157,7 +157,14 @@ public partial class StrategicMapView : Control
             }
             else
             {
-                DrawCircle(point, selected ? 12 : 8, color, filled: !selected, width: 2);
+                if (selected)
+                {
+                    DrawCircle(point, 12, color, filled: false, width: 2);
+                }
+                else
+                {
+                    DrawCircle(point, 8, color);
+                }
             }
 
             DrawString(

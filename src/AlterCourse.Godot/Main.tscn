@@ -189,13 +189,14 @@ theme_override_constants/separation = 8
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-size_flags_stretch_ratio = 3.0
+size_flags_stretch_ratio = 4.0
 
 [node name="EventLogStack" type="VBoxContainer" parent="OuterMargin/Shell/BottomArea/EventLogPanel"]
 layout_mode = 2
 theme_override_constants/separation = 4
 
 [node name="EventLogHeading" type="Label" parent="OuterMargin/Shell/BottomArea/EventLogPanel/EventLogStack"]
+unique_name_in_owner = true
 layout_mode = 2
 theme_type_variation = &"PanelHeading"
 text = "EVENT / ORDER LOG"
@@ -213,12 +214,13 @@ theme_override_constants/separation = 3
 
 [node name="CaptainActionsPanel" type="PanelContainer" parent="OuterMargin/Shell/BottomArea"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(650, 0)
+custom_minimum_size = Vector2(430, 0)
 layout_mode = 2
 size_flags_horizontal = 3
-size_flags_stretch_ratio = 2.0
+size_flags_stretch_ratio = 1.0
 
 [node name="CaptainActions" type="VBoxContainer" parent="OuterMargin/Shell/BottomArea/CaptainActionsPanel"]
+unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 4
 
@@ -352,3 +354,38 @@ size_flags_horizontal = 3
 focus_mode = 2
 text = "LOAD [CTRL+L]"
 tooltip_text = "Load the quick-save slot; failure preserves the current game. Shortcut: Ctrl+L."
+
+[node name="EngineeringBottomActions" type="VBoxContainer" parent="OuterMargin/Shell/BottomArea/CaptainActionsPanel"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="EngineeringQueueHeading" type="Label" parent="OuterMargin/Shell/BottomArea/CaptainActionsPanel/EngineeringBottomActions"]
+layout_mode = 2
+theme_type_variation = &"PanelHeading"
+text = "REPAIR / ACTION QUEUE"
+
+[node name="EngineeringQueueScroll" type="ScrollContainer" parent="OuterMargin/Shell/BottomArea/CaptainActionsPanel/EngineeringBottomActions"]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="EngineeringQueueContent" type="VBoxContainer" parent="OuterMargin/Shell/BottomArea/CaptainActionsPanel/EngineeringBottomActions/EngineeringQueueScroll"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 3
+
+[node name="EngineeringQueueActions" type="VBoxContainer" parent="OuterMargin/Shell/BottomArea/CaptainActionsPanel/EngineeringBottomActions"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 3
+
+[node name="EngineeringBottomReturnButton" type="Button" parent="OuterMargin/Shell/BottomArea/CaptainActionsPanel/EngineeringBottomActions"]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 2
+theme_type_variation = &"CommandButton"
+text = "RETURN TO COMMAND DECK"
+tooltip_text = "Return to the last Command Deck context without replacing the running simulation."
