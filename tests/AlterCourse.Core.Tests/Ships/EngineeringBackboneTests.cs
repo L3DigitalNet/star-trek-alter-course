@@ -34,6 +34,22 @@ public sealed class EngineeringBackboneTests
     public void PowerUnitsRejectOutsideBounds(int value) =>
         Assert.Throws<ArgumentOutOfRangeException>(() => new PowerUnits(value));
 
+    /// <summary>Confirms addition reaches the declared maximum and rejects an overflowing result.</summary>
+    [Fact]
+    public void PowerUnitsAdditionIsCheckedAndBounded()
+    {
+        Assert.Equal(new PowerUnits(PowerUnits.MaximumValue), new PowerUnits(400_000) + new PowerUnits(600_000));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new PowerUnits(PowerUnits.MaximumValue) + new PowerUnits(1));
+    }
+
+    /// <summary>Confirms condition includes both semantic endpoints.</summary>
+    [Fact]
+    public void SystemConditionAcceptsOfflineAndNominalEndpoints()
+    {
+        Assert.Equal(SystemConditionStatus.Offline, new SystemCondition(0).Status);
+        Assert.Equal(SystemConditionStatus.Nominal, new SystemCondition(1).Status);
+    }
+
     /// <summary>Confirms condition rejects nonfinite and out-of-range inputs.</summary>
     [Theory]
     [InlineData(double.NaN)]
@@ -73,6 +89,117 @@ public sealed class EngineeringBackboneTests
             new PowerAllocation(new PowerUnits(25), new PowerUnits(50)),
             engineering.AllocationFor(PathfinderEngineering, PowerAllocationPreset.PrioritizePropulsion)
         );
+    }
+
+    /// <summary>Confirms floor rounding is stable at representative exact and fractional boundaries.</summary>
+    [Theory]
+    [InlineData(10, 0, 0)]
+    [InlineData(10, 0.69, 6)]
+    [InlineData(10, 0.7, 7)]
+    [InlineData(999_999, 1, 999_999)]
+    public void AvailablePowerUsesDeterministicFloorRounding(int generation, double condition, int expected)
+    {
+        ShipEngineeringDefinition definition = Definition(generation, 1, 1);
+        ShipEngineeringState engineering = Engineering(condition, 1, 1, 0, 0);
+
+        Assert.Equal(new PowerUnits(expected), engineering.AvailablePower(definition));
+    }
+
+    /// <summary>Confirms every preset conserves available power and respects each authored demand.</summary>
+    [Theory]
+    [InlineData(120, 70, 50, 0)]
+    [InlineData(11, 7, 5, 73)]
+    [InlineData(100, 3, 2, 100)]
+    [InlineData(1_000_000, 600_000, 400_000, 99)]
+    public void PresetsConservePowerWithinDemand(
+        int generation,
+        int sensorDemand,
+        int impulseDemand,
+        int generationPercent
+    )
+    {
+        ShipEngineeringDefinition definition = Definition(generation, sensorDemand, impulseDemand);
+        ShipEngineeringState engineering = Engineering(generationPercent / 100d, 1, 1, 0, 0);
+
+        foreach (PowerAllocationPreset preset in Enum.GetValues<PowerAllocationPreset>())
+        {
+            PowerAllocation allocation = engineering.AllocationFor(definition, preset);
+            ShipEngineeringState allocated = engineering with { Allocation = allocation };
+            int available = engineering.AvailablePower(definition).Value;
+
+            Assert.InRange(allocation.Sensors.Value, 0, sensorDemand);
+            Assert.InRange(allocation.ImpulsePropulsion.Value, 0, impulseDemand);
+            Assert.Equal(
+                available,
+                allocation.Sensors.Value + allocation.ImpulsePropulsion.Value + allocated.Reserve(definition).Value
+            );
+        }
+    }
+
+    /// <summary>Confirms the balanced preset assigns indivisible remainders to sensors first.</summary>
+    [Theory]
+    [InlineData(5, 4, 3, 3, 2)]
+    [InlineData(7, 5, 3, 5, 2)]
+    [InlineData(8, 5, 4, 5, 3)]
+    public void BalancedPresetUsesStableSensorFirstRemainder(
+        int available,
+        int sensorDemand,
+        int impulseDemand,
+        int expectedSensors,
+        int expectedImpulse
+    )
+    {
+        ShipEngineeringDefinition definition = Definition(available, sensorDemand, impulseDemand);
+        ShipEngineeringState engineering = Engineering(1, 1, 1, 0, 0);
+
+        PowerAllocation allocation = engineering.AllocationFor(definition, PowerAllocationPreset.Balanced);
+
+        Assert.Equal(new PowerAllocation(new PowerUnits(expectedSensors), new PowerUnits(expectedImpulse)), allocation);
+    }
+
+    /// <summary>Confirms capability remains bounded and is monotonic in allocation and condition.</summary>
+    [Theory]
+    [InlineData(0, 0, 0.5, 0)]
+    [InlineData(10, 20, 0.25, 0.5)]
+    [InlineData(50, 70, 0.5, 1)]
+    public void CapabilityIsBoundedAndMonotonic(
+        int lowerAllocation,
+        int higherAllocation,
+        double lowerCondition,
+        double higherCondition
+    )
+    {
+        ShipEngineeringDefinition definition = Definition(120, 70, 50);
+        ShipEngineeringState lowerPower = Engineering(1, higherCondition, 1, lowerAllocation, 0);
+        ShipEngineeringState higherPower = Engineering(1, higherCondition, 1, higherAllocation, 0);
+        ShipEngineeringState lowerConditionState = Engineering(1, lowerCondition, 1, higherAllocation, 0);
+
+        double lowerPowerCapability = lowerPower.SensorCapability(definition);
+        double higherPowerCapability = higherPower.SensorCapability(definition);
+        double lowerConditionCapability = lowerConditionState.SensorCapability(definition);
+
+        Assert.InRange(lowerPowerCapability, 0, 1);
+        Assert.InRange(higherPowerCapability, 0, 1);
+        Assert.InRange(lowerConditionCapability, 0, 1);
+        Assert.True(lowerPowerCapability <= higherPowerCapability);
+        Assert.True(lowerConditionCapability <= higherPowerCapability);
+    }
+
+    /// <summary>Confirms zero input removes capability and nominal input reproduces authored capability.</summary>
+    [Fact]
+    public void CapabilityEndpointsHaveZeroAndIdentitySemantics()
+    {
+        ShipEngineeringDefinition definition = Definition(120, 70, 50);
+        ShipEngineeringState offline = Engineering(1, 0, 0, 70, 50);
+        ShipEngineeringState unpowered = Engineering(1, 1, 1, 0, 0);
+        ShipEngineeringState nominal = Engineering(1, 1, 1, 70, 50);
+
+        Assert.Equal(0, offline.SensorCapability(definition));
+        Assert.Equal(0, offline.ImpulseCapability(definition));
+        Assert.Equal(0, unpowered.SensorCapability(definition));
+        Assert.Equal(0, unpowered.ImpulseCapability(definition));
+        Assert.Equal(1, nominal.SensorCapability(definition));
+        Assert.Equal(1, nominal.ImpulseCapability(definition));
     }
 
     /// <summary>Confirms the player projection derives all Engineering values from the aggregate.</summary>
@@ -177,6 +304,23 @@ public sealed class EngineeringBackboneTests
         );
     }
 
+    /// <summary>Confirms an impulse repair does not masquerade as sensor repair state.</summary>
+    [Fact]
+    public void ImpulseRepairAppearsOnlyInEngineeringProjection()
+    {
+        GameSimulation game = CreateSingleShip(new SystemCondition(0.5), new SystemCondition(0.5));
+        Assert.Equal(
+            SystemRepairOutcome.Accepted,
+            game.BeginSystemRepair(ShipSystemId.ImpulsePropulsion, new SystemCondition(1)).Outcome
+        );
+
+        PlayerShipProjection projection = game.GetPlayerProjection().Ship;
+
+        Assert.False(projection.Sensors.IsRepairing);
+        Assert.Equal(1, projection.Sensors.RepairProgress);
+        Assert.Equal(ShipSystemId.ImpulsePropulsion, projection.Engineering.ActiveRepair!.TargetSystem);
+    }
+
     /// <summary>Confirms tactical commands use current effective propulsion rather than design maximum.</summary>
     [Fact]
     public void EffectivePropulsionBoundsTacticalCommands()
@@ -215,6 +359,29 @@ public sealed class EngineeringBackboneTests
             new SystemCondition(0.4),
             new SystemCondition(1),
             new PowerAllocation(new PowerUnits(44), new PowerUnits(31))
+        );
+
+    private static ShipEngineeringState Engineering(
+        double generationCondition,
+        double sensorCondition,
+        double impulseCondition,
+        int sensorAllocation,
+        int impulseAllocation
+    ) =>
+        new(
+            new SystemCondition(generationCondition),
+            new SystemCondition(sensorCondition),
+            new SystemCondition(impulseCondition),
+            new PowerAllocation(new PowerUnits(sensorAllocation), new PowerUnits(impulseAllocation))
+        );
+
+    private static ShipEngineeringDefinition Definition(int generation, int sensorDemand, int impulseDemand) =>
+        new(
+            new PowerUnits(generation),
+            new PowerUnits(sensorDemand),
+            new PowerUnits(impulseDemand),
+            new SimulationDuration(100),
+            new SimulationDuration(100)
         );
 
     private static GameSimulation CreateDefault() => FirstGameSetup.Create(CreateCatalog());

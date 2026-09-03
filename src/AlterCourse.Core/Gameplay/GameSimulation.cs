@@ -1673,7 +1673,10 @@ public sealed class GameSimulation
         ShipDefinition playerDefinition
     )
     {
-        SystemRepairState? repair = playerShip.Engineering.ActiveRepair;
+        SystemRepairState? sensorRepair =
+            playerShip.Engineering.ActiveRepair is { TargetSystem: var target } repair && target == ShipSystemId.Sensors
+                ? repair
+                : null;
         ActiveSensorScanState? activeScan = playerShip.SensorKnowledge.ActiveScan;
         SensorContactTrack[] activeContacts =
         [
@@ -1693,8 +1696,8 @@ public sealed class GameSimulation
             ),
             new SensorProjection(
                 playerShip.Engineering.SensorCondition.Value,
-                repair?.ProgressAt(state.Time) ?? 1,
-                repair is not null,
+                sensorRepair?.ProgressAt(state.Time) ?? 1,
+                sensorRepair is not null,
                 new ReadOnlyValueList<SensorContactSnapshot>(
                     activeContacts.Select(contact => contact.ToActorSafeSnapshot())
                 ),
