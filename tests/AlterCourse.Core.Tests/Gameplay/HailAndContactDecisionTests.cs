@@ -108,6 +108,59 @@ public sealed class HailAndContactDecisionTests
         Assert.False(explanation.RandomnessUsed);
     }
 
+    /// <summary>Confirms hail cancels a target scan before transmitted identity makes it obsolete.</summary>
+    [Fact]
+    public void AcknowledgedHailCancelsTargetScanBeforeIdentifyingPlayer()
+    {
+        GameSimulation game = IdentifyNpc(CreateGame(cautiousNpc: true));
+        SimulationState state = game.CaptureState();
+        ShipState npc = state.GetRequiredShip(NpcId);
+        SensorContactTrack playerContact = Assert.Single(npc.SensorKnowledge.Contacts);
+        (SimulationScheduler scheduler, ScheduledWork completion) = state.Scheduler.Schedule(
+            state.Time.AdvanceBy(new SimulationDuration(2_000)),
+            NpcId,
+            ScheduledWorkKind.ActiveSensorScanCompletion
+        );
+        var activeScan = new ActiveSensorScanState(playerContact.Id, state.Time, completion.DueTime, completion.Id);
+        SensorKnowledge scanningKnowledge = npc.SensorKnowledge with { ActiveScan = activeScan };
+        game = GameSimulation.RestoreState(
+            state.ReplaceShip(npc.InstanceId, npc with { SensorKnowledge = scanningKnowledge }) with
+            {
+                Scheduler = scheduler,
+            },
+            CreateCatalog()
+        );
+
+        HailResult result = game.RequestHail(new SensorContactId(1));
+
+        Assert.Equal(HailOutcome.Acknowledged, result.Outcome);
+        SimulationState after = game.CaptureState();
+        ShipState informedNpc = after.GetRequiredShip(NpcId);
+        SensorContactTrack identifiedPlayer = Assert.Single(informedNpc.SensorKnowledge.Contacts);
+        Assert.Null(informedNpc.SensorKnowledge.ActiveScan);
+        Assert.DoesNotContain(after.Scheduler.OutstandingWork, work => work.Id == completion.Id);
+        Assert.Equal(SensorContactIdentification.Identified, identifiedPlayer.Identification);
+        Assert.Equal("USS Pathfinder", identifiedPlayer.KnownVesselDisplayName);
+        Assert.Equal("Explorer", identifiedPlayer.KnownDesignDisplayName);
+        Assert.Equal(0, informedNpc.TacticalMotion.Speed.Value);
+
+        ShipContactDecisionExplanation explanation = Assert.IsType<ShipContactDecisionExplanation>(
+            game.LastContactDecisionExplanation
+        );
+        Assert.Equal(ShipContactDecisionAction.Hold, explanation.SelectedAction);
+
+        SimulationAdvanceTraceResult beyondCompletion = GameSimulation.AdvanceTo(
+            after,
+            completion.DueTime,
+            CreateCatalog()
+        );
+        Assert.DoesNotContain(beyondCompletion.Traces, trace => trace.WorkId == completion.Id);
+        Assert.DoesNotContain(
+            beyondCompletion.PlayerEvents,
+            playerEvent => playerEvent.Kind == PlayerAdvanceEventKind.ActiveSensorScanCompleted
+        );
+    }
+
     /// <summary>Confirms one appended wake resolves once, stays hidden, and is not recreated by refresh.</summary>
     [Fact]
     public void ContactWakeIsDeduplicatedHiddenAndAppliesObservedPositionCourse()
@@ -150,6 +203,48 @@ public sealed class HailAndContactDecisionTests
         );
     }
 
+    /// <summary>Confirms a decision wake cannot consult changed truth behind the same retained observation.</summary>
+    [Fact]
+    public void ContactDecisionWakeIsInvariantToHiddenTargetPosition()
+    {
+        ShipDefinitionCatalog catalog = CreateCatalog();
+        SimulationState firstWorld = CreateHiddenTruthDecisionWorld(new TacticalPosition(500, 300));
+        SimulationState secondWorld = CreateHiddenTruthDecisionWorld(new TacticalPosition(-600, 400));
+        ShipState firstHiddenPlayer = firstWorld.GetRequiredShip(PlayerId);
+        ShipState secondHiddenPlayer = secondWorld.GetRequiredShip(PlayerId);
+        SensorContactSnapshot firstRetainedObservation = Assert
+            .Single(firstWorld.GetRequiredShip(NpcId).SensorKnowledge.Contacts)
+            .ToActorSafeSnapshot();
+        SensorContactSnapshot secondRetainedObservation = Assert
+            .Single(secondWorld.GetRequiredShip(NpcId).SensorKnowledge.Contacts)
+            .ToActorSafeSnapshot();
+
+        SimulationAdvanceTraceResult first = GameSimulation.AdvanceTo(firstWorld, firstWorld.Time, catalog);
+        SimulationAdvanceTraceResult second = GameSimulation.AdvanceTo(secondWorld, secondWorld.Time, catalog);
+
+        Assert.NotEqual(firstHiddenPlayer.TacticalPosition, secondHiddenPlayer.TacticalPosition);
+        Assert.Equal(firstRetainedObservation, secondRetainedObservation);
+        Assert.Equal(SensorContactIdentification.Detected, firstRetainedObservation.Identification);
+        ShipContactDecisionExplanation firstDecision = Assert.IsType<ShipContactDecisionExplanation>(
+            Assert
+                .Single(first.Traces, trace => trace.WorkKind == ScheduledWorkKind.ShipContactDecisionWake)
+                .ContactDecision
+        );
+        ShipContactDecisionExplanation secondDecision = Assert.IsType<ShipContactDecisionExplanation>(
+            Assert
+                .Single(second.Traces, trace => trace.WorkKind == ScheduledWorkKind.ShipContactDecisionWake)
+                .ContactDecision
+        );
+        Assert.Equal(firstDecision, secondDecision);
+        Assert.Equal(firstRetainedObservation, Assert.Single(firstDecision.ActorKnownFacts.Contacts));
+        Assert.Equal(ShipContactDecisionAction.Withdraw, firstDecision.SelectedAction);
+        Assert.Equal(firstDecision.ResultingCourse, secondDecision.ResultingCourse);
+        Assert.Equal(
+            first.State.GetRequiredShip(NpcId).TacticalMotion,
+            second.State.GetRequiredShip(NpcId).TacticalMotion
+        );
+    }
+
     private static GameSimulation IdentifyNpc(GameSimulation game)
     {
         game.AdvanceFixedSteps(1);
@@ -175,6 +270,35 @@ public sealed class HailAndContactDecisionTests
             state.ReplaceShip(player.InstanceId, player with { SensorKnowledge = knowledge }),
             CreateCatalog()
         );
+    }
+
+    private static SimulationState CreateHiddenTruthDecisionWorld(TacticalPosition hiddenPlayerPosition)
+    {
+        GameSimulation game = CreateGame(cautiousNpc: true);
+        game.AdvanceFixedSteps(1);
+        SimulationState state = game.CaptureState();
+        ShipState player = state.GetRequiredShip(PlayerId);
+        ShipState npc = state.GetRequiredShip(NpcId);
+        (SimulationScheduler scheduler, ScheduledWork work) = state.Scheduler.Schedule(
+            state.Time,
+            NpcId,
+            ScheduledWorkKind.ShipContactDecisionWake
+        );
+        ShipState waitingNpc = npc with
+        {
+            AutonomousState = npc.AutonomousState with
+            {
+                PendingContactDecisionWake = new ShipContactDecisionWake(work.Id, work.DueTime),
+            },
+        };
+        SimulationState candidate = state
+            .ReplaceShip(player.InstanceId, player with { TacticalPosition = hiddenPlayerPosition })
+            .ReplaceShip(npc.InstanceId, waitingNpc) with
+        {
+            Scheduler = scheduler,
+        };
+        candidate.Validate(CreateCatalog());
+        return candidate;
     }
 
     private static GameSimulation CreateGame(bool cautiousNpc)

@@ -159,6 +159,19 @@ public sealed class GameSimulation
             player.VesselDisplayName,
             playerDefinition.DesignDisplayName
         );
+        SimulationScheduler scheduler = _state.Scheduler;
+        ActiveSensorScanState? activeScan = target.SensorKnowledge.ActiveScan;
+        if (activeScan?.TargetContactId == reciprocal.Id)
+        {
+            (scheduler, bool removed) = scheduler.Cancel(activeScan.ScheduledCompletionId);
+            if (!removed)
+            {
+                throw new InvalidOperationException("A target-side scan lacks its exact scheduled completion.");
+            }
+
+            activeScan = null;
+        }
+
         SensorContactTrack identifiedPlayer = reciprocal with
         {
             Identification = SensorContactIdentification.Identified,
@@ -168,10 +181,13 @@ public sealed class GameSimulation
         SensorKnowledge updatedKnowledge = new(
             target.SensorKnowledge.NextContactId,
             target.SensorKnowledge.Contacts.Replace(reciprocal, identifiedPlayer),
-            target.SensorKnowledge.ActiveScan
+            activeScan
         );
         ShipState informedTarget = target with { SensorKnowledge = updatedKnowledge };
-        SimulationState informedState = _state.ReplaceShip(target.InstanceId, informedTarget);
+        SimulationState informedState = _state.ReplaceShip(target.InstanceId, informedTarget) with
+        {
+            Scheduler = scheduler,
+        };
         ShipContactDecisionExplanation decision = DecideContact(
             informedState,
             informedTarget,

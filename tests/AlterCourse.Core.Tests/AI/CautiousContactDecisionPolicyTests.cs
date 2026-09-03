@@ -213,22 +213,6 @@ public sealed class CautiousContactDecisionPolicyTests
         );
     }
 
-    /// <summary>Confirms changing unavailable target truth cannot affect a held observer snapshot.</summary>
-    [Fact]
-    public void HeldActorSnapshotIsInvariantToHiddenTargetTruth()
-    {
-        SensorContactSnapshot held = Contact(1, new TacticalPosition(4, 0));
-        TacticalPosition firstHiddenTruth = new(4, 0);
-        TacticalPosition changedHiddenTruth = new(-900, 700);
-
-        ShipContactDecisionExplanation first = CautiousContactDecisionPolicy.Evaluate(Input([held]));
-        ShipContactDecisionExplanation second = CautiousContactDecisionPolicy.Evaluate(Input([held]));
-
-        Assert.NotEqual(firstHiddenTruth, changedHiddenTruth);
-        Assert.Equal(first, second);
-        Assert.Equal(held.LastObservedPosition, first.ActorKnownFacts.Contacts[0].LastObservedPosition);
-    }
-
     /// <summary>Confirms hidden world and definition types cannot enter the public policy input graph.</summary>
     [Fact]
     public void PolicyInputExcludesHiddenTruthTypes()
