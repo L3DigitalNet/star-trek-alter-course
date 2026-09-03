@@ -16,58 +16,82 @@ public static class FirstGameSetup
     {
         ArgumentNullException.ThrowIfNull(catalog);
         ShipDefinition playerShipDefinition = catalog.GetRequired(new ShipDefinitionId("pathfinder"));
-        var initialSensorIntegrity = new SensorIntegrity(0.4);
-
         (StrategicMap map, LocationId dawn, LocationId vesper, LocationId meridian) = CreateMap();
         var initialTime = new SimulationTime(0);
-        var repaired = new SensorIntegrity(1);
-        var zeroMotion = new TacticalMotion(new HeadingDegrees(0), new SpeedKilometersPerSecond(0));
-        ShipStart[] starts =
-        [
-            new(
-                new ShipInstanceId(1),
-                playerShipDefinition.Id,
-                "USS Pathfinder",
-                new TacticalPosition(3.25, -7.5),
-                zeroMotion,
-                initialSensorIntegrity,
-                new AtLocationStart(dawn),
-                new SensorRepairStart(initialSensorIntegrity, repaired, initialTime)
-            ),
-            new(
-                new ShipInstanceId(2),
-                playerShipDefinition.Id,
-                "USS Wayfarer",
-                new TacticalPosition(-2, 4),
-                zeroMotion,
-                initialSensorIntegrity,
-                new AtLocationStart(vesper),
-                new SensorRepairStart(initialSensorIntegrity, repaired, initialTime)
-            ),
-            new(
-                new ShipInstanceId(3),
-                playerShipDefinition.Id,
-                "USS Horizon",
-                new TacticalPosition(6, 1.5),
-                zeroMotion,
-                repaired,
-                new TravelingStart(vesper, meridian, initialTime)
-            ),
-            new(
-                new ShipInstanceId(4),
-                playerShipDefinition.Id,
-                "Survey Vessel Kestrel",
-                new TacticalPosition(21.25, -7.5),
-                zeroMotion,
-                repaired,
-                new AtLocationStart(dawn)
-            ),
-        ];
+        ShipStart[] starts = CreateShipStarts(playerShipDefinition, dawn, vesper, meridian, initialTime);
         GameSimulation simulation = new GameBootstrap(initialTime, map, starts[0].InstanceId, starts).CreateSimulation(
             catalog
         );
         simulation.BootstrapHiddenCautiousContactObservation(starts[3].InstanceId);
         return simulation;
+    }
+
+    private static ShipStart[] CreateShipStarts(
+        ShipDefinition definition,
+        LocationId dawn,
+        LocationId vesper,
+        LocationId meridian,
+        SimulationTime initialTime
+    )
+    {
+        var damagedSensors = new SystemCondition(0.4);
+        var nominal = new SystemCondition(1);
+        var constrainedGeneration = new SystemCondition(0.625);
+        var fullAllocation = new PowerAllocation(new PowerUnits(70), new PowerUnits(50));
+        var balancedAllocation = new PowerAllocation(new PowerUnits(44), new PowerUnits(31));
+        var zeroMotion = new TacticalMotion(new HeadingDegrees(0), new SpeedKilometersPerSecond(0));
+        return
+        [
+            new(
+                new ShipInstanceId(1),
+                definition.Id,
+                "USS Pathfinder",
+                new TacticalPosition(3.25, -7.5),
+                zeroMotion,
+                constrainedGeneration,
+                damagedSensors,
+                nominal,
+                balancedAllocation,
+                new AtLocationStart(dawn),
+                new SystemRepairStart(ShipSystemId.Sensors, damagedSensors, nominal, initialTime)
+            ),
+            new(
+                new ShipInstanceId(2),
+                definition.Id,
+                "USS Wayfarer",
+                new TacticalPosition(-2, 4),
+                zeroMotion,
+                nominal,
+                nominal,
+                nominal,
+                fullAllocation,
+                new AtLocationStart(vesper)
+            ),
+            new(
+                new ShipInstanceId(3),
+                definition.Id,
+                "USS Horizon",
+                new TacticalPosition(6, 1.5),
+                zeroMotion,
+                nominal,
+                nominal,
+                nominal,
+                fullAllocation,
+                new TravelingStart(vesper, meridian, initialTime)
+            ),
+            new(
+                new ShipInstanceId(4),
+                definition.Id,
+                "Survey Vessel Kestrel",
+                new TacticalPosition(21.25, -7.5),
+                zeroMotion,
+                nominal,
+                nominal,
+                nominal,
+                fullAllocation,
+                new AtLocationStart(dawn)
+            ),
+        ];
     }
 
     private static (StrategicMap Map, LocationId Dawn, LocationId Vesper, LocationId Meridian) CreateMap()

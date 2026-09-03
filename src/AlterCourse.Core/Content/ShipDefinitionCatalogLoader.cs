@@ -7,14 +7,14 @@ using Json.Schema;
 
 namespace AlterCourse.Core.Content;
 
-/// <summary>Strictly validates version-three authored ship JSON and constructs domain definitions.</summary>
+/// <summary>Strictly validates version-four authored ship JSON and constructs domain definitions.</summary>
 public sealed class ShipDefinitionCatalogLoader
 {
     /// <summary>Gets the maximum number of authored definitions admitted into one development catalog.</summary>
     public const int MaximumDefinitions = 256;
 
     private static readonly Uri SchemaBaseUri = new(
-        "https://l3digital.net/star-trek-alter-course/schemas/ship-definition-v3.schema.json"
+        "https://l3digital.net/star-trek-alter-course/schemas/ship-definition-v4.schema.json"
     );
     private static readonly EvaluationOptions SchemaEvaluationOptions = new()
     {
@@ -24,7 +24,7 @@ public sealed class ShipDefinitionCatalogLoader
 
     private readonly JsonSchema _schema;
 
-    /// <summary>Initializes the loader from the canonical version-three JSON Schema text.</summary>
+    /// <summary>Initializes the loader from the canonical version-four JSON Schema text.</summary>
     public ShipDefinitionCatalogLoader(string schemaText)
     {
         ArgumentNullException.ThrowIfNull(schemaText);
@@ -90,7 +90,7 @@ public sealed class ShipDefinitionCatalogLoader
         using (document)
         {
             ValidateSchema(document.RootElement, content.SourceIdentity);
-            AuthoredShipDefinitionV3 authored = ReadAuthoredModel(document.RootElement, content.SourceIdentity);
+            AuthoredShipDefinitionV4 authored = ReadAuthoredModel(document.RootElement, content.SourceIdentity);
             return ValidateSemantics(authored, content.SourceIdentity);
         }
     }
@@ -198,16 +198,23 @@ public sealed class ShipDefinitionCatalogLoader
 
     private static string Location(string pointer) => string.IsNullOrEmpty(pointer) ? "#" : "#" + pointer;
 
-    private static AuthoredShipDefinitionV3 ReadAuthoredModel(JsonElement root, string sourceIdentity) =>
-        new(
+    private static AuthoredShipDefinitionV4 ReadAuthoredModel(JsonElement root, string sourceIdentity)
+    {
+        JsonElement engineering = root.GetProperty("engineering");
+        return new AuthoredShipDefinitionV4(
             ReadInt32(root, "schemaVersion", sourceIdentity),
             root.GetProperty("id").GetString()!,
             root.GetProperty("designDisplayName").GetString()!,
             root.GetProperty("maximumTacticalSpeedKilometersPerSecond").GetDouble(),
             root.GetProperty("passiveSensorRangeKilometers").GetDouble(),
             ReadInt64(root, "activeScanDurationMilliseconds", sourceIdentity),
-            ReadInt64(root, "sensorRepairDurationMilliseconds", sourceIdentity)
+            ReadInt32(engineering, "nominalGenerationPowerUnits", sourceIdentity),
+            ReadInt32(engineering, "nominalSensorDemandPowerUnits", sourceIdentity),
+            ReadInt32(engineering, "nominalImpulseDemandPowerUnits", sourceIdentity),
+            ReadInt64(engineering, "sensorRepairDurationMilliseconds", sourceIdentity),
+            ReadInt64(engineering, "impulseRepairDurationMilliseconds", sourceIdentity)
         );
+    }
 
     private static int ReadInt32(JsonElement root, string propertyName, string sourceIdentity)
     {
@@ -262,7 +269,7 @@ public sealed class ShipDefinitionCatalogLoader
             $"'{propertyName}' must be representable as {expectedType}."
         );
 
-    private static ShipDefinition ValidateSemantics(AuthoredShipDefinitionV3 authored, string sourceIdentity)
+    private static ShipDefinition ValidateSemantics(AuthoredShipDefinitionV4 authored, string sourceIdentity)
     {
         var diagnostics = new List<ShipContentDiagnostic>();
         ShipDefinitionId id = ValidateIdentity(authored.Id, sourceIdentity, diagnostics);
@@ -276,7 +283,33 @@ public sealed class ShipDefinitionCatalogLoader
             sourceIdentity,
             diagnostics
         );
-        ValidateRepairDuration(authored.SensorRepairDurationMilliseconds, sourceIdentity, diagnostics);
+        ValidatePower(authored.NominalGenerationPowerUnits, "nominalGenerationPowerUnits", sourceIdentity, diagnostics);
+        ValidatePower(
+            authored.NominalSensorDemandPowerUnits,
+            "nominalSensorDemandPowerUnits",
+            sourceIdentity,
+            diagnostics
+        );
+        ValidatePower(
+            authored.NominalImpulseDemandPowerUnits,
+            "nominalImpulseDemandPowerUnits",
+            sourceIdentity,
+            diagnostics
+        );
+        ValidateEngineeringDuration(
+            authored.SensorRepairDurationMilliseconds,
+            "sensorRepairDurationMilliseconds",
+            "Sensor repair duration",
+            sourceIdentity,
+            diagnostics
+        );
+        ValidateEngineeringDuration(
+            authored.ImpulseRepairDurationMilliseconds,
+            "impulseRepairDurationMilliseconds",
+            "Impulse repair duration",
+            sourceIdentity,
+            diagnostics
+        );
 
         if (diagnostics.Count > 0)
         {
@@ -289,7 +322,13 @@ public sealed class ShipDefinitionCatalogLoader
             new SpeedKilometersPerSecond(authored.MaximumTacticalSpeedKilometersPerSecond),
             new DistanceKilometers(authored.PassiveSensorRangeKilometers),
             new SimulationDuration(authored.ActiveScanDurationMilliseconds),
-            new SimulationDuration(authored.SensorRepairDurationMilliseconds)
+            new ShipEngineeringDefinition(
+                new PowerUnits(authored.NominalGenerationPowerUnits),
+                new PowerUnits(authored.NominalSensorDemandPowerUnits),
+                new PowerUnits(authored.NominalImpulseDemandPowerUnits),
+                new SimulationDuration(authored.SensorRepairDurationMilliseconds),
+                new SimulationDuration(authored.ImpulseRepairDurationMilliseconds)
+            )
         );
     }
 
@@ -386,19 +425,43 @@ public sealed class ShipDefinitionCatalogLoader
         }
     }
 
-    private static void ValidateRepairDuration(
-        long milliseconds,
+    private static void ValidatePower(
+        int value,
+        string propertyName,
         string sourceIdentity,
         List<ShipContentDiagnostic> diagnostics
     )
     {
-        ValidateDuration(
-            milliseconds,
-            "sensorRepairDurationMilliseconds",
-            "Sensor repair duration",
-            sourceIdentity,
-            diagnostics
-        );
+        if (value is <= 0 or > PowerUnits.MaximumValue)
+        {
+            diagnostics.Add(
+                Semantic(
+                    sourceIdentity,
+                    $"#/engineering/{propertyName}",
+                    $"Engineering power must be positive and no greater than {PowerUnits.MaximumValue}."
+                )
+            );
+        }
+    }
+
+    private static void ValidateEngineeringDuration(
+        long milliseconds,
+        string propertyName,
+        string displayName,
+        string sourceIdentity,
+        List<ShipContentDiagnostic> diagnostics
+    )
+    {
+        if (milliseconds <= 0 || milliseconds % SimulationFixedStep.Duration.Milliseconds != 0)
+        {
+            diagnostics.Add(
+                Semantic(
+                    sourceIdentity,
+                    $"#/engineering/{propertyName}",
+                    $"{displayName} must be positive and align to the 100 millisecond simulation step."
+                )
+            );
+        }
     }
 
     private static ShipContentDiagnostic Semantic(string sourceIdentity, string location, string message) =>
@@ -412,13 +475,17 @@ public sealed class ShipDefinitionCatalogLoader
         string message
     ) => new([new ShipContentDiagnostic(code, sourceIdentity, instanceLocation, schemaLocation, message)]);
 
-    private sealed record AuthoredShipDefinitionV3(
+    private sealed record AuthoredShipDefinitionV4(
         int SchemaVersion,
         string Id,
         string DesignDisplayName,
         double MaximumTacticalSpeedKilometersPerSecond,
         double PassiveSensorRangeKilometers,
         long ActiveScanDurationMilliseconds,
-        long SensorRepairDurationMilliseconds
+        int NominalGenerationPowerUnits,
+        int NominalSensorDemandPowerUnits,
+        int NominalImpulseDemandPowerUnits,
+        long SensorRepairDurationMilliseconds,
+        long ImpulseRepairDurationMilliseconds
     );
 }

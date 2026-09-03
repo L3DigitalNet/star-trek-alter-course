@@ -42,8 +42,8 @@ public sealed class WorldBootstrapSignatureTests
         Assert.Equal([1L, 2L, 3L], simulationShips.Select(ship => ship!["instanceId"]!.GetValue<long>()));
         Assert.Equal(
             [
-                (1L, 1L, 0L, 8000L, "sensorRepairCompletion"),
-                (2L, 2L, 1L, 8000L, "sensorRepairCompletion"),
+                (1L, 1L, 0L, 8000L, "systemRepairCompletion"),
+                (2L, 2L, 1L, 8000L, "systemRepairCompletion"),
                 (3L, 3L, 2L, 14000L, "travelArrival"),
             ],
             work.Select(item =>
@@ -82,7 +82,7 @@ public sealed class WorldBootstrapSignatureTests
                     expandingDisplayName,
                     default,
                     default,
-                    new SensorIntegrity(1),
+                    new SystemCondition(1),
                     new AtLocationStart(map.Locations[0].Id)
                 )),
         ];
@@ -129,10 +129,10 @@ public sealed class WorldBootstrapSignatureTests
         JsonArray atFourSeconds = Ships(Parse(game));
 
         Assert.Equal(11.25, game.GetPlayerProjection().Ship.Tactical.Position.XKilometers, 10);
-        Assert.Equal(0.7, atFourSeconds[0]!["sensorIntegrity"]!.GetValue<double>(), 10);
-        Assert.Equal(0.7, atFourSeconds[1]!["sensorIntegrity"]!.GetValue<double>(), 10);
-        Assert.NotNull(atFourSeconds[0]!["sensorRepair"]);
-        Assert.NotNull(atFourSeconds[1]!["sensorRepair"]);
+        Assert.Equal(0.7, atFourSeconds[0]!["engineering"]!["sensorCondition"]!.GetValue<double>(), 10);
+        Assert.Equal(0.7, atFourSeconds[1]!["engineering"]!["sensorCondition"]!.GetValue<double>(), 10);
+        Assert.NotNull(atFourSeconds[0]!["engineering"]!["activeRepair"]);
+        Assert.NotNull(atFourSeconds[1]!["engineering"]!["activeRepair"]);
         Assert.Equal("atLocation", atFourSeconds[1]!["strategicState"]!["kind"]!.GetValue<string>());
         Assert.Equal("traveling", atFourSeconds[2]!["strategicState"]!["kind"]!.GetValue<string>());
         Assert.Equal(6, atFourSeconds[2]!["tacticalPosition"]!["xKilometers"]!.GetValue<double>());
@@ -140,12 +140,18 @@ public sealed class WorldBootstrapSignatureTests
         AdvanceUntilResult repairs = game.AdvanceUntilNextPlayerRelevantEvent();
         Assert.Equal(8000, repairs.StoppedAt.Milliseconds);
         Assert.Equal(
-            [new PlayerAdvanceEvent(PlayerAdvanceEventKind.SensorRepairCompleted, new SimulationTime(8000))],
+            [
+                new PlayerAdvanceEvent(
+                    PlayerAdvanceEventKind.SystemRepairCompleted,
+                    new SimulationTime(8000),
+                    ShipSystemId: ShipSystemId.Sensors
+                ),
+            ],
             repairs.ResolvedEvents
         );
         JsonArray afterRepairs = Ships(Parse(game));
-        Assert.Null(afterRepairs[0]!["sensorRepair"]);
-        Assert.Null(afterRepairs[1]!["sensorRepair"]);
+        Assert.Null(afterRepairs[0]!["engineering"]!["activeRepair"]);
+        Assert.Null(afterRepairs[1]!["engineering"]!["activeRepair"]);
         Assert.Equal("traveling", afterRepairs[2]!["strategicState"]!["kind"]!.GetValue<string>());
 
         AdvanceUntilResult noPlayerEvent = game.AdvanceUntilNextPlayerRelevantEvent();
@@ -295,16 +301,17 @@ public sealed class WorldBootstrapSignatureTests
                 .CreateSimulation(CreateCatalog())
         );
         Assert.Throws<ArgumentException>(() =>
-            CreateBootstrap([valid with { SensorIntegrity = new SensorIntegrity(0.5) }])
+            CreateBootstrap([valid with { SensorCondition = new SystemCondition(0.5) }])
                 .CreateSimulation(CreateCatalog())
         );
         Assert.Throws<ArgumentException>(() =>
             CreateBootstrap([
                     valid with
                     {
-                        SensorRepair = new SensorRepairStart(
-                            new SensorIntegrity(0.4),
-                            new SensorIntegrity(0.4),
+                        SystemRepair = new SystemRepairStart(
+                            ShipSystemId.Sensors,
+                            new SystemCondition(0.4),
+                            new SystemCondition(0.4),
                             new SimulationTime(0)
                         ),
                     },
@@ -411,8 +418,8 @@ public sealed class WorldBootstrapSignatureTests
     {
         var initial = new SimulationTime(0);
         var definition = new ShipDefinitionId("pathfinder");
-        var damaged = new SensorIntegrity(0.4);
-        var repaired = new SensorIntegrity(1);
+        var damaged = new SystemCondition(0.4);
+        var repaired = new SystemCondition(1);
         TacticalMotion stopped = default;
         return
         [
@@ -424,7 +431,7 @@ public sealed class WorldBootstrapSignatureTests
                 stopped,
                 damaged,
                 new AtLocationStart(new LocationId("dawn-anchor")),
-                new SensorRepairStart(damaged, repaired, initial)
+                new SystemRepairStart(ShipSystemId.Sensors, damaged, repaired, initial)
             ),
             new(
                 new ShipInstanceId(2),
@@ -434,7 +441,7 @@ public sealed class WorldBootstrapSignatureTests
                 stopped,
                 damaged,
                 new AtLocationStart(new LocationId("vesper-reach")),
-                new SensorRepairStart(damaged, repaired, initial)
+                new SystemRepairStart(ShipSystemId.Sensors, damaged, repaired, initial)
             ),
             new(
                 new ShipInstanceId(3),
@@ -520,17 +527,17 @@ public sealed class WorldBootstrapSignatureTests
     {
         string definition = $$"""
             {
-              "schemaVersion": 3,
+              "schemaVersion": 4,
               "id": "{{definitionId}}",
               "designDisplayName": "Pathfinder class",
               "maximumTacticalSpeedKilometersPerSecond": 10,
               "passiveSensorRangeKilometers": 30.0,
               "activeScanDurationMilliseconds": 2000,
-              "sensorRepairDurationMilliseconds": 8000
+              "engineering": { "nominalGenerationPowerUnits": 120, "nominalSensorDemandPowerUnits": 70, "nominalImpulseDemandPowerUnits": 50, "sensorRepairDurationMilliseconds": 8000, "impulseRepairDurationMilliseconds": 6000 }
             }
             """;
         string schema = File.ReadAllText(
-            Path.Combine(FindRepositoryRoot(), "src/AlterCourse.Godot/content/schemas/ship-definition-v3.schema.json")
+            Path.Combine(FindRepositoryRoot(), "src/AlterCourse.Godot/content/schemas/ship-definition-v4.schema.json")
         );
         return new ShipDefinitionCatalogLoader(schema).LoadCatalog([
             ShipDefinitionContent.FromText("pathfinder.json", definition),

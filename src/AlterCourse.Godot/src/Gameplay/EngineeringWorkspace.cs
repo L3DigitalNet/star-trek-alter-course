@@ -11,7 +11,12 @@ public partial class EngineeringWorkspace : Control
     private const string UnavailableText = "UNAVAILABLE — NOT PROVIDED BY LIVE SIMULATION";
     private static readonly HashSet<string> EngineeringActionIds = new(StringComparer.Ordinal)
     {
-        "allocate-power",
+        "allocate-balanced",
+        "prioritize-sensors",
+        "prioritize-propulsion",
+        "repair-sensors",
+        "repair-propulsion",
+        "return-command",
         "assign-repair",
         "isolate-eps",
         "prioritize-shields",
@@ -20,21 +25,27 @@ public partial class EngineeringWorkspace : Control
     };
 
     /// <summary>Carries one authoritative command-interface intent requested by the Engineering workspace.</summary>
-    public sealed class EngineeringCommandRequestedEventArgs(CommandInterfaceIntent intent) : EventArgs
+    public sealed class EngineeringCommandRequestedEventArgs(CommandInterfaceAction action) : EventArgs
     {
-        /// <summary>Gets the intent that the application boundary must validate before submission.</summary>
-        public CommandInterfaceIntent Intent { get; } = intent;
+        /// <summary>Gets the current projected action that the application boundary must validate before submission.</summary>
+        public CommandInterfaceAction Action { get; } = action;
     }
 
     private readonly Dictionary<string, Button> _actionButtons = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Button> _hierarchyButtons = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, CommandInterfaceAction> _presentedActions = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, CommandInterfaceHierarchyRow> _presentedHierarchy = new(StringComparer.Ordinal);
     private CommandInterfacePresentation? _presentation;
     private VBoxContainer _actions = null!;
+    private Label _actionsHeading = null!;
     private VBoxContainer _connectedLoads = null!;
+    private HBoxContainer _engineeringTabs = null!;
     private VBoxContainer _hierarchy = null!;
     private VBoxContainer _inspector = null!;
     private VBoxContainer _powerAllocation = null!;
+    private Button? _pendingFocusRestore;
     private EngineeringSchematicView _schematic = null!;
+    private Label _schematicHeading = null!;
 
     /// <summary>Notifies an application adapter of an authoritative intent selected in this view.</summary>
     public event EventHandler<EngineeringCommandRequestedEventArgs>? EngineeringCommandRequested;
@@ -67,19 +78,31 @@ public partial class EngineeringWorkspace : Control
             );
         }
 
+        Control? retainedFocus = GetViewport().GuiGetFocusOwner();
+        bool restoreOwnedFocus =
+            retainedFocus is Button focusedButton
+            && (_actionButtons.ContainsValue(focusedButton) || _hierarchyButtons.ContainsValue(focusedButton));
         _presentation = presentation;
         CurrentDataMode = presentation.DataMode;
-        SelectedComponentId = presentation.Engineering?.Hierarchy.FirstOrDefault(row => row.IsSelected)?.Id;
         SetMeta("data_mode", presentation.DataMode.ToString());
         SetMeta("is_preview", IsPreviewMode);
-        SetMeta("selected_component_id", SelectedComponentId ?? string.Empty);
+        _engineeringTabs.Visible = IsPreviewMode;
+        _schematicHeading.Text = IsPreviewMode ? "POWER / EPS DISTRIBUTION" : "ENGINEERING CAPABILITY";
 
-        RebuildHierarchy(presentation.Engineering);
+        ReconcileHierarchy(presentation.Engineering);
         RebuildSchematic(presentation.Engineering);
         RebuildInspector();
         RebuildSection(_connectedLoads, "CONNECTED LOADS", FindTelemetry("connected-loads"));
         RebuildSection(_powerAllocation, "POWER ALLOCATION SUMMARY", FindTelemetry("power-allocation"));
-        RebuildActions(presentation.Actions);
+        ReconcileActions(presentation.Actions);
+        bool focusStillRetained =
+            retainedFocus is Button retainedButton
+            && (_actionButtons.ContainsValue(retainedButton) || _hierarchyButtons.ContainsValue(retainedButton));
+        _pendingFocusRestore = restoreOwnedFocus && focusStillRetained ? retainedFocus as Button : null;
+        if (_pendingFocusRestore is not null)
+        {
+            Callable.From(RestorePendingFocus).CallDeferred();
+        }
     }
 
     /// <summary>Returns whether the named engineering action currently submits authoritative intent.</summary>
@@ -115,13 +138,13 @@ public partial class EngineeringWorkspace : Control
         }
 
         var controls = new List<Control>();
-        controls.AddRange(_hierarchyButtons.Values.Where(IsFocusable));
+        controls.AddRange(_hierarchy.GetChildren().OfType<Control>().Where(IsFocusable));
         if (IsFocusable(_schematic))
         {
             controls.Add(_schematic);
         }
 
-        controls.AddRange(_actionButtons.Values.Where(IsFocusable));
+        controls.AddRange(_actions.GetChildren().OfType<Control>().Where(IsFocusable));
         return controls;
     }
 
@@ -131,45 +154,114 @@ public partial class EngineeringWorkspace : Control
         _schematic = GetNode<EngineeringSchematicView>("%EngineeringSchematic");
         _inspector = GetNode<VBoxContainer>("%ComponentInspectorContent");
         _connectedLoads = GetNode<VBoxContainer>("%ConnectedLoadsContent");
+        _engineeringTabs = GetNode<HBoxContainer>("%EngineeringTabs");
         _actions = GetNode<VBoxContainer>("%EngineeringActionsContent");
+        _actionsHeading = new Label { Text = "ENGINEERING CONTROLS", ThemeTypeVariation = "PanelHeading" };
+        _actions.AddChild(_actionsHeading);
         _powerAllocation = GetNode<VBoxContainer>("%PowerAllocationContent");
+        _schematicHeading = GetNode<Label>("%SchematicHeading");
     }
 
-    private void RebuildHierarchy(CommandInterfaceEngineeringPresentation? engineering)
+    private void ReconcileHierarchy(CommandInterfaceEngineeringPresentation? engineering)
     {
-        ClearChildren(_hierarchy);
-        _hierarchyButtons.Clear();
         if (engineering is null || engineering.Hierarchy.IsDefaultOrEmpty)
         {
+            RemoveAllHierarchyButtons();
+            ClearChildren(_hierarchy);
             AddUnavailable(_hierarchy, "SYSTEM HIERARCHY");
+            SelectedComponentId = null;
+            SetMeta("selected_component_id", string.Empty);
             return;
         }
 
+        RemoveNonButtonChildren(_hierarchy);
+
+        var retainedIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (CommandInterfaceHierarchyRow row in engineering.Hierarchy)
         {
-            string indent = row.ParentId is null ? string.Empty : "    ";
-            string attention = row.AttentionCount > 0 ? $"  [{row.AttentionCount} !]" : string.Empty;
-            string unavailable =
-                row.Availability == CommandInterfaceAvailability.Unavailable ? "  — UNAVAILABLE" : string.Empty;
-            var button = new Button
+            if (!retainedIds.Add(row.Id))
+            {
+                throw new InvalidOperationException($"Duplicate Engineering hierarchy id '{row.Id}'.");
+            }
+        }
+
+        bool selectionRetained =
+            SelectedComponentId is string selectedId
+            && retainedIds.Contains(selectedId)
+            && engineering.Hierarchy.Any(row =>
+                string.Equals(row.Id, selectedId, StringComparison.Ordinal)
+                && row.Availability == CommandInterfaceAvailability.Available
+            );
+        if (!selectionRetained)
+        {
+            SelectedComponentId = engineering
+                .Hierarchy.FirstOrDefault(row =>
+                    row.IsSelected && row.Availability == CommandInterfaceAvailability.Available
+                )
+                ?.Id;
+            SelectedComponentId ??= engineering
+                .Hierarchy.FirstOrDefault(row => row.Availability == CommandInterfaceAvailability.Available)
+                ?.Id;
+        }
+
+        for (int index = 0; index < engineering.Hierarchy.Length; index++)
+        {
+            ReconcileHierarchyButton(engineering.Hierarchy[index], index);
+        }
+
+        foreach (string removedId in _hierarchyButtons.Keys.Where(id => !retainedIds.Contains(id)).ToArray())
+        {
+            RemoveHierarchyButton(removedId);
+        }
+
+        SetMeta("selected_component_id", SelectedComponentId ?? string.Empty);
+    }
+
+    private void ReconcileHierarchyButton(CommandInterfaceHierarchyRow row, int index)
+    {
+        if (!_hierarchyButtons.TryGetValue(row.Id, out Button? button))
+        {
+            string rowId = row.Id;
+            button = new Button
             {
                 Name = $"Hierarchy_{SafeNodeName(row.Id)}",
-                Text = $"{indent}{row.Label}{attention}{unavailable}",
                 Alignment = HorizontalAlignment.Left,
                 FocusMode = FocusModeEnum.All,
                 ToggleMode = true,
-                ButtonPressed = string.Equals(row.Id, SelectedComponentId, StringComparison.Ordinal),
-                Disabled = row.Availability == CommandInterfaceAvailability.Unavailable,
-                ThemeTypeVariation = VariationForButton(row.Tone, row.IsSelected),
-                TooltipText =
-                    row.Availability == CommandInterfaceAvailability.Available
-                        ? $"Inspect {row.Label}."
-                        : $"{row.Label} is not provided by the live simulation.",
             };
-            string rowId = row.Id;
-            button.Pressed += () => SelectComponent(rowId);
+            button.Pressed += () => SelectCurrentComponent(rowId);
             _hierarchy.AddChild(button);
             _hierarchyButtons.Add(row.Id, button);
+        }
+
+        string indent = row.ParentId is null ? string.Empty : "    ";
+        string attention = row.AttentionCount > 0 ? $"  [{row.AttentionCount} !]" : string.Empty;
+        string unavailable =
+            row.Availability == CommandInterfaceAvailability.Unavailable ? "  — UNAVAILABLE" : string.Empty;
+        bool selected = string.Equals(row.Id, SelectedComponentId, StringComparison.Ordinal);
+        button.Text = $"{indent}{row.Label}{attention}{unavailable}";
+        button.ButtonPressed = selected;
+        button.Disabled = row.Availability == CommandInterfaceAvailability.Unavailable;
+        button.ThemeTypeVariation = VariationForButton(row.Tone, selected);
+        button.TooltipText =
+            row.Availability == CommandInterfaceAvailability.Available
+                ? $"Inspect {row.Label}."
+                : $"{row.Label} is not provided by the live simulation.";
+        _presentedHierarchy[row.Id] = row;
+        if (button.GetIndex() != index)
+        {
+            _hierarchy.MoveChild(button, index);
+        }
+    }
+
+    private void SelectCurrentComponent(string componentId)
+    {
+        if (
+            _presentedHierarchy.TryGetValue(componentId, out CommandInterfaceHierarchyRow? row)
+            && row.Availability == CommandInterfaceAvailability.Available
+        )
+        {
+            SelectComponent(componentId);
         }
     }
 
@@ -200,55 +292,155 @@ public partial class EngineeringWorkspace : Control
         RebuildSection(_inspector, "SELECTED COMPONENT", section);
     }
 
-    private void RebuildActions(ImmutableArray<CommandInterfaceAction> actions)
+    private void ReconcileActions(ImmutableArray<CommandInterfaceAction> actions)
     {
-        ClearChildren(_actions);
-        _actionButtons.Clear();
-        AddHeading(_actions, "ENGINEERING CONTROLS");
+        RemoveNonButtonChildren(_actions, _actionsHeading);
+        var allIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (CommandInterfaceAction action in actions)
+        {
+            if (!allIds.Add(action.Id))
+            {
+                throw new InvalidOperationException($"Duplicate Engineering action id '{action.Id}'.");
+            }
+        }
+
         IEnumerable<CommandInterfaceAction> engineeringActions = actions.Where(action =>
             EngineeringActionIds.Contains(action.Id)
         );
-        bool any = false;
-        foreach (CommandInterfaceAction action in engineeringActions)
+        CommandInterfaceAction[] currentActions = [.. engineeringActions];
+        var retainedIds = new HashSet<string>(StringComparer.Ordinal);
+        for (int index = 0; index < currentActions.Length; index++)
         {
-            any = true;
-            bool enabled =
-                action.Availability == CommandInterfaceActionAvailability.Submittable && action.Intent is not null;
-            string suffix = action.Availability switch
-            {
-                CommandInterfaceActionAvailability.PreviewOnly => "  [PREVIEW ONLY]",
-                CommandInterfaceActionAvailability.Disabled => "  [UNAVAILABLE]",
-                _ => string.Empty,
-            };
-            var button = new Button
+            CommandInterfaceAction action = currentActions[index];
+            retainedIds.Add(action.Id);
+            ReconcileActionButton(action, index + 1);
+        }
+
+        foreach (string removedId in _actionButtons.Keys.Where(id => !retainedIds.Contains(id)).ToArray())
+        {
+            Button button = _actionButtons[removedId];
+            _actionButtons.Remove(removedId);
+            _presentedActions.Remove(removedId);
+            _actions.RemoveChild(button);
+            button.QueueFree();
+        }
+
+        if (currentActions.Length == 0 && _actions.GetChildCount() == 1)
+        {
+            AddUnavailable(_actions, "ENGINEERING CONTROLS");
+        }
+    }
+
+    private void ReconcileActionButton(CommandInterfaceAction action, int index)
+    {
+        bool enabled =
+            CurrentDataMode == CommandInterfaceDataMode.Live
+            && action.Availability == CommandInterfaceActionAvailability.Submittable
+            && action.EngineeringCommand is not null;
+        if (!_actionButtons.TryGetValue(action.Id, out Button? button))
+        {
+            string actionId = action.Id;
+            button = new Button
             {
                 Name = $"Action_{SafeNodeName(action.Id)}",
-                Text = action.Label + suffix,
                 Alignment = HorizontalAlignment.Left,
                 FocusMode = FocusModeEnum.All,
-                Disabled = !enabled,
-                ThemeTypeVariation = VariationForButton(action.Tone, false),
-                TooltipText =
-                    enabled ? "Submit this intent to the application boundary for authoritative validation."
-                    : action.Availability == CommandInterfaceActionAvailability.PreviewOnly
-                        ? "Illustrative control; no simulation command will be submitted."
-                    : "The live simulation does not currently support this engineering command.",
             };
-            if (enabled)
-            {
-                CommandInterfaceIntent intent = action.Intent!.Value;
-                button.Pressed += () =>
-                    EngineeringCommandRequested?.Invoke(this, new EngineeringCommandRequestedEventArgs(intent));
-            }
-
+            button.Pressed += () => OnActionPressed(actionId);
             _actions.AddChild(button);
             _actionButtons.Add(action.Id, button);
         }
 
-        if (!any)
+        string suffix = action.Availability switch
         {
-            AddUnavailable(_actions, "ENGINEERING CONTROLS");
+            CommandInterfaceActionAvailability.PreviewOnly => "  [PREVIEW ONLY]",
+            CommandInterfaceActionAvailability.Disabled => "  [UNAVAILABLE]",
+            _ when CurrentDataMode != CommandInterfaceDataMode.Live => "  [NON-SUBMITTING]",
+            _ => string.Empty,
+        };
+        string text = action.Label + suffix;
+        bool disabled = !enabled;
+        StringName variation = VariationForButton(action.Tone, false);
+        string tooltip = ActionTooltip(action, enabled);
+        if (!string.Equals(button.Text, text, StringComparison.Ordinal))
+        {
+            button.Text = text;
         }
+
+        if (button.Disabled != disabled)
+        {
+            button.Disabled = disabled;
+        }
+
+        if (button.ThemeTypeVariation != variation)
+        {
+            button.ThemeTypeVariation = variation;
+        }
+
+        if (!string.Equals(button.TooltipText, tooltip, StringComparison.Ordinal))
+        {
+            button.TooltipText = tooltip;
+        }
+
+        _presentedActions[action.Id] = action;
+        if (button.GetIndex() != index)
+        {
+            _actions.MoveChild(button, index);
+        }
+    }
+
+    private static string ActionTooltip(CommandInterfaceAction action, bool enabled) =>
+        action.Tooltip
+        ?? (
+            enabled ? "Submit this intent to the application boundary for authoritative validation."
+            : action.Availability == CommandInterfaceActionAvailability.PreviewOnly
+                ? "Illustrative control; no simulation command will be submitted."
+            : "The live simulation does not currently support this engineering command."
+        );
+
+    private void OnActionPressed(string actionId)
+    {
+        if (
+            CurrentDataMode == CommandInterfaceDataMode.Live
+            && IsActionEnabled(actionId)
+            && _presentedActions.TryGetValue(actionId, out CommandInterfaceAction? action)
+            && action.EngineeringCommand is not null
+        )
+        {
+            EngineeringCommandRequested?.Invoke(this, new EngineeringCommandRequestedEventArgs(action));
+        }
+    }
+
+    private void RestorePendingFocus()
+    {
+        Button? button = _pendingFocusRestore;
+        _pendingFocusRestore = null;
+        if (
+            button is not null
+            && GodotObject.IsInstanceValid(button)
+            && button.IsInsideTree()
+            && (_actionButtons.ContainsValue(button) || _hierarchyButtons.ContainsValue(button))
+        )
+        {
+            button.GrabFocus();
+        }
+    }
+
+    private void RemoveAllHierarchyButtons()
+    {
+        foreach (string id in _hierarchyButtons.Keys.ToArray())
+        {
+            RemoveHierarchyButton(id);
+        }
+    }
+
+    private void RemoveHierarchyButton(string id)
+    {
+        Button button = _hierarchyButtons[id];
+        _hierarchyButtons.Remove(id);
+        _presentedHierarchy.Remove(id);
+        _hierarchy.RemoveChild(button);
+        button.QueueFree();
     }
 
     private static void RebuildSection(
@@ -298,6 +490,15 @@ public partial class EngineeringWorkspace : Control
     private static void ClearChildren(Node parent)
     {
         foreach (Node child in parent.GetChildren())
+        {
+            parent.RemoveChild(child);
+            child.QueueFree();
+        }
+    }
+
+    private static void RemoveNonButtonChildren(Node parent, Node? retained = null)
+    {
+        foreach (Node child in parent.GetChildren().Where(child => child is not Button && child != retained))
         {
             parent.RemoveChild(child);
             child.QueueFree();

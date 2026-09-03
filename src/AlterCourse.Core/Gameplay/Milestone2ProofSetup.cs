@@ -25,7 +25,7 @@ internal static class Milestone2ProofSetup
             [new StrategicRoute(alpha.Id, beta.Id, new SimulationDuration(6 * HourMilliseconds))]
         );
         var initialTime = new SimulationTime(3 * HourMilliseconds);
-        var fullIntegrity = new SensorIntegrity(1);
+        var fullIntegrity = new SystemCondition(1);
         ShipStart[] starts =
         [
             new(

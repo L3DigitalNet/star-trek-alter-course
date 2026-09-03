@@ -155,6 +155,10 @@ public sealed class GameSimulationTests
     {
         GameSimulation game = CreateGame();
         Assert.Equal(
+            PowerAllocationOutcome.Accepted,
+            game.ApplyPowerAllocationPreset(PowerAllocationPreset.PrioritizePropulsion).Outcome
+        );
+        Assert.Equal(
             SetTacticalCourseOutcome.Accepted,
             game.SetTacticalCourse(
                 new SetTacticalCourseIntent(new HeadingDegrees(heading), new SpeedKilometersPerSecond(10))
@@ -202,7 +206,7 @@ public sealed class GameSimulationTests
         PlayerProjection initial = game.GetPlayerProjection();
 
         Assert.Equal(
-            SetTacticalCourseOutcome.SpeedExceedsMaximum,
+            SetTacticalCourseOutcome.SpeedExceedsCurrentCapability,
             game.SetTacticalCourse(
                 new SetTacticalCourseIntent(new HeadingDegrees(10), new SpeedKilometersPerSecond(10.01))
             ).Outcome
@@ -229,6 +233,10 @@ public sealed class GameSimulationTests
     public void MaximumTacticalSpeedIsAccepted()
     {
         GameSimulation game = CreateGame();
+        Assert.Equal(
+            PowerAllocationOutcome.Accepted,
+            game.ApplyPowerAllocationPreset(PowerAllocationPreset.PrioritizePropulsion).Outcome
+        );
 
         SetTacticalCourseResult result = game.SetTacticalCourse(
             new SetTacticalCourseIntent(new HeadingDegrees(0), new SpeedKilometersPerSecond(10))
@@ -278,8 +286,9 @@ public sealed class GameSimulationTests
         Assert.Equal(AdvanceUntilOutcome.PlayerEventResolved, repair.Outcome);
         Assert.Equal(8000, repair.StoppedAt.Milliseconds);
         var repairCompleted = new PlayerAdvanceEvent(
-            PlayerAdvanceEventKind.SensorRepairCompleted,
-            new SimulationTime(8000)
+            PlayerAdvanceEventKind.SystemRepairCompleted,
+            new SimulationTime(8000),
+            ShipSystemId: ShipSystemId.Sensors
         );
         Assert.Equal([repairCompleted], repair.ResolvedEvents);
         Assert.NotNull(repair.Projection.Strategic.Travel);
@@ -437,12 +446,13 @@ public sealed class GameSimulationTests
                         $"USS Test {index}",
                         isMover ? default : new TacticalPosition(index, -index),
                         isMover ? new TacticalMotion(new HeadingDegrees(90), new SpeedKilometersPerSecond(1)) : default,
-                        new SensorIntegrity(isRepairing ? 0.4 : 1),
+                        new SystemCondition(isRepairing ? 0.4 : 1),
                         new AtLocationStart(location.Id),
                         isRepairing
-                            ? new SensorRepairStart(
-                                new SensorIntegrity(0.4),
-                                new SensorIntegrity(1),
+                            ? new SystemRepairStart(
+                                ShipSystemId.Sensors,
+                                new SystemCondition(0.4),
+                                new SystemCondition(1),
                                 new SimulationTime(0)
                             )
                             : null
@@ -465,8 +475,8 @@ public sealed class GameSimulationTests
         Assert.Equal(stepCount * 100, result.FinalTime.Milliseconds);
         Assert.Equal(500, final.GetRequiredShip(new ShipInstanceId(1)).TacticalPosition.XKilometers, 8);
         Assert.Equal(inactivePosition, final.GetRequiredShip(new ShipInstanceId(shipCount)).TacticalPosition);
-        Assert.Equal(1, final.GetRequiredShip(new ShipInstanceId(2)).SensorIntegrity.Value);
-        Assert.Null(final.GetRequiredShip(new ShipInstanceId(2)).SensorRepair);
+        Assert.Equal(1, final.GetRequiredShip(new ShipInstanceId(2)).Engineering.SensorCondition.Value);
+        Assert.Null(final.GetRequiredShip(new ShipInstanceId(2)).Engineering.ActiveRepair);
     }
 
     /// <summary>Confirms bootstrap cannot admit scheduled work that persistence would reject for time exhaustion.</summary>
@@ -485,7 +495,7 @@ public sealed class GameSimulationTests
             "USS Boundary",
             default,
             default,
-            new SensorIntegrity(1),
+            new SystemCondition(1),
             new TravelingStart(origin.Id, destination.Id, new SimulationTime(0))
         );
 
@@ -511,7 +521,7 @@ public sealed class GameSimulationTests
             "USS Pathfinder",
             new TacticalPosition(3.25, -7.5),
             default,
-            new SensorIntegrity(1),
+            new SystemCondition(1),
             new AtLocationStart(location.Id)
         );
         return new GameBootstrap(
@@ -526,17 +536,17 @@ public sealed class GameSimulationTests
     {
         const string definition = """
             {
-              "schemaVersion": 3,
+              "schemaVersion": 4,
               "id": "pathfinder",
               "designDisplayName": "Pathfinder class",
               "maximumTacticalSpeedKilometersPerSecond": 10,
               "passiveSensorRangeKilometers": 30.0,
               "activeScanDurationMilliseconds": 2000,
-              "sensorRepairDurationMilliseconds": 8000
+              "engineering": { "nominalGenerationPowerUnits": 120, "nominalSensorDemandPowerUnits": 70, "nominalImpulseDemandPowerUnits": 50, "sensorRepairDurationMilliseconds": 8000, "impulseRepairDurationMilliseconds": 6000 }
             }
             """;
         string schema = File.ReadAllText(
-            Path.Combine(FindRepositoryRoot(), "src/AlterCourse.Godot/content/schemas/ship-definition-v3.schema.json")
+            Path.Combine(FindRepositoryRoot(), "src/AlterCourse.Godot/content/schemas/ship-definition-v4.schema.json")
         );
         ShipDefinitionCatalog catalog = new ShipDefinitionCatalogLoader(schema).LoadCatalog([
             ShipDefinitionContent.FromText("pathfinder.json", definition),

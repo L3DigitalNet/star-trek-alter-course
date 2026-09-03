@@ -17,8 +17,7 @@ internal sealed record ShipState
         string vesselDisplayName,
         TacticalPosition tacticalPosition,
         TacticalMotion tacticalMotion,
-        SensorIntegrity sensorIntegrity,
-        SensorRepairState? sensorRepair,
+        ShipEngineeringState engineering,
         ShipStrategicState strategicState,
         ShipOrder? activeOrder = null,
         SensorKnowledge? sensorKnowledge = null,
@@ -47,6 +46,7 @@ internal sealed record ShipState
             );
         }
 
+        ArgumentNullException.ThrowIfNull(engineering);
         ArgumentNullException.ThrowIfNull(strategicState);
 
         InstanceId = instanceId;
@@ -54,8 +54,7 @@ internal sealed record ShipState
         VesselDisplayName = vesselDisplayName;
         TacticalPosition = tacticalPosition;
         TacticalMotion = tacticalMotion;
-        SensorIntegrity = sensorIntegrity;
-        SensorRepair = sensorRepair;
+        Engineering = engineering;
         StrategicState = strategicState;
         ActiveOrder = activeOrder;
         SensorKnowledge = sensorKnowledge ?? SensorKnowledge.Empty;
@@ -67,8 +66,7 @@ internal sealed record ShipState
     internal string VesselDisplayName { get; }
     internal TacticalPosition TacticalPosition { get; init; }
     internal TacticalMotion TacticalMotion { get; init; }
-    internal SensorIntegrity SensorIntegrity { get; init; }
-    internal SensorRepairState? SensorRepair { get; init; }
+    internal ShipEngineeringState Engineering { get; init; }
     internal ShipStrategicState StrategicState { get; init; }
     internal ShipOrder? ActiveOrder { get; init; }
     internal SensorKnowledge SensorKnowledge { get; init; }

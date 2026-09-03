@@ -6,8 +6,8 @@ internal enum ScheduledWorkKind
     /// <summary>Completes travel at a destination.</summary>
     TravelArrival = 1,
 
-    /// <summary>Completes repair of a ship sensor system.</summary>
-    SensorRepairCompletion = 2,
+    /// <summary>Completes one exactly correlated ship-system repair.</summary>
+    SystemRepairCompletion = 2,
 
     /// <summary>Wakes an active order at its next decision boundary.</summary>
     OrderWake = 3,

@@ -1,9 +1,15 @@
 {
-	"schemaVersion": 3,
+	"schemaVersion": 4,
 	"id": "pathfinder",
 	"designDisplayName": "Pathfinder class",
 	"maximumTacticalSpeedKilometersPerSecond": 10,
 	"passiveSensorRangeKilometers": 30.0,
 	"activeScanDurationMilliseconds": 2000,
-	"sensorRepairDurationMilliseconds": 8000
+	"engineering": {
+		"nominalGenerationPowerUnits": 120,
+		"nominalSensorDemandPowerUnits": 70,
+		"nominalImpulseDemandPowerUnits": 50,
+		"sensorRepairDurationMilliseconds": 8000,
+		"impulseRepairDurationMilliseconds": 6000
+	}
 }

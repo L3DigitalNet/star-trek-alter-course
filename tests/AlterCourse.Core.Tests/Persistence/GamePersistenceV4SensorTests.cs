@@ -33,8 +33,8 @@ public sealed class GamePersistenceV4SensorTests
         JsonArray ships = root["simulation"]!["ships"]!.AsArray();
 
         Assert.Equal(first, second);
-        Assert.Equal(4, root["schemaVersion"]!.GetValue<int>());
-        Assert.Equal("sensor-knowledge-first-contact-v1", root["simulationRulesVersion"]!.GetValue<string>());
+        Assert.Equal(5, root["schemaVersion"]!.GetValue<int>());
+        Assert.Equal("engineering-backbone-v1", root["simulationRulesVersion"]!.GetValue<string>());
         Assert.Equal(
             "identified",
             ships[0]!["sensorKnowledge"]!["contacts"]![0]!["identification"]!.GetValue<string>()
@@ -58,7 +58,7 @@ public sealed class GamePersistenceV4SensorTests
         JsonNode simulation = current["simulation"]!;
         JsonNode npc = simulation["ships"]![1]!;
 
-        Assert.Equal(4, current["schemaVersion"]!.GetValue<int>());
+        Assert.Equal(5, current["schemaVersion"]!.GetValue<int>());
         Assert.Equal("holdUntil", npc["activeOrder"]!["kind"]!.GetValue<string>());
         Assert.Equal("orderWake", simulation["scheduler"]!["outstandingWork"]![0]!["kind"]!.GetValue<string>());
         Assert.Equal(1, npc["sensorKnowledge"]!["nextContactId"]!.GetValue<long>());
@@ -67,6 +67,114 @@ public sealed class GamePersistenceV4SensorTests
         Assert.Null(npc["autonomousState"]!["contactPosture"]);
         Assert.Null(npc["autonomousState"]!["pendingContactDecisionWake"]);
         Assert.Single(simulation["scheduler"]!["outstandingWork"]!.AsArray());
+    }
+
+    /// <summary>Confirms a fully populated native V4 graph migrates without losing identity or work order.</summary>
+    [Fact]
+    public void MigratesPopulatedNativeV4GraphAndContinuesDeterministically()
+    {
+        byte[] fixture = CreatePopulatedNativeV4Save();
+        JsonObject source = Parse(fixture);
+        Assert.Equal(4, source["schemaVersion"]!.GetValue<int>());
+        Assert.Equal("sensor-knowledge-first-contact-v1", source["simulationRulesVersion"]!.GetValue<string>());
+
+        LoadedGameSave migrated = GamePersistence.Deserialize(fixture, Catalog(), "native-populated-v4.json");
+        AssertPopulatedNativeV4Migration(migrated.Simulation);
+
+        byte[] migratedV5 = GamePersistence.Serialize(migrated.Simulation, migrated.Metadata);
+        AssertCurrentOrdering(migratedV5);
+        LoadedGameSave resumed = GamePersistence.Deserialize(migratedV5, Catalog(), "native-populated-v5.json");
+
+        AssertNativeV4Continuation(migrated, resumed);
+    }
+
+    private static void AssertPopulatedNativeV4Migration(GameSimulation simulation)
+    {
+        SimulationState state = simulation.CaptureState();
+        ShipState player = state.GetRequiredShip(new ShipInstanceId(1));
+        ShipState cautiousNpc = state.GetRequiredShip(new ShipInstanceId(2));
+        SensorContactTrack learned = Assert.Single(player.SensorKnowledge.Contacts, contact => contact.Id.Value == 7);
+        ActiveSensorScanState scan = Assert.IsType<ActiveSensorScanState>(player.SensorKnowledge.ActiveScan);
+        SystemRepairState repair = Assert.IsType<SystemRepairState>(player.Engineering.ActiveRepair);
+        ShipContactDecisionWake wake = Assert.IsType<ShipContactDecisionWake>(
+            cautiousNpc.AutonomousState.PendingContactDecisionWake
+        );
+
+        Assert.Equal(new SimulationTime(100), state.Time);
+        Assert.Equal([1L, 2L, 3L], state.Ships.Select(ship => ship.InstanceId.Value));
+        Assert.Equal(9, player.SensorKnowledge.NextContactId);
+        Assert.Equal(new ShipInstanceId(2), learned.TargetShipId);
+        Assert.Equal(SensorContactIdentification.Identified, learned.Identification);
+        Assert.Equal("NPC One", learned.KnownVesselDisplayName);
+        Assert.Equal("Pathfinder", learned.KnownDesignDisplayName);
+        Assert.Equal(new SensorContactId(8), scan.TargetContactId);
+        Assert.Equal(new SimulationTime(100), scan.StartedAt);
+        Assert.Equal(new SimulationTime(2_100), scan.ExpectedCompletion);
+        Assert.Equal(new ScheduledWorkId(2), scan.ScheduledCompletionId);
+        Assert.Equal(ShipSystemId.Sensors, repair.TargetSystem);
+        Assert.Equal(new SystemCondition(0.5), repair.StartingCondition);
+        Assert.Equal(new SystemCondition(1), repair.TargetCondition);
+        Assert.Equal(new SimulationTime(100), repair.StartedAt);
+        Assert.Equal(new SimulationTime(8_100), repair.ExpectedCompletion);
+        Assert.Equal(new ScheduledWorkId(3), repair.ScheduledCompletionId);
+        Assert.Equal(ShipContactPosture.CautiousContact, cautiousNpc.AutonomousState.ContactPosture);
+        Assert.Equal(new ScheduledWorkId(1), wake.ScheduledWorkId);
+        Assert.Equal(new SimulationTime(100), wake.DueTime);
+        Assert.Equal(
+            [
+                (1L, 100L, 0L, 2L, ScheduledWorkKind.ShipContactDecisionWake),
+                (2L, 2_100L, 1L, 1L, ScheduledWorkKind.ActiveSensorScanCompletion),
+                (3L, 8_100L, 2L, 1L, ScheduledWorkKind.SystemRepairCompletion),
+            ],
+            state.Scheduler.OutstandingWork.Select(work =>
+                (work.Id.Value, work.DueTime.Milliseconds, work.Sequence, work.TargetShipId.Value, work.Kind)
+            )
+        );
+    }
+
+    private static void AssertCurrentOrdering(byte[] migratedV5)
+    {
+        JsonObject current = Parse(migratedV5);
+        Assert.Equal(5, current["schemaVersion"]!.GetValue<int>());
+        Assert.Equal(
+            [1L, 2L, 3L],
+            current["simulation"]!["ships"]!.AsArray().Select(ship => ship!["instanceId"]!.GetValue<long>())
+        );
+        Assert.Equal(
+            [7L, 8L],
+            current["simulation"]!["ships"]![0]!["sensorKnowledge"]!["contacts"]!
+                .AsArray()
+                .Select(contact => contact!["id"]!.GetValue<long>())
+        );
+    }
+
+    private static void AssertNativeV4Continuation(LoadedGameSave migrated, LoadedGameSave resumed)
+    {
+        Assert.Equal(migrated.Simulation.AdvanceFixedSteps(1), resumed.Simulation.AdvanceFixedSteps(1));
+
+        SimulationAdvanceResult scanCompletion = migrated.Simulation.AdvanceFixedSteps(19);
+        Assert.Equal(scanCompletion, resumed.Simulation.AdvanceFixedSteps(19));
+        Assert.Contains(
+            scanCompletion.ResolvedEvents,
+            item =>
+                item.Kind == PlayerAdvanceEventKind.ActiveSensorScanCompleted
+                && item.SensorContactId == new SensorContactId(8)
+                && item.OccurredAt == new SimulationTime(2_100)
+        );
+
+        SimulationAdvanceResult repairCompletion = migrated.Simulation.AdvanceFixedSteps(60);
+        Assert.Equal(repairCompletion, resumed.Simulation.AdvanceFixedSteps(60));
+        Assert.Contains(
+            repairCompletion.ResolvedEvents,
+            item =>
+                item.Kind == PlayerAdvanceEventKind.SystemRepairCompleted
+                && item.ShipSystemId == ShipSystemId.Sensors
+                && item.OccurredAt == new SimulationTime(8_100)
+        );
+        Assert.Equal(
+            GamePersistence.Serialize(migrated.Simulation, migrated.Metadata),
+            GamePersistence.Serialize(resumed.Simulation, resumed.Metadata)
+        );
     }
 
     /// <summary>Confirms malformed V4 knowledge and work graphs fail before another simulation can change.</summary>
@@ -147,7 +255,7 @@ public sealed class GamePersistenceV4SensorTests
         byte[] saved = GamePersistence.Serialize(simulation, metadata);
         LoadedGameSave loaded = GamePersistence.Deserialize(saved, catalog, "maximum-contacts-v4.json");
 
-        Assert.Equal(95_632_438, saved.Length);
+        Assert.Equal(95_677_740, saved.Length);
         Assert.InRange(saved.Length, 1, 128 * 1024 * 1024);
         Assert.Equal(256, loaded.Simulation.CaptureState().Ships.Length);
         Assert.All(
@@ -259,8 +367,12 @@ public sealed class GamePersistenceV4SensorTests
             maximumName,
             new TacticalPosition(observerIndex, -observerIndex),
             default,
-            new SensorIntegrity(1),
-            null,
+            new ShipEngineeringState(
+                new SystemCondition(1),
+                new SystemCondition(1),
+                new SystemCondition(1),
+                new PowerAllocation(new(70), new(50))
+            ),
             new AtLocationState(locationId),
             sensorKnowledge: new SensorKnowledge(SensorKnowledge.MaximumContactsPerObserver + 1L, contacts)
         );
@@ -362,7 +474,20 @@ public sealed class GamePersistenceV4SensorTests
         );
 
     private static ShipState Ship(ShipInstanceId id, string name) =>
-        new(id, DefinitionId, name, default, default, new SensorIntegrity(1), null, new AtLocationState(Location));
+        new(
+            id,
+            DefinitionId,
+            name,
+            default,
+            default,
+            new ShipEngineeringState(
+                new SystemCondition(1),
+                new SystemCondition(1),
+                new SystemCondition(1),
+                new PowerAllocation(new(70), new(50))
+            ),
+            new AtLocationState(Location)
+        );
 
     private static void ApplyMutation(JsonObject root, string mutation)
     {
@@ -470,6 +595,92 @@ public sealed class GamePersistenceV4SensorTests
             }
             """
         );
+
+    private static byte[] CreatePopulatedNativeV4Save() =>
+        Encoding.UTF8.GetBytes(
+            $$"""
+            {
+              "schemaVersion": 4,
+              "simulationRulesVersion": "sensor-knowledge-first-contact-v1",
+              "metadata": { "saveId": "native-v4", "displayName": "Native V4", "createdAtUtc": "2026-09-03T00:00:00+00:00", "savedAtUtc": "2026-09-03T00:00:00+00:00" },
+              "simulation": {
+                "timeMilliseconds": 100,
+                "shipAllocatorNextId": 4,
+                "orderAllocatorNextId": 1,
+                "playerShipId": 1,
+                "scheduler": {
+                  "nextWorkId": 4,
+                  "nextSequence": 3,
+                  "outstandingWork": [
+                    { "id": 1, "dueTimeMilliseconds": 100, "sequence": 0, "kind": "shipContactDecisionWake", "targetShipId": 2 },
+                    { "id": 2, "dueTimeMilliseconds": 2100, "sequence": 1, "kind": "activeSensorScanCompletion", "targetShipId": 1 },
+                    { "id": 3, "dueTimeMilliseconds": 8100, "sequence": 2, "kind": "sensorRepairCompletion", "targetShipId": 1 }
+                  ]
+                },
+                "strategicMap": {
+                  "locations": [{ "id": "alpha", "displayName": "Alpha", "position": { "xUnitless": 0, "yUnitless": 0 } }],
+                  "routes": []
+                },
+                "ships": [
+                  {{NativeV4PlayerJson()}},
+                  {{NativeV4CautiousNpcJson()}},
+                  {{NativeV4SecondNpcJson()}}
+                ]
+              }
+            }
+            """
+        );
+
+    private static string NativeV4PlayerJson() =>
+        """
+            {
+              "instanceId": 1, "definitionId": "pathfinder", "displayName": "Player",
+              "tacticalPosition": { "xKilometers": 0, "yKilometers": 0 },
+              "tacticalMotion": { "headingDegrees": 0, "speedKilometersPerSecond": 0 },
+              "sensorIntegrity": 0.5,
+              "sensorRepair": { "startingIntegrity": 0.5, "targetIntegrity": 1, "startedAtMilliseconds": 100, "expectedCompletionMilliseconds": 8100, "scheduledCompletionId": 3 },
+              "strategicState": { "kind": "atLocation", "locationId": "alpha", "travel": null }, "activeOrder": null,
+              "sensorKnowledge": {
+                "nextContactId": 9,
+                "contacts": [
+                  { "id": 7, "targetShipId": 2, "lastObservedPosition": { "xKilometers": 3, "yKilometers": -4 }, "lastObservedAtMilliseconds": 100, "status": "current", "identification": "identified", "knownVesselDisplayName": "NPC One", "knownDesignDisplayName": "Pathfinder", "lossWorkId": null, "lossDueTimeMilliseconds": null },
+                  { "id": 8, "targetShipId": 3, "lastObservedPosition": { "xKilometers": 6, "yKilometers": -8 }, "lastObservedAtMilliseconds": 100, "status": "current", "identification": "detected", "knownVesselDisplayName": null, "knownDesignDisplayName": null, "lossWorkId": null, "lossDueTimeMilliseconds": null }
+                ],
+                "activeScan": { "targetContactId": 8, "startedAtMilliseconds": 100, "expectedCompletionMilliseconds": 2100, "scheduledCompletionId": 2 }
+              },
+              "autonomousState": { "contactPosture": null, "pendingContactDecisionWake": null }
+            }
+            """;
+
+    private static string NativeV4CautiousNpcJson() =>
+        """
+            {
+              "instanceId": 2, "definitionId": "pathfinder", "displayName": "NPC One",
+              "tacticalPosition": { "xKilometers": 3, "yKilometers": -4 },
+              "tacticalMotion": { "headingDegrees": 0, "speedKilometersPerSecond": 0 },
+              "sensorIntegrity": 1, "sensorRepair": null,
+              "strategicState": { "kind": "atLocation", "locationId": "alpha", "travel": null }, "activeOrder": null,
+              "sensorKnowledge": {
+                "nextContactId": 4,
+                "contacts": [{ "id": 3, "targetShipId": 1, "lastObservedPosition": { "xKilometers": 0, "yKilometers": 0 }, "lastObservedAtMilliseconds": 100, "status": "current", "identification": "detected", "knownVesselDisplayName": null, "knownDesignDisplayName": null, "lossWorkId": null, "lossDueTimeMilliseconds": null }],
+                "activeScan": null
+              },
+              "autonomousState": { "contactPosture": "cautiousContact", "pendingContactDecisionWake": { "scheduledWorkId": 1, "dueTimeMilliseconds": 100 } }
+            }
+            """;
+
+    private static string NativeV4SecondNpcJson() =>
+        """
+            {
+              "instanceId": 3, "definitionId": "pathfinder", "displayName": "NPC Two",
+              "tacticalPosition": { "xKilometers": 6, "yKilometers": -8 },
+              "tacticalMotion": { "headingDegrees": 0, "speedKilometersPerSecond": 0 },
+              "sensorIntegrity": 1, "sensorRepair": null,
+              "strategicState": { "kind": "atLocation", "locationId": "alpha", "travel": null }, "activeOrder": null,
+              "sensorKnowledge": { "nextContactId": 1, "contacts": [], "activeScan": null },
+              "autonomousState": { "contactPosture": null, "pendingContactDecisionWake": null }
+            }
+            """;
 
     private static string ShipJson(long id, string name, string order) =>
         $$"""{ "instanceId": {{id}}, "definitionId": "pathfinder", "displayName": "{{name}}", "tacticalPosition": { "xKilometers": 0, "yKilometers": 0 }, "tacticalMotion": { "headingDegrees": 0, "speedKilometersPerSecond": 0 }, "sensorIntegrity": 1, "sensorRepair": null, "strategicState": { "kind": "atLocation", "locationId": "alpha", "travel": null }, "activeOrder": {{order}} }""";

@@ -309,7 +309,7 @@ public sealed class GameBootstrapOrderTests
             $"Ship {id.Value}",
             default,
             default,
-            new SensorIntegrity(1),
+            new SystemCondition(1),
             strategic,
             ActiveOrder: activeOrder
         );

@@ -11,7 +11,7 @@ public sealed class SimulationSchedulerTests
     public void ScheduledWorkKindNumericIdentitiesRemainStable()
     {
         Assert.Equal(1, (int)ScheduledWorkKind.TravelArrival);
-        Assert.Equal(2, (int)ScheduledWorkKind.SensorRepairCompletion);
+        Assert.Equal(2, (int)ScheduledWorkKind.SystemRepairCompletion);
         Assert.Equal(3, (int)ScheduledWorkKind.OrderWake);
         Assert.Equal(4, (int)ScheduledWorkKind.SensorContactLoss);
         Assert.Equal(5, (int)ScheduledWorkKind.ActiveSensorScanCompletion);
@@ -81,7 +81,7 @@ public sealed class SimulationSchedulerTests
         (SimulationScheduler afterBoundary, ScheduledWork boundary) = afterEarlier.Schedule(
             new SimulationTime(500),
             Target(),
-            ScheduledWorkKind.SensorRepairCompletion
+            ScheduledWorkKind.SystemRepairCompletion
         );
         (SimulationScheduler afterFuture, ScheduledWork future) = afterBoundary.Schedule(
             new SimulationTime(501),
@@ -135,7 +135,7 @@ public sealed class SimulationSchedulerTests
         (SimulationScheduler afterSecond, ScheduledWork second) = afterFirst.Schedule(
             new SimulationTime(200),
             Target(2),
-            ScheduledWorkKind.SensorRepairCompletion
+            ScheduledWorkKind.SystemRepairCompletion
         );
         (SimulationScheduler scheduled, ScheduledWork third) = afterSecond.Schedule(
             new SimulationTime(300),
@@ -240,7 +240,7 @@ public sealed class SimulationSchedulerTests
         (SimulationScheduler rescheduled, ScheduledWork second) = remaining.Schedule(
             new SimulationTime(100),
             Target(),
-            ScheduledWorkKind.SensorRepairCompletion
+            ScheduledWorkKind.SystemRepairCompletion
         );
 
         (SimulationScheduler final, IReadOnlyList<ScheduledWork> secondBatch) = rescheduled.DequeueDue(
@@ -268,7 +268,7 @@ public sealed class SimulationSchedulerTests
             new SimulationTime(200),
             8,
             Target(1),
-            ScheduledWorkKind.SensorRepairCompletion
+            ScheduledWorkKind.SystemRepairCompletion
         );
 
         var restored = SimulationScheduler.Restore(8, 13, [later, earlier]);
@@ -308,7 +308,7 @@ public sealed class SimulationSchedulerTests
         (SimulationScheduler live, ScheduledWork future) = afterFirst.Schedule(
             new SimulationTime(300),
             Target(),
-            ScheduledWorkKind.SensorRepairCompletion
+            ScheduledWorkKind.SystemRepairCompletion
         );
         (SimulationScheduler postDequeue, _) = live.DequeueDue(new SimulationTime(100));
 

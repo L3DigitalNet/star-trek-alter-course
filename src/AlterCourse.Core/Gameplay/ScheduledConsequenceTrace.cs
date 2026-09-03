@@ -2,6 +2,7 @@ using AlterCourse.Core.AI;
 using AlterCourse.Core.Identity;
 using AlterCourse.Core.Orders;
 using AlterCourse.Core.Sensors;
+using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 
 namespace AlterCourse.Core.Gameplay;
@@ -18,5 +19,6 @@ internal sealed record ScheduledConsequenceTrace(
     bool Completed,
     bool RandomnessUsed,
     SensorContactId? ContactId = null,
+    ShipSystemId? SystemId = null,
     ShipContactDecisionExplanation? ContactDecision = null
 );

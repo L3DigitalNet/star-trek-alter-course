@@ -38,20 +38,20 @@ public sealed class Milestone3ProofScenarioTests
         );
         Assert.Equal(5, state.ShipIdAllocator.NextId);
         Assert.Equal(new LocationId("dawn-anchor"), Assert.IsType<AtLocationState>(player.StrategicState).LocationId);
-        Assert.NotNull(player.SensorRepair);
+        Assert.NotNull(player.Engineering.ActiveRepair);
         Assert.Equal(
             new LocationId("vesper-reach"),
             Assert.IsType<AtLocationState>(wayfarer.StrategicState).LocationId
         );
-        Assert.NotNull(wayfarer.SensorRepair);
+        Assert.Null(wayfarer.Engineering.ActiveRepair);
         TravelingState horizonTravel = Assert.IsType<TravelingState>(horizon.StrategicState);
         Assert.Equal(new LocationId("vesper-reach"), horizonTravel.Travel.Origin);
         Assert.Equal(new LocationId("meridian-drift"), horizonTravel.Travel.Destination);
 
         Assert.Equal(new TacticalPosition(21.25, -7.5), kestrel.TacticalPosition);
         Assert.Equal(default, kestrel.TacticalMotion);
-        Assert.Equal(1, kestrel.SensorIntegrity.Value);
-        Assert.Null(kestrel.SensorRepair);
+        Assert.Equal(1, kestrel.Engineering.SensorCondition.Value);
+        Assert.Null(kestrel.Engineering.ActiveRepair);
         Assert.Null(kestrel.ActiveOrder);
         Assert.Equal(new LocationId("dawn-anchor"), Assert.IsType<AtLocationState>(kestrel.StrategicState).LocationId);
         Assert.Equal(ShipContactPosture.CautiousContact, kestrel.AutonomousState.ContactPosture);
@@ -62,19 +62,14 @@ public sealed class Milestone3ProofScenarioTests
         Assert.Equal(new SimulationTime(0), npcContact.LastObservedAt);
         Assert.Empty(game.GetPlayerProjection().Ship.Sensors.Contacts);
         Assert.Equal(
-            [
-                (4L, 0L, "ShipContactDecisionWake"),
-                (1L, 8000L, "SensorRepairCompletion"),
-                (2L, 8000L, "SensorRepairCompletion"),
-                (3L, 14000L, "TravelArrival"),
-            ],
+            [(4L, 0L, "ShipContactDecisionWake"), (1L, 8000L, "SystemRepairCompletion"), (3L, 14000L, "TravelArrival")],
             state.Scheduler.OutstandingWork.Select(work =>
                 (work.TargetShipId.Value, work.DueTime.Milliseconds, work.Kind.ToString())
             )
         );
 
         JsonObject root = JsonNode.Parse(GamePersistence.Serialize(game, Milestone3ProofFixture.Metadata))!.AsObject();
-        Assert.Equal(4, root["schemaVersion"]!.GetValue<int>());
+        Assert.Equal(5, root["schemaVersion"]!.GetValue<int>());
         Assert.Equal(5, root["simulation"]!["shipAllocatorNextId"]!.GetValue<long>());
         Assert.Equal(4, root["simulation"]!["ships"]!.AsArray().Count);
     }
@@ -84,6 +79,10 @@ public sealed class Milestone3ProofScenarioTests
     public void PrimaryScenarioPersistsMidScanAndAfterAcknowledgedHail()
     {
         GameSimulation uninterrupted = _fixture.CreateDefault();
+        Assert.Equal(
+            PowerAllocationOutcome.Accepted,
+            uninterrupted.ApplyPowerAllocationPreset(PowerAllocationPreset.PrioritizeSensors).Outcome
+        );
         AdvanceUntilResult acquisition = uninterrupted.AdvanceUntilNextPlayerRelevantEvent();
         Assert.Equal(3500, acquisition.StoppedAt.Milliseconds);
         Assert.Equal(PlayerAdvanceEventKind.SensorContactDetected, Assert.Single(acquisition.ResolvedEvents).Kind);
@@ -129,7 +128,7 @@ public sealed class Milestone3ProofScenarioTests
 
         SimulationAdvanceResult repair = postHail.AdvanceFixedSteps(25);
         Assert.Equal(8000, repair.FinalTime.Milliseconds);
-        Assert.Equal(PlayerAdvanceEventKind.SensorRepairCompleted, Assert.Single(repair.ResolvedEvents).Kind);
+        Assert.Equal(PlayerAdvanceEventKind.SystemRepairCompleted, Assert.Single(repair.ResolvedEvents).Kind);
         Assert.Equal(1, repair.Projection.Ship.Sensors.Integrity);
         Assert.False(repair.Projection.Ship.Sensors.IsRepairing);
         Assert.Equal(0, Milestone3ProofFixture.Kestrel(postHail).TacticalMotion.Speed.Value);
@@ -140,6 +139,10 @@ public sealed class Milestone3ProofScenarioTests
     public void NoInteractionScenarioPersistsDuringStaleAndLosesAt29100Milliseconds()
     {
         GameSimulation uninterrupted = _fixture.CreateDefault();
+        Assert.Equal(
+            PowerAllocationOutcome.Accepted,
+            uninterrupted.ApplyPowerAllocationPreset(PowerAllocationPreset.PrioritizeSensors).Outcome
+        );
 
         SimulationAdvanceResult beforeAcquisition = uninterrupted.AdvanceFixedSteps(34);
         Assert.Empty(beforeAcquisition.Projection.Ship.Sensors.Contacts);
@@ -153,7 +156,7 @@ public sealed class Milestone3ProofScenarioTests
         SimulationAdvanceResult lastCurrent = uninterrupted.AdvanceFixedSteps(205);
         Assert.Equal(24000, lastCurrent.FinalTime.Milliseconds);
         Assert.Equal(
-            [PlayerAdvanceEventKind.SensorRepairCompleted],
+            [PlayerAdvanceEventKind.SystemRepairCompleted],
             lastCurrent.ResolvedEvents.Select(@event => @event.Kind)
         );
         Assert.Equal(SensorContactStatus.Current, Assert.Single(lastCurrent.Projection.Ship.Sensors.Contacts).Status);

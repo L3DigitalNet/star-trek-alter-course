@@ -502,6 +502,16 @@ The player should be able to meet another ship, initially know less than Core tr
 
 ## Milestone 4 — Engineering Backbone and Degraded Operations
 
+### Implementation outcome
+
+Feature #62 implements this milestone through Final PR #63. Release status is governed separately under ADR 0013. `AlterCourse.Core` now owns concrete `ShipSystemId` values for power generation, sensors, and impulse propulsion; `SystemCondition`; bounded `PowerUnits`; exact allocation; and one `SystemRepairState` per ship. Available power is `floor(nominal generation × generation condition)`, and sensor/impulse capability is condition multiplied by the allocated-to-nominal-demand ratio, capped at one. The V4 Pathfinder definition supplies 120 nominal generation units, 70 sensor-demand units, 50 impulse-demand units, an 8,000 ms sensor repair, and a 6,000 ms impulse repair.
+
+The player can submit deterministic Balanced, Prioritize Sensors, and Prioritize Propulsion allocations. Allocation changes reconcile observations immediately, can stale or reacquire a local contact, and cannot commit when the current tactical speed would exceed the resulting impulse limit. The same effective impulse limit constrains player courses and the bounded cautious-contact AI; strategic travel remains unchanged. A sensor scan still uses its authored duration, but Core interrupts it if committed Engineering state makes sensor capability zero.
+
+`SystemRepairState` carries the repair target, start/target condition, start/completion times, and its exact scheduled-work ID. Completion resolves only the matching `SystemRepairCompletion` work, atomically materializes the target condition, and clears the repair. V5 persistence writes Engineering conditions, allocation, and optional repair while excluding derived capability and presentation. Adjacent V4→V5 migration maps sensor integrity and a correlated sensor repair, initializes generation and impulse condition to nominal, preserves the exact completion identity, and validates the complete candidate. The measured maximum V5 shape is 95,677,740 bytes within the 134,217,728-byte envelope.
+
+The Godot Engineering station presents the immutable player projection and stable-ID live hierarchy (`OVERVIEW`, `POWER`, `SENSORS`, `PROPULSION`, `REPAIRS`), including Core-supplied action availability. The full headless encounter proves acquisition at 3,500 ms, a V5 save during the scan at 4,500 ms, scan completion and later reacquisition at 5,500 ms, sensor repair completion at 8,000 ms, and Horizon's strategic arrival at 14,000 ms. Focused verification is green: Core 376/376 and GameplayShell 60/60. Focused, manual, adversarial, canonical, and hosted verification passed before final admission.
+
 ### Goal
 
 Establish the minimum ship-system structure needed for later engineering and combat depth, while deliberately avoiding a complete definition of every possible Star Trek subsystem.

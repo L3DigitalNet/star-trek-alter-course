@@ -16,7 +16,7 @@ public sealed record ShipDefinition
         SpeedKilometersPerSecond maximumTacticalSpeed,
         DistanceKilometers passiveSensorRange,
         SimulationDuration activeScanDuration,
-        SimulationDuration sensorRepairDuration
+        ShipEngineeringDefinition engineering
     )
     {
         if (string.IsNullOrWhiteSpace(id.Value))
@@ -46,26 +46,38 @@ public sealed record ShipDefinition
             );
         }
 
-        if (sensorRepairDuration.Milliseconds <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(sensorRepairDuration), "Repair duration must be positive.");
-        }
-
-        if (sensorRepairDuration.Milliseconds % SimulationFixedStep.Duration.Milliseconds != 0)
-        {
-            throw new ArgumentException(
-                "Repair duration must align to the fixed simulation step.",
-                nameof(sensorRepairDuration)
-            );
-        }
+        ArgumentNullException.ThrowIfNull(engineering);
 
         Id = id;
         DesignDisplayName = designDisplayName;
         MaximumTacticalSpeed = maximumTacticalSpeed;
         PassiveSensorRange = passiveSensorRange;
         ActiveScanDuration = activeScanDuration;
-        SensorRepairDuration = sensorRepairDuration;
+        Engineering = engineering;
     }
+
+    internal ShipDefinition(
+        ShipDefinitionId id,
+        string designDisplayName,
+        SpeedKilometersPerSecond maximumTacticalSpeed,
+        DistanceKilometers passiveSensorRange,
+        SimulationDuration activeScanDuration,
+        SimulationDuration sensorRepairDuration
+    )
+        : this(
+            id,
+            designDisplayName,
+            maximumTacticalSpeed,
+            passiveSensorRange,
+            activeScanDuration,
+            new ShipEngineeringDefinition(
+                new PowerUnits(120),
+                new PowerUnits(70),
+                new PowerUnits(50),
+                sensorRepairDuration,
+                sensorRepairDuration
+            )
+        ) { }
 
     /// <summary>Gets the stable definition identity.</summary>
     public ShipDefinitionId Id { get; }
@@ -82,6 +94,8 @@ public sealed record ShipDefinition
     /// <summary>Gets the simulation duration required to complete an active scan.</summary>
     public SimulationDuration ActiveScanDuration { get; }
 
-    /// <summary>Gets the duration of a complete active sensor repair.</summary>
-    public SimulationDuration SensorRepairDuration { get; }
+    /// <summary>Gets immutable engineering demand and repair timing.</summary>
+    public ShipEngineeringDefinition Engineering { get; }
+
+    internal SimulationDuration SensorRepairDuration => Engineering.SensorRepairDuration;
 }
