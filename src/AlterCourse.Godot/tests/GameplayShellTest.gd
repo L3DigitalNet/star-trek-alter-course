@@ -680,6 +680,37 @@ func test_travel_departure_presents_contact_and_scan_events_in_log() -> void:
 	assert_str(event_log).contains("Contact detected")
 
 
+func test_batched_events_render_their_distinct_core_clocks_in_log() -> void:
+	var screen := _create_screen()
+	for _batch in range(12):
+		assert_int(screen.call("ProcessSyntheticDelta", 0.6)).is_equal(6)
+	assert_int(screen.call("ProcessSyntheticDelta", 0.2)).is_equal(2)
+	screen.call("QuickSave")
+
+	var save_text := FileAccess.get_file_as_string(TEST_QUICK_SAVE_PATH)
+	var knowledge_start := save_text.find('"sensorKnowledge":')
+	var contacts_member := save_text.find('"contacts":', knowledge_start)
+	var contacts_start := save_text.find("[", contacts_member)
+	var active_scan_start := save_text.find('"activeScan":', contacts_start)
+	var contacts_end := save_text.rfind("]", active_scan_start)
+	assert_int(knowledge_start).is_greater_equal(0)
+	assert_int(contacts_member).is_greater_equal(knowledge_start)
+	assert_int(contacts_start).is_greater(contacts_member)
+	assert_int(active_scan_start).is_greater(contacts_start)
+	assert_int(contacts_end).is_greater(contacts_start)
+	save_text = save_text.left(contacts_start + 1) + save_text.substr(contacts_end)
+	_write_text(TEST_QUICK_SAVE_PATH, save_text)
+	screen.call("QuickLoad")
+	assert_str(screen.get_meta("quick_save_status", "")).is_equal("loaded")
+
+	assert_int(screen.call("ProcessSyntheticDelta", 0.6)).is_equal(6)
+	var event_log := _collect_control_text(screen.get_node("%EventLogContent"))
+	assert_str(event_log).contains("00:00:07  SENSOR")
+	assert_str(event_log).contains("Contact detected")
+	assert_str(event_log).contains("00:00:08  ENGINEER")
+	assert_str(event_log).contains("Sensor repair completed")
+
+
 func test_hail_no_response_appears_in_log_without_hidden_ship_identity() -> void:
 	var screen := _create_screen()
 	screen.call("SelectDestination", "vesper-reach")

@@ -1340,10 +1340,11 @@ public partial class GameScreen : Control
             return;
         }
 
-        long eventTimeMilliseconds = _simulation!.GetPlayerProjection().SimulationTime.Milliseconds;
         foreach (PlayerAdvanceEvent @event in events)
         {
-            AppendRecentActivity(new CommandInterfacePresenter.ResolvedActivityEvent(eventTimeMilliseconds, @event));
+            AppendRecentActivity(
+                new CommandInterfacePresenter.ResolvedActivityEvent(@event.OccurredAt.Milliseconds, @event)
+            );
         }
 
         string description = string.Join(", ", events.Select(DescribePlayerEvent));

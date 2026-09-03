@@ -1,3 +1,4 @@
+using AlterCourse.Core.AI;
 using AlterCourse.Core.Content;
 using AlterCourse.Core.Gameplay;
 using AlterCourse.Core.Identity;
@@ -42,6 +43,18 @@ public sealed class GameSimulationTests
         );
         Assert.Null(typeof(GameSimulation).GetMethod("AdvanceUntilNextScheduledEvent"));
         Assert.False(typeof(Milestone2ProofSetup).IsPublic);
+
+        Type[] hiddenDiagnostics =
+        [
+            typeof(ShipContactDecisionExplanation),
+            typeof(SimulationState),
+            typeof(ScheduledConsequenceTrace),
+            typeof(SimulationAdvanceTraceResult),
+        ];
+        Assert.DoesNotContain(
+            PublicInstanceSignatureTypes(typeof(GameSimulation)),
+            signatureType => hiddenDiagnostics.Any(hidden => SignatureContains(signatureType, hidden))
+        );
     }
 
     /// <summary>Confirms setup is deterministic, damaged, repairing, and projected read-only.</summary>
@@ -264,29 +277,52 @@ public sealed class GameSimulationTests
 
         Assert.Equal(AdvanceUntilOutcome.PlayerEventResolved, repair.Outcome);
         Assert.Equal(8000, repair.StoppedAt.Milliseconds);
-        Assert.Equal([new PlayerAdvanceEvent(PlayerAdvanceEventKind.SensorRepairCompleted)], repair.ResolvedEvents);
+        var repairCompleted = new PlayerAdvanceEvent(
+            PlayerAdvanceEventKind.SensorRepairCompleted,
+            new SimulationTime(8000)
+        );
+        Assert.Equal([repairCompleted], repair.ResolvedEvents);
         Assert.NotNull(repair.Projection.Strategic.Travel);
         Assert.Equal(12000, arrival.StoppedAt.Milliseconds);
         var contactDetected = new PlayerAdvanceEvent(
             PlayerAdvanceEventKind.SensorContactDetected,
+            new SimulationTime(12000),
             new SensorContactId(1)
         );
-        Assert.Equal(
-            [new PlayerAdvanceEvent(PlayerAdvanceEventKind.TravelArrived), contactDetected],
-            arrival.ResolvedEvents
-        );
+        var travelArrived = new PlayerAdvanceEvent(PlayerAdvanceEventKind.TravelArrived, new SimulationTime(12000));
+        Assert.Equal([travelArrived, contactDetected], arrival.ResolvedEvents);
         Assert.Equal(12000, ordinaryAdvance.FinalTime.Milliseconds);
-        Assert.Equal(
-            [
-                new PlayerAdvanceEvent(PlayerAdvanceEventKind.SensorRepairCompleted),
-                new PlayerAdvanceEvent(PlayerAdvanceEventKind.TravelArrived),
-                contactDetected,
-            ],
-            ordinaryAdvance.ResolvedEvents
-        );
+        Assert.Equal([repairCompleted, travelArrived, contactDetected], ordinaryAdvance.ResolvedEvents);
         Assert.Equal(ordinary.GetPlayerProjection(), ordinaryAdvance.Projection);
         Assert.Equal(until.GetPlayerProjection(), ordinary.GetPlayerProjection());
     }
+
+    private static IEnumerable<Type> PublicInstanceSignatureTypes(Type type) =>
+        type.GetMembers(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)
+            .SelectMany(member =>
+                member switch
+                {
+                    System.Reflection.MethodInfo method => method
+                        .GetParameters()
+                        .Select(parameter => parameter.ParameterType)
+                        .Prepend(method.ReturnType),
+                    System.Reflection.ConstructorInfo constructor => constructor
+                        .GetParameters()
+                        .Select(parameter => parameter.ParameterType),
+                    System.Reflection.PropertyInfo property => [property.PropertyType],
+                    System.Reflection.FieldInfo field => [field.FieldType],
+                    System.Reflection.EventInfo @event when @event.EventHandlerType is { } handlerType => [handlerType],
+                    _ => [],
+                }
+            );
+
+    private static bool SignatureContains(Type signatureType, Type forbiddenType) =>
+        signatureType == forbiddenType
+        || (signatureType.HasElementType && SignatureContains(signatureType.GetElementType()!, forbiddenType))
+        || (
+            signatureType.IsGenericType
+            && signatureType.GetGenericArguments().Any(type => SignatureContains(type, forbiddenType))
+        );
 
     /// <summary>Confirms advance-until is a no-op once no player-relevant event remains.</summary>
     [Fact]

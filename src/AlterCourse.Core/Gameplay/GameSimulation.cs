@@ -40,7 +40,7 @@ public sealed class GameSimulation
     public PlayerProjection GetPlayerProjection() => Project(_state);
 
     /// <summary>Gets the latest autonomous contact explanation produced during this live session.</summary>
-    public ShipContactDecisionExplanation? LastContactDecisionExplanation { get; private set; }
+    internal ShipContactDecisionExplanation? LastContactDecisionExplanation { get; private set; }
 
     /// <summary>Validates and schedules persistent strategic travel for the player ship.</summary>
     public TravelRequestResult RequestTravel(TravelIntent intent)
@@ -787,6 +787,7 @@ public sealed class GameSimulation
                 observerId,
                 state.PlayerShipId,
                 PlayerAdvanceEventKind.SensorContactReacquired,
+                state.Time,
                 contact.Id,
                 playerEvents
             );
@@ -823,6 +824,7 @@ public sealed class GameSimulation
             observerId,
             state.PlayerShipId,
             PlayerAdvanceEventKind.SensorContactStale,
+            state.Time,
             contact.Id,
             playerEvents
         );
@@ -878,6 +880,7 @@ public sealed class GameSimulation
                 observer.InstanceId,
                 playerShipId,
                 PlayerAdvanceEventKind.SensorContactDetected,
+                observationTime,
                 contactId,
                 playerEvents
             );
@@ -905,6 +908,7 @@ public sealed class GameSimulation
                 observer.InstanceId,
                 state.PlayerShipId,
                 PlayerAdvanceEventKind.ActiveSensorScanInterrupted,
+                state.Time,
                 activeScan.TargetContactId,
                 playerEvents
             );
@@ -988,13 +992,14 @@ public sealed class GameSimulation
         ShipInstanceId observerId,
         ShipInstanceId playerShipId,
         PlayerAdvanceEventKind kind,
+        SimulationTime occurredAt,
         SensorContactId contactId,
         List<PlayerAdvanceEvent> playerEvents
     )
     {
         if (observerId == playerShipId)
         {
-            playerEvents.Add(new PlayerAdvanceEvent(kind, contactId));
+            playerEvents.Add(new PlayerAdvanceEvent(kind, occurredAt, contactId));
         }
     }
 
@@ -1459,16 +1464,22 @@ public sealed class GameSimulation
 
         PlayerAdvanceEvent? playerEvent = trace.WorkKind switch
         {
-            ScheduledWorkKind.TravelArrival => new PlayerAdvanceEvent(PlayerAdvanceEventKind.TravelArrived),
+            ScheduledWorkKind.TravelArrival => new PlayerAdvanceEvent(
+                PlayerAdvanceEventKind.TravelArrived,
+                trace.ResolutionTime
+            ),
             ScheduledWorkKind.SensorRepairCompletion => new PlayerAdvanceEvent(
-                PlayerAdvanceEventKind.SensorRepairCompleted
+                PlayerAdvanceEventKind.SensorRepairCompleted,
+                trace.ResolutionTime
             ),
             ScheduledWorkKind.SensorContactLoss => new PlayerAdvanceEvent(
                 PlayerAdvanceEventKind.SensorContactLost,
+                trace.ResolutionTime,
                 trace.ContactId
             ),
             ScheduledWorkKind.ActiveSensorScanCompletion => new PlayerAdvanceEvent(
                 PlayerAdvanceEventKind.ActiveSensorScanCompleted,
+                trace.ResolutionTime,
                 trace.ContactId
             ),
             ScheduledWorkKind.OrderWake or ScheduledWorkKind.ShipContactDecisionWake => null,

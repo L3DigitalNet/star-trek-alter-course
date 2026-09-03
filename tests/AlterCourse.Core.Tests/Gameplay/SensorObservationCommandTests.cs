@@ -35,7 +35,11 @@ public sealed class SensorObservationCommandTests
             Enum.GetNames<ActiveSensorScanOutcome>()
         );
         Assert.Equal(
-            [nameof(PlayerAdvanceEvent.Kind), nameof(PlayerAdvanceEvent.SensorContactId)],
+            [
+                nameof(PlayerAdvanceEvent.Kind),
+                nameof(PlayerAdvanceEvent.OccurredAt),
+                nameof(PlayerAdvanceEvent.SensorContactId),
+            ],
             typeof(PlayerAdvanceEvent).GetProperties().Select(property => property.Name),
             StringComparer.Ordinal
         );
@@ -71,7 +75,13 @@ public sealed class SensorObservationCommandTests
         Assert.Equal([new SensorContactId(1)], result.Projection.Ship.Sensors.Contacts.Select(contact => contact.Id));
         Assert.Equal(new TacticalPosition(5, 0), result.Projection.Ship.Sensors.Contacts[0].LastObservedPosition);
         Assert.Equal(
-            [new PlayerAdvanceEvent(PlayerAdvanceEventKind.SensorContactDetected, new SensorContactId(1))],
+            [
+                new PlayerAdvanceEvent(
+                    PlayerAdvanceEventKind.SensorContactDetected,
+                    new SimulationTime(100),
+                    new SensorContactId(1)
+                ),
+            ],
             result.ResolvedEvents
         );
         Assert.DoesNotContain(
