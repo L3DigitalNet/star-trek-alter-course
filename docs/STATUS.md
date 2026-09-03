@@ -55,6 +55,6 @@
 - Owner accepted the command interface for v0.3.0: it runs smoothly with no errors.
 - Bug #49's PR #50 merged as `2064822`; the launcher imports Godot assets before loading the command theme.
 - Bug #51 merged through Final PR #52 as `c5602cc`; live context actions now retain pointer interaction and keyboard focus across refreshes.
-- Milestone 4 focused checks are green: Core 376/376 and GameplayShell 60/60; manual and adversarial review passed. Canonical and hosted checks remain.
+- Milestone 4 Core 376/376 and GameplayShell 60/60 are green; manual and adversarial review passed; canonical passed on `379011b`.
 - Remaining Milestone 3 work includes richer uncertainty, strategic contacts, additional postures, affiliation and intent knowledge, and broader encounter transitions.
 - Engineering depth beyond this backbone, faction strategy, combat, diplomacy, economy, narrative, networking, and final art remain deferred.
