@@ -1,4 +1,5 @@
 using AlterCourse.Core.Player;
+using AlterCourse.Core.Sensors;
 using Godot;
 
 namespace AlterCourse.Godot.Gameplay;
@@ -8,15 +9,48 @@ public partial class TacticalMapView : Control
 {
     private const double PixelsPerKilometer = 18;
     private const float PreviewPadding = 64;
+    private const float ContactHitRadius = 16;
+
+    /// <summary>Provides the observer-local identity selected on the tactical plot.</summary>
+    public sealed class ContactEventArgs(SensorContactId contactId) : EventArgs
+    {
+        /// <summary>Gets the selected observer-local identity.</summary>
+        public SensorContactId ContactId { get; } = contactId;
+    }
 
     private TacticalProjection? _projection;
+    private IReadOnlyList<CommandInterfaceContact> _contacts = [];
+    private SensorContactId? _selectedContactId;
     private IReadOnlyList<CommandInterfaceMapItem> _previewItems = [];
     private IReadOnlyList<CommandInterfaceMapLink> _previewLinks = [];
+
+    /// <summary>Notifies the workspace that a live actor-safe contact was selected.</summary>
+    public event EventHandler<ContactEventArgs>? ContactSelected;
+
+    /// <inheritdoc />
+    public override void _Ready()
+    {
+        FocusMode = FocusModeEnum.All;
+    }
 
     /// <summary>Displays one fresh tactical projection.</summary>
     public void Present(TacticalProjection projection)
     {
+        Present(projection, [], null);
+    }
+
+    /// <summary>Displays one fresh tactical projection and its actor-safe sensor contacts.</summary>
+    public void Present(
+        TacticalProjection projection,
+        IReadOnlyList<CommandInterfaceContact> contacts,
+        SensorContactId? selectedContactId
+    )
+    {
+        ArgumentNullException.ThrowIfNull(projection);
+        ArgumentNullException.ThrowIfNull(contacts);
         _projection = projection;
+        _contacts = contacts.Where(contact => contact.Status != SensorContactStatus.Lost).ToArray();
+        _selectedContactId = selectedContactId;
         _previewItems = [];
         _previewLinks = [];
         QueueRedraw();
@@ -31,10 +65,142 @@ public partial class TacticalMapView : Control
         ArgumentNullException.ThrowIfNull(items);
         ArgumentNullException.ThrowIfNull(links);
         _projection = null;
+        _contacts = [];
+        _selectedContactId = null;
         _previewItems = items.ToArray();
         _previewLinks = links.ToArray();
         QueueRedraw();
     }
+
+    /// <inheritdoc />
+    public override void _GuiInput(InputEvent @event)
+    {
+        if (_projection is null)
+        {
+            return;
+        }
+
+        if (
+            @event is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } click
+            && FindContact(click.Position) is SensorContactId contactId
+        )
+        {
+            AcceptEvent();
+            SelectContact(contactId);
+            return;
+        }
+
+        if (@event.IsActionPressed("ui_accept") && SelectFocusedContact())
+        {
+            AcceptEvent();
+        }
+        else if (@event.IsActionPressed("ui_left") && SelectAdjacentContact(-1))
+        {
+            AcceptEvent();
+        }
+        else if (@event.IsActionPressed("ui_right") && SelectAdjacentContact(1))
+        {
+            AcceptEvent();
+        }
+    }
+
+    /// <summary>Selects a hit-tested live contact through the same typed path used by pointer input.</summary>
+    public bool SelectContactAt(Vector2 screenPosition)
+    {
+        if (_projection is null || FindContact(screenPosition) is not SensorContactId contactId)
+        {
+            return false;
+        }
+
+        SelectContact(contactId);
+        return true;
+    }
+
+    private bool SelectFocusedContact()
+    {
+        SensorContactId? contactId =
+            _selectedContactId is SensorContactId selected && _contacts.Any(contact => contact.Id == selected)
+                ? selected
+                : _contacts
+                    .OrderBy(contact => contact.Id.Value)
+                    .Select(contact => (SensorContactId?)contact.Id)
+                    .FirstOrDefault();
+        if (contactId is not SensorContactId resolved)
+        {
+            return false;
+        }
+
+        SelectContact(resolved);
+        return true;
+    }
+
+    private bool SelectAdjacentContact(int offset)
+    {
+        SensorContactId[] ordered = [.. _contacts.Select(contact => contact.Id).OrderBy(id => id.Value)];
+        if (ordered.Length == 0)
+        {
+            return false;
+        }
+
+        int current =
+            _selectedContactId is SensorContactId selected ? Array.IndexOf(ordered, selected)
+            : offset > 0 ? -1
+            : 0;
+        int next = (current + offset + ordered.Length) % ordered.Length;
+        SelectContact(ordered[next]);
+        return true;
+    }
+
+    private void SelectContact(SensorContactId contactId)
+    {
+        _selectedContactId = contactId;
+        QueueRedraw();
+        ContactSelected?.Invoke(this, new ContactEventArgs(contactId));
+    }
+
+    /// <summary>Returns the hit contact value for the GDScript integration-test boundary, or zero.</summary>
+    public long HitTestContactId(Vector2 screenPosition) => FindContact(screenPosition)?.Value ?? 0;
+
+    /// <summary>Hit-tests explicit tactical candidates at the GDScript integration-test boundary.</summary>
+    public long HitTestContactCandidates(Vector2 screenPosition, long[] contactIds, Vector2[] tacticalPositions)
+    {
+        ArgumentNullException.ThrowIfNull(contactIds);
+        ArgumentNullException.ThrowIfNull(tacticalPositions);
+        if (contactIds.Length != tacticalPositions.Length)
+        {
+            throw new ArgumentException(
+                "Contact identities and tactical positions must have equal lengths.",
+                nameof(tacticalPositions)
+            );
+        }
+
+        return FindContact(
+                screenPosition,
+                contactIds.Select(
+                    (id, index) =>
+                        (
+                            Id: new SensorContactId(id),
+                            Position: MapPosition(tacticalPositions[index].X, tacticalPositions[index].Y)
+                        )
+                )
+            )?.Value
+            ?? 0;
+    }
+
+    /// <summary>Maps one presented contact's observed position for integration verification.</summary>
+    public Vector2 MapContact(long contactId)
+    {
+        CommandInterfaceContact contact = _contacts.Single(contact => contact.Id == new SensorContactId(contactId));
+        return MapPosition(contact.ObservedXKilometers, contact.ObservedYKilometers);
+    }
+
+    /// <summary>Returns one actor-safe presented contact label for integration verification.</summary>
+    public string ContactLabel(long contactId) =>
+        _contacts.Single(contact => contact.Id == new SensorContactId(contactId)).Label;
+
+    /// <summary>Returns one actor-safe contact status for integration verification.</summary>
+    public string ContactStatus(long contactId) =>
+        _contacts.Single(contact => contact.Id == new SensorContactId(contactId)).Status.ToString();
 
     /// <summary>Maps a Core position relative to the current ship-centered local plot.</summary>
     public Vector2 MapPosition(double xKilometers, double yKilometers)
@@ -61,6 +227,11 @@ public partial class TacticalMapView : Control
             return;
         }
 
+        foreach (CommandInterfaceContact contact in _contacts)
+        {
+            DrawContact(contact);
+        }
+
         Vector2 ship = MapPosition(_projection.Position.XKilometers, _projection.Position.YKilometers);
         Vector2 direction = TacticalMapTransform.HeadingToScreenDirection(_projection.HeadingDegrees);
         DrawCircle(ship, 9, new Color("d6b75e"));
@@ -71,6 +242,57 @@ public partial class TacticalMapView : Control
             3
         );
     }
+
+    private void DrawContact(CommandInterfaceContact contact)
+    {
+        Vector2 point = MapPosition(contact.ObservedXKilometers, contact.ObservedYKilometers);
+        Color color = ToneColor(
+            contact.Status == SensorContactStatus.Current ? CommandInterfaceTone.Command : CommandInterfaceTone.Caution
+        );
+        Vector2[] marker =
+        [
+            point + new Vector2(0, -9),
+            point + new Vector2(9, 0),
+            point + new Vector2(0, 9),
+            point + new Vector2(-9, 0),
+            point + new Vector2(0, -9),
+        ];
+        DrawPolyline(marker, color, 2);
+        if (_selectedContactId == contact.Id)
+        {
+            DrawCircle(point, 14, color, filled: false, width: 2);
+        }
+
+        DrawString(
+            GetThemeFont("font", "TelemetryValue"),
+            point + new Vector2(14, 5),
+            contact.Label,
+            HorizontalAlignment.Left,
+            -1,
+            GetThemeFontSize("font_size", "TelemetryValue"),
+            color
+        );
+    }
+
+    private SensorContactId? FindContact(Vector2 screenPosition) =>
+        FindContact(
+            screenPosition,
+            _contacts.Select(contact =>
+                (contact.Id, MapPosition(contact.ObservedXKilometers, contact.ObservedYKilometers))
+            )
+        );
+
+    private static SensorContactId? FindContact(
+        Vector2 screenPosition,
+        IEnumerable<(SensorContactId Id, Vector2 Position)> contacts
+    ) =>
+        contacts
+            .Select(contact => (contact.Id, Distance: contact.Position.DistanceTo(screenPosition)))
+            .Where(candidate => candidate.Distance <= ContactHitRadius)
+            .OrderBy(candidate => candidate.Distance)
+            .ThenBy(candidate => candidate.Id.Value)
+            .Select(candidate => (SensorContactId?)candidate.Id)
+            .FirstOrDefault();
 
     private void DrawPreview()
     {

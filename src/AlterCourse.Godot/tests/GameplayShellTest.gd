@@ -6,6 +6,8 @@ const DEFAULT_QUICK_SAVE_PATH := "user://quick-save.json"
 const LEGACY_DEFAULT_QUICK_SAVE_PATH := "user://quick-save-v1.json"
 const INVALID_CONTENT_PATH := "user://gameplay-shell-invalid-content.json"
 
+var _screens_to_free: Array[Node] = []
+
 
 func before_test() -> void:
 	_remove_quick_save_files()
@@ -13,6 +15,11 @@ func before_test() -> void:
 
 
 func after_test() -> void:
+	for screen in _screens_to_free:
+		if is_instance_valid(screen):
+			screen.queue_free()
+	_screens_to_free.clear()
+	await get_tree().process_frame
 	_remove_quick_save_files()
 	_remove_file(INVALID_CONTENT_PATH)
 
@@ -482,15 +489,541 @@ func test_live_context_action_identity_and_focus_survive_projection_refresh() ->
 	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(8000)
 
 
+func test_live_engineering_projects_authoritative_power_capability_and_repair_state() -> void:
+	var screen := _create_screen()
+	screen.call("ShowEngineeringWorkspace")
+	var engineering := _engineering_workspace(screen)
+	var presented := _collect_control_text(engineering)
+
+	assert_str(presented).contains("OVERVIEW")
+	assert_str(presented).contains("POWER")
+	assert_str(presented).contains("SENSORS")
+	assert_str(presented).contains("PROPULSION")
+	assert_str(presented).contains("REPAIRS")
+	assert_str(presented).contains("NOMINAL GENERATION")
+	assert_str(presented).contains("120 units")
+	assert_str(presented).contains("AVAILABLE POWER")
+	assert_str(presented).contains("75 units")
+	assert_str(presented).contains("ENGINEERING CONTROLS")
+	assert_str(presented).contains("MAX TACTICAL SPEED")
+	(engineering.get_node("%EngineeringHierarchy").get_node("Hierarchy_sensors") as Button).emit_signal(
+		"pressed"
+	)
+	var sensor_inspector := _collect_control_text(engineering.get_node("%ComponentInspectorContent"))
+	assert_str(sensor_inspector).contains("CAPABILITY")
+	assert_str(sensor_inspector).contains("PASSIVE RANGE")
+	(engineering.get_node("%EngineeringHierarchy").get_node("Hierarchy_repairs") as Button).emit_signal(
+		"pressed"
+	)
+	var repair_inspector := _collect_control_text(engineering.get_node("%ComponentInspectorContent"))
+	assert_str(repair_inspector).contains("Sensors")
+	assert_str(repair_inspector).contains("8.0 s")
+	assert_bool((engineering.get_node("%EngineeringTabs") as Control).visible).is_false()
+	assert_str((engineering.get_node("%SchematicHeading") as Label).text).is_equal(
+		"ENGINEERING CAPABILITY"
+	)
+	var hierarchy_text := _collect_control_text(engineering.get_node("%EngineeringHierarchy"))
+	for unsupported in ["SHIELDS", "WEAPONS", "EPS", "BATTERIES", "WARP CORE", "LIFE SUPPORT"]:
+		assert_str(hierarchy_text).not_contains(unsupported)
+
+	assert_int(screen.get_meta("engineering_nominal_power", -1)).is_equal(120)
+	assert_int(screen.get_meta("engineering_available_power", -1)).is_equal(75)
+	assert_int(screen.get_meta("engineering_sensor_allocation", -1)).is_equal(44)
+	assert_int(screen.get_meta("engineering_impulse_allocation", -1)).is_equal(31)
+	assert_str(screen.get_meta("engineering_repair_target", "")).is_equal("sensors")
+	assert_bool((_find_engineering_action_button(screen, "allocate-balanced") as Button).disabled).is_false()
+	assert_bool((_find_engineering_action_button(screen, "repair-sensors") as Button).disabled).is_true()
+	assert_str(
+		(_find_engineering_action_button(screen, "repair-sensors") as Button).tooltip_text
+	).contains("another system repair is active")
+
+
+func test_live_engineering_allocation_presets_submit_core_choices_and_refresh_projection() -> void:
+	var screen := _create_screen()
+	screen.call("ShowEngineeringWorkspace")
+
+	(_find_engineering_action_button(screen, "prioritize-sensors") as Button).emit_signal("pressed")
+	assert_int(screen.get_meta("engineering_sensor_allocation", -1)).is_equal(70)
+	assert_int(screen.get_meta("engineering_impulse_allocation", -1)).is_equal(5)
+	assert_str(screen.get_meta("last_engineering_command", "")).is_equal(
+		"allocation:PrioritizeSensors:Accepted"
+	)
+	assert_str((screen.get_node("%Message") as Label).text).contains("Sensor-priority allocation applied")
+
+	(_find_engineering_action_button(screen, "prioritize-propulsion") as Button).emit_signal("pressed")
+	assert_int(screen.get_meta("engineering_sensor_allocation", -1)).is_equal(25)
+	assert_int(screen.get_meta("engineering_impulse_allocation", -1)).is_equal(50)
+	assert_str(screen.get_meta("last_engineering_command", "")).is_equal(
+		"allocation:PrioritizePropulsion:Accepted"
+	)
+
+	(_find_engineering_action_button(screen, "allocate-balanced") as Button).emit_signal("pressed")
+	assert_int(screen.get_meta("engineering_sensor_allocation", -1)).is_equal(44)
+	assert_int(screen.get_meta("engineering_impulse_allocation", -1)).is_equal(31)
+	assert_int(screen.get_meta("engineering_reserve", -1)).is_equal(0)
+	assert_str(screen.get_meta("last_engineering_command", "")).is_equal(
+		"allocation:Balanced:Accepted"
+	)
+
+
+func test_sensor_priority_refreshes_command_contacts_without_revealing_hidden_identity() -> void:
+	var screen := _create_screen()
+	assert_int(screen.get_meta("sensor_contact_count", -1)).is_equal(0)
+	screen.call("AdvanceUntilNextPlayerRelevantEvent")
+	assert_int(screen.get_meta("sensor_contact_count", -1)).is_equal(0)
+
+	screen.call("ShowEngineeringWorkspace")
+	(_find_engineering_action_button(screen, "prioritize-sensors") as Button).emit_signal("pressed")
+	assert_int(screen.get_meta("sensor_contact_count", -1)).is_equal(1)
+	assert_str(screen.get_meta("first_contact_label", "")).is_equal("Contact 1")
+	assert_str(screen.get_meta("first_contact_identification", "")).is_equal("Detected")
+	screen.call("ShowTacticalView")
+	assert_str(_collect_control_text(_command_deck(screen))).not_contains("Survey Vessel Kestrel")
+	screen.call("SelectContact", 1)
+	assert_bool((_find_action_button(screen, "active-scan") as Button).disabled).is_false()
+
+
+func test_tactical_course_uses_current_core_propulsion_capability_after_allocation() -> void:
+	var screen := _create_screen()
+	screen.call("ShowEngineeringWorkspace")
+	(_find_engineering_action_button(screen, "prioritize-sensors") as Button).emit_signal("pressed")
+	screen.call("ShowTacticalView")
+	(_find_action_button(screen, "set-tactical-course") as Button).emit_signal("pressed")
+	assert_float(screen.get_meta("tactical_speed", -1.0)).is_equal_approx(0.0, 0.0001)
+	assert_str((screen.get_node("%Message") as Label).text).contains(
+		"exceeds current propulsion capability"
+	)
+
+	screen.call("ShowEngineeringWorkspace")
+	(_find_engineering_action_button(screen, "prioritize-propulsion") as Button).emit_signal("pressed")
+	screen.call("ShowTacticalView")
+	(_find_action_button(screen, "set-tactical-course") as Button).emit_signal("pressed")
+	assert_float(screen.get_meta("tactical_speed", -1.0)).is_equal_approx(2.0, 0.0001)
+	assert_str((screen.get_node("%Message") as Label).text).contains("Tactical course set")
+
+	screen.call("ShowEngineeringWorkspace")
+	var sensor_priority := _find_engineering_action_button(screen, "prioritize-sensors") as Button
+	assert_bool(sensor_priority.disabled).is_true()
+	assert_str(sensor_priority.tooltip_text).contains("current speed")
+
+
+func test_live_engineering_identity_selection_current_payload_and_traversal_survive_refresh() -> void:
+	var screen := _create_screen()
+	screen.call("ShowEngineeringWorkspace")
+	var engineering := _engineering_workspace(screen)
+	var hierarchy := engineering.get_node("%EngineeringHierarchy")
+	var sensor_hierarchy := hierarchy.get_node("Hierarchy_sensors") as Button
+	var allocation := _find_engineering_action_button(screen, "prioritize-sensors") as Button
+	var repair := _find_engineering_action_button(screen, "repair-sensors") as Button
+	var hierarchy_id := sensor_hierarchy.get_instance_id()
+	var allocation_id := allocation.get_instance_id()
+	var repair_id := repair.get_instance_id()
+	sensor_hierarchy.emit_signal("pressed")
+	allocation.grab_focus()
+	assert_bool(allocation.has_focus()).is_true()
+
+	assert_int(screen.call("ProcessSyntheticDelta", 0.1)).is_equal(1)
+	await get_tree().process_frame
+	var refreshed_allocation := _find_engineering_action_button(screen, "prioritize-sensors") as Button
+	assert_int(
+		(hierarchy.get_node("Hierarchy_sensors") as Button).get_instance_id()
+	).is_equal(hierarchy_id)
+	assert_int(refreshed_allocation.get_instance_id()).is_equal(allocation_id)
+	assert_int(
+		(_find_engineering_action_button(screen, "repair-sensors") as Button).get_instance_id()
+	).is_equal(repair_id)
+	assert_bool(refreshed_allocation.has_focus()).is_true()
+	assert_str(engineering.get_meta("selected_component_id", "")).is_equal("sensors")
+	assert_bool(refreshed_allocation.focus_next.is_empty()).is_false()
+	assert_object(screen.get_node_or_null(refreshed_allocation.focus_next)).is_not_null()
+
+	screen.call("AdvanceUntilNextPlayerRelevantEvent")
+	var completed_repair := _find_engineering_action_button(screen, "repair-sensors") as Button
+	assert_int(completed_repair.get_instance_id()).is_equal(repair_id)
+	assert_str(completed_repair.tooltip_text).contains("already nominal")
+	assert_str(engineering.get_meta("selected_component_id", "")).is_equal("sensors")
+
+	(screen.get_node("%QuickSaveButton") as Button).emit_signal("pressed")
+	(screen.get_node("%QuickLoadButton") as Button).emit_signal("pressed")
+	assert_str(engineering.get_meta("selected_component_id", "")).is_equal("sensors")
+	assert_str(screen.get_meta("active_workspace", "")).is_equal("engineering")
+
+
+func test_live_impulse_repair_stays_focused_then_submits_through_core() -> void:
+	var screen := _create_screen()
+	screen.call("QuickSave")
+	_write_text(
+		TEST_QUICK_SAVE_PATH,
+		_rewrite_v5_for_damaged_impulse(
+			FileAccess.get_file_as_string(TEST_QUICK_SAVE_PATH)
+		)
+	)
+
+	screen.call("QuickLoad")
+	assert_str(screen.get_meta("quick_save_status", "")).is_equal("loaded")
+	screen.call("ShowEngineeringWorkspace")
+	var impulse_repair := _find_engineering_action_button(screen, "repair-propulsion") as Button
+	assert_bool(impulse_repair.disabled).is_false()
+	var repair_button_id := impulse_repair.get_instance_id()
+	impulse_repair.grab_focus()
+
+	assert_int(screen.call("ProcessSyntheticDelta", 0.1)).is_equal(1)
+	await get_tree().process_frame
+	var refreshed_repair := _find_engineering_action_button(screen, "repair-propulsion") as Button
+	assert_int(refreshed_repair.get_instance_id()).is_equal(repair_button_id)
+	assert_bool(refreshed_repair.has_focus()).is_true()
+	assert_bool(refreshed_repair.disabled).is_false()
+
+	refreshed_repair.emit_signal("pressed")
+	assert_str(screen.get_meta("last_engineering_command", "")).is_equal(
+		"repair:impulse-propulsion:Accepted"
+	)
+	assert_str(screen.get_meta("engineering_repair_target", "")).is_equal("impulse-propulsion")
+	assert_str((screen.get_node("%Message") as Label).text).contains(
+		"Impulse propulsion repair started"
+	)
+	assert_int(
+		(_find_engineering_action_button(screen, "repair-propulsion") as Button).get_instance_id()
+	).is_equal(repair_button_id)
+	assert_bool(
+		(_find_engineering_action_button(screen, "repair-propulsion") as Button).disabled
+	).is_true()
+
+
+func test_removed_live_engineering_action_cannot_fire_stale_intent_in_preview() -> void:
+	var screen := _create_screen()
+	screen.call("ShowEngineeringWorkspace")
+	var live_action := _find_engineering_action_button(screen, "prioritize-sensors") as Button
+	live_action.emit_signal("pressed")
+	live_action.grab_focus()
+	assert_bool(live_action.has_focus()).is_true()
+	var command_before: String = screen.get_meta("last_engineering_command", "")
+	var allocation_before: int = screen.get_meta("engineering_sensor_allocation", -1)
+
+	screen.call("ShowPreview", 3)
+	assert_object(_find_engineering_action_button(screen, "prioritize-sensors")).is_null()
+	assert_bool(get_viewport().gui_get_focus_owner() == live_action).is_false()
+	live_action.emit_signal("pressed")
+	assert_str(screen.get_meta("last_engineering_command", "")).is_equal(command_before)
+	assert_int(screen.get_meta("engineering_sensor_allocation", -1)).is_equal(allocation_before)
+	assert_str(screen.get_meta("data_mode", "")).is_equal("EngineeringPreview")
+
+	screen.call("RestoreLiveMode")
+	assert_str(screen.get_meta("data_mode", "")).is_equal("Live")
+	assert_int(screen.get_meta("engineering_sensor_allocation", -1)).is_equal(allocation_before)
+	assert_bool(
+		(_find_engineering_action_button(screen, "prioritize-sensors") as Button).disabled
+	).is_false()
+
+
+func test_space_pause_does_not_activate_focused_engineering_action() -> void:
+	var screen := _create_screen()
+	screen.call("ShowEngineeringWorkspace")
+	var action := _find_engineering_action_button(screen, "prioritize-sensors") as Button
+	action.grab_focus()
+	var allocation_before: int = screen.get_meta("engineering_sensor_allocation", -1)
+	var command_before: String = screen.get_meta("last_engineering_command", "")
+
+	var press := InputEventKey.new()
+	press.physical_keycode = KEY_SPACE
+	press.unicode = KEY_SPACE
+	press.pressed = true
+	screen.call("_Input", press)
+	var release := press.duplicate() as InputEventKey
+	release.pressed = false
+	screen.call("_Input", release)
+
+	assert_float(screen.get_meta("simulation_rate", -1.0)).is_equal(0.0)
+	assert_int(screen.get_meta("engineering_sensor_allocation", -1)).is_equal(allocation_before)
+	assert_str(screen.get_meta("last_engineering_command", "")).is_equal(command_before)
+	assert_bool(action.has_focus()).is_true()
+
+
+func test_live_contact_marker_hit_selects_actor_safe_inspector_context() -> void:
+	var screen := _create_screen()
+	_prepare_detected_contact(screen)
+	screen.call("ShowTacticalView")
+	var tactical_map := _command_deck(screen).get_node("%TacticalMap") as Control
+	tactical_map.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	tactical_map.size = Vector2(800, 500)
+	var marker: Vector2 = tactical_map.call("MapContact", 1)
+
+	assert_int(screen.get_meta("sensor_contact_count", 0)).is_equal(1)
+	assert_str(screen.get_meta("first_contact_label", "")).is_equal("Contact 1")
+	assert_str(screen.get_meta("first_contact_identification", "")).is_equal("Detected")
+	assert_str(tactical_map.call("ContactLabel", 1)).is_equal("Contact 1")
+	assert_int(tactical_map.call("HitTestContactId", marker)).is_equal(1)
+	assert_int(tactical_map.call("HitTestContactId", marker + Vector2(17, 0))).is_equal(0)
+	var click := InputEventMouseButton.new()
+	click.button_index = MOUSE_BUTTON_LEFT
+	click.pressed = true
+	click.position = marker
+	tactical_map.call("_GuiInput", click)
+
+	assert_int(screen.get_meta("selected_contact", 0)).is_equal(1)
+	var inspector_text := _collect_control_text(_command_deck(screen).get_node("%InspectorContent"))
+	assert_str(inspector_text).contains("LOCAL CONTACT ID")
+	assert_str(inspector_text).contains("DETECTED")
+	assert_str(inspector_text).contains("OBSERVATION AGE")
+	assert_str(inspector_text).not_contains("Survey Vessel Kestrel")
+	assert_str(_collect_control_text(screen)).not_contains("Survey Vessel Kestrel")
+	assert_bool((_find_action_button(screen, "active-scan") as Button).disabled).is_false()
+	assert_bool((_find_action_button(screen, "hail") as Button).disabled).is_true()
+
+
+func test_tactical_map_keyboard_focus_selects_contact_through_typed_path() -> void:
+	var screen := _create_screen()
+	_prepare_detected_contact(screen)
+	screen.call("ShowTacticalView")
+	await get_tree().process_frame
+	var tactical_map := _command_deck(screen).get_node("%TacticalMap") as Control
+	tactical_map.grab_focus()
+
+	assert_bool(tactical_map.has_focus()).is_true()
+	assert_bool(tactical_map.focus_next.is_empty()).is_false()
+	var accept := InputEventAction.new()
+	accept.action = "ui_accept"
+	accept.pressed = true
+	tactical_map.call("_GuiInput", accept)
+
+	assert_int(screen.get_meta("selected_contact", 0)).is_equal(1)
+	assert_bool(tactical_map.has_focus()).is_true()
+	assert_bool((_find_action_button(screen, "active-scan") as Button).disabled).is_false()
+
+
+func test_tactical_contact_hit_test_uses_distance_then_lowest_local_id() -> void:
+	var screen := _create_screen()
+	var tactical_map := _command_deck(screen).get_node("%TacticalMap")
+	var tactical_origin := Vector2(
+		screen.get_meta("tactical_x", 0.0), screen.get_meta("tactical_y", 0.0)
+	)
+	var click: Vector2 = screen.call(
+		"MapTacticalPosition", tactical_origin.x, tactical_origin.y
+	)
+
+	assert_int(
+		tactical_map.call(
+			"HitTestContactCandidates",
+			click,
+			PackedInt64Array([2, 1]),
+			PackedVector2Array([tactical_origin, tactical_origin])
+		)
+	).is_equal(1)
+	assert_int(
+		tactical_map.call(
+			"HitTestContactCandidates",
+			click,
+			PackedInt64Array([1, 2]),
+			PackedVector2Array(
+				[tactical_origin + Vector2(0.2, 0), tactical_origin + Vector2(0.1, 0)]
+			)
+		)
+	).is_equal(2)
+
+
+func test_contact_selection_survives_refresh_but_load_and_loss_clear_it() -> void:
+	var screen := _create_screen()
+	_prepare_detected_contact(screen)
+	screen.call("ShowTacticalView")
+	await get_tree().process_frame
+	screen.call("SelectContact", 1)
+	var tactical_map := _command_deck(screen).get_node("%TacticalMap")
+	var scan_button := _find_action_button(screen, "active-scan") as Button
+	var scan_instance_id := scan_button.get_instance_id()
+	scan_button.grab_focus()
+
+	assert_int(screen.call("ProcessSyntheticDelta", 0.1)).is_equal(1)
+	await get_tree().process_frame
+	assert_int(screen.get_meta("selected_contact", 0)).is_equal(1)
+	assert_int((_find_action_button(screen, "active-scan") as Button).get_instance_id()).is_equal(
+		scan_instance_id
+	)
+	assert_bool((_find_action_button(screen, "active-scan") as Button).has_focus()).is_true()
+	screen.call("QuickSave")
+	screen.call("QuickLoad")
+	assert_int(screen.get_meta("selected_contact", -1)).is_equal(0)
+	assert_int(screen.get_meta("sensor_contact_count", 0)).is_equal(1)
+
+	screen.call("SelectContact", 1)
+	for _step in range(34):
+		assert_int(screen.call("ProcessSyntheticDelta", 0.6)).is_equal(6)
+	assert_int(screen.call("ProcessSyntheticDelta", 0.1)).is_equal(1)
+	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(28600)
+	assert_str(screen.get_meta("first_contact_status", "")).is_equal("Stale")
+	assert_int(screen.get_meta("selected_contact", 0)).is_equal(1)
+	var stale_marker: Vector2 = tactical_map.call("MapContact", 1)
+	screen.call("ProcessSyntheticDelta", 0.1)
+	var refreshed_stale_marker: Vector2 = tactical_map.call("MapContact", 1)
+	assert_bool(refreshed_stale_marker.is_equal_approx(stale_marker)).is_true()
+	screen.call("AdvanceUntilNextPlayerRelevantEvent")
+	assert_int(screen.get_meta("sensor_contact_count", -1)).is_equal(0)
+	assert_int(screen.get_meta("selected_contact", -1)).is_equal(0)
+
+
+func test_active_scan_and_hail_actions_translate_typed_contact_and_reconcile_buttons() -> void:
+	var screen := _create_screen()
+	_prepare_detected_contact(screen)
+	screen.call("ShowTacticalView")
+	screen.call("SelectContact", 1)
+	var scan_button := _find_action_button(screen, "active-scan") as Button
+	var hail_button := _find_action_button(screen, "hail") as Button
+	var scan_instance_id := scan_button.get_instance_id()
+	var hail_instance_id := hail_button.get_instance_id()
+
+	scan_button.grab_focus()
+	assert_bool(scan_button.has_focus()).is_true()
+	scan_button.emit_signal("pressed")
+	await get_tree().process_frame
+	assert_str(screen.get_meta("last_contact_command", "")).is_equal("active-scan:Accepted")
+	assert_int(screen.get_meta("active_scan_contact", 0)).is_equal(1)
+	var disabled_scan := _find_action_button(screen, "active-scan") as Button
+	assert_bool(disabled_scan.disabled).is_true()
+	assert_int(disabled_scan.get_instance_id()).is_equal(scan_instance_id)
+	assert_bool(disabled_scan.has_focus()).is_false()
+	var focus_owner := get_viewport().gui_get_focus_owner() as Control
+	assert_object(focus_owner).is_not_null()
+	assert_bool(focus_owner is Button and (focus_owner as Button).disabled).is_false()
+	assert_str(_collect_control_text(_command_deck(screen).get_node("%InspectorContent"))).contains(
+		"0 %"
+	)
+	assert_int(screen.call("ProcessSyntheticDelta", 0.5)).is_equal(5)
+	assert_str(_collect_control_text(_command_deck(screen).get_node("%InspectorContent"))).contains(
+		"25 %"
+	)
+	screen.call("AdvanceUntilNextPlayerRelevantEvent")
+	assert_str(screen.get_meta("first_contact_identification", "")).is_equal("Identified")
+	assert_str(screen.get_meta("first_contact_label", "")).is_equal("Survey Vessel Kestrel")
+	assert_int((_find_action_button(screen, "active-scan") as Button).get_instance_id()).is_equal(
+		scan_instance_id
+	)
+	assert_int((_find_action_button(screen, "hail") as Button).get_instance_id()).is_equal(
+		hail_instance_id
+	)
+	assert_bool((_find_action_button(screen, "hail") as Button).disabled).is_false()
+	assert_str(_collect_control_text(_command_deck(screen))).contains("Pathfinder class")
+
+	screen.call("ShowStrategicView")
+	screen.call("RequestSelectedHail")
+	assert_str(screen.get_meta("last_contact_command", "")).is_equal("hail:Acknowledged")
+	assert_str(screen.get_node("%Message").text).contains("Survey Vessel Kestrel")
+	var acknowledged_log := _collect_control_text(screen.get_node("%EventLogContent"))
+	assert_str(acknowledged_log).contains("Survey Vessel Kestrel acknowledged the hail")
+	assert_str(acknowledged_log).not_contains("Ship 4")
+	screen.call("ShowPreview", 2)
+	assert_str(_collect_control_text(_command_deck(screen))).not_contains("Survey Vessel Kestrel")
+	assert_bool((_find_action_button(screen, "hail-target") as Button).disabled).is_true()
+
+
+func test_space_pause_does_not_activate_the_focused_hail_action() -> void:
+	var screen := _create_screen()
+	_prepare_detected_contact(screen)
+	screen.call("ShowTacticalView")
+	screen.call("SelectContact", 1)
+	screen.call("RequestSelectedActiveScan")
+	screen.call("AdvanceUntilNextPlayerRelevantEvent")
+	var hail_button := _find_action_button(screen, "hail") as Button
+	hail_button.grab_focus()
+	assert_bool(hail_button.has_focus()).is_true()
+	var log_before := _collect_control_text(screen.get_node("%EventLogContent"))
+	var command_before: String = screen.get_meta("last_contact_command", "")
+
+	var press := InputEventKey.new()
+	press.physical_keycode = KEY_SPACE
+	press.unicode = KEY_SPACE
+	press.pressed = true
+	screen.call("_Input", press)
+	assert_bool(screen.get_viewport().is_input_handled()).is_true()
+	var release := press.duplicate() as InputEventKey
+	release.pressed = false
+	screen.call("_Input", release)
+	assert_bool(screen.get_viewport().is_input_handled()).is_true()
+
+	assert_float(screen.get_meta("simulation_rate", -1.0)).is_equal(0.0)
+	assert_str(screen.get_meta("last_contact_command", "")).is_equal(command_before)
+	assert_str(_collect_control_text(screen.get_node("%EventLogContent"))).is_equal(log_before)
+	assert_bool(hail_button.has_focus()).is_true()
+
+
+func test_travel_departure_presents_contact_and_scan_events_in_log() -> void:
+	var screen := _create_screen()
+	_prepare_detected_contact(screen)
+	screen.call("ShowTacticalView")
+	screen.call("SelectContact", 1)
+	screen.call("RequestSelectedActiveScan")
+	screen.call("ShowStrategicView")
+	screen.call("SelectDestination", "vesper-reach")
+	screen.call("RequestSelectedTravel")
+
+	var event_log := _collect_control_text(screen.get_node("%EventLogContent"))
+	assert_str(event_log).contains("Contact 1: Contact became stale")
+	assert_str(event_log).contains("Contact 1: Active scan interrupted")
+	assert_str(event_log).contains("Contact detected")
+
+
+func test_batched_events_render_their_distinct_core_clocks_in_log() -> void:
+	var screen := _create_screen()
+	screen.call("ShowEngineeringWorkspace")
+	(_find_engineering_action_button(screen, "prioritize-sensors") as Button).emit_signal("pressed")
+	for _batch in range(12):
+		assert_int(screen.call("ProcessSyntheticDelta", 0.6)).is_equal(6)
+	assert_int(screen.call("ProcessSyntheticDelta", 0.2)).is_equal(2)
+	screen.call("QuickSave")
+
+	var save_text := FileAccess.get_file_as_string(TEST_QUICK_SAVE_PATH)
+	var knowledge_start := save_text.find('"sensorKnowledge":')
+	var contacts_member := save_text.find('"contacts":', knowledge_start)
+	var contacts_start := save_text.find("[", contacts_member)
+	var active_scan_start := save_text.find('"activeScan":', contacts_start)
+	var contacts_end := save_text.rfind("]", active_scan_start)
+	assert_int(knowledge_start).is_greater_equal(0)
+	assert_int(contacts_member).is_greater_equal(knowledge_start)
+	assert_int(contacts_start).is_greater(contacts_member)
+	assert_int(active_scan_start).is_greater(contacts_start)
+	assert_int(contacts_end).is_greater(contacts_start)
+	save_text = save_text.left(contacts_start + 1) + save_text.substr(contacts_end)
+	_write_text(TEST_QUICK_SAVE_PATH, save_text)
+	screen.call("QuickLoad")
+	assert_str(screen.get_meta("quick_save_status", "")).is_equal("loaded")
+
+	assert_int(screen.call("ProcessSyntheticDelta", 0.6)).is_equal(6)
+	var event_log := _collect_control_text(screen.get_node("%EventLogContent"))
+	assert_str(event_log).contains("00:00:07  SENSOR")
+	assert_str(event_log).contains("Contact detected")
+	assert_str(event_log).contains("00:00:08  ENGINEER")
+	assert_str(event_log).contains("Sensors repair completed")
+
+
+func test_hail_no_response_appears_in_log_without_hidden_ship_identity() -> void:
+	var screen := _create_screen()
+	screen.call("SelectDestination", "vesper-reach")
+	screen.call("RequestSelectedTravel")
+	screen.call("AdvanceUntilNextPlayerRelevantEvent")
+	screen.call("AdvanceUntilNextPlayerRelevantEvent")
+	screen.call("ShowTacticalView")
+	screen.call("SelectContact", 1)
+	screen.call("RequestSelectedActiveScan")
+	screen.call("AdvanceUntilNextPlayerRelevantEvent")
+	screen.call("RequestSelectedHail")
+
+	assert_str(screen.get_meta("last_contact_command", "")).is_equal("hail:NoResponse")
+	var event_log := _collect_control_text(screen.get_node("%EventLogContent"))
+	assert_str(event_log).contains("USS Wayfarer did not respond")
+	assert_str(event_log).not_contains("Ship 2")
+
+
 func test_live_unsupported_values_and_engineering_actions_are_explicitly_unavailable() -> void:
 	var screen := _create_screen()
 	assert_str(_collect_control_text(_command_deck(screen))).contains("UNAVAILABLE")
 	assert_bool((_find_action_button(screen, "fire-phasers") as Button).disabled).is_true()
 
 	screen.call("ShowEngineeringWorkspace")
-	var engineering_text := _collect_control_text(_engineering_workspace(screen))
-	assert_str(engineering_text).contains("NOT PROVIDED BY LIVE SIMULATION")
-	assert_bool((_find_engineering_action_button(screen, "allocate-power") as Button).disabled).is_true()
+	var hierarchy_text := _collect_control_text(
+		_engineering_workspace(screen).get_node("%EngineeringHierarchy")
+	)
+	assert_str(hierarchy_text).not_contains("SHIELDS")
+	assert_str(hierarchy_text).not_contains("WEAPONS")
+	assert_str(hierarchy_text).not_contains("EPS")
+	assert_bool((_find_engineering_action_button(screen, "allocate-balanced") as Button).disabled).is_false()
 	assert_bool(
 		_engineering_workspace(screen).get_node("%EngineeringSchematic").get_meta(
 			"topology_available", true
@@ -500,8 +1033,8 @@ func test_live_unsupported_values_and_engineering_actions_are_explicitly_unavail
 
 func test_invalid_content_bootstrap_is_fail_closed_and_player_safe() -> void:
 	_write_text(INVALID_CONTENT_PATH, "not-json")
-	var scene := load("res://Main.tscn") as PackedScene
-	var screen: Node = auto_free(scene.instantiate())
+	var scene := _load_main_scene()
+	var screen := _track_screen(scene.instantiate())
 	screen.set("ShipDefinitionResourcePath", INVALID_CONTENT_PATH)
 	add_child(screen)
 	screen.set_process(false)
@@ -533,7 +1066,7 @@ func test_normal_shell_never_projects_hidden_vessel_or_scheduler_truth() -> void
 	assert_str(presented).not_contains("ScheduledWork")
 
 
-func test_default_quick_save_writes_schema_v3_without_touching_legacy_slot() -> void:
+func test_default_quick_save_writes_schema_v5_without_touching_legacy_slot() -> void:
 	_write_text(LEGACY_DEFAULT_QUICK_SAVE_PATH, "legacy-slot-sentinel")
 	var screen := _create_default_screen()
 
@@ -544,14 +1077,16 @@ func test_default_quick_save_writes_schema_v3_without_touching_legacy_slot() -> 
 	var save_json: Dictionary = JSON.parse_string(
 		FileAccess.get_file_as_string(DEFAULT_QUICK_SAVE_PATH)
 	)
-	assert_int(int(save_json.get("schemaVersion", -1))).is_equal(3)
-	assert_str(save_json.get("simulationRulesVersion", "")).is_equal("active-world-orders-v1")
+	assert_int(int(save_json.get("schemaVersion", -1))).is_equal(5)
+	assert_str(save_json.get("simulationRulesVersion", "")).is_equal(
+		"engineering-backbone-v1"
+	)
 	assert_str(FileAccess.get_file_as_string(LEGACY_DEFAULT_QUICK_SAVE_PATH)).is_equal(
 		"legacy-slot-sentinel"
 	)
 
 
-func test_default_quick_load_discovers_legacy_slot_path_then_saves_generic_v3() -> void:
+func test_default_quick_load_discovers_legacy_slot_path_then_saves_generic_v5() -> void:
 	var snapshot_screen := _create_screen()
 	snapshot_screen.call("ProcessSyntheticDelta", 0.6)
 	snapshot_screen.call("QuickSave")
@@ -570,8 +1105,10 @@ func test_default_quick_load_discovers_legacy_slot_path_then_saves_generic_v3() 
 	var save_json: Dictionary = JSON.parse_string(
 		FileAccess.get_file_as_string(DEFAULT_QUICK_SAVE_PATH)
 	)
-	assert_int(int(save_json.get("schemaVersion", -1))).is_equal(3)
-	assert_str(save_json.get("simulationRulesVersion", "")).is_equal("active-world-orders-v1")
+	assert_int(int(save_json.get("schemaVersion", -1))).is_equal(5)
+	assert_str(save_json.get("simulationRulesVersion", "")).is_equal(
+		"engineering-backbone-v1"
+	)
 	assert_str(FileAccess.get_file_as_string(LEGACY_DEFAULT_QUICK_SAVE_PATH)).is_equal(
 		legacy_contents
 	)
@@ -631,8 +1168,8 @@ func test_custom_quick_save_path_never_consults_legacy_slot() -> void:
 
 
 func test_quick_save_path_cannot_escape_user_boundary() -> void:
-	var scene := load("res://Main.tscn") as PackedScene
-	var screen: Node = auto_free(scene.instantiate())
+	var scene := _load_main_scene()
+	var screen := _track_screen(scene.instantiate())
 	screen.set("QuickSaveUserPath", "user://../outside.json")
 	add_child(screen)
 	screen.set_process(false)
@@ -863,7 +1400,7 @@ func test_advance_until_stops_at_repair_before_arrival() -> void:
 	assert_bool(screen.get_meta("travel_active", false)).is_true()
 	assert_float(screen.get_meta("sensor_integrity", 0.0)).is_equal_approx(1.0, 0.0001)
 	assert_str(_collect_control_text(screen.get_node("%EventLogContent"))).contains(
-		"Sensor repair completed"
+		"Sensors repair completed"
 	)
 
 	screen.call("AdvanceUntilNextPlayerRelevantEvent")
@@ -941,6 +1478,13 @@ func _send_action(screen: Node, action: StringName) -> void:
 	screen.call("_UnhandledInput", event)
 
 
+func _prepare_detected_contact(screen: Node) -> void:
+	screen.call("AdvanceUntilNextPlayerRelevantEvent")
+	screen.call("ShowEngineeringWorkspace")
+	(_find_engineering_action_button(screen, "prioritize-sensors") as Button).emit_signal("pressed")
+	assert_int(screen.get_meta("sensor_contact_count", 0)).is_equal(1)
+
+
 func _collect_control_text(node: Node) -> String:
 	var presented := ""
 	if node is Label or node is Button:
@@ -953,8 +1497,8 @@ func _collect_control_text(node: Node) -> String:
 
 
 func _create_screen() -> Node:
-	var scene := load("res://Main.tscn") as PackedScene
-	var screen: Node = auto_free(scene.instantiate())
+	var scene := _load_main_scene()
+	var screen := _track_screen(scene.instantiate())
 	screen.set("QuickSaveUserPath", TEST_QUICK_SAVE_PATH)
 	add_child(screen)
 	screen.set_process(false)
@@ -962,11 +1506,26 @@ func _create_screen() -> Node:
 
 
 func _create_default_screen() -> Node:
-	var scene := load("res://Main.tscn") as PackedScene
-	var screen: Node = auto_free(scene.instantiate())
+	var scene := _load_main_scene()
+	var screen := _track_screen(scene.instantiate())
 	add_child(screen)
 	screen.set_process(false)
 	return screen
+
+
+func _track_screen(screen: Node) -> Node:
+	# GdUnit's immediate free path can invalidate child C# wrappers before Godot's managed bridge observes teardown.
+	# Queueing the owned scene and awaiting one frame in after_test preserves the normal engine lifecycle.
+	_screens_to_free.append(screen)
+	return screen
+
+
+func _load_main_scene() -> PackedScene:
+	# Repeated cached mixed-language scene instantiation can race Godot's managed-handle replacement during teardown.
+	# Tests need isolated scene resources; production still loads its one ordinary cached startup scene.
+	return ResourceLoader.load(
+		"res://Main.tscn", "", ResourceLoader.CACHE_MODE_IGNORE_DEEP
+	) as PackedScene
 
 
 func _command_deck(screen: Node) -> Node:
@@ -1004,6 +1563,44 @@ func _write_text(user_path: String, contents: String) -> void:
 	assert_object(file).is_not_null()
 	file.store_string(contents)
 	file.close()
+
+
+func _rewrite_v5_for_damaged_impulse(save_text: String) -> String:
+	# Godot's JSON parser normalizes integer tokens through Variant; targeted structural edits keep the strict
+	# persistence contract intact while constructing one otherwise unreachable damaged-impulse test fixture.
+	var engineering_start := save_text.find('"engineering":')
+	var impulse_member := save_text.find('"impulseCondition": 1', engineering_start)
+	assert_int(engineering_start).is_greater_equal(0)
+	assert_int(impulse_member).is_greater(engineering_start)
+	var impulse_value := impulse_member + '"impulseCondition": '.length()
+	save_text = save_text.left(impulse_value) + "0.5" + save_text.substr(impulse_value + 1)
+
+	var repair_member := save_text.find('"activeRepair": {', engineering_start)
+	var repair_value_start := save_text.find("{", repair_member)
+	var repair_value_end := save_text.find("}", repair_value_start)
+	assert_int(repair_member).is_greater(engineering_start)
+	assert_int(repair_value_start).is_greater(repair_member)
+	assert_int(repair_value_end).is_greater(repair_value_start)
+	var repair: Dictionary = JSON.parse_string(
+		save_text.substr(repair_value_start, repair_value_end - repair_value_start + 1)
+	)
+	var repair_work_id := int(repair["scheduledCompletionId"])
+	save_text = save_text.left(repair_value_start) + "null" + save_text.substr(repair_value_end + 1)
+
+	var work_kind := save_text.find('"kind": "systemRepairCompletion"')
+	var work_start := save_text.rfind("{", work_kind)
+	var work_end := save_text.find("}", work_kind)
+	assert_int(work_kind).is_greater_equal(0)
+	assert_int(work_start).is_greater_equal(0)
+	assert_int(work_end).is_greater(work_kind)
+	var work: Dictionary = JSON.parse_string(save_text.substr(work_start, work_end - work_start + 1))
+	assert_int(int(work["id"])).is_equal(repair_work_id)
+	var removal_end := work_end + 1
+	while removal_end < save_text.length() and save_text[removal_end] in [" ", "\n", "\r", "\t"]:
+		removal_end += 1
+	if removal_end < save_text.length() and save_text[removal_end] == ",":
+		removal_end += 1
+	return save_text.left(work_start) + save_text.substr(removal_end)
 
 
 func _remove_quick_save_files() -> void:

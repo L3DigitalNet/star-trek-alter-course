@@ -92,11 +92,13 @@ Lint additionally skips generated directories: `.pytest_cache/**`, `.ruff_cache/
 Declared exclusions:
 - `.agents/skills/agent-handoff/**` (both): Centrally locked Agent Handoff skill tree; editing it to satisfy a formatter creates drift.
 - `.claude/skills/agent-handoff/**` (both): Centrally locked Agent Handoff skill tree for Claude Code; editing it to satisfy a formatter creates drift.
+- `.claude/skills/figma-*/**` (both): Official Figma MCP skill corpus; vendor formatting must be preserved.
+- `.codex/skills/figma-*/**` (both): Official Figma MCP skill corpus; vendor formatting must be preserved.
 
 Check formatting over exactly that scope, with Git as the corpus authority:
 
 ```bash
-git ls-files -z -- ':(glob)**/*.md' ':(glob)**/*.json' ':(glob)**/*.jsonc' ':(glob)**/*.yml' ':(glob)**/*.yaml' ':(glob,exclude).agents/skills/agent-handoff/**' ':(glob,exclude).claude/skills/agent-handoff/**' | xargs -0 -r npx prettier --check --
+git ls-files -z -- ':(glob)**/*.md' ':(glob)**/*.json' ':(glob)**/*.jsonc' ':(glob)**/*.yml' ':(glob)**/*.yaml' ':(glob,exclude).agents/skills/agent-handoff/**' ':(glob,exclude).claude/skills/agent-handoff/**' ':(glob,exclude).claude/skills/figma-*/**' ':(glob,exclude).codex/skills/figma-*/**' | xargs -0 -r npx prettier --check --
 ```
 
 Without Git, bound the same scope by glob instead. Prettier's CLI has no negative pattern, so this form does not apply the declared format exclusions above; pass them through an `--ignore-path` file inside the repository:
@@ -110,7 +112,7 @@ Never check or write with a bare `.`: it reaches undeclared languages and Git-ex
 Lint Markdown structure over the same Git-tracked scope:
 
 ```bash
-git ls-files -z -- ':(glob)**/*.md' ':(glob,exclude).pytest_cache/**' ':(glob,exclude).ruff_cache/**' ':(glob,exclude).venv/**' ':(glob,exclude)node_modules/**' ':(glob,exclude).agents/skills/agent-handoff/**' ':(glob,exclude).claude/skills/agent-handoff/**' | sed -z 's|^|:|' | xargs -0 -r npx markdownlint-cli2 --no-globs
+git ls-files -z -- ':(glob)**/*.md' ':(glob,exclude).pytest_cache/**' ':(glob,exclude).ruff_cache/**' ':(glob,exclude).venv/**' ':(glob,exclude)node_modules/**' ':(glob,exclude).agents/skills/agent-handoff/**' ':(glob,exclude).claude/skills/agent-handoff/**' ':(glob,exclude).claude/skills/figma-*/**' ':(glob,exclude).codex/skills/figma-*/**' | sed -z 's|^|:|' | xargs -0 -r npx markdownlint-cli2 --no-globs
 ```
 
 Never lint a bare recursive glob: it descends into any independent Git repository checked out below this one.

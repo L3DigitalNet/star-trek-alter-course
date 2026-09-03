@@ -93,7 +93,7 @@ public sealed class PlayerTravelAndNpcOrdersTests
             $"Ship {id.Value}",
             default,
             default,
-            new SensorIntegrity(1),
+            new SystemCondition(1),
             strategic,
             ActiveOrder: activeOrder
         );
@@ -116,7 +116,14 @@ public sealed class PlayerTravelAndNpcOrdersTests
 
     private static ShipDefinitionCatalog CreateCatalog()
     {
-        var definition = new ShipDefinition(DefinitionId, "Test ship", new SpeedKilometersPerSecond(10), Duration(6));
+        var definition = new ShipDefinition(
+            DefinitionId,
+            "Test ship",
+            new SpeedKilometersPerSecond(10),
+            new DistanceKilometers(30),
+            new SimulationDuration(2000),
+            Duration(6)
+        );
         return new ShipDefinitionCatalog(
             new Dictionary<ShipDefinitionId, ShipDefinition> { [definition.Id] = definition }
         );

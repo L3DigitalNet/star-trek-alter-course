@@ -1,10 +1,12 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using AlterCourse.Core.AI;
 using AlterCourse.Core.Content;
 using AlterCourse.Core.Gameplay;
 using AlterCourse.Core.Identity;
 using AlterCourse.Core.Orders;
 using AlterCourse.Core.Quantities;
+using AlterCourse.Core.Sensors;
 using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
@@ -16,6 +18,8 @@ using PlayerShipSnapshotV1 = AlterCourse.Core.Persistence.SaveModelsV1.PlayerShi
 using SaveEnvelopeV1 = AlterCourse.Core.Persistence.SaveModelsV1.SaveEnvelopeV1;
 using SaveEnvelopeV2 = AlterCourse.Core.Persistence.SaveModelsV2.SaveEnvelopeV2;
 using SaveEnvelopeV3 = AlterCourse.Core.Persistence.SaveModelsV3.SaveEnvelopeV3;
+using SaveEnvelopeV4 = AlterCourse.Core.Persistence.SaveModelsV4.SaveEnvelopeV4;
+using SaveEnvelopeV5 = AlterCourse.Core.Persistence.SaveModelsV5.SaveEnvelopeV5;
 using SaveMetadataV2 = AlterCourse.Core.Persistence.SaveModelsV2.SaveMetadataV2;
 using ScheduledWorkSnapshotV2 = AlterCourse.Core.Persistence.SaveModelsV2.ScheduledWorkSnapshotV2;
 using SchedulerSnapshotV1 = AlterCourse.Core.Persistence.SaveModelsV1.SchedulerSnapshotV1;
@@ -25,9 +29,13 @@ using SensorRepairSnapshotV2 = AlterCourse.Core.Persistence.SaveModelsV2.SensorR
 using ShipOrderSnapshotV3 = AlterCourse.Core.Persistence.SaveModelsV3.ShipOrderSnapshotV3;
 using ShipSnapshotV2 = AlterCourse.Core.Persistence.SaveModelsV2.ShipSnapshotV2;
 using ShipSnapshotV3 = AlterCourse.Core.Persistence.SaveModelsV3.ShipSnapshotV3;
+using ShipSnapshotV4 = AlterCourse.Core.Persistence.SaveModelsV4.ShipSnapshotV4;
+using ShipSnapshotV5 = AlterCourse.Core.Persistence.SaveModelsV5.ShipSnapshotV5;
 using SimulationSnapshotV1 = AlterCourse.Core.Persistence.SaveModelsV1.SimulationSnapshotV1;
 using SimulationSnapshotV2 = AlterCourse.Core.Persistence.SaveModelsV2.SimulationSnapshotV2;
 using SimulationSnapshotV3 = AlterCourse.Core.Persistence.SaveModelsV3.SimulationSnapshotV3;
+using SimulationSnapshotV4 = AlterCourse.Core.Persistence.SaveModelsV4.SimulationSnapshotV4;
+using SimulationSnapshotV5 = AlterCourse.Core.Persistence.SaveModelsV5.SimulationSnapshotV5;
 using StrategicLocationSnapshotV2 = AlterCourse.Core.Persistence.SaveModelsV2.StrategicLocationSnapshotV2;
 using StrategicMapSnapshotV1 = AlterCourse.Core.Persistence.SaveModelsV1.StrategicMapSnapshotV1;
 using StrategicMapSnapshotV2 = AlterCourse.Core.Persistence.SaveModelsV2.StrategicMapSnapshotV2;
@@ -49,15 +57,30 @@ public static class GamePersistence
 {
     private const int V1SchemaVersion = 1;
     private const int V2SchemaVersion = 2;
-    private const int CurrentSchemaVersion = 3;
-    private const string HistoricalSimulationRulesVersion = "first-playable-v1";
-    private const string CurrentSimulationRulesVersion = "active-world-orders-v1";
+    private const int V3SchemaVersion = 3;
+    private const int V4SchemaVersion = 4;
+    private const int CurrentSchemaVersion = 5;
+    private const string V1SimulationRulesVersion = "first-playable-v1";
+    private const string V2SimulationRulesVersion = "first-playable-v1";
+    private const string V3SimulationRulesVersion = "active-world-orders-v1";
+    private const string V4SimulationRulesVersion = "sensor-knowledge-first-contact-v1";
+    private const string CurrentSimulationRulesVersion = "engineering-backbone-v1";
     private const string TravelArrivalKind = "travelArrival";
     private const string SensorRepairCompletionKind = "sensorRepairCompletion";
+    private const string SystemRepairCompletionKind = "systemRepairCompletion";
     private const string OrderWakeKind = "orderWake";
+    private const string SensorContactLossKind = "sensorContactLoss";
+    private const string ActiveSensorScanCompletionKind = "activeSensorScanCompletion";
+    private const string ShipContactDecisionWakeKind = "shipContactDecisionWake";
+    private const string CurrentContactStatus = "current";
+    private const string StaleContactStatus = "stale";
+    private const string LostContactStatus = "lost";
+    private const string DetectedContactIdentification = "detected";
+    private const string IdentifiedContactIdentification = "identified";
+    private const string CautiousContactPosture = "cautiousContact";
     private const string AtLocationKind = "atLocation";
     private const string TravelingKind = "traveling";
-    private const int MaximumSaveBytes = 1024 * 1024;
+    private const int MaximumSaveBytes = 128 * 1024 * 1024;
     private const int MaximumJsonDepth = 32;
     private const int MaximumMetadataTextLength = 128;
 
@@ -69,18 +92,18 @@ public static class GamePersistence
         MaxDepth = MaximumJsonDepth,
     };
 
-    /// <summary>Serializes a validated simulation and caller-supplied organization metadata as V3 UTF-8 JSON.</summary>
+    /// <summary>Serializes a validated simulation and caller-supplied organization metadata as V5 UTF-8 JSON.</summary>
     public static byte[] Serialize(GameSimulation simulation, GameSaveMetadata metadata)
     {
         ArgumentNullException.ThrowIfNull(simulation);
         ArgumentNullException.ThrowIfNull(metadata);
         ValidateMetadata(metadata);
 
-        SaveEnvelopeV3 envelope = CaptureV3(simulation.CaptureState(), metadata);
+        SaveEnvelopeV5 envelope = CaptureV5(simulation.CaptureState(), metadata);
         byte[] json = JsonSerializer.SerializeToUtf8Bytes(envelope, SerializerOptions);
         if (json.Length > MaximumSaveBytes)
         {
-            throw new InvalidOperationException($"The V3 save exceeds the {MaximumSaveBytes}-byte contract limit.");
+            throw new InvalidOperationException($"The V5 save exceeds the {MaximumSaveBytes}-byte contract limit.");
         }
 
         return json;
@@ -115,7 +138,9 @@ public static class GamePersistence
             {
                 V1SchemaVersion => LoadV1(documentBytes, catalog, sourceIdentity),
                 V2SchemaVersion => LoadV2(documentBytes, catalog, sourceIdentity),
-                CurrentSchemaVersion => LoadV3(documentBytes, catalog, sourceIdentity),
+                V3SchemaVersion => LoadV3(documentBytes, catalog, sourceIdentity),
+                V4SchemaVersion => LoadV4(documentBytes, catalog, sourceIdentity),
+                CurrentSchemaVersion => LoadV5(documentBytes, catalog, sourceIdentity),
                 _ => throw Failure(
                     GamePersistenceFailure.UnsupportedVersion,
                     sourceIdentity,
@@ -243,16 +268,16 @@ public static class GamePersistence
         }
     }
 
-    private static SaveEnvelopeV3 CaptureV3(SimulationState state, GameSaveMetadata metadata)
+    private static SaveEnvelopeV5 CaptureV5(SimulationState state, GameSaveMetadata metadata)
     {
         if (state.Ships.Length > SimulationState.MaximumShips)
         {
             throw new InvalidOperationException(
-                $"V3 persistence supports at most {SimulationState.MaximumShips} ships."
+                $"V5 persistence supports at most {SimulationState.MaximumShips} ships."
             );
         }
 
-        return new SaveEnvelopeV3
+        return new SaveEnvelopeV5
         {
             SchemaVersion = CurrentSchemaVersion,
             SimulationRulesVersion = CurrentSimulationRulesVersion,
@@ -263,7 +288,7 @@ public static class GamePersistence
                 CreatedAtUtc = metadata.CreatedAtUtc,
                 SavedAtUtc = metadata.SavedAtUtc,
             },
-            Simulation = new SimulationSnapshotV3
+            Simulation = new SimulationSnapshotV5
             {
                 TimeMilliseconds = state.Time.Milliseconds,
                 ShipAllocatorNextId = state.ShipIdAllocator.NextId,
@@ -271,7 +296,7 @@ public static class GamePersistence
                 PlayerShipId = state.PlayerShipId.Value,
                 Scheduler = CaptureSchedulerV2(state.Scheduler),
                 StrategicMap = CaptureStrategicMapV2(state.StrategicMap),
-                Ships = [.. state.Ships.OrderBy(ship => ship.InstanceId.Value).Select(CaptureShipV3)],
+                Ships = [.. state.Ships.OrderBy(ship => ship.InstanceId.Value).Select(CaptureShipV5)],
             },
         };
     }
@@ -321,7 +346,7 @@ public static class GamePersistence
             ],
         };
 
-    private static ShipSnapshotV3 CaptureShipV3(ShipState ship) =>
+    private static ShipSnapshotV5 CaptureShipV5(ShipState ship) =>
         new()
         {
             InstanceId = ship.InstanceId.Value,
@@ -337,19 +362,79 @@ public static class GamePersistence
                 HeadingDegrees = ship.TacticalMotion.Heading.Value,
                 SpeedKilometersPerSecond = ship.TacticalMotion.Speed.Value,
             },
-            SensorIntegrity = ship.SensorIntegrity.Value,
-            SensorRepair = ship.SensorRepair is null
-                ? null
-                : new SensorRepairSnapshotV2
-                {
-                    StartingIntegrity = ship.SensorRepair.StartingIntegrity.Value,
-                    TargetIntegrity = ship.SensorRepair.TargetIntegrity.Value,
-                    StartedAtMilliseconds = ship.SensorRepair.StartedAt.Milliseconds,
-                    ExpectedCompletionMilliseconds = ship.SensorRepair.ExpectedCompletion.Milliseconds,
-                    ScheduledCompletionId = ship.SensorRepair.ScheduledCompletionId.Value,
-                },
+            Engineering = new SaveModelsV5.EngineeringSnapshotV5
+            {
+                GenerationCondition = ship.Engineering.GenerationCondition.Value,
+                SensorCondition = ship.Engineering.SensorCondition.Value,
+                ImpulseCondition = ship.Engineering.ImpulseCondition.Value,
+                SensorAllocation = ship.Engineering.Allocation.Sensors.Value,
+                ImpulseAllocation = ship.Engineering.Allocation.ImpulsePropulsion.Value,
+                ActiveRepair = ship.Engineering.ActiveRepair is null
+                    ? null
+                    : new SaveModelsV5.SystemRepairSnapshotV5
+                    {
+                        TargetSystem = ship.Engineering.ActiveRepair.TargetSystem.Value,
+                        StartingCondition = ship.Engineering.ActiveRepair.StartingCondition.Value,
+                        TargetCondition = ship.Engineering.ActiveRepair.TargetCondition.Value,
+                        StartedAtMilliseconds = ship.Engineering.ActiveRepair.StartedAt.Milliseconds,
+                        ExpectedCompletionMilliseconds = ship.Engineering.ActiveRepair.ExpectedCompletion.Milliseconds,
+                        ScheduledCompletionId = ship.Engineering.ActiveRepair.ScheduledCompletionId.Value,
+                    },
+            },
             StrategicState = CaptureStrategicStateV2(ship.StrategicState),
             ActiveOrder = CaptureOrderV3(ship.ActiveOrder),
+            SensorKnowledge = CaptureSensorKnowledgeV4(ship.SensorKnowledge),
+            AutonomousState = CaptureAutonomousStateV4(ship.AutonomousState),
+        };
+
+    private static SaveModelsV4.SensorKnowledgeSnapshotV4 CaptureSensorKnowledgeV4(SensorKnowledge knowledge) =>
+        new()
+        {
+            NextContactId = knowledge.NextContactId,
+            Contacts = [.. knowledge.Contacts.Select(CaptureContactV4)],
+            ActiveScan = knowledge.ActiveScan is null
+                ? null
+                : new SaveModelsV4.ActiveSensorScanSnapshotV4
+                {
+                    TargetContactId = knowledge.ActiveScan.TargetContactId.Value,
+                    StartedAtMilliseconds = knowledge.ActiveScan.StartedAt.Milliseconds,
+                    ExpectedCompletionMilliseconds = knowledge.ActiveScan.ExpectedCompletion.Milliseconds,
+                    ScheduledCompletionId = knowledge.ActiveScan.ScheduledCompletionId.Value,
+                },
+        };
+
+    private static SaveModelsV4.SensorContactSnapshotV4 CaptureContactV4(SensorContactTrack contact) =>
+        new()
+        {
+            Id = contact.Id.Value,
+            TargetShipId = contact.TargetShipId.Value,
+            LastObservedPosition = new TacticalPositionSnapshotV2
+            {
+                XKilometers = contact.LastObservedPosition.XKilometers,
+                YKilometers = contact.LastObservedPosition.YKilometers,
+            },
+            LastObservedAtMilliseconds = contact.LastObservedAt.Milliseconds,
+            Status = CaptureContactStatus(contact.Status),
+            Identification = CaptureContactIdentification(contact.Identification),
+            KnownVesselDisplayName = contact.KnownVesselDisplayName,
+            KnownDesignDisplayName = contact.KnownDesignDisplayName,
+            LossWorkId = contact.LossWorkId?.Value,
+            LossDueTimeMilliseconds = contact.LossDueTime?.Milliseconds,
+        };
+
+    private static SaveModelsV4.ShipAutonomousSnapshotV4 CaptureAutonomousStateV4(ShipAutonomousState autonomous) =>
+        new()
+        {
+            ContactPosture = autonomous.ContactPosture is null
+                ? null
+                : CaptureContactPosture(autonomous.ContactPosture.Value),
+            PendingContactDecisionWake = autonomous.PendingContactDecisionWake is null
+                ? null
+                : new SaveModelsV4.ContactDecisionWakeSnapshotV4
+                {
+                    ScheduledWorkId = autonomous.PendingContactDecisionWake.ScheduledWorkId.Value,
+                    DueTimeMilliseconds = autonomous.PendingContactDecisionWake.DueTime.Milliseconds,
+                },
         };
 
     private static ShipOrderSnapshotV3? CaptureOrderV3(ShipOrder? order) =>
@@ -405,9 +490,36 @@ public static class GamePersistence
         kind switch
         {
             ScheduledWorkKind.TravelArrival => TravelArrivalKind,
-            ScheduledWorkKind.SensorRepairCompletion => SensorRepairCompletionKind,
+            ScheduledWorkKind.SystemRepairCompletion => SystemRepairCompletionKind,
             ScheduledWorkKind.OrderWake => OrderWakeKind,
+            ScheduledWorkKind.SensorContactLoss => SensorContactLossKind,
+            ScheduledWorkKind.ActiveSensorScanCompletion => ActiveSensorScanCompletionKind,
+            ScheduledWorkKind.ShipContactDecisionWake => ShipContactDecisionWakeKind,
             _ => throw new InvalidOperationException("Cannot persist an unknown scheduled work kind."),
+        };
+
+    private static string CaptureContactStatus(SensorContactStatus status) =>
+        status switch
+        {
+            SensorContactStatus.Current => CurrentContactStatus,
+            SensorContactStatus.Stale => StaleContactStatus,
+            SensorContactStatus.Lost => LostContactStatus,
+            _ => throw new InvalidOperationException("Cannot persist an unknown sensor contact status."),
+        };
+
+    private static string CaptureContactIdentification(SensorContactIdentification identification) =>
+        identification switch
+        {
+            SensorContactIdentification.Detected => DetectedContactIdentification,
+            SensorContactIdentification.Identified => IdentifiedContactIdentification,
+            _ => throw new InvalidOperationException("Cannot persist an unknown sensor contact identification."),
+        };
+
+    private static string CaptureContactPosture(ShipContactPosture posture) =>
+        posture switch
+        {
+            ShipContactPosture.CautiousContact => CautiousContactPosture,
+            _ => throw new InvalidOperationException("Cannot persist an unknown ship contact posture."),
         };
 
     private static LoadedGameSave LoadV1(byte[] json, ShipDefinitionCatalog catalog, string sourceIdentity)
@@ -420,7 +532,11 @@ public static class GamePersistence
             ValidateEnvelopeV1(envelope);
             SaveEnvelopeV2 migrated = MigrateV1ToV2(envelope, catalog);
             ValidateCandidateV2(migrated, catalog);
-            return RestoreV3(MigrateV2ToV3(migrated), catalog);
+            SaveEnvelopeV3 migratedV3 = MigrateV2ToV3(migrated);
+            ValidateCandidateV3(migratedV3, catalog);
+            SaveEnvelopeV4 migratedV4 = MigrateV3ToV4(migratedV3);
+            ValidateCandidateV4(migratedV4, catalog);
+            return RestoreV5(MigrateV4ToV5(migratedV4, catalog), catalog);
         }
         catch (GamePersistenceException)
         {
@@ -455,7 +571,11 @@ public static class GamePersistence
                 JsonSerializer.Deserialize<SaveEnvelopeV2>(json, SerializerOptions)
                 ?? throw new JsonException("The save root must be an object.");
             ValidateCandidateV2(envelope, catalog);
-            return RestoreV3(MigrateV2ToV3(envelope), catalog);
+            SaveEnvelopeV3 migrated = MigrateV2ToV3(envelope);
+            ValidateCandidateV3(migrated, catalog);
+            SaveEnvelopeV4 migratedV4 = MigrateV3ToV4(migrated);
+            ValidateCandidateV4(migratedV4, catalog);
+            return RestoreV5(MigrateV4ToV5(migratedV4, catalog), catalog);
         }
         catch (GamePersistenceException)
         {
@@ -489,7 +609,10 @@ public static class GamePersistence
             SaveEnvelopeV3 envelope =
                 JsonSerializer.Deserialize<SaveEnvelopeV3>(json, SerializerOptions)
                 ?? throw new JsonException("The save root must be an object.");
-            return RestoreV3(envelope, catalog);
+            ValidateCandidateV3(envelope, catalog);
+            SaveEnvelopeV4 migratedV4 = MigrateV3ToV4(envelope);
+            ValidateCandidateV4(migratedV4, catalog);
+            return RestoreV5(MigrateV4ToV5(migratedV4, catalog), catalog);
         }
         catch (GamePersistenceException)
         {
@@ -511,6 +634,75 @@ public static class GamePersistence
                 GamePersistenceFailure.InvalidData,
                 sourceIdentity,
                 $"violates the V3 semantic contract: {exception.Message}",
+                exception
+            );
+        }
+    }
+
+    private static LoadedGameSave LoadV4(byte[] json, ShipDefinitionCatalog catalog, string sourceIdentity)
+    {
+        try
+        {
+            SaveEnvelopeV4 envelope =
+                JsonSerializer.Deserialize<SaveEnvelopeV4>(json, SerializerOptions)
+                ?? throw new JsonException("The save root must be an object.");
+            ValidateCandidateV4(envelope, catalog);
+            return RestoreV5(MigrateV4ToV5(envelope, catalog), catalog);
+        }
+        catch (GamePersistenceException)
+        {
+            throw;
+        }
+        catch (JsonException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+            when (exception
+                    is ArgumentException
+                        or InvalidOperationException
+                        or KeyNotFoundException
+                        or OverflowException
+            )
+        {
+            throw Failure(
+                GamePersistenceFailure.InvalidData,
+                sourceIdentity,
+                $"violates the V4 semantic contract: {exception.Message}",
+                exception
+            );
+        }
+    }
+
+    private static LoadedGameSave LoadV5(byte[] json, ShipDefinitionCatalog catalog, string sourceIdentity)
+    {
+        try
+        {
+            SaveEnvelopeV5 envelope =
+                JsonSerializer.Deserialize<SaveEnvelopeV5>(json, SerializerOptions)
+                ?? throw new JsonException("The save root must be an object.");
+            return RestoreV5(envelope, catalog);
+        }
+        catch (GamePersistenceException)
+        {
+            throw;
+        }
+        catch (JsonException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+            when (exception
+                    is ArgumentException
+                        or InvalidOperationException
+                        or KeyNotFoundException
+                        or OverflowException
+            )
+        {
+            throw Failure(
+                GamePersistenceFailure.InvalidData,
+                sourceIdentity,
+                $"violates the V5 semantic contract: {exception.Message}",
                 exception
             );
         }
@@ -574,8 +766,8 @@ public static class GamePersistence
     private static SaveEnvelopeV3 MigrateV2ToV3(SaveEnvelopeV2 envelope) =>
         new()
         {
-            SchemaVersion = CurrentSchemaVersion,
-            SimulationRulesVersion = CurrentSimulationRulesVersion,
+            SchemaVersion = V3SchemaVersion,
+            SimulationRulesVersion = V3SimulationRulesVersion,
             Metadata = envelope.Metadata,
             Simulation = new SimulationSnapshotV3
             {
@@ -602,6 +794,125 @@ public static class GamePersistence
                 ],
             },
         };
+
+    private static SaveEnvelopeV4 MigrateV3ToV4(SaveEnvelopeV3 envelope) =>
+        new()
+        {
+            SchemaVersion = V4SchemaVersion,
+            SimulationRulesVersion = V4SimulationRulesVersion,
+            Metadata = envelope.Metadata,
+            Simulation = new SimulationSnapshotV4
+            {
+                TimeMilliseconds = envelope.Simulation.TimeMilliseconds,
+                ShipAllocatorNextId = envelope.Simulation.ShipAllocatorNextId,
+                OrderAllocatorNextId = envelope.Simulation.OrderAllocatorNextId,
+                PlayerShipId = envelope.Simulation.PlayerShipId,
+                Scheduler = envelope.Simulation.Scheduler,
+                StrategicMap = envelope.Simulation.StrategicMap,
+                Ships =
+                [
+                    .. envelope.Simulation.Ships.Select(ship => new ShipSnapshotV4
+                    {
+                        InstanceId = ship.InstanceId,
+                        DefinitionId = ship.DefinitionId,
+                        DisplayName = ship.DisplayName,
+                        TacticalPosition = ship.TacticalPosition,
+                        TacticalMotion = ship.TacticalMotion,
+                        SensorIntegrity = ship.SensorIntegrity,
+                        SensorRepair = ship.SensorRepair,
+                        StrategicState = ship.StrategicState,
+                        ActiveOrder = ship.ActiveOrder,
+                        SensorKnowledge = new SaveModelsV4.SensorKnowledgeSnapshotV4
+                        {
+                            NextContactId = 1,
+                            Contacts = [],
+                            ActiveScan = null,
+                        },
+                        AutonomousState = new SaveModelsV4.ShipAutonomousSnapshotV4
+                        {
+                            ContactPosture = null,
+                            PendingContactDecisionWake = null,
+                        },
+                    }),
+                ],
+            },
+        };
+
+    private static SaveEnvelopeV5 MigrateV4ToV5(SaveEnvelopeV4 envelope, ShipDefinitionCatalog catalog) =>
+        new()
+        {
+            SchemaVersion = CurrentSchemaVersion,
+            SimulationRulesVersion = CurrentSimulationRulesVersion,
+            Metadata = envelope.Metadata,
+            Simulation = new SimulationSnapshotV5
+            {
+                TimeMilliseconds = envelope.Simulation.TimeMilliseconds,
+                ShipAllocatorNextId = envelope.Simulation.ShipAllocatorNextId,
+                OrderAllocatorNextId = envelope.Simulation.OrderAllocatorNextId,
+                PlayerShipId = envelope.Simulation.PlayerShipId,
+                Scheduler = MigrateSchedulerV4(envelope.Simulation.Scheduler),
+                StrategicMap = envelope.Simulation.StrategicMap,
+                Ships = [.. envelope.Simulation.Ships.Select(ship => MigrateShipV4(ship, catalog))],
+            },
+        };
+
+    private static SchedulerSnapshotV2 MigrateSchedulerV4(SchedulerSnapshotV2 scheduler) =>
+        new()
+        {
+            NextWorkId = scheduler.NextWorkId,
+            NextSequence = scheduler.NextSequence,
+            OutstandingWork =
+            [
+                .. scheduler.OutstandingWork.Select(work => new ScheduledWorkSnapshotV2
+                {
+                    Id = work.Id,
+                    DueTimeMilliseconds = work.DueTimeMilliseconds,
+                    Sequence = work.Sequence,
+                    Kind = string.Equals(work.Kind, SensorRepairCompletionKind, StringComparison.Ordinal)
+                        ? SystemRepairCompletionKind
+                        : work.Kind,
+                    TargetShipId = work.TargetShipId,
+                }),
+            ],
+        };
+
+    private static ShipSnapshotV5 MigrateShipV4(ShipSnapshotV4 ship, ShipDefinitionCatalog catalog)
+    {
+        ShipDefinition definition = catalog.GetRequired(new ShipDefinitionId(ship.DefinitionId));
+        return new ShipSnapshotV5
+        {
+            InstanceId = ship.InstanceId,
+            DefinitionId = ship.DefinitionId,
+            DisplayName = ship.DisplayName,
+            TacticalPosition = ship.TacticalPosition,
+            TacticalMotion = ship.TacticalMotion,
+            Engineering = new SaveModelsV5.EngineeringSnapshotV5
+            {
+                GenerationCondition = 1,
+                SensorCondition = ship.SensorIntegrity,
+                ImpulseCondition = 1,
+                SensorAllocation = definition.Engineering.NominalSensorDemand.Value,
+                ImpulseAllocation = definition.Engineering.NominalImpulseDemand.Value,
+                // V4 encoded only sensor repair. V5 changes both the target identity and
+                // scheduled kind while preserving the exact temporal/work correlation.
+                ActiveRepair = ship.SensorRepair is null
+                    ? null
+                    : new SaveModelsV5.SystemRepairSnapshotV5
+                    {
+                        TargetSystem = ShipSystemId.Sensors.Value,
+                        StartingCondition = ship.SensorRepair.StartingIntegrity,
+                        TargetCondition = ship.SensorRepair.TargetIntegrity,
+                        StartedAtMilliseconds = ship.SensorRepair.StartedAtMilliseconds,
+                        ExpectedCompletionMilliseconds = ship.SensorRepair.ExpectedCompletionMilliseconds,
+                        ScheduledCompletionId = ship.SensorRepair.ScheduledCompletionId,
+                    },
+            },
+            StrategicState = ship.StrategicState,
+            ActiveOrder = ship.ActiveOrder,
+            SensorKnowledge = ship.SensorKnowledge,
+            AutonomousState = ship.AutonomousState,
+        };
+    }
 
     private static SchedulerSnapshotV2 MigrateSchedulerV1(SchedulerSnapshotV1 source, long targetShipId)
     {
@@ -746,7 +1057,7 @@ public static class GamePersistence
             throw new InvalidOperationException("The V1 mapper received a different schema version.");
         }
 
-        if (!string.Equals(envelope.SimulationRulesVersion, HistoricalSimulationRulesVersion, StringComparison.Ordinal))
+        if (!string.Equals(envelope.SimulationRulesVersion, V1SimulationRulesVersion, StringComparison.Ordinal))
         {
             throw new InvalidOperationException(
                 $"Simulation rules version '{envelope.SimulationRulesVersion}' is unsupported."
@@ -759,14 +1070,14 @@ public static class GamePersistence
         }
     }
 
-    private static LoadedGameSave RestoreV3(SaveEnvelopeV3 envelope, ShipDefinitionCatalog catalog)
+    private static LoadedGameSave RestoreV5(SaveEnvelopeV5 envelope, ShipDefinitionCatalog catalog)
     {
-        ValidateCandidateV3(envelope, catalog);
-        SimulationSnapshotV3 snapshot = envelope.Simulation;
+        ValidateCandidateV5(envelope, catalog);
+        SimulationSnapshotV5 snapshot = envelope.Simulation;
         var time = new SimulationTime(snapshot.TimeMilliseconds);
         StrategicMap map = RestoreMapV2(snapshot.StrategicMap);
-        ShipState[] ships = [.. snapshot.Ships.Select(RestoreShipV3)];
-        SimulationScheduler scheduler = RestoreSchedulerV2(snapshot.Scheduler);
+        ShipState[] ships = [.. snapshot.Ships.Select(RestoreShipV5)];
+        SimulationScheduler scheduler = RestoreSchedulerV2(snapshot.Scheduler, CurrentSchemaVersion);
         var state = new SimulationState(
             time,
             scheduler,
@@ -792,7 +1103,7 @@ public static class GamePersistence
             throw new InvalidOperationException("The V2 mapper received a different schema version.");
         }
 
-        if (!string.Equals(envelope.SimulationRulesVersion, HistoricalSimulationRulesVersion, StringComparison.Ordinal))
+        if (!string.Equals(envelope.SimulationRulesVersion, V2SimulationRulesVersion, StringComparison.Ordinal))
         {
             throw new InvalidOperationException(
                 $"Simulation rules version '{envelope.SimulationRulesVersion}' is unsupported."
@@ -813,17 +1124,17 @@ public static class GamePersistence
             )
         );
 
-        ValidateSimulationCandidateV2(envelope.Simulation, catalog);
+        ValidateSimulationCandidateV2(envelope.Simulation, catalog, V2SchemaVersion);
     }
 
     private static void ValidateCandidateV3(SaveEnvelopeV3 envelope, ShipDefinitionCatalog catalog)
     {
-        if (envelope.SchemaVersion != CurrentSchemaVersion)
+        if (envelope.SchemaVersion != V3SchemaVersion)
         {
             throw new InvalidOperationException("The V3 mapper received a different schema version.");
         }
 
-        if (!string.Equals(envelope.SimulationRulesVersion, CurrentSimulationRulesVersion, StringComparison.Ordinal))
+        if (!string.Equals(envelope.SimulationRulesVersion, V3SimulationRulesVersion, StringComparison.Ordinal))
         {
             throw new InvalidOperationException(
                 $"Simulation rules version '{envelope.SimulationRulesVersion}' is unsupported."
@@ -850,8 +1161,351 @@ public static class GamePersistence
             throw new InvalidOperationException("Required V3 simulation members cannot be null.");
         }
 
-        ValidateSimulationCandidateV2(ToBaseSnapshotV2(snapshot), catalog, allowOrderWake: true);
+        ValidateSimulationCandidateV2(ToBaseSnapshotV2(snapshot), catalog, V3SchemaVersion);
         ValidateOrderCandidatesV3(snapshot);
+    }
+
+    private static void ValidateCandidateV4(SaveEnvelopeV4 envelope, ShipDefinitionCatalog catalog)
+    {
+        if (envelope.SchemaVersion != V4SchemaVersion)
+        {
+            throw new InvalidOperationException("The V4 mapper received a different schema version.");
+        }
+
+        if (!string.Equals(envelope.SimulationRulesVersion, V4SimulationRulesVersion, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Simulation rules version '{envelope.SimulationRulesVersion}' is unsupported."
+            );
+        }
+
+        if (envelope.Metadata is null || envelope.Simulation is null)
+        {
+            throw new InvalidOperationException("Required V4 envelope members cannot be null.");
+        }
+
+        ValidateMetadata(
+            new GameSaveMetadata(
+                envelope.Metadata.SaveId,
+                envelope.Metadata.DisplayName,
+                envelope.Metadata.CreatedAtUtc,
+                envelope.Metadata.SavedAtUtc
+            )
+        );
+
+        SimulationSnapshotV4 snapshot = envelope.Simulation;
+        if (snapshot.Ships is null)
+        {
+            throw new InvalidOperationException("Required V4 simulation members cannot be null.");
+        }
+
+        SimulationSnapshotV3 baseSnapshot = ToBaseSnapshotV3(snapshot);
+        ValidateSimulationCandidateV2(ToBaseSnapshotV2(baseSnapshot), catalog, V4SchemaVersion);
+        ValidateOrderCandidatesV3(baseSnapshot);
+        ValidateSensorCandidatesV4(snapshot);
+    }
+
+    private static void ValidateCandidateV5(SaveEnvelopeV5 envelope, ShipDefinitionCatalog catalog)
+    {
+        if (envelope.SchemaVersion != CurrentSchemaVersion)
+        {
+            throw new InvalidOperationException("The V5 mapper received a different schema version.");
+        }
+
+        if (!string.Equals(envelope.SimulationRulesVersion, CurrentSimulationRulesVersion, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Simulation rules version '{envelope.SimulationRulesVersion}' is unsupported."
+            );
+        }
+
+        if (envelope.Metadata is null || envelope.Simulation is null)
+        {
+            throw new InvalidOperationException("Required V5 envelope members cannot be null.");
+        }
+
+        ValidateMetadata(
+            new GameSaveMetadata(
+                envelope.Metadata.SaveId,
+                envelope.Metadata.DisplayName,
+                envelope.Metadata.CreatedAtUtc,
+                envelope.Metadata.SavedAtUtc
+            )
+        );
+
+        SimulationSnapshotV5 snapshot = envelope.Simulation;
+        if (snapshot.Ships is null || snapshot.Scheduler is null || snapshot.StrategicMap is null)
+        {
+            throw new InvalidOperationException("Required V5 simulation members cannot be null.");
+        }
+
+        SimulationSnapshotV3 baseSnapshot = ToBaseSnapshotV3(snapshot);
+        ValidateSimulationCandidateV2(ToBaseSnapshotV2(baseSnapshot), catalog, V4SchemaVersion);
+        ValidateOrderCandidatesV3(baseSnapshot);
+        ValidateSensorCandidatesV4(ToSensorSnapshotV4(snapshot));
+
+        HashSet<long> shipIds = [.. snapshot.Ships.Select(ship => ship.InstanceId)];
+        ValidateSchedulerCandidateV2(snapshot.Scheduler, snapshot.TimeMilliseconds, shipIds, CurrentSchemaVersion);
+        foreach (ShipSnapshotV5 ship in snapshot.Ships)
+        {
+            ValidateEngineeringCandidateV5(
+                ship,
+                catalog.GetRequired(new ShipDefinitionId(ship.DefinitionId)),
+                snapshot.Scheduler,
+                snapshot.TimeMilliseconds
+            );
+        }
+    }
+
+    private static SimulationSnapshotV3 ToBaseSnapshotV3(SimulationSnapshotV5 snapshot) =>
+        new()
+        {
+            TimeMilliseconds = snapshot.TimeMilliseconds,
+            ShipAllocatorNextId = snapshot.ShipAllocatorNextId,
+            OrderAllocatorNextId = snapshot.OrderAllocatorNextId,
+            PlayerShipId = snapshot.PlayerShipId,
+            Scheduler = new SchedulerSnapshotV2
+            {
+                NextWorkId = snapshot.Scheduler.NextWorkId,
+                NextSequence = snapshot.Scheduler.NextSequence,
+                OutstandingWork =
+                [
+                    .. snapshot.Scheduler.OutstandingWork.Where(work =>
+                        !string.Equals(work.Kind, SystemRepairCompletionKind, StringComparison.Ordinal)
+                    ),
+                ],
+            },
+            StrategicMap = snapshot.StrategicMap,
+            Ships =
+            [
+                .. snapshot.Ships.Select(ship =>
+                    ship is null
+                        ? null!
+                        : new ShipSnapshotV3
+                        {
+                            InstanceId = ship.InstanceId,
+                            DefinitionId = ship.DefinitionId,
+                            DisplayName = ship.DisplayName,
+                            TacticalPosition = ship.TacticalPosition,
+                            TacticalMotion = ship.TacticalMotion,
+                            SensorIntegrity = ship.Engineering?.SensorCondition ?? double.NaN,
+                            SensorRepair = null,
+                            StrategicState = ship.StrategicState,
+                            ActiveOrder = ship.ActiveOrder,
+                        }
+                ),
+            ],
+        };
+
+    private static SimulationSnapshotV4 ToSensorSnapshotV4(SimulationSnapshotV5 snapshot) =>
+        new()
+        {
+            TimeMilliseconds = snapshot.TimeMilliseconds,
+            ShipAllocatorNextId = snapshot.ShipAllocatorNextId,
+            OrderAllocatorNextId = snapshot.OrderAllocatorNextId,
+            PlayerShipId = snapshot.PlayerShipId,
+            Scheduler = snapshot.Scheduler,
+            StrategicMap = snapshot.StrategicMap,
+            Ships =
+            [
+                .. snapshot.Ships.Select(ship =>
+                    ship is null
+                        ? null!
+                        : new ShipSnapshotV4
+                        {
+                            InstanceId = ship.InstanceId,
+                            DefinitionId = ship.DefinitionId,
+                            DisplayName = ship.DisplayName,
+                            TacticalPosition = ship.TacticalPosition,
+                            TacticalMotion = ship.TacticalMotion,
+                            SensorIntegrity = ship.Engineering?.SensorCondition ?? double.NaN,
+                            SensorRepair = null,
+                            StrategicState = ship.StrategicState,
+                            ActiveOrder = ship.ActiveOrder,
+                            SensorKnowledge = ship.SensorKnowledge,
+                            AutonomousState = ship.AutonomousState,
+                        }
+                ),
+            ],
+        };
+
+    private static SimulationSnapshotV3 ToBaseSnapshotV3(SimulationSnapshotV4 snapshot) =>
+        new()
+        {
+            TimeMilliseconds = snapshot.TimeMilliseconds,
+            ShipAllocatorNextId = snapshot.ShipAllocatorNextId,
+            OrderAllocatorNextId = snapshot.OrderAllocatorNextId,
+            PlayerShipId = snapshot.PlayerShipId,
+            Scheduler = snapshot.Scheduler,
+            StrategicMap = snapshot.StrategicMap,
+            Ships =
+            [
+                .. snapshot.Ships.Select(ship =>
+                    ship is null
+                        ? null!
+                        : new ShipSnapshotV3
+                        {
+                            InstanceId = ship.InstanceId,
+                            DefinitionId = ship.DefinitionId,
+                            DisplayName = ship.DisplayName,
+                            TacticalPosition = ship.TacticalPosition,
+                            TacticalMotion = ship.TacticalMotion,
+                            SensorIntegrity = ship.SensorIntegrity,
+                            SensorRepair = ship.SensorRepair,
+                            StrategicState = ship.StrategicState,
+                            ActiveOrder = ship.ActiveOrder,
+                        }
+                ),
+            ],
+        };
+
+    private static void ValidateSensorCandidatesV4(SimulationSnapshotV4 snapshot)
+    {
+        foreach (ShipSnapshotV4? ship in snapshot.Ships)
+        {
+            if (ship?.SensorKnowledge is null || ship.AutonomousState is null)
+            {
+                throw new InvalidOperationException("V4 ship sensor knowledge and autonomous state are required.");
+            }
+
+            if (ship.SensorKnowledge.Contacts is null)
+            {
+                throw new InvalidOperationException("V4 sensor contact collection is required.");
+            }
+
+            EnsureCount(
+                ship.SensorKnowledge.Contacts.Length,
+                SensorKnowledge.MaximumContactsPerObserver,
+                "sensor contacts per observer"
+            );
+            foreach (SaveModelsV4.SensorContactSnapshotV4? contact in ship.SensorKnowledge.Contacts)
+            {
+                if (contact?.LastObservedPosition is null)
+                {
+                    throw new InvalidOperationException("V4 sensor contact and observed position are required.");
+                }
+            }
+        }
+    }
+
+    private static void ValidateEngineeringCandidateV5(
+        ShipSnapshotV5 ship,
+        ShipDefinition definition,
+        SchedulerSnapshotV2 scheduler,
+        long currentTime
+    )
+    {
+        if (ship.Engineering is null)
+        {
+            throw new InvalidOperationException("V5 ship Engineering state is required.");
+        }
+
+        SaveModelsV5.EngineeringSnapshotV5 engineering = ship.Engineering;
+        EnsureUnitInterval(engineering.GenerationCondition, "Generation condition");
+        EnsureUnitInterval(engineering.SensorCondition, "Sensor condition");
+        EnsureUnitInterval(engineering.ImpulseCondition, "Impulse condition");
+        var state = new ShipEngineeringState(
+            new SystemCondition(engineering.GenerationCondition),
+            new SystemCondition(engineering.SensorCondition),
+            new SystemCondition(engineering.ImpulseCondition),
+            new PowerAllocation(
+                new PowerUnits(engineering.SensorAllocation),
+                new PowerUnits(engineering.ImpulseAllocation)
+            )
+        );
+        state.Validate(definition.Engineering);
+
+        double effectiveMaximumSpeed =
+            definition.MaximumTacticalSpeed.Value * state.ImpulseCapability(definition.Engineering);
+        if (ship.TacticalMotion.SpeedKilometersPerSecond > effectiveMaximumSpeed)
+        {
+            throw new InvalidOperationException("Ship tactical speed exceeds its effective impulse capability.");
+        }
+
+        ScheduledWorkSnapshotV2[] repairWork =
+        [
+            .. scheduler.OutstandingWork.Where(work =>
+                work.TargetShipId == ship.InstanceId
+                && string.Equals(work.Kind, SystemRepairCompletionKind, StringComparison.Ordinal)
+            ),
+        ];
+        ValidateRepairCandidateV5(ship, definition, currentTime, engineering, repairWork);
+    }
+
+    private static void ValidateRepairCandidateV5(
+        ShipSnapshotV5 ship,
+        ShipDefinition definition,
+        long currentTime,
+        SaveModelsV5.EngineeringSnapshotV5 engineering,
+        ScheduledWorkSnapshotV2[] repairWork
+    )
+    {
+        if (engineering.ActiveRepair is null)
+        {
+            if (repairWork.Length != 0)
+            {
+                throw new InvalidOperationException("Scheduled system completion has no correlated active repair.");
+            }
+
+            return;
+        }
+
+        SaveModelsV5.SystemRepairSnapshotV5 repair = engineering.ActiveRepair;
+        var targetSystem = ShipSystemId.Parse(repair.TargetSystem);
+        if (targetSystem != ShipSystemId.Sensors && targetSystem != ShipSystemId.ImpulsePropulsion)
+        {
+            throw new InvalidOperationException("Only sensors and impulse propulsion are repairable.");
+        }
+
+        ValidateRepairTimingV5(repair, currentTime);
+
+        if (
+            repair.ExpectedCompletionMilliseconds - repair.StartedAtMilliseconds
+            != definition.Engineering.RepairDurationFor(targetSystem).Milliseconds
+        )
+        {
+            throw new InvalidOperationException("System repair duration does not match its ship definition.");
+        }
+
+        double progress =
+            (double)(currentTime - repair.StartedAtMilliseconds)
+            / (repair.ExpectedCompletionMilliseconds - repair.StartedAtMilliseconds);
+        double expectedCondition =
+            repair.StartingCondition + ((repair.TargetCondition - repair.StartingCondition) * progress);
+        double actualCondition =
+            targetSystem == ShipSystemId.Sensors ? engineering.SensorCondition : engineering.ImpulseCondition;
+        if (actualCondition != expectedCondition)
+        {
+            throw new InvalidOperationException("System condition does not match the active repair at current time.");
+        }
+
+        if (
+            repairWork.Length != 1
+            || repairWork[0].Id != repair.ScheduledCompletionId
+            || repairWork[0].DueTimeMilliseconds != repair.ExpectedCompletionMilliseconds
+        )
+        {
+            throw new InvalidOperationException(
+                "Active system repair must have exactly one same-target correlated scheduled work item."
+            );
+        }
+    }
+
+    private static void ValidateRepairTimingV5(SaveModelsV5.SystemRepairSnapshotV5 repair, long currentTime)
+    {
+        EnsureUnitInterval(repair.StartingCondition, "System repair starting condition");
+        EnsureUnitInterval(repair.TargetCondition, "System repair target condition");
+        if (repair.TargetCondition <= repair.StartingCondition)
+        {
+            throw new InvalidOperationException("System repair target must exceed its starting condition.");
+        }
+
+        EnsureFixedStep(repair.StartedAtMilliseconds, "System repair start");
+        EnsureFixedStep(repair.ExpectedCompletionMilliseconds, "System repair completion");
+        if (currentTime < repair.StartedAtMilliseconds || currentTime >= repair.ExpectedCompletionMilliseconds)
+        {
+            throw new InvalidOperationException("Active system repair does not contain the current simulation time.");
+        }
     }
 
     private static SimulationSnapshotV2 ToBaseSnapshotV2(SimulationSnapshotV3 snapshot) =>
@@ -953,7 +1607,7 @@ public static class GamePersistence
     private static void ValidateSimulationCandidateV2(
         SimulationSnapshotV2 snapshot,
         ShipDefinitionCatalog catalog,
-        bool allowOrderWake = false
+        int sourceSchemaVersion
     )
     {
         if (snapshot.Scheduler is null || snapshot.StrategicMap is null || snapshot.Ships is null)
@@ -994,7 +1648,7 @@ public static class GamePersistence
             );
         }
 
-        ValidateSchedulerCandidateV2(snapshot.Scheduler, snapshot.TimeMilliseconds, shipIds, allowOrderWake);
+        ValidateSchedulerCandidateV2(snapshot.Scheduler, snapshot.TimeMilliseconds, shipIds, sourceSchemaVersion);
         foreach (ShipSnapshotV2 ship in snapshot.Ships)
         {
             ValidateShipCandidateV2(
@@ -1113,7 +1767,7 @@ public static class GamePersistence
         SchedulerSnapshotV2 scheduler,
         long currentTime,
         HashSet<long> shipIds,
-        bool allowOrderWake
+        int sourceSchemaVersion
     )
     {
         if (scheduler.OutstandingWork is null)
@@ -1140,7 +1794,7 @@ public static class GamePersistence
                 shipIds,
                 identities,
                 sequences,
-                allowOrderWake
+                sourceSchemaVersion
             );
             if (
                 index > 0
@@ -1167,7 +1821,7 @@ public static class GamePersistence
         HashSet<long> shipIds,
         HashSet<long> identities,
         HashSet<long> sequences,
-        bool allowOrderWake
+        int sourceSchemaVersion
     )
     {
         if (work is null)
@@ -1200,7 +1854,7 @@ public static class GamePersistence
             throw new InvalidOperationException("Scheduled work target ship does not exist.");
         }
 
-        ParseWorkKind(work.Kind, allowOrderWake);
+        ParseWorkKind(work.Kind, sourceSchemaVersion);
         return work;
     }
 
@@ -1446,7 +2100,7 @@ public static class GamePersistence
             ))
         );
 
-    private static SimulationScheduler RestoreSchedulerV2(SchedulerSnapshotV2 snapshot) =>
+    private static SimulationScheduler RestoreSchedulerV2(SchedulerSnapshotV2 snapshot, int sourceSchemaVersion) =>
         SimulationScheduler.Restore(
             snapshot.NextWorkId,
             snapshot.NextSequence,
@@ -1455,11 +2109,11 @@ public static class GamePersistence
                 new SimulationTime(work.DueTimeMilliseconds),
                 work.Sequence,
                 new ShipInstanceId(work.TargetShipId),
-                ParseWorkKind(work.Kind)
+                ParseWorkKind(work.Kind, sourceSchemaVersion)
             ))
         );
 
-    private static ShipState RestoreShipV3(ShipSnapshotV3 snapshot) =>
+    private static ShipState RestoreShipV5(ShipSnapshotV5 snapshot) =>
         new(
             new ShipInstanceId(snapshot.InstanceId),
             new ShipDefinitionId(snapshot.DefinitionId),
@@ -1469,10 +2123,61 @@ public static class GamePersistence
                 new HeadingDegrees(snapshot.TacticalMotion.HeadingDegrees),
                 new SpeedKilometersPerSecond(snapshot.TacticalMotion.SpeedKilometersPerSecond)
             ),
-            new SensorIntegrity(snapshot.SensorIntegrity),
-            RestoreSensorRepairV2(snapshot.SensorRepair),
+            new ShipEngineeringState(
+                new SystemCondition(snapshot.Engineering.GenerationCondition),
+                new SystemCondition(snapshot.Engineering.SensorCondition),
+                new SystemCondition(snapshot.Engineering.ImpulseCondition),
+                new PowerAllocation(
+                    new PowerUnits(snapshot.Engineering.SensorAllocation),
+                    new PowerUnits(snapshot.Engineering.ImpulseAllocation)
+                ),
+                RestoreSystemRepairV5(snapshot.Engineering.ActiveRepair)
+            ),
             RestoreStrategicStateV2(snapshot.StrategicState),
-            RestoreOrderV3(snapshot.ActiveOrder)
+            RestoreOrderV3(snapshot.ActiveOrder),
+            RestoreSensorKnowledgeV4(snapshot.SensorKnowledge),
+            RestoreAutonomousStateV4(snapshot.AutonomousState)
+        );
+
+    private static SensorKnowledge RestoreSensorKnowledgeV4(SaveModelsV4.SensorKnowledgeSnapshotV4 snapshot) =>
+        new(
+            snapshot.NextContactId,
+            snapshot.Contacts.Select(contact => new SensorContactTrack(
+                new SensorContactId(contact.Id),
+                new ShipInstanceId(contact.TargetShipId),
+                new TacticalPosition(
+                    contact.LastObservedPosition.XKilometers,
+                    contact.LastObservedPosition.YKilometers
+                ),
+                new SimulationTime(contact.LastObservedAtMilliseconds),
+                ParseContactStatus(contact.Status),
+                ParseContactIdentification(contact.Identification),
+                contact.KnownVesselDisplayName,
+                contact.KnownDesignDisplayName,
+                contact.LossWorkId is null ? null : new ScheduledWorkId(contact.LossWorkId.Value),
+                contact.LossDueTimeMilliseconds is null
+                    ? null
+                    : new SimulationTime(contact.LossDueTimeMilliseconds.Value)
+            )),
+            snapshot.ActiveScan is null
+                ? null
+                : new ActiveSensorScanState(
+                    new SensorContactId(snapshot.ActiveScan.TargetContactId),
+                    new SimulationTime(snapshot.ActiveScan.StartedAtMilliseconds),
+                    new SimulationTime(snapshot.ActiveScan.ExpectedCompletionMilliseconds),
+                    new ScheduledWorkId(snapshot.ActiveScan.ScheduledCompletionId)
+                )
+        );
+
+    private static ShipAutonomousState RestoreAutonomousStateV4(SaveModelsV4.ShipAutonomousSnapshotV4 snapshot) =>
+        new(
+            snapshot.ContactPosture is null ? null : ParseContactPosture(snapshot.ContactPosture),
+            snapshot.PendingContactDecisionWake is null
+                ? null
+                : new ShipContactDecisionWake(
+                    new ScheduledWorkId(snapshot.PendingContactDecisionWake.ScheduledWorkId),
+                    new SimulationTime(snapshot.PendingContactDecisionWake.DueTimeMilliseconds)
+                )
         );
 
     private static ShipOrder? RestoreOrderV3(ShipOrderSnapshotV3? snapshot) =>
@@ -1496,12 +2201,13 @@ public static class GamePersistence
             _ => throw new InvalidOperationException("Active ship order kind is unknown."),
         };
 
-    private static SensorRepairState? RestoreSensorRepairV2(SensorRepairSnapshotV2? snapshot) =>
+    private static SystemRepairState? RestoreSystemRepairV5(SaveModelsV5.SystemRepairSnapshotV5? snapshot) =>
         snapshot is null
             ? null
-            : new SensorRepairState(
-                new SensorIntegrity(snapshot.StartingIntegrity),
-                new SensorIntegrity(snapshot.TargetIntegrity),
+            : new SystemRepairState(
+                ShipSystemId.Parse(snapshot.TargetSystem),
+                new SystemCondition(snapshot.StartingCondition),
+                new SystemCondition(snapshot.TargetCondition),
                 new SimulationTime(snapshot.StartedAtMilliseconds),
                 new SimulationTime(snapshot.ExpectedCompletionMilliseconds),
                 new ScheduledWorkId(snapshot.ScheduledCompletionId)
@@ -1523,13 +2229,84 @@ public static class GamePersistence
             _ => throw new InvalidOperationException("Ship strategic state kind is unknown."),
         };
 
-    private static ScheduledWorkKind ParseWorkKind(string? kind, bool allowOrderWake = true) =>
-        kind switch
+    private static ScheduledWorkKind ParseWorkKind(string? kind, int sourceSchemaVersion)
+    {
+        if (
+            (
+                sourceSchemaVersion <= V4SchemaVersion
+                && string.Equals(kind, SystemRepairCompletionKind, StringComparison.Ordinal)
+            )
+            || (
+                sourceSchemaVersion == CurrentSchemaVersion
+                && string.Equals(kind, SensorRepairCompletionKind, StringComparison.Ordinal)
+            )
+        )
+        {
+            throw new InvalidOperationException("Scheduled repair work kind is unsupported by schema.");
+        }
+
+        ScheduledWorkKind parsed = kind switch
         {
             TravelArrivalKind => ScheduledWorkKind.TravelArrival,
-            SensorRepairCompletionKind => ScheduledWorkKind.SensorRepairCompletion,
-            OrderWakeKind when allowOrderWake => ScheduledWorkKind.OrderWake,
+            SensorRepairCompletionKind => ScheduledWorkKind.SystemRepairCompletion,
+            SystemRepairCompletionKind => ScheduledWorkKind.SystemRepairCompletion,
+            OrderWakeKind => ScheduledWorkKind.OrderWake,
+            SensorContactLossKind => ScheduledWorkKind.SensorContactLoss,
+            ActiveSensorScanCompletionKind => ScheduledWorkKind.ActiveSensorScanCompletion,
+            ShipContactDecisionWakeKind => ScheduledWorkKind.ShipContactDecisionWake,
             _ => throw new InvalidOperationException("Scheduled work kind is unknown."),
+        };
+
+        bool allowed = sourceSchemaVersion switch
+        {
+            V1SchemaVersion or V2SchemaVersion => parsed
+                is ScheduledWorkKind.TravelArrival
+                    or ScheduledWorkKind.SystemRepairCompletion,
+            V3SchemaVersion => parsed
+                is ScheduledWorkKind.TravelArrival
+                    or ScheduledWorkKind.SystemRepairCompletion
+                    or ScheduledWorkKind.OrderWake,
+            V4SchemaVersion => parsed
+                is ScheduledWorkKind.TravelArrival
+                    or ScheduledWorkKind.SystemRepairCompletion
+                    or ScheduledWorkKind.OrderWake
+                    or ScheduledWorkKind.SensorContactLoss
+                    or ScheduledWorkKind.ActiveSensorScanCompletion
+                    or ScheduledWorkKind.ShipContactDecisionWake,
+            CurrentSchemaVersion => parsed
+                is ScheduledWorkKind.TravelArrival
+                    or ScheduledWorkKind.SystemRepairCompletion
+                    or ScheduledWorkKind.OrderWake
+                    or ScheduledWorkKind.SensorContactLoss
+                    or ScheduledWorkKind.ActiveSensorScanCompletion
+                    or ScheduledWorkKind.ShipContactDecisionWake,
+            _ => false,
+        };
+        return allowed ? parsed : throw new InvalidOperationException("Scheduled work kind is unsupported by schema.");
+    }
+
+    private static SensorContactStatus ParseContactStatus(string? status) =>
+        status switch
+        {
+            CurrentContactStatus => SensorContactStatus.Current,
+            StaleContactStatus => SensorContactStatus.Stale,
+            LostContactStatus => SensorContactStatus.Lost,
+            _ => throw new InvalidOperationException("Sensor contact status is unknown."),
+        };
+
+    private static SensorContactIdentification ParseContactIdentification(string? identification) =>
+        identification switch
+        {
+            DetectedContactIdentification => SensorContactIdentification.Detected,
+            IdentifiedContactIdentification => SensorContactIdentification.Identified,
+            _ => throw new InvalidOperationException("Sensor contact identification is unknown."),
+        };
+
+    private static ShipContactPosture ParseContactPosture(string? posture) =>
+        posture switch
+        {
+            CautiousContactPosture => ShipContactPosture.CautiousContact,
+            _ => throw new InvalidOperationException("Ship contact posture is unknown."),
         };
 
     private static void EnsureFinite(double value, string label)

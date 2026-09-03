@@ -1,3 +1,4 @@
+using AlterCourse.Core.Sensors;
 using AlterCourse.Core.Strategic;
 using Godot;
 
@@ -22,6 +23,13 @@ public partial class CommandDeckWorkspace : Control
         public CommandInterfaceAction Action { get; } = action;
     }
 
+    /// <summary>Provides the observer-local sensor contact selected through the tactical map.</summary>
+    public sealed class ContactEventArgs(SensorContactId contactId) : EventArgs
+    {
+        /// <summary>Gets the selected observer-local identity.</summary>
+        public SensorContactId ContactId { get; } = contactId;
+    }
+
     private readonly Dictionary<string, Button> _actionButtons = new(StringComparer.Ordinal);
     private readonly Dictionary<string, CommandInterfaceAction> _presentedActions = new(StringComparer.Ordinal);
     private VBoxContainer _systemRows = null!;
@@ -41,6 +49,9 @@ public partial class CommandDeckWorkspace : Control
     /// <summary>Notifies the shell that a currently submittable presentation action was requested.</summary>
     public event EventHandler<ActionEventArgs>? PresentationActionRequested;
 
+    /// <summary>Notifies the shell that the player selected an actor-safe live sensor contact.</summary>
+    public event EventHandler<ContactEventArgs>? ContactSelected;
+
     /// <summary>Gets the currently displayed command hierarchy.</summary>
     public CommandInterfaceMode? CurrentMode { get; private set; }
 
@@ -49,6 +60,9 @@ public partial class CommandDeckWorkspace : Control
 
     /// <summary>Gets the selected strategic identity most recently presented or selected.</summary>
     public LocationId? SelectedLocationId { get; private set; }
+
+    /// <summary>Gets the selected observer-local sensor contact most recently presented.</summary>
+    public SensorContactId? SelectedContactId { get; private set; }
 
     /// <summary>Gets the production strategic map control used by this workspace.</summary>
     public StrategicMapView StrategicMap => _strategicMap;
@@ -70,6 +84,7 @@ public partial class CommandDeckWorkspace : Control
         _strategicMap = GetNode<StrategicMapView>("%StrategicMap");
         _tacticalMap = GetNode<TacticalMapView>("%TacticalMap");
         _strategicMap.DestinationSelected = OnDestinationSelected;
+        _tacticalMap.ContactSelected += OnContactSelected;
     }
 
     /// <summary>Displays one immutable presentation snapshot without retaining simulation authority.</summary>
@@ -89,6 +104,7 @@ public partial class CommandDeckWorkspace : Control
         CurrentMode = presentation.Mode;
         CurrentDataMode = presentation.DataMode;
         SelectedLocationId = presentation.SelectedLocationId;
+        SelectedContactId = presentation.SelectedContactId;
 
         PresentSystems(presentation);
         PresentMap(presentation);
@@ -110,6 +126,10 @@ public partial class CommandDeckWorkspace : Control
     /// <summary>Reports whether an action is currently enabled for UI submission.</summary>
     public bool IsActionEnabled(string actionId) =>
         _actionButtons.TryGetValue(actionId, out Button? button) && !button.Disabled;
+
+    /// <summary>Gets visible enabled context actions for shell-owned focus traversal.</summary>
+    public IEnumerable<Control> GetVisibleFocusControls() =>
+        _actionButtons.Values.Where(button => button.IsVisibleInTree() && !button.Disabled);
 
     private void PresentSystems(CommandInterfacePresentation presentation)
     {
@@ -176,7 +196,7 @@ public partial class CommandDeckWorkspace : Control
 
         if (presentation.Tactical is not null)
         {
-            _tacticalMap.Present(presentation.Tactical);
+            _tacticalMap.Present(presentation.Tactical, presentation.Contacts, presentation.SelectedContactId);
         }
         else
         {
@@ -274,9 +294,13 @@ public partial class CommandDeckWorkspace : Control
 
         string text = action.Label + ActionSuffix(action.Availability, canSubmit);
         bool disabled = !canSubmit;
-        string tooltip = canSubmit
-            ? "Requests presentation intent; the shell and Core remain authoritative."
-            : "Displayed for context only; this control cannot submit an intent.";
+        string tooltip =
+            action.Tooltip
+            ?? (
+                canSubmit
+                    ? "Requests presentation intent; the shell and Core remain authoritative."
+                    : "Displayed for context only; this control cannot submit an intent."
+            );
         StringName variation = ActionVariation(action.Tone);
         if (!string.Equals(button.Text, text, StringComparison.Ordinal))
         {
@@ -318,6 +342,12 @@ public partial class CommandDeckWorkspace : Control
     {
         SelectedLocationId = locationId;
         DestinationSelected?.Invoke(this, new DestinationEventArgs(locationId));
+    }
+
+    private void OnContactSelected(object? sender, TacticalMapView.ContactEventArgs args)
+    {
+        SelectedContactId = args.ContactId;
+        ContactSelected?.Invoke(this, new ContactEventArgs(args.ContactId));
     }
 
     private void OnActionPressed(string actionId)

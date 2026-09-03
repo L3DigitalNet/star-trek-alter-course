@@ -1,0 +1,30 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://l3digital.net/star-trek-alter-course/schemas/ship-definition-v3.schema.json",
+	"title": "Ship Definition Version 3",
+	"type": "object",
+	"required": [
+		"schemaVersion",
+		"id",
+		"designDisplayName",
+		"maximumTacticalSpeedKilometersPerSecond",
+		"passiveSensorRangeKilometers",
+		"activeScanDurationMilliseconds",
+		"sensorRepairDurationMilliseconds"
+	],
+	"properties": {
+		"schemaVersion": { "const": 3 },
+		"id": {
+			"type": "string",
+			"minLength": 1,
+			"maxLength": 128,
+			"pattern": "^[A-Za-z0-9._-]+$"
+		},
+		"designDisplayName": { "type": "string", "minLength": 1, "maxLength": 64 },
+		"maximumTacticalSpeedKilometersPerSecond": { "type": "number", "minimum": 0 },
+		"passiveSensorRangeKilometers": { "type": "number", "minimum": 0 },
+		"activeScanDurationMilliseconds": { "type": "integer", "minimum": 1 },
+		"sensorRepairDurationMilliseconds": { "type": "integer", "minimum": 1 }
+	},
+	"additionalProperties": false
+}

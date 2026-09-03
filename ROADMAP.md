@@ -365,6 +365,20 @@ A strong acceptance scenario is:
 
 ## Milestone 3 — Sensor Knowledge and First Contact
 
+### Implementation outcome — Milestone 3A: First Observed Contact
+
+Feature #58 implements the first governed slice of this milestone. It does **not** mark Milestone 3 complete. This implementation outcome is included in the source-only v0.4.0 release.
+
+Each `ShipState` now owns bounded sensor knowledge with observer-local `SensorContactId` values. The aggregate retains target-ship correlation only for Core rule resolution; player projections and autonomous decision input receive actor-safe contact snapshots without the target's ship ID. Local passive observation applies only to distinct ships at the same strategic location. Effective range is the authored passive sensor range multiplied by the observing ship's sensor integrity. Contacts are observed as Current, become Stale when no longer detectable, become Lost after a fixed retention interval, and can be reacquired with their existing observer-local ID and learned identity.
+
+The slice adds one active scan and one hail seam. A player can scan a current detected contact to learn its vessel and design display names, then hail an identified current contact. The proof vessel's persisted `CautiousContact` posture receives only its own contact snapshot. Its pure explainable policy chooses Hold, Approach, or Withdraw deterministically; the proof path withdraws from an unidentified contact and holds after a valid identified hail. The resulting motion uses the same validated targetable tactical-course command as player course input.
+
+Contact-sensitive local advancement reuses the Core's 100 ms tactical grid, while inactive strategic simulation remains event-driven. Contact loss, scan completion, and autonomous decision wakes use appended scheduled-work kinds with exact correlations, stable ordering, and revalidation at resolution. Player advance-until remains silent about hidden NPC work but may stop for a player-safe contact or scan event.
+
+Save schema V4 persists sensor knowledge, active scans, autonomous contact posture, and new scheduler correlations under `sensor-knowledge-first-contact-v1`. V3-to-V4 migration deliberately creates empty knowledge, a next contact ID of 1, no active scan, no posture, and no decision wake, preserving historical behavior. Ship-definition schema V3 adds explicit passive sensor range and active-scan duration. The four-ship Dawn Anchor proof world gives damaged USS Pathfinder and full-integrity Survey Vessel Kestrel different knowledge at the same time, then proves scan, hail, autonomous response, and save/load continuation.
+
+The slice deliberately defers affiliation and intent knowledge, scalar confidence or measurement error, strategic contacts, cloaking and electronic warfare, NPC scanning, additional doctrines, faction AI, dialogue, sensor power, combat, and generalized encounter generation. See [First Observed Contact](docs/design/first-observed-contact.md) for the implemented boundary and rules.
+
 ### Goal
 
 Make incomplete information a real simulation boundary and create the first autonomous multi-ship encounter that does not require combat.
@@ -487,6 +501,16 @@ The player should be able to meet another ship, initially know less than Core tr
 ---
 
 ## Milestone 4 — Engineering Backbone and Degraded Operations
+
+### Implementation outcome
+
+Feature #62 implements this milestone. Its implementation outcome is included in the source-only v0.4.0 release; release status is governed separately under ADR 0013. `AlterCourse.Core` now owns concrete `ShipSystemId` values for power generation, sensors, and impulse propulsion; `SystemCondition`; bounded `PowerUnits`; exact allocation; and one `SystemRepairState` per ship. Available power is `floor(nominal generation × generation condition)`, and sensor/impulse capability is condition multiplied by the allocated-to-nominal-demand ratio, capped at one. The V4 Pathfinder definition supplies 120 nominal generation units, 70 sensor-demand units, 50 impulse-demand units, an 8,000 ms sensor repair, and a 6,000 ms impulse repair.
+
+The player can submit deterministic Balanced, Prioritize Sensors, and Prioritize Propulsion allocations. Allocation changes reconcile observations immediately, can stale or reacquire a local contact, and cannot commit when the current tactical speed would exceed the resulting impulse limit. The same effective impulse limit constrains player courses and the bounded cautious-contact AI; strategic travel remains unchanged. A sensor scan still uses its authored duration, but Core interrupts it if committed Engineering state makes sensor capability zero.
+
+`SystemRepairState` carries the repair target, start/target condition, start/completion times, and its exact scheduled-work ID. Completion resolves only the matching `SystemRepairCompletion` work, atomically materializes the target condition, and clears the repair. V5 persistence writes Engineering conditions, allocation, and optional repair while excluding derived capability and presentation. Adjacent V4→V5 migration maps sensor integrity and a correlated sensor repair, initializes generation and impulse condition to nominal, preserves the exact completion identity, and validates the complete candidate. The measured maximum V5 shape is 95,677,740 bytes within the 134,217,728-byte envelope.
+
+The Godot Engineering station presents the immutable player projection and stable-ID live hierarchy (`OVERVIEW`, `POWER`, `SENSORS`, `PROPULSION`, `REPAIRS`), including Core-supplied action availability. The full headless encounter proves acquisition at 3,500 ms, a V5 save during the scan at 4,500 ms, scan completion and later reacquisition at 5,500 ms, sensor repair completion at 8,000 ms, and Horizon's strategic arrival at 14,000 ms. Focused verification is green: Core 376/376 and GameplayShell 60/60. Focused, manual, adversarial, canonical, and hosted verification passed before final admission.
 
 ### Goal
 

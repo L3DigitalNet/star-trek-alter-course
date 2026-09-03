@@ -261,20 +261,17 @@ public sealed class Milestone2AcceptanceTests
         (SimulationScheduler scheduler, ScheduledWork repairWork) = proof.Scheduler.Schedule(
             Time(6),
             PlayerId,
-            ScheduledWorkKind.SensorRepairCompletion
+            ScheduledWorkKind.SystemRepairCompletion
         );
-        var repair = new SensorRepairState(
-            new SensorIntegrity(0.25),
-            new SensorIntegrity(1),
+        var repair = new SystemRepairState(
+            ShipSystemId.Sensors,
+            new SystemCondition(0.25),
+            new SystemCondition(1),
             Time(3),
             Time(6),
             repairWork.Id
         );
-        ShipState player = proof.GetRequiredShip(PlayerId) with
-        {
-            SensorIntegrity = new SensorIntegrity(0.25),
-            SensorRepair = repair,
-        };
+        ShipState player = WithSensorRepair(proof.GetRequiredShip(PlayerId), repair);
         var game = GameSimulation.RestoreState(
             proof.ReplaceShip(PlayerId, player) with
             {
@@ -282,7 +279,6 @@ public sealed class Milestone2AcceptanceTests
             },
             catalog
         );
-
         Assert.Equal(
             SetTacticalCourseOutcome.Accepted,
             game.SetTacticalCourse(
@@ -300,15 +296,23 @@ public sealed class Milestone2AcceptanceTests
                 new SetTacticalCourseIntent(new HeadingDegrees(237), new SpeedKilometersPerSecond(0))
             ).Outcome
         );
-        int remainingSteps = checked((int)((Time(9).Milliseconds - game.CaptureState().Time.Milliseconds) / 100));
-        SimulationAdvanceResult result = game.AdvanceFixedSteps(remainingSteps);
+        SimulationAdvanceResult result = AdvanceTo(game, Time(9));
         SimulationState final = game.CaptureState();
 
         Assert.Equal(Time(9), result.FinalTime);
-        Assert.Equal([PlayerAdvanceEvent.SensorRepairCompleted], result.ResolvedEvents);
+        Assert.Equal(
+            [
+                new PlayerAdvanceEvent(
+                    PlayerAdvanceEventKind.SystemRepairCompleted,
+                    Time(6),
+                    ShipSystemId: ShipSystemId.Sensors
+                ),
+            ],
+            result.ResolvedEvents
+        );
         Assert.Equal(afterMotion, final.GetRequiredShip(PlayerId).TacticalPosition);
-        Assert.Equal(1, final.GetRequiredShip(PlayerId).SensorIntegrity.Value);
-        Assert.Null(final.GetRequiredShip(PlayerId).SensorRepair);
+        Assert.Equal(1, final.GetRequiredShip(PlayerId).Engineering.SensorCondition.Value);
+        Assert.Null(final.GetRequiredShip(PlayerId).Engineering.ActiveRepair);
         AssertPatrolLeg(final, Beta, Alpha, 0, Time(6), Time(12));
         Assert.Null(final.GetRequiredShip(HoldId).ActiveOrder);
     }
@@ -357,7 +361,7 @@ public sealed class Milestone2AcceptanceTests
             $"Ship {id.Value}",
             default,
             default,
-            new SensorIntegrity(1),
+            new SystemCondition(1),
             strategic,
             ActiveOrder: order
         );
@@ -376,6 +380,8 @@ public sealed class Milestone2AcceptanceTests
             DefinitionId,
             "Pathfinder",
             new SpeedKilometersPerSecond(10),
+            new DistanceKilometers(30),
+            new SimulationDuration(2000),
             repairDuration ?? new SimulationDuration(6 * HourMilliseconds)
         );
         return new ShipDefinitionCatalog(
@@ -428,8 +434,8 @@ public sealed class Milestone2AcceptanceTests
             Assert.Equal(expectedShip.VesselDisplayName, actualShip.VesselDisplayName);
             Assert.Equal(expectedShip.TacticalPosition, actualShip.TacticalPosition);
             Assert.Equal(expectedShip.TacticalMotion, actualShip.TacticalMotion);
-            Assert.Equal(expectedShip.SensorIntegrity, actualShip.SensorIntegrity);
-            Assert.Equal(expectedShip.SensorRepair, actualShip.SensorRepair);
+            Assert.Equal(expectedShip.Engineering.SensorCondition, actualShip.Engineering.SensorCondition);
+            Assert.Equal(expectedShip.Engineering.ActiveRepair, actualShip.Engineering.ActiveRepair);
             Assert.Equal(expectedShip.StrategicState, actualShip.StrategicState);
             if (expectedShip.ActiveOrder is PatrolRouteOrder expectedPatrol)
             {
@@ -463,6 +469,18 @@ public sealed class Milestone2AcceptanceTests
         Assert.Equal(destination, traveling.Travel.Destination);
         Assert.Equal(departure, traveling.Travel.Departure);
         Assert.Equal(arrival, traveling.Travel.ExpectedArrival);
+    }
+
+    private static ShipState WithSensorRepair(ShipState ship, SystemRepairState repair) =>
+        ship with
+        {
+            Engineering = ship.Engineering with { SensorCondition = repair.StartingCondition, ActiveRepair = repair },
+        };
+
+    private static SimulationAdvanceResult AdvanceTo(GameSimulation game, SimulationTime target)
+    {
+        int steps = checked((int)((target.Milliseconds - game.CaptureState().Time.Milliseconds) / 100));
+        return game.AdvanceFixedSteps(steps);
     }
 
     private static SimulationTime Time(long hours) => new(hours * HourMilliseconds);

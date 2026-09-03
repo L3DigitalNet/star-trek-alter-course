@@ -1,6 +1,8 @@
+using AlterCourse.Core.AI;
 using AlterCourse.Core.Gameplay;
 using AlterCourse.Core.Identity;
 using AlterCourse.Core.Orders;
+using AlterCourse.Core.Sensors;
 using AlterCourse.Core.Tactical;
 
 namespace AlterCourse.Core.Ships;
@@ -15,10 +17,11 @@ internal sealed record ShipState
         string vesselDisplayName,
         TacticalPosition tacticalPosition,
         TacticalMotion tacticalMotion,
-        SensorIntegrity sensorIntegrity,
-        SensorRepairState? sensorRepair,
+        ShipEngineeringState engineering,
         ShipStrategicState strategicState,
-        ShipOrder? activeOrder = null
+        ShipOrder? activeOrder = null,
+        SensorKnowledge? sensorKnowledge = null,
+        ShipAutonomousState? autonomousState = null
     )
     {
         if (instanceId.Value <= 0)
@@ -43,6 +46,7 @@ internal sealed record ShipState
             );
         }
 
+        ArgumentNullException.ThrowIfNull(engineering);
         ArgumentNullException.ThrowIfNull(strategicState);
 
         InstanceId = instanceId;
@@ -50,10 +54,11 @@ internal sealed record ShipState
         VesselDisplayName = vesselDisplayName;
         TacticalPosition = tacticalPosition;
         TacticalMotion = tacticalMotion;
-        SensorIntegrity = sensorIntegrity;
-        SensorRepair = sensorRepair;
+        Engineering = engineering;
         StrategicState = strategicState;
         ActiveOrder = activeOrder;
+        SensorKnowledge = sensorKnowledge ?? SensorKnowledge.Empty;
+        AutonomousState = autonomousState ?? ShipAutonomousState.Empty;
     }
 
     internal ShipInstanceId InstanceId { get; }
@@ -61,8 +66,9 @@ internal sealed record ShipState
     internal string VesselDisplayName { get; }
     internal TacticalPosition TacticalPosition { get; init; }
     internal TacticalMotion TacticalMotion { get; init; }
-    internal SensorIntegrity SensorIntegrity { get; init; }
-    internal SensorRepairState? SensorRepair { get; init; }
+    internal ShipEngineeringState Engineering { get; init; }
     internal ShipStrategicState StrategicState { get; init; }
     internal ShipOrder? ActiveOrder { get; init; }
+    internal SensorKnowledge SensorKnowledge { get; init; }
+    internal ShipAutonomousState AutonomousState { get; init; }
 }

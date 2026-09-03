@@ -71,6 +71,16 @@ glob = ".claude/skills/agent-handoff/**"
 applies_to = "both"
 reason = "Centrally locked Agent Handoff skill tree for Claude Code; editing it to satisfy a formatter creates drift."
 
+[[standards.markdown-tooling.config.exclusions]]
+glob = ".claude/skills/figma-*/**"
+applies_to = "both"
+reason = "Official Figma MCP skill corpus; vendor formatting must be preserved."
+
+[[standards.markdown-tooling.config.exclusions]]
+glob = ".codex/skills/figma-*/**"
+applies_to = "both"
+reason = "Official Figma MCP skill corpus; vendor formatting must be preserved."
+
 [standards.agent-handoff]
 enabled = true
 version = "1.16"

@@ -9,6 +9,9 @@ public enum SetTacticalCourseOutcome
     /// <summary>Course changes are unavailable during strategic travel.</summary>
     UnavailableWhileTraveling = 2,
 
-    /// <summary>The requested speed exceeds the ship definition maximum.</summary>
-    SpeedExceedsMaximum = 3,
+    /// <summary>Impulse propulsion currently supplies no movement capability.</summary>
+    PropulsionOffline = 3,
+
+    /// <summary>The requested speed exceeds current effective propulsion.</summary>
+    SpeedExceedsCurrentCapability = 4,
 }

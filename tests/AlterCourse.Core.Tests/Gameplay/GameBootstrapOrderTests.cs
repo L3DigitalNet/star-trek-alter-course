@@ -309,7 +309,7 @@ public sealed class GameBootstrapOrderTests
             $"Ship {id.Value}",
             default,
             default,
-            new SensorIntegrity(1),
+            new SystemCondition(1),
             strategic,
             ActiveOrder: activeOrder
         );
@@ -339,6 +339,8 @@ public sealed class GameBootstrapOrderTests
             new ShipDefinitionId(definitionId),
             "Test ship",
             new SpeedKilometersPerSecond(10),
+            new DistanceKilometers(30),
+            new SimulationDuration(2000),
             Duration(6)
         );
         return new ShipDefinitionCatalog(

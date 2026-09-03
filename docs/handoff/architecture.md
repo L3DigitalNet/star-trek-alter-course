@@ -11,8 +11,8 @@
 - Scheduled work, travel, and repairs target ships explicitly. Public player commands resolve `PlayerShipId`; arbitrary-ship control is not exposed.
 - Ship iteration is stable. Each advancement is capped at 1,000,000 moving-ship steps and 10,000 scheduled consequences.
 - Finite-long numeric exhaustion fails atomically; it is an explicit limitation rather than an indefinite-successor promise.
-- V3 persistence bounds world state, definition references, scheduler data, active orders, and the order allocator.
-- Loading resolves references through the supplied immutable catalog. Historical `first-playable-v1` validates at source schema; V2-to-V3 writes `active-world-orders-v1`.
+- V5 persistence bounds world state, definition references, scheduler data, active orders, Engineering state, repairs, and the order allocator.
+- Loading resolves references through the supplied immutable catalog. The adjacent chain migrates V1 through V5 before candidate validation.
 - Definitions are not serialized. V1 migration creates one ship, targets old work to the player, and uses its design label for the missing vessel name.
 - World construction and persistence admit at most 256 ships to bound untrusted input and fixed-step work; this is not a final capacity target.
 - Authored strategic-map order remains observable.
@@ -22,6 +22,8 @@
 - Ordinary ships may have one optional stable `ShipOrder`: `TravelTo`, `PatrolRoute`, or `HoldUntil`; old travel remains orderless.
 - Order execution shares the internal travel application with player travel. Cancellation removes only the identified order and its exact hold wake.
 - Strategic-only intervals jump event-to-event. Only at-location ships with nonzero tactical motion take fixed steps; repairs materialize analytically.
+- Ship Engineering state owns bounded conditions, available power, allocations, derived sensor and impulse capability, and one exact system repair.
+- Sensor contacts, scans, tactical courses, and cautious AI consume actor-owned effective capability; strategic travel remains unchanged.
 - Player-relevant advance processes hidden NPC work but reports and stops only on `PlayerShipId`; Godot results stay filtered.
 - Public advancement outcomes use player-semantic event names at the Godot boundary; scheduler consequences and proof traces remain internal surfaces.
 - The Godot command shell owns stable player controls and projections, while `GameSimulation` remains the command and state authority.

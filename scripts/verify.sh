@@ -36,13 +36,17 @@ mapfile -d '' structured_files < <(
   git ls-files -z -- \
     '*.md' '*.json' '*.jsonc' '*.yml' '*.yaml' \
     ':(exclude).agents/skills/agent-handoff/**' \
-    ':(exclude).claude/skills/agent-handoff/**'
+    ':(exclude).claude/skills/agent-handoff/**' \
+    ':(exclude).claude/skills/figma-*/**' \
+    ':(exclude).codex/skills/figma-*/**'
 )
 mapfile -d '' markdown_files < <(
   git ls-files -z -- \
     '*.md' \
     ':(exclude).agents/skills/agent-handoff/**' \
-    ':(exclude).claude/skills/agent-handoff/**'
+    ':(exclude).claude/skills/agent-handoff/**' \
+    ':(exclude).claude/skills/figma-*/**' \
+    ':(exclude).codex/skills/figma-*/**'
 )
 
 dotnet tool restore

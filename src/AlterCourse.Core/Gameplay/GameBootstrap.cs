@@ -127,12 +127,22 @@ public sealed class GameBootstrap
         foreach (ShipStart start in _shipStarts)
         {
             ShipDefinition definition = catalog.GetRequired(start.DefinitionId);
-            if (start.TacticalMotion.Speed.Value > definition.MaximumTacticalSpeed.Value)
+            SystemRepairState? repair = CreateRepair(start, definition, ref scheduler);
+            var engineering = new ShipEngineeringState(
+                start.GenerationCondition,
+                start.SensorCondition,
+                start.ImpulseCondition,
+                start.Allocation,
+                repair
+            );
+            engineering.Validate(definition.Engineering);
+            double effectiveMaximumSpeed =
+                definition.MaximumTacticalSpeed.Value * engineering.ImpulseCapability(definition.Engineering);
+            if (start.TacticalMotion.Speed.Value > effectiveMaximumSpeed)
             {
-                throw new ArgumentException("Tactical speed exceeds the ship definition maximum.", nameof(catalog));
+                throw new ArgumentException("Tactical speed exceeds current effective propulsion.", nameof(catalog));
             }
 
-            SensorRepairState? repair = CreateRepair(start, definition, ref scheduler);
             ShipStrategicState strategicState = start.Strategic switch
             {
                 AtLocationStart atLocation => CreateAtLocation(atLocation),
@@ -147,8 +157,7 @@ public sealed class GameBootstrap
                     start.VesselDisplayName,
                     start.TacticalPosition,
                     start.TacticalMotion,
-                    start.SensorIntegrity,
-                    repair,
+                    engineering,
                     strategicState,
                     activeOrder
                 )
@@ -168,26 +177,36 @@ public sealed class GameBootstrap
         return GameSimulation.RestoreState(candidate, catalog);
     }
 
-    private SensorRepairState? CreateRepair(
+    private SystemRepairState? CreateRepair(
         ShipStart ship,
         ShipDefinition definition,
         ref SimulationScheduler scheduler
     )
     {
-        if (ship.SensorRepair is not SensorRepairStart start)
+        if (ship.SystemRepair is not SystemRepairStart start)
         {
             return null;
         }
 
-        SimulationTime completion = start.StartedAt.AdvanceBy(definition.SensorRepairDuration);
+        SimulationDuration duration;
+        try
+        {
+            duration = definition.Engineering.RepairDurationFor(start.TargetSystem);
+        }
+        catch (ArgumentException exception)
+        {
+            throw new ArgumentException("Active system repair target is unsupported.", nameof(ship), exception);
+        }
+
+        SimulationTime completion = start.StartedAt.AdvanceBy(duration);
         if (
-            start.TargetIntegrity.Value <= start.StartingIntegrity.Value
+            start.TargetCondition.Value <= start.StartingCondition.Value
             || start.StartedAt.Milliseconds > InitialTime.Milliseconds
             || InitialTime.Milliseconds >= completion.Milliseconds
         )
         {
             throw new ArgumentException(
-                "Active sensor repair declaration is outside its valid interval.",
+                "Active system repair declaration is outside its valid interval.",
                 nameof(ship)
             );
         }
@@ -195,18 +214,21 @@ public sealed class GameBootstrap
         (scheduler, ScheduledWork work) = scheduler.Schedule(
             completion,
             ship.InstanceId,
-            ScheduledWorkKind.SensorRepairCompletion
+            ScheduledWorkKind.SystemRepairCompletion
         );
-        var repair = new SensorRepairState(
-            start.StartingIntegrity,
-            start.TargetIntegrity,
+        var repair = new SystemRepairState(
+            start.TargetSystem,
+            start.StartingCondition,
+            start.TargetCondition,
             start.StartedAt,
             completion,
             work.Id
         );
-        if (ship.SensorIntegrity != repair.IntegrityAt(InitialTime))
+        SystemCondition declared =
+            start.TargetSystem == ShipSystemId.Sensors ? ship.SensorCondition : ship.ImpulseCondition;
+        if (declared != repair.ConditionAt(InitialTime))
         {
-            throw new ArgumentException("Sensor integrity must match active repair progress.", nameof(ship));
+            throw new ArgumentException("System condition must match active repair progress.", nameof(ship));
         }
 
         return repair;
