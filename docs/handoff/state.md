@@ -2,8 +2,8 @@
 
 ## Current focus
 
-- Feature #58 Milestone 3A is complete on ready Final PR #61 to `dev`; review and all hosted checks pass, while owner merge remains.
-- The slice proves actor-specific contacts, Save V4, content V3, scanning, hailing, and cautious NPC behavior; no release changed `main`.
+- Feature #58 pre-merge corrections are complete on Final PR #61 to `dev`; owner merge remains.
+- The pass internalizes NPC diagnostics, preserves per-event Core times, and fixes Space-pause activation of a focused Hail action.
 
 ## Active incidents
 
