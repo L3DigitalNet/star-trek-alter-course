@@ -23,8 +23,7 @@ public sealed record SensorContactSnapshot
             Identification,
             KnownVesselDisplayName,
             KnownDesignDisplayName
-        ) =
-        (
+        ) = (
             id,
             lastObservedPosition,
             lastObservedAt,

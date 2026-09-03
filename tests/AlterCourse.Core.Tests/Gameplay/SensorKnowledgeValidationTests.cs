@@ -71,9 +71,7 @@ public sealed class SensorKnowledgeValidationTests
     [Fact]
     public void RejectsInconsistentContactIdentificationAndNames()
     {
-        AssertInvalid(
-            new SensorKnowledge(2, [Contact(1, NpcId) with { KnownVesselDisplayName = "Unexpected" }])
-        );
+        AssertInvalid(new SensorKnowledge(2, [Contact(1, NpcId) with { KnownVesselDisplayName = "Unexpected" }]));
         AssertInvalid(
             new SensorKnowledge(
                 2,
@@ -105,10 +103,7 @@ public sealed class SensorKnowledgeValidationTests
                 [
                     Contact(1, NpcId, identification: SensorContactIdentification.Identified) with
                     {
-                        KnownDesignDisplayName = new string(
-                            'd',
-                            ShipDefinition.MaximumDesignDisplayNameLength + 1
-                        ),
+                        KnownDesignDisplayName = new string('d', ShipDefinition.MaximumDesignDisplayNameLength + 1),
                     },
                 ]
             )
@@ -133,10 +128,7 @@ public sealed class SensorKnowledgeValidationTests
         AssertInvalid(new SensorKnowledge(2, [stale with { LossWorkId = default(ScheduledWorkId) }]), scheduler);
         AssertInvalid(new SensorKnowledge(2, [stale with { LossWorkId = new ScheduledWorkId(99) }]), scheduler);
         AssertInvalid(new SensorKnowledge(2, [stale with { LossDueTime = new SimulationTime(600) }]), scheduler);
-        AssertInvalid(
-            new SensorKnowledge(2, [stale with { Status = SensorContactStatus.Current }]),
-            scheduler
-        );
+        AssertInvalid(new SensorKnowledge(2, [stale with { Status = SensorContactStatus.Current }]), scheduler);
         AssertInvalid(new SensorKnowledge(2, [Contact(1, NpcId) with { Status = (SensorContactStatus)99 }]));
         AssertInvalid(new SensorKnowledge(2, [Contact(1, NpcId)]), scheduler);
     }
@@ -158,30 +150,26 @@ public sealed class SensorKnowledgeValidationTests
 
         CreateState(knowledge, scheduler).Validate(CreateCatalog());
         AssertInvalid(
-            knowledge with { ActiveScan = scan with { TargetContactId = new SensorContactId(9) } },
+            knowledge with
+            {
+                ActiveScan = scan with { TargetContactId = new SensorContactId(9) },
+            },
             scheduler
         );
         AssertInvalid(
-            new SensorKnowledge(
-                2,
-                [Contact(1, NpcId) with { Status = SensorContactStatus.Lost }],
-                scan
-            ),
+            new SensorKnowledge(2, [Contact(1, NpcId) with { Status = SensorContactStatus.Lost }], scan),
             scheduler
         );
         AssertInvalid(
-            knowledge with { ActiveScan = scan with { ScheduledCompletionId = new ScheduledWorkId(99) } },
+            knowledge with
+            {
+                ActiveScan = scan with { ScheduledCompletionId = new ScheduledWorkId(99) },
+            },
             scheduler
         );
-        AssertInvalid(
-            knowledge with { ActiveScan = scan with { ScheduledCompletionId = default } },
-            scheduler
-        );
+        AssertInvalid(knowledge with { ActiveScan = scan with { ScheduledCompletionId = default } }, scheduler);
         AssertInvalid(knowledge with { ActiveScan = scan with { StartedAt = new SimulationTime(101) } }, scheduler);
-        AssertInvalid(
-            knowledge with { ActiveScan = scan with { StartedAt = new SimulationTime(0) } },
-            scheduler
-        );
+        AssertInvalid(knowledge with { ActiveScan = scan with { StartedAt = new SimulationTime(0) } }, scheduler);
         AssertInvalid(new SensorKnowledge(2, [Contact(1, NpcId)]), scheduler);
     }
 
@@ -198,11 +186,17 @@ public sealed class SensorKnowledgeValidationTests
         CreateState(SensorKnowledge.Empty, scheduler, valid).Validate(CreateCatalog());
         AssertInvalidAutonomy(new ShipAutonomousState(null, wake), scheduler);
         AssertInvalidAutonomy(
-            valid with { PendingContactDecisionWake = wake with { ScheduledWorkId = new ScheduledWorkId(99) } },
+            valid with
+            {
+                PendingContactDecisionWake = wake with { ScheduledWorkId = new ScheduledWorkId(99) },
+            },
             scheduler
         );
         AssertInvalidAutonomy(
-            valid with { PendingContactDecisionWake = wake with { ScheduledWorkId = default } },
+            valid with
+            {
+                PendingContactDecisionWake = wake with { ScheduledWorkId = default },
+            },
             scheduler
         );
         AssertInvalidAutonomy(new ShipAutonomousState(ShipContactPosture.CautiousContact), scheduler);
@@ -225,10 +219,7 @@ public sealed class SensorKnowledgeValidationTests
             identification == SensorContactIdentification.Identified ? "Test design" : null
         );
 
-    private static void AssertInvalid(
-        SensorKnowledge knowledge,
-        SimulationScheduler? scheduler = null
-    ) =>
+    private static void AssertInvalid(SensorKnowledge knowledge, SimulationScheduler? scheduler = null) =>
         Assert.Throws<InvalidOperationException>(() =>
             CreateState(knowledge, scheduler ?? SimulationScheduler.Create()).Validate(CreateCatalog())
         );
@@ -246,10 +237,7 @@ public sealed class SensorKnowledgeValidationTests
     {
         var location = new StrategicLocation(Location, "Test", default);
         ShipState player = CreateShip(PlayerId) with { SensorKnowledge = knowledge };
-        ShipState npc = CreateShip(NpcId) with
-        {
-            AutonomousState = npcAutonomy ?? ShipAutonomousState.Empty,
-        };
+        ShipState npc = CreateShip(NpcId) with { AutonomousState = npcAutonomy ?? ShipAutonomousState.Empty };
         return new SimulationState(
             new SimulationTime(100),
             scheduler ?? SimulationScheduler.Create(),

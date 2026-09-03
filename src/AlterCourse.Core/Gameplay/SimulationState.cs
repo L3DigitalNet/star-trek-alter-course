@@ -236,8 +236,7 @@ internal sealed record SimulationState
             ScheduledWorkKind.ActiveSensorScanCompletion => target.SensorKnowledge.ActiveScan is { } scan
                 && scan.ScheduledCompletionId == work.Id
                 && scan.ExpectedCompletion == work.DueTime,
-            ScheduledWorkKind.ShipContactDecisionWake => target.AutonomousState.PendingContactDecisionWake is
-                { } wake
+            ScheduledWorkKind.ShipContactDecisionWake => target.AutonomousState.PendingContactDecisionWake is { } wake
                 && wake.ScheduledWorkId == work.Id
                 && wake.DueTime == work.DueTime,
             _ => false,
@@ -268,8 +267,7 @@ internal sealed record SimulationState
     private void ValidateSensorKnowledge(ShipState observer, ShipDefinitionCatalog catalog)
     {
         SensorKnowledge knowledge =
-            observer.SensorKnowledge
-            ?? throw new InvalidOperationException("Ship sensor knowledge cannot be null.");
+            observer.SensorKnowledge ?? throw new InvalidOperationException("Ship sensor knowledge cannot be null.");
         if (knowledge.Contacts.Length > SensorKnowledge.MaximumContactsPerObserver)
         {
             throw new InvalidOperationException(
@@ -327,11 +325,7 @@ internal sealed record SimulationState
         }
     }
 
-    private void ValidateObservedFacts(
-        SensorContactTrack contact,
-        ShipState target,
-        ShipDefinitionCatalog catalog
-    )
+    private void ValidateObservedFacts(SensorContactTrack contact, ShipState target, ShipDefinitionCatalog catalog)
     {
         if (
             !double.IsFinite(contact.LastObservedPosition.XKilometers)
@@ -358,11 +352,7 @@ internal sealed record SimulationState
                     && contact.KnownDesignDisplayName.Length <= ShipDefinition.MaximumDesignDisplayNameLength:
                 ShipDefinition targetDefinition = catalog.GetRequired(target.DefinitionId);
                 if (
-                    !string.Equals(
-                        contact.KnownVesselDisplayName,
-                        target.VesselDisplayName,
-                        StringComparison.Ordinal
-                    )
+                    !string.Equals(contact.KnownVesselDisplayName, target.VesselDisplayName, StringComparison.Ordinal)
                     || !string.Equals(
                         contact.KnownDesignDisplayName,
                         targetDefinition.DesignDisplayName,
@@ -375,7 +365,9 @@ internal sealed record SimulationState
 
                 break;
             default:
-                throw new InvalidOperationException("Sensor contact identification and learned names are inconsistent.");
+                throw new InvalidOperationException(
+                    "Sensor contact identification and learned names are inconsistent."
+                );
         }
     }
 
@@ -383,8 +375,8 @@ internal sealed record SimulationState
     {
         switch (contact.Status)
         {
-            case SensorContactStatus.Current or SensorContactStatus.Lost
-                when contact.LossWorkId is null && contact.LossDueTime is null:
+            case SensorContactStatus.Current
+            or SensorContactStatus.Lost when contact.LossWorkId is null && contact.LossDueTime is null:
                 return;
             case SensorContactStatus.Stale
                 when contact.LossWorkId is { Value: > 0 } lossWorkId
@@ -399,15 +391,13 @@ internal sealed record SimulationState
                 );
                 return;
             default:
-                throw new InvalidOperationException("Sensor contact status and loss-work correlation are inconsistent.");
+                throw new InvalidOperationException(
+                    "Sensor contact status and loss-work correlation are inconsistent."
+                );
         }
     }
 
-    private void ValidateActiveScan(
-        ShipState observer,
-        ActiveSensorScanState scan,
-        ShipDefinition observerDefinition
-    )
+    private void ValidateActiveScan(ShipState observer, ActiveSensorScanState scan, ShipDefinition observerDefinition)
     {
         if (scan.TargetContactId.Value <= 0 || scan.ScheduledCompletionId.Value <= 0)
         {
@@ -448,8 +438,7 @@ internal sealed record SimulationState
     private void ValidateAutonomousState(ShipState ship)
     {
         ShipAutonomousState autonomous =
-            ship.AutonomousState
-            ?? throw new InvalidOperationException("Ship autonomous state cannot be null.");
+            ship.AutonomousState ?? throw new InvalidOperationException("Ship autonomous state cannot be null.");
         if (ship.InstanceId == PlayerShipId && autonomous != ShipAutonomousState.Empty)
         {
             throw new InvalidOperationException("The player ship cannot have an autonomous contact posture or wake.");
