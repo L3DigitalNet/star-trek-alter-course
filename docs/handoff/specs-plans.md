@@ -14,5 +14,5 @@
 | Bug #51 | Merged / Done | Live Command Deck action stability repair merged through Final PR #52 as `c5602cc` into `dev`. |
 | Task #53 | Merged / Done | Source-only v0.3.0 release Final PR #54 merged as `fae21bd` into `main`; supporting PR #55 restored release ancestry to `dev`. |
 | Task #56 | Merged / Done | Project-scoped Figma tooling merged through Final PR #57 as `24cf7b0` into `dev`; it did not change gameplay. |
-| Feature #58 | Draft / Review | Milestone 3A first observed contact is complete on draft Final PR #61 to `dev`; independent review passed, while hosted checks and merge remain. |
+| Feature #58 | Ready / Review | Milestone 3A first observed contact is complete on Final PR #61 to `dev`; review and all hosted checks pass, while owner merge remains. |
 | Task #59 | Merged / Done | Godot UID and import metadata merged through Final PR #60 as `ce454f5` into `dev`. |
