@@ -4,7 +4,7 @@
 
 - Features #36 and #38 completed Milestones 1 and 2 through merged Final PRs #37 (`eb3c976`) and #39 (`fba9b438`) on `dev`.
 - Task #40 consolidated their gameplay shell through Final PR #41 (`ed8ca4b`); owner gameplay evaluation found the shell working well.
-- Version 0.2.0 is the current immutable source-only GitHub Release, tagged at `163b8e2`; no packaged gameplay artifact is published.
+- Release Task #53 is Done; v0.3.0 is the current immutable source-only GitHub Release, tagged at `fae21bd`; no packaged gameplay artifact is published.
 - The shell retains strategic travel, local tactical movement, sensor repair, deterministic time controls, player-relevant advance-until, and quick save/load.
 - The tracked launch script restores and builds before Godot starts, preventing stale local Debug content after branch changes.
 - The proof world has three vessels: USS Pathfinder at Dawn Anchor, USS Wayfarer repairing at Vesper Reach, and USS Horizon traveling to Meridian Drift.
@@ -28,12 +28,13 @@
 - The solution uses a one-way Godot-to-Core project reference, exact .NET SDK 10.0.111, C# 12, Godot 4.7.2 .NET, .NET 8 runtime support, Node 24, xUnit, and GdUnit4 6.2.0.
 - `scripts/verify.sh` is the canonical read-only gate for formatting, analysis, policy, builds, tests, Godot integration, security, and smoke checks.
 - AssetCtl remains an isolated .NET 10 tool with bounded inputs, offline-first defaults, safe publication, provenance, and Godot import validation.
-- `main` holds v0.2.0. Sync PR #44 merged it back into protected `dev` as `851845f`; significant work follows ADR 0013.
+- `main` holds v0.3.0. Supporting sync PR #55 merged it back into protected `dev` as `b1f2eb7`; significant work follows ADR 0013.
+- Final PR #54 and supporting sync PR #55 both passed CI; no deployment occurred beyond the source-only release.
 - Feature #47 merged through Final PR #48 as squash commit `b80c669` on `dev`; Issue #47 is closed Done and all CI passed.
 - The Command Deck now retains live strategic travel, tactical-map continuity, persistent Engineering navigation, rate controls, selection, and save/load.
 - Command, combat, and Engineering previews use deterministic non-authoritative presentation fixtures; live unavailable systems remain labelled `Unavailable`.
 - The Godot Theme and owned font assets are the runtime presentation source; the Figma nodes and repository PNGs remain visual references only.
-- No release or deployment followed Feature #47. Owner manual gameplay testing is required before any later release decision.
+- Owner accepted the command interface for v0.3.0: it runs smoothly with no errors.
 - Bug #49's PR #50 merged as `2064822`; the launcher imports Godot assets before loading the command theme.
 - Bug #51 merged through Final PR #52 as `c5602cc`; live context actions now retain pointer interaction and keyboard focus across refreshes.
 - Actor knowledge, contacts, first contact, faction strategy, general mission assignment, and tactical AI remain deferred.
