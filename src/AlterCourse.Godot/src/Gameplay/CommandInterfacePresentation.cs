@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using AlterCourse.Core.Player;
+using AlterCourse.Core.Sensors;
 using AlterCourse.Core.Strategic;
 
 namespace AlterCourse.Godot.Gameplay;
@@ -41,6 +42,12 @@ public sealed record CommandInterfacePresentation
 
     /// <summary>Gets the selected strategic identity when the user has made a live or preview selection.</summary>
     public LocationId? SelectedLocationId { get; init; }
+
+    /// <summary>Gets actor-safe live contacts, or an empty collection for illustrative previews.</summary>
+    public ImmutableArray<CommandInterfaceContact> Contacts { get; init; } = [];
+
+    /// <summary>Gets the selected observer-local contact identity when it remains actionable context.</summary>
+    public SensorContactId? SelectedContactId { get; init; }
 
     /// <summary>Gets the original Core strategic projection for the existing strategic map adapter.</summary>
     public StrategicProjection? Strategic { get; init; }

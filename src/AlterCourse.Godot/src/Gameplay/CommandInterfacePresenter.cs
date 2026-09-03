@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Globalization;
 using AlterCourse.Core.Gameplay;
 using AlterCourse.Core.Player;
+using AlterCourse.Core.Sensors;
 using AlterCourse.Core.Strategic;
 
 namespace AlterCourse.Godot.Gameplay;
@@ -13,6 +14,7 @@ public static class CommandInterfacePresenter
     public static CommandInterfacePresentation PresentLive(
         PlayerProjection projection,
         LocationId? selectedLocationId = null,
+        SensorContactId? selectedContactId = null,
         IReadOnlyList<PlayerAdvanceEvent>? recentEvents = null,
         CommandInterfaceMode mode = CommandInterfaceMode.Travel
     )
@@ -23,19 +25,27 @@ public static class CommandInterfacePresenter
         StrategicLocationProjection? selectedLocation = selectedLocationId is LocationId selected
             ? projection.Strategic.Locations.SingleOrDefault(location => location.Id == selected)
             : null;
+        SensorContactSnapshot? selectedContact = selectedContactId is SensorContactId contactId
+            ? projection.Ship.Sensors.Contacts.SingleOrDefault(contact =>
+                contact.Id == contactId && contact.Status != SensorContactStatus.Lost
+            )
+            : null;
+        ImmutableArray<CommandInterfaceContact> contacts = BuildContacts(projection);
         return new CommandInterfacePresentation
         {
             DataMode = CommandInterfaceDataMode.Live,
             Mode = mode,
             Header = BuildHeader(projection),
             Systems = BuildSystems(projection),
-            Telemetry = BuildTelemetry(projection, selectedLocation),
-            Actions = BuildActions(projection, selectedLocation),
+            Telemetry = BuildTelemetry(projection, selectedLocation, selectedContact, mode),
+            Actions = BuildActions(projection, selectedLocation, selectedContact),
             Events = BuildEvents(projection, recentEvents),
             Stations = BuildStations(mode),
             MapItems = BuildMapItems(projection),
             MapLinks = BuildMapLinks(projection),
             SelectedLocationId = selectedLocation?.Id,
+            Contacts = contacts,
+            SelectedContactId = selectedContact?.Id,
             Strategic = projection.Strategic,
             Tactical = projection.Ship.Tactical,
             Engineering = BuildEngineering(projection),
@@ -82,6 +92,21 @@ public static class CommandInterfacePresenter
     }
 
     private static ImmutableArray<CommandInterfaceTelemetrySection> BuildTelemetry(
+        PlayerProjection projection,
+        StrategicLocationProjection? selectedLocation,
+        SensorContactSnapshot? selectedContact,
+        CommandInterfaceMode mode
+    )
+    {
+        if (mode == CommandInterfaceMode.Combat)
+        {
+            return BuildTacticalTelemetry(projection, selectedContact);
+        }
+
+        return BuildStrategicTelemetry(projection, selectedLocation);
+    }
+
+    private static ImmutableArray<CommandInterfaceTelemetrySection> BuildStrategicTelemetry(
         PlayerProjection projection,
         StrategicLocationProjection? selectedLocation
     )
@@ -147,7 +172,8 @@ public static class CommandInterfacePresenter
 
     private static ImmutableArray<CommandInterfaceAction> BuildActions(
         PlayerProjection projection,
-        StrategicLocationProjection? selectedLocation
+        StrategicLocationProjection? selectedLocation,
+        SensorContactSnapshot? selectedContact
     ) =>
         [
             LiveAction(
@@ -170,6 +196,29 @@ public static class CommandInterfacePresenter
                 CommandInterfaceTone.Command,
                 CommandInterfaceIntent.AdvanceTime,
                 projection.AvailableActions.Contains(PlayerAction.AdvanceTime)
+            ),
+            LiveAction(
+                "active-scan",
+                selectedContact is null ? "Active scan" : $"Active scan {ContactLabel(selectedContact)}",
+                CommandInterfaceTone.Caution,
+                CommandInterfaceIntent.ActiveScan,
+                selectedContact is not null
+                    && selectedContact.Status == SensorContactStatus.Current
+                    && selectedContact.Identification == SensorContactIdentification.Detected
+                    && projection.AvailableActions.Contains(PlayerAction.ActiveSensorScan),
+                selectedContact?.Id,
+                ActiveScanTooltip(projection, selectedContact)
+            ),
+            LiveAction(
+                "hail",
+                selectedContact is null ? "Hail" : $"Hail {ContactLabel(selectedContact)}",
+                CommandInterfaceTone.Command,
+                CommandInterfaceIntent.Hail,
+                selectedContact is not null
+                    && selectedContact.Status == SensorContactStatus.Current
+                    && selectedContact.Identification == SensorContactIdentification.Identified,
+                selectedContact?.Id,
+                HailTooltip(selectedContact)
             ),
             DisabledAction("fire-phasers", "Fire phasers", CommandInterfaceTone.Critical),
             DisabledAction("allocate-power", "Prioritize power", CommandInterfaceTone.Engineering),
@@ -235,12 +284,163 @@ public static class CommandInterfacePresenter
         new(
             FormatClock(projection.SimulationTime.Milliseconds),
             "SENSOR",
-            $"{DescribeContact(@event)}: {message}",
+            $"{DescribeContact(projection, @event)}: {message}",
             CommandInterfaceTone.Caution
         );
 
-    private static string DescribeContact(PlayerAdvanceEvent @event) =>
-        @event.SensorContactId is { } contactId ? $"Contact {contactId.Value}" : "Contact";
+    private static string DescribeContact(PlayerProjection projection, PlayerAdvanceEvent @event)
+    {
+        if (@event.SensorContactId is not { } contactId)
+        {
+            return "Contact";
+        }
+
+        SensorContactSnapshot? contact = projection.Ship.Sensors.Contacts.SingleOrDefault(candidate =>
+            candidate.Id == contactId
+        );
+        return contact is null ? $"Contact {contactId.Value}" : ContactLabel(contact);
+    }
+
+    private static ImmutableArray<CommandInterfaceContact> BuildContacts(PlayerProjection projection) =>
+        [
+            .. projection
+                .Ship.Sensors.Contacts.Where(contact => contact.Status != SensorContactStatus.Lost)
+                .OrderBy(contact => contact.Id.Value)
+                .Select(contact => new CommandInterfaceContact(
+                    contact.Id,
+                    ContactLabel(contact),
+                    contact.Status,
+                    contact.Identification,
+                    contact.LastObservedPosition.XKilometers,
+                    contact.LastObservedPosition.YKilometers,
+                    contact.LastObservedAt.Milliseconds,
+                    projection.SimulationTime.Milliseconds - contact.LastObservedAt.Milliseconds,
+                    contact.Identification == SensorContactIdentification.Identified
+                        ? contact.KnownVesselDisplayName
+                        : null,
+                    contact.Identification == SensorContactIdentification.Identified
+                        ? contact.KnownDesignDisplayName
+                        : null,
+                    projection.Ship.Sensors.ActiveScanContactId == contact.Id
+                )),
+        ];
+
+    private static ImmutableArray<CommandInterfaceTelemetrySection> BuildTacticalTelemetry(
+        PlayerProjection projection,
+        SensorContactSnapshot? selectedContact
+    )
+    {
+        ImmutableArray<CommandInterfaceTelemetrySection>.Builder sections =
+            ImmutableArray.CreateBuilder<CommandInterfaceTelemetrySection>();
+        if (selectedContact is null)
+        {
+            sections.Add(
+                new CommandInterfaceTelemetrySection(
+                    "contact",
+                    "CONTACT",
+                    CommandInterfaceTone.Muted,
+                    [Unavailable("SELECTION")]
+                )
+            );
+        }
+        else
+        {
+            sections.Add(
+                new CommandInterfaceTelemetrySection(
+                    "contact",
+                    ContactLabel(selectedContact).ToUpperInvariant(),
+                    selectedContact.Status == SensorContactStatus.Current
+                        ? CommandInterfaceTone.Command
+                        : CommandInterfaceTone.Caution,
+                    BuildContactFields(projection, selectedContact)
+                )
+            );
+        }
+
+        sections.Add(
+            new CommandInterfaceTelemetrySection(
+                "tactical",
+                "TACTICAL MOTION",
+                CommandInterfaceTone.Command,
+                [
+                    Available("POSITION X", FormatKilometers(projection.Ship.Tactical.Position.XKilometers)),
+                    Available("POSITION Y", FormatKilometers(projection.Ship.Tactical.Position.YKilometers)),
+                    Available("HEADING", FormatHeading(projection.Ship.Tactical.HeadingDegrees)),
+                    Available("SPEED", FormatSpeed(projection.Ship.Tactical.SpeedKilometersPerSecond)),
+                ]
+            )
+        );
+        return sections.ToImmutable();
+    }
+
+    private static ImmutableArray<CommandInterfaceField> BuildContactFields(
+        PlayerProjection projection,
+        SensorContactSnapshot selectedContact
+    )
+    {
+        ImmutableArray<CommandInterfaceField>.Builder fields = ImmutableArray.CreateBuilder<CommandInterfaceField>();
+        fields.Add(Available("LOCAL CONTACT ID", selectedContact.Id.Value.ToString(CultureInfo.InvariantCulture)));
+        fields.Add(
+            Available(
+                "STATUS",
+                selectedContact.Status.ToString().ToUpperInvariant(),
+                selectedContact.Status == SensorContactStatus.Current
+                    ? CommandInterfaceTone.Command
+                    : CommandInterfaceTone.Caution
+            )
+        );
+        fields.Add(Available("IDENTIFICATION", selectedContact.Identification.ToString().ToUpperInvariant()));
+        fields.Add(Available("OBSERVED X", FormatKilometers(selectedContact.LastObservedPosition.XKilometers)));
+        fields.Add(Available("OBSERVED Y", FormatKilometers(selectedContact.LastObservedPosition.YKilometers)));
+        fields.Add(Available("OBSERVED AT", FormatSeconds(selectedContact.LastObservedAt.Milliseconds)));
+        fields.Add(
+            Available(
+                "OBSERVATION AGE",
+                FormatSeconds(projection.SimulationTime.Milliseconds - selectedContact.LastObservedAt.Milliseconds),
+                selectedContact.Status == SensorContactStatus.Stale
+                    ? CommandInterfaceTone.Caution
+                    : CommandInterfaceTone.Neutral
+            )
+        );
+        if (selectedContact.Identification == SensorContactIdentification.Identified)
+        {
+            fields.Add(Available("VESSEL", selectedContact.KnownVesselDisplayName ?? "UNKNOWN"));
+            fields.Add(Available("DESIGN", selectedContact.KnownDesignDisplayName ?? "UNKNOWN"));
+        }
+
+        if (projection.Ship.Sensors.ActiveScanContactId == selectedContact.Id)
+        {
+            fields.Add(Available("ACTIVE SCAN", "IN PROGRESS", CommandInterfaceTone.Caution));
+        }
+
+        return fields.ToImmutable();
+    }
+
+    private static string ContactLabel(SensorContactSnapshot contact) =>
+        contact.Identification == SensorContactIdentification.Identified
+            ? contact.KnownVesselDisplayName ?? contact.KnownDesignDisplayName ?? $"Contact {contact.Id.Value}"
+            : $"Contact {contact.Id.Value}";
+
+    private static string ActiveScanTooltip(PlayerProjection projection, SensorContactSnapshot? contact) =>
+        contact switch
+        {
+            null => "Select a live sensor contact to request an active scan.",
+            { Status: not SensorContactStatus.Current } => "Active scan requires a current sensor contact.",
+            { Identification: SensorContactIdentification.Identified } => "This contact is already identified.",
+            _ when projection.Ship.Sensors.ActiveScanContactId is not null => "Another active scan is in progress.",
+            _ when !projection.AvailableActions.Contains(PlayerAction.ActiveSensorScan) =>
+                "Active scan is unavailable from the current Core projection.",
+            _ => "Request active identification of this contact.",
+        };
+
+    private static string HailTooltip(SensorContactSnapshot? contact) =>
+        contact switch
+        {
+            null => "Select an identified live sensor contact to hail.",
+            { Status: not SensorContactStatus.Current } => "Hail requires a current sensor contact.",
+            { Identification: not SensorContactIdentification.Identified } => "Identify this contact before hailing.",
+            _ => "Request a bounded hail to this identified contact.",
+        };
 
     private static ImmutableArray<CommandInterfaceStation> BuildStations(CommandInterfaceMode mode)
     {
@@ -355,14 +555,18 @@ public static class CommandInterfacePresenter
         string label,
         CommandInterfaceTone tone,
         CommandInterfaceIntent intent,
-        bool isAvailable
+        bool isAvailable,
+        SensorContactId? focusedContactId = null,
+        string? tooltip = null
     ) =>
         new(
             id,
             label,
             isAvailable ? tone : CommandInterfaceTone.Muted,
             isAvailable ? CommandInterfaceActionAvailability.Submittable : CommandInterfaceActionAvailability.Disabled,
-            isAvailable ? intent : null
+            intent,
+            focusedContactId,
+            tooltip
         );
 
     private static CommandInterfaceAction DisabledAction(string id, string label, CommandInterfaceTone tone) =>

@@ -11,4 +11,10 @@ public enum CommandInterfaceIntent
 
     /// <summary>Advance authoritative simulation time.</summary>
     AdvanceTime = 3,
+
+    /// <summary>Request active identification of one observer-local sensor contact.</summary>
+    ActiveScan = 4,
+
+    /// <summary>Request a bounded hail to one identified observer-local sensor contact.</summary>
+    Hail = 5,
 }

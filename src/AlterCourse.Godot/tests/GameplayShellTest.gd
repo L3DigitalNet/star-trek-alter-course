@@ -479,7 +479,142 @@ func test_live_context_action_identity_and_focus_survive_projection_refresh() ->
 	assert_int(refreshed_advance.get_instance_id()).is_equal(advance_instance_id)
 	assert_bool(refreshed_course.has_focus()).is_true()
 	refreshed_advance.emit_signal("pressed")
-	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(8000)
+	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(3500)
+
+
+func test_live_contact_marker_hit_selects_actor_safe_inspector_context() -> void:
+	var screen := _create_screen()
+	screen.call("AdvanceUntilNextPlayerRelevantEvent")
+	screen.call("ShowTacticalView")
+	var tactical_map := _command_deck(screen).get_node("%TacticalMap") as Control
+	tactical_map.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	tactical_map.size = Vector2(800, 500)
+	var marker: Vector2 = tactical_map.call("MapContact", 1)
+
+	assert_int(screen.get_meta("sensor_contact_count", 0)).is_equal(1)
+	assert_str(screen.get_meta("first_contact_label", "")).is_equal("Contact 1")
+	assert_str(screen.get_meta("first_contact_identification", "")).is_equal("Detected")
+	assert_str(tactical_map.call("ContactLabel", 1)).is_equal("Contact 1")
+	assert_int(tactical_map.call("HitTestContactId", marker)).is_equal(1)
+	assert_int(tactical_map.call("HitTestContactId", marker + Vector2(17, 0))).is_equal(0)
+	assert_bool(tactical_map.call("SelectContactAt", marker)).is_true()
+
+	assert_int(screen.get_meta("selected_contact", 0)).is_equal(1)
+	var inspector_text := _collect_control_text(_command_deck(screen).get_node("%InspectorContent"))
+	assert_str(inspector_text).contains("LOCAL CONTACT ID")
+	assert_str(inspector_text).contains("DETECTED")
+	assert_str(inspector_text).contains("OBSERVATION AGE")
+	assert_str(inspector_text).not_contains("Survey Vessel Kestrel")
+	assert_str(_collect_control_text(screen)).not_contains("Survey Vessel Kestrel")
+	assert_bool((_find_action_button(screen, "active-scan") as Button).disabled).is_false()
+	assert_bool((_find_action_button(screen, "hail") as Button).disabled).is_true()
+
+
+func test_tactical_contact_hit_test_uses_distance_then_lowest_local_id() -> void:
+	var screen := _create_screen()
+	var tactical_map := _command_deck(screen).get_node("%TacticalMap")
+	var tactical_origin := Vector2(
+		screen.get_meta("tactical_x", 0.0), screen.get_meta("tactical_y", 0.0)
+	)
+	var click: Vector2 = screen.call(
+		"MapTacticalPosition", tactical_origin.x, tactical_origin.y
+	)
+
+	assert_int(
+		tactical_map.call(
+			"HitTestContactCandidates",
+			click,
+			PackedInt64Array([2, 1]),
+			PackedVector2Array([tactical_origin, tactical_origin])
+		)
+	).is_equal(1)
+	assert_int(
+		tactical_map.call(
+			"HitTestContactCandidates",
+			click,
+			PackedInt64Array([1, 2]),
+			PackedVector2Array(
+				[tactical_origin + Vector2(0.2, 0), tactical_origin + Vector2(0.1, 0)]
+			)
+		)
+	).is_equal(2)
+
+
+func test_contact_selection_survives_refresh_but_load_and_loss_clear_it() -> void:
+	var screen := _create_screen()
+	screen.call("AdvanceUntilNextPlayerRelevantEvent")
+	screen.call("ShowTacticalView")
+	await get_tree().process_frame
+	screen.call("SelectContact", 1)
+	var tactical_map := _command_deck(screen).get_node("%TacticalMap")
+	var scan_button := _find_action_button(screen, "active-scan") as Button
+	var scan_instance_id := scan_button.get_instance_id()
+	scan_button.grab_focus()
+
+	assert_int(screen.call("ProcessSyntheticDelta", 0.1)).is_equal(1)
+	await get_tree().process_frame
+	assert_int(screen.get_meta("selected_contact", 0)).is_equal(1)
+	assert_int((_find_action_button(screen, "active-scan") as Button).get_instance_id()).is_equal(
+		scan_instance_id
+	)
+	assert_bool((_find_action_button(screen, "active-scan") as Button).has_focus()).is_true()
+	screen.call("QuickSave")
+	screen.call("QuickLoad")
+	assert_int(screen.get_meta("selected_contact", -1)).is_equal(0)
+	assert_int(screen.get_meta("sensor_contact_count", 0)).is_equal(1)
+
+	screen.call("SelectContact", 1)
+	for _step in range(34):
+		assert_int(screen.call("ProcessSyntheticDelta", 0.6)).is_equal(6)
+	assert_int(screen.call("ProcessSyntheticDelta", 0.1)).is_equal(1)
+	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(24100)
+	assert_str(screen.get_meta("first_contact_status", "")).is_equal("Stale")
+	assert_int(screen.get_meta("selected_contact", 0)).is_equal(1)
+	var stale_marker: Vector2 = tactical_map.call("MapContact", 1)
+	screen.call("ProcessSyntheticDelta", 0.1)
+	var refreshed_stale_marker: Vector2 = tactical_map.call("MapContact", 1)
+	assert_bool(refreshed_stale_marker.is_equal_approx(stale_marker)).is_true()
+	screen.call("AdvanceUntilNextPlayerRelevantEvent")
+	assert_int(screen.get_meta("sensor_contact_count", -1)).is_equal(0)
+	assert_int(screen.get_meta("selected_contact", -1)).is_equal(0)
+
+
+func test_active_scan_and_hail_actions_translate_typed_contact_and_reconcile_buttons() -> void:
+	var screen := _create_screen()
+	screen.call("AdvanceUntilNextPlayerRelevantEvent")
+	screen.call("ShowTacticalView")
+	screen.call("SelectContact", 1)
+	var scan_button := _find_action_button(screen, "active-scan") as Button
+	var hail_button := _find_action_button(screen, "hail") as Button
+	var scan_instance_id := scan_button.get_instance_id()
+	var hail_instance_id := hail_button.get_instance_id()
+
+	scan_button.emit_signal("pressed")
+	assert_str(screen.get_meta("last_contact_command", "")).is_equal("active-scan:Accepted")
+	assert_int(screen.get_meta("active_scan_contact", 0)).is_equal(1)
+	assert_bool((_find_action_button(screen, "active-scan") as Button).disabled).is_true()
+	assert_str(_collect_control_text(_command_deck(screen).get_node("%InspectorContent"))).contains(
+		"IN PROGRESS"
+	)
+	screen.call("AdvanceUntilNextPlayerRelevantEvent")
+	assert_str(screen.get_meta("first_contact_identification", "")).is_equal("Identified")
+	assert_str(screen.get_meta("first_contact_label", "")).is_equal("Survey Vessel Kestrel")
+	assert_int((_find_action_button(screen, "active-scan") as Button).get_instance_id()).is_equal(
+		scan_instance_id
+	)
+	assert_int((_find_action_button(screen, "hail") as Button).get_instance_id()).is_equal(
+		hail_instance_id
+	)
+	assert_bool((_find_action_button(screen, "hail") as Button).disabled).is_false()
+	assert_str(_collect_control_text(_command_deck(screen))).contains("Pathfinder class")
+
+	screen.call("ShowStrategicView")
+	screen.call("RequestSelectedHail")
+	assert_str(screen.get_meta("last_contact_command", "")).is_equal("hail:Acknowledged")
+	assert_str(screen.get_node("%Message").text).contains("Survey Vessel Kestrel")
+	screen.call("ShowPreview", 2)
+	assert_str(_collect_control_text(_command_deck(screen))).not_contains("Survey Vessel Kestrel")
+	assert_bool((_find_action_button(screen, "hail-target") as Button).disabled).is_true()
 
 
 func test_live_unsupported_values_and_engineering_actions_are_explicitly_unavailable() -> void:
