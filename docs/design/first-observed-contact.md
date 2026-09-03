@@ -32,7 +32,7 @@ This slice has local tactical scope only. A passive observation is possible only
 
 ## Contact knowledge and lifecycle
 
-Each `ShipState` owns bounded, canonically ordered sensor knowledge and a monotonically allocated `SensorContactId`. The ID belongs to the observer, is not derived from a `ShipInstanceId`, and remains stable through stale, lost, and reacquired states. Core retains a correlated target ship ID only to resolve authoritative rules and commands. That correlation never appears in player projections, Godot presentation, player-safe events, or AI decision inputs.
+Each `ShipState` owns bounded, canonically ordered sensor knowledge and a monotonically allocated `SensorContactId`. The bound is the world maximum minus the observer itself: 255 contacts in a 256-ship world. The ID belongs to the observer, is not derived from a `ShipInstanceId`, and remains stable through stale, lost, and reacquired states. Core retains a correlated target ship ID only to resolve authoritative rules and commands. That correlation never appears in player projections, Godot presentation, player-safe events, or AI decision inputs.
 
 A contact exposes only its observer-known facts: local contact ID, last observed tactical position and time, Current/Stale/Lost status, Detected/Identified state, and vessel/design display names only after identification. A new detectable contact is Current and Detected. Continued detection refreshes its observed position and time. When it is no longer detectable, it becomes Stale, keeps its last observation, and receives exactly one loss work item due five seconds later. Resolution rechecks detectability: a still-undetectable Stale contact becomes Lost; reacquisition cancels its exact loss work, restores Current, and preserves its local ID and prior identification. Lost contacts remain bounded correlation memory but are absent from live tactical projection.
 
@@ -56,7 +56,7 @@ Inactive strategic work remains event-to-event; there is no global recurring sen
 
 ## Content and persistence
 
-Ship-definition schema V3 adds `passiveSensorRangeKilometers` and `activeScanDurationMilliseconds`. The canonical Pathfinder definition uses 30 km and 2,000 ms respectively. Save schema V4 uses simulation-rules version `sensor-knowledge-first-contact-v1` and explicitly maps per-ship contact allocators, tracks, observation facts, identification, active scan state, autonomous posture, pending decision wake, and exact new scheduler correlations.
+Ship-definition schema V3 adds `passiveSensorRangeKilometers` and `activeScanDurationMilliseconds`. The canonical Pathfinder definition uses 30 km and 2,000 ms respectively. Save schema V4 uses simulation-rules version `sensor-knowledge-first-contact-v1` and explicitly maps per-ship contact allocators, tracks, observation facts, identification, active scan state, autonomous posture, pending decision wake, and exact new scheduler correlations. Its 128 MiB envelope admits the measured 95,632,438-byte maximum contact graph while retaining a finite input and output bound.
 
 V3-to-V4 migration preserves existing state but initializes empty sensor knowledge, next contact ID 1, no active scan, no contact posture, and no pending decision wake. The V1-to-V2-to-V3-to-V4 chain remains adjacent and candidate-before-commit validation rejects invalid contact and scheduler cross-references before replacing live simulation state.
 

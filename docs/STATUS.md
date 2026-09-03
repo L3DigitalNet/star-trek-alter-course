@@ -21,7 +21,7 @@
 - Ship-definition schema V3 adds explicit passive sensor range and active-scan duration to reusable Pathfinder-class capability.
 - Vessel names and starting sensor condition remain bootstrap state rather than authored design capability.
 - The proof world reuses one validated Pathfinder-class definition for four vessel instances.
-- Each ship owns bounded observer-local contact knowledge; Current, Stale, and Lost contacts preserve a local ID and learned identity.
+- Each ship owns up to 255 observer-local contacts; Current, Stale, and Lost tracks preserve a local ID and learned identity.
 - The internal correlated ship ID is absent from player and AI projections.
 - Passive detection is local to ships at the same strategic location and scales authored sensor range by sensor integrity.
 - Current contacts support typed Core scan commands; identified Current contacts also support typed hail commands.
