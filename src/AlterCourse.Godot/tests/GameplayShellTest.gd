@@ -52,6 +52,7 @@ func test_default_live_state_is_command_deck_travel() -> void:
 	assert_bool((_command_deck(screen) as Control).visible).is_true()
 	assert_bool((_command_deck(screen).get_node("%StrategicMap") as Control).visible).is_true()
 	assert_bool((_engineering_workspace(screen) as Control).visible).is_false()
+	assert_str((screen.get_node("%ViewStatus") as Label).text).is_equal("COMMAND DECK / TRAVEL")
 
 
 func test_semantic_input_actions_and_theme_states_are_configured() -> void:
@@ -73,6 +74,11 @@ func test_semantic_input_actions_and_theme_states_are_configured() -> void:
 
 	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
 		assert_object(screen.theme.get_stylebox(state, "Button")).is_not_null()
+	var focus_style := screen.theme.get_stylebox("focus", "Button") as StyleBoxFlat
+	var normal_style := screen.theme.get_stylebox("normal", "Button") as StyleBoxFlat
+	assert_bool(focus_style.border_color.is_equal_approx(Color("67c6d4"))).is_true()
+	assert_int(focus_style.border_width_left).is_equal(2)
+	assert_int(normal_style.border_width_left).is_equal(1)
 
 
 func test_keyboard_view_pause_rate_and_tactical_course_use_shell_actions() -> void:
@@ -139,9 +145,15 @@ func test_initial_focus_and_explicit_traversal_follow_visible_context() -> void:
 	assert_bool((screen.get_node("%CourseButton") as Button).visible).is_true()
 	screen.call("ShowEngineeringWorkspace")
 	await get_tree().process_frame
-	assert_bool((screen.get_node("%EngineeringStationButton") as Button).has_focus()).is_true()
+	var engineering_focus := get_viewport().gui_get_focus_owner()
+	assert_object(engineering_focus).is_not_null()
+	assert_bool(_engineering_workspace(screen).is_ancestor_of(engineering_focus)).is_true()
+	assert_str(str(engineering_focus.focus_next)).is_not_empty()
 	assert_bool((_engineering_workspace(screen) as Control).visible).is_true()
 	assert_bool((_command_deck(screen) as Control).visible).is_false()
+	screen.call("ShowCommandWorkspace")
+	await get_tree().process_frame
+	assert_bool(command.has_focus()).is_true()
 
 
 func test_container_layout_remains_stable_at_practical_sizes() -> void:
@@ -180,6 +192,50 @@ func test_container_layout_remains_stable_at_practical_sizes() -> void:
 		assert_float(technical.size.x).is_greater(engineering_inspector.size.x)
 		screen.call("ShowCommandWorkspace")
 		await get_tree().process_frame
+
+
+func test_engineering_minimums_and_key_panels_remain_accessible_at_1600_by_900() -> void:
+	var screen := _create_screen()
+	screen.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	screen.size = Vector2(1600, 900)
+	screen.call("ShowPreview", 3)
+	await get_tree().process_frame
+
+	var engineering := _engineering_workspace(screen) as Control
+	var workspace_margin := engineering.get_node("WorkspaceMargin") as MarginContainer
+	var workspace_stack := engineering.get_node("WorkspaceMargin/WorkspaceStack") as VBoxContainer
+	var allocation := engineering.get_node("%PowerAllocationSummary") as Control
+	var inspector_scroll := engineering.get_node("%EngineeringInspectorScroll") as ScrollContainer
+	var actions := engineering.get_node("%EngineeringActions") as Control
+	assert_float(workspace_stack.get_combined_minimum_size().y).is_less_equal(
+		workspace_margin.size.y
+	)
+	assert_float(allocation.get_global_rect().end.y).is_less_equal(
+		engineering.get_global_rect().end.y
+	)
+	assert_bool(inspector_scroll.is_ancestor_of(actions)).is_true()
+	assert_bool(
+		inspector_scroll.get_v_scroll_bar().max_value
+		> inspector_scroll.get_v_scroll_bar().page
+	).is_true()
+
+
+func test_engineering_uses_native_schematic_projection() -> void:
+	var screen := _create_screen()
+	screen.call("ShowPreview", 3)
+	await get_tree().process_frame
+
+	var schematic := _engineering_workspace(screen).get_node("%EngineeringSchematic") as Control
+	assert_object(schematic).is_not_null()
+	assert_str((screen.get_node("%ViewStatus") as Label).text).is_equal("ENGINEERING WORKSPACE")
+	assert_str(schematic.get_script().resource_path).ends_with("EngineeringSchematicView.cs")
+	assert_int(schematic.get_meta("component_count", 0)).is_equal(9)
+	assert_int(schematic.get_meta("link_count", 0)).is_equal(7)
+	assert_bool(schematic.get_meta("is_preview", false)).is_true()
+	assert_float(schematic.get_meta("maximum_component_width", 0.0)).is_equal(220.0)
+	assert_bool(schematic.get_meta("topology_available", false)).is_true()
+	assert_object(_engineering_workspace(screen).get_node_or_null("%SchematicComponents")).is_null()
+	assert_object(_engineering_workspace(screen).get_node_or_null("%SchematicLinks")).is_null()
 
 
 func test_view_switch_preserves_workspace_geometry_and_persistent_header() -> void:
@@ -298,6 +354,7 @@ func test_command_inspector_keeps_mode_sections_above_quick_actions() -> void:
 	)
 
 	screen.call("ShowPreview", 2)
+	assert_str((screen.get_node("%ViewStatus") as Label).text).is_equal("COMMAND DECK / COMBAT")
 	assert_str((_command_deck(screen).get_node("%InspectorHeading") as Label).text).is_equal(
 		"SELECTED CONTACT / TACTICAL SUMMARY"
 	)
@@ -387,6 +444,11 @@ func test_live_unsupported_values_and_engineering_actions_are_explicitly_unavail
 	var engineering_text := _collect_control_text(_engineering_workspace(screen))
 	assert_str(engineering_text).contains("NOT PROVIDED BY LIVE SIMULATION")
 	assert_bool((_find_engineering_action_button(screen, "allocate-power") as Button).disabled).is_true()
+	assert_bool(
+		_engineering_workspace(screen).get_node("%EngineeringSchematic").get_meta(
+			"topology_available", true
+		)
+	).is_false()
 
 
 func test_invalid_content_bootstrap_is_fail_closed_and_player_safe() -> void:
@@ -666,6 +728,19 @@ func test_connected_destination_submits_travel_and_refreshes_visible_state() -> 
 	assert_int(screen.get_meta("travel_eta_milliseconds", -1)).is_equal(12000)
 	assert_str(_collect_control_text(_command_deck(screen))).contains("Dawn Anchor")
 	assert_str(_collect_control_text(_command_deck(screen))).contains("Vesper Reach")
+
+
+func test_unconnected_destination_submits_intent_and_core_rejects_route() -> void:
+	var screen := _create_screen()
+	screen.call("SelectDestination", "meridian-drift")
+	var travel_button := screen.get_node("%TravelButton") as Button
+	assert_bool(travel_button.disabled).is_false()
+
+	travel_button.emit_signal("pressed")
+
+	assert_bool(screen.get_meta("travel_active", false)).is_false()
+	assert_str(screen.get_node("%Message").text).contains("no direct route is known")
+	assert_str(screen.get_meta("selected_destination", "")).is_equal("meridian-drift")
 
 
 func test_destination_selection_projects_one_authoritative_pressed_state() -> void:

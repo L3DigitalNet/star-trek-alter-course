@@ -27,7 +27,6 @@ public partial class EngineeringWorkspace : Control
     }
 
     private readonly Dictionary<string, Button> _actionButtons = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, Button> _componentButtons = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Button> _hierarchyButtons = new(StringComparer.Ordinal);
     private CommandInterfacePresentation? _presentation;
     private VBoxContainer _actions = null!;
@@ -35,13 +34,7 @@ public partial class EngineeringWorkspace : Control
     private VBoxContainer _hierarchy = null!;
     private VBoxContainer _inspector = null!;
     private VBoxContainer _powerAllocation = null!;
-    private GridContainer _schematicComponents = null!;
-    private VBoxContainer _schematicLinks = null!;
-    private Label _dataModeStatus = null!;
-    private Button _returnButton = null!;
-
-    /// <summary>Notifies the shell that the player requested the Command Deck.</summary>
-    public event EventHandler? ReturnToCommandRequested;
+    private EngineeringSchematicView _schematic = null!;
 
     /// <summary>Notifies an application adapter of an authoritative intent selected in this view.</summary>
     public event EventHandler<EngineeringCommandRequestedEventArgs>? EngineeringCommandRequested;
@@ -59,8 +52,7 @@ public partial class EngineeringWorkspace : Control
     public override void _Ready()
     {
         BindScene();
-        _returnButton.Pressed += RequestReturnToCommand;
-        _returnButton.GrabFocus();
+        _schematic.ComponentSelected = SelectComponent;
     }
 
     /// <summary>Replaces the complete view with one immutable engineering display snapshot.</summary>
@@ -82,11 +74,6 @@ public partial class EngineeringWorkspace : Control
         SetMeta("is_preview", IsPreviewMode);
         SetMeta("selected_component_id", SelectedComponentId ?? string.Empty);
 
-        _dataModeStatus.Text = IsPreviewMode
-            ? "PREVIEW — ILLUSTRATIVE / NON-AUTHORITATIVE"
-            : "LIVE — CORE PROJECTION / LIMITED ENGINEERING TELEMETRY";
-        _dataModeStatus.ThemeTypeVariation = IsPreviewMode ? "StatusCaution" : "StatusNominal";
-
         RebuildHierarchy(presentation.Engineering);
         RebuildSchematic(presentation.Engineering);
         RebuildInspector();
@@ -100,19 +87,30 @@ public partial class EngineeringWorkspace : Control
     public bool IsActionEnabled(string actionId) =>
         _actionButtons.TryGetValue(actionId, out Button? button) && !button.Disabled;
 
-    /// <summary>Emits the navigation request without changing simulation or presentation state.</summary>
-    public void RequestReturnToCommand()
+    /// <summary>Places keyboard focus on the first meaningful control in the visible Engineering workspace.</summary>
+    public void GrabEntryFocus()
     {
-        ReturnToCommandRequested?.Invoke(this, EventArgs.Empty);
+        if (!IsInsideTree() || !IsVisibleInTree())
+        {
+            return;
+        }
+
+        Button? entry = _hierarchyButtons.Values.FirstOrDefault(button => button.ButtonPressed && !button.Disabled);
+        entry ??= _hierarchyButtons.Values.FirstOrDefault(button => !button.Disabled);
+        if (entry is not null)
+        {
+            entry.GrabFocus();
+        }
+        else
+        {
+            _schematic.GrabFocus();
+        }
     }
 
     private void BindScene()
     {
-        _dataModeStatus = GetNode<Label>("%DataModeStatus");
-        _returnButton = GetNode<Button>("%ReturnToCommandButton");
         _hierarchy = GetNode<VBoxContainer>("%EngineeringHierarchy");
-        _schematicComponents = GetNode<GridContainer>("%SchematicComponents");
-        _schematicLinks = GetNode<VBoxContainer>("%SchematicLinks");
+        _schematic = GetNode<EngineeringSchematicView>("%EngineeringSchematic");
         _inspector = GetNode<VBoxContainer>("%ComponentInspectorContent");
         _connectedLoads = GetNode<VBoxContainer>("%ConnectedLoadsContent");
         _actions = GetNode<VBoxContainer>("%EngineeringActionsContent");
@@ -159,57 +157,7 @@ public partial class EngineeringWorkspace : Control
 
     private void RebuildSchematic(CommandInterfaceEngineeringPresentation? engineering)
     {
-        ClearChildren(_schematicComponents);
-        ClearChildren(_schematicLinks);
-        _componentButtons.Clear();
-        if (engineering is null || engineering.Components.IsDefaultOrEmpty)
-        {
-            AddUnavailable(_schematicLinks, "TECHNICAL SCHEMATIC");
-            return;
-        }
-
-        foreach (CommandInterfaceTelemetrySection component in engineering.Components)
-        {
-            string fieldSummary = string.Join(
-                "  /  ",
-                component.Fields.Select(field => $"{field.Label} {DisplayValue(field)}")
-            );
-            var button = new Button
-            {
-                Name = $"Component_{SafeNodeName(component.Id)}",
-                Text = $"{component.Title}\n{fieldSummary}",
-                CustomMinimumSize = new Vector2(0, 72),
-                SizeFlagsHorizontal = SizeFlags.ExpandFill,
-                FocusMode = FocusModeEnum.All,
-                ToggleMode = true,
-                ButtonPressed = string.Equals(component.Id, SelectedComponentId, StringComparison.Ordinal),
-                ThemeTypeVariation = VariationForButton(
-                    component.Tone,
-                    string.Equals(component.Id, SelectedComponentId, StringComparison.Ordinal)
-                ),
-                TooltipText = $"Inspect the {component.Title} presentation.",
-            };
-            string componentId = component.Id;
-            button.Pressed += () => SelectComponent(componentId);
-            _schematicComponents.AddChild(button);
-            _componentButtons.Add(component.Id, button);
-        }
-
-        AddHeading(_schematicLinks, "DISTRIBUTION LINKS");
-        if (engineering.Links.IsDefaultOrEmpty)
-        {
-            AddUnavailable(_schematicLinks, "POWER TOPOLOGY");
-            return;
-        }
-
-        foreach (CommandInterfaceEngineeringLink link in engineering.Links)
-        {
-            AddValueLabel(
-                _schematicLinks,
-                $"{DisplayComponentName(engineering.Components, link.OriginId)}  →  {DisplayComponentName(engineering.Components, link.DestinationId)}",
-                link.Tone
-            );
-        }
+        _schematic.Present(engineering?.Components ?? [], engineering?.Links ?? [], SelectedComponentId, IsPreviewMode);
     }
 
     private void SelectComponent(string componentId)
@@ -221,11 +169,7 @@ public partial class EngineeringWorkspace : Control
             button.ButtonPressed = string.Equals(id, componentId, StringComparison.Ordinal);
         }
 
-        foreach ((string id, Button button) in _componentButtons)
-        {
-            button.ButtonPressed = string.Equals(id, componentId, StringComparison.Ordinal);
-        }
-
+        _schematic.SelectComponent(componentId);
         RebuildInspector();
     }
 
@@ -335,16 +279,18 @@ public partial class EngineeringWorkspace : Control
             return;
         }
 
-        var controls = new List<Control> { _returnButton };
+        var controls = new List<Control>();
         controls.AddRange(_hierarchyButtons.Values.Where(button => !button.Disabled));
-        controls.AddRange(_componentButtons.Values.Where(button => !button.Disabled));
+        controls.Add(_schematic);
         controls.AddRange(_actionButtons.Values.Where(button => !button.Disabled));
         for (int index = 0; index < controls.Count; index++)
         {
             Control previous = controls[(index - 1 + controls.Count) % controls.Count];
             Control next = controls[(index + 1) % controls.Count];
             controls[index].FocusPrevious = previous.GetPath();
+            controls[index].FocusNeighborTop = previous.GetPath();
             controls[index].FocusNext = next.GetPath();
+            controls[index].FocusNeighborBottom = next.GetPath();
         }
     }
 
@@ -374,27 +320,8 @@ public partial class EngineeringWorkspace : Control
         );
     }
 
-    private static void AddValueLabel(Node parent, string text, CommandInterfaceTone tone)
-    {
-        parent.AddChild(
-            new Label
-            {
-                Text = text,
-                AutowrapMode = TextServer.AutowrapMode.WordSmart,
-                ThemeTypeVariation = VariationForLabel(tone, CommandInterfaceAvailability.Available),
-            }
-        );
-    }
-
     private static string DisplayValue(CommandInterfaceField field) =>
         field.Availability == CommandInterfaceAvailability.Available ? field.Value : "UNAVAILABLE";
-
-    private static string DisplayComponentName(
-        ImmutableArray<CommandInterfaceTelemetrySection> components,
-        string id
-    ) =>
-        components.FirstOrDefault(component => string.Equals(component.Id, id, StringComparison.Ordinal))?.Title
-        ?? id.ToUpperInvariant();
 
     private static StringName VariationForButton(CommandInterfaceTone tone, bool selected) =>
         tone switch

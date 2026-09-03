@@ -23,14 +23,6 @@ public static class CommandInterfacePresenter
         StrategicLocationProjection? selectedLocation = selectedLocationId is LocationId selected
             ? projection.Strategic.Locations.SingleOrDefault(location => location.Id == selected)
             : null;
-        bool selectedIsConnected =
-            selectedLocation is not null
-            && projection.Strategic.CurrentLocation is StrategicLocationProjection current
-            && projection.Strategic.Routes.Any(route =>
-                (route.Origin == current.Id && route.Destination == selectedLocation.Id)
-                || (route.Destination == current.Id && route.Origin == selectedLocation.Id)
-            );
-
         return new CommandInterfacePresentation
         {
             DataMode = CommandInterfaceDataMode.Live,
@@ -38,7 +30,7 @@ public static class CommandInterfacePresenter
             Header = BuildHeader(projection),
             Systems = BuildSystems(projection),
             Telemetry = BuildTelemetry(projection, selectedLocation),
-            Actions = BuildActions(projection, selectedLocation, selectedIsConnected),
+            Actions = BuildActions(projection, selectedLocation),
             Events = BuildEvents(projection, recentEvents),
             Stations = BuildStations(mode),
             MapItems = BuildMapItems(projection),
@@ -155,8 +147,7 @@ public static class CommandInterfacePresenter
 
     private static ImmutableArray<CommandInterfaceAction> BuildActions(
         PlayerProjection projection,
-        StrategicLocationProjection? selectedLocation,
-        bool selectedIsConnected
+        StrategicLocationProjection? selectedLocation
     ) =>
         [
             LiveAction(
@@ -164,7 +155,7 @@ public static class CommandInterfacePresenter
                 selectedLocation is null ? "Set course…" : $"Set course to {selectedLocation.DisplayName}",
                 CommandInterfaceTone.Navigation,
                 CommandInterfaceIntent.Travel,
-                selectedIsConnected && projection.AvailableActions.Contains(PlayerAction.Travel)
+                selectedLocation is not null && projection.AvailableActions.Contains(PlayerAction.Travel)
             ),
             LiveAction(
                 "set-tactical-course",

@@ -1,7 +1,8 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://src/Gameplay/EngineeringWorkspace.cs" id="1_script"]
 [ext_resource type="Theme" path="res://assets/ui/command_theme.tres" id="2_theme"]
+[ext_resource type="Script" path="res://src/Gameplay/EngineeringSchematicView.cs" id="3_schematic"]
 
 [node name="EngineeringWorkspace" type="Control"]
 layout_mode = 3
@@ -28,35 +29,6 @@ grow_vertical = 2
 [node name="WorkspaceStack" type="VBoxContainer" parent="WorkspaceMargin"]
 layout_mode = 2
 theme_override_constants/separation = 8
-
-[node name="WorkspaceHeader" type="PanelContainer" parent="WorkspaceMargin/WorkspaceStack"]
-custom_minimum_size = Vector2(0, 44)
-layout_mode = 2
-
-[node name="HeaderRow" type="HBoxContainer" parent="WorkspaceMargin/WorkspaceStack/WorkspaceHeader"]
-layout_mode = 2
-theme_override_constants/separation = 12
-
-[node name="Title" type="Label" parent="WorkspaceMargin/WorkspaceStack/WorkspaceHeader/HeaderRow"]
-layout_mode = 2
-size_flags_horizontal = 3
-theme_type_variation = &"StationHeading"
-text = "ENGINEERING WORKSPACE"
-
-[node name="DataModeStatus" type="Label" parent="WorkspaceMargin/WorkspaceStack/WorkspaceHeader/HeaderRow"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_type_variation = &"StatusCaution"
-text = "AWAITING PRESENTATION"
-vertical_alignment = 1
-
-[node name="ReturnToCommandButton" type="Button" parent="WorkspaceMargin/WorkspaceStack/WorkspaceHeader/HeaderRow"]
-unique_name_in_owner = true
-layout_mode = 2
-focus_mode = 2
-theme_type_variation = &"CommandButton"
-text = "RETURN TO COMMAND"
-tooltip_text = "Return to the Command Deck."
 
 [node name="PrimaryAndInspector" type="HBoxContainer" parent="WorkspaceMargin/WorkspaceStack"]
 layout_mode = 2
@@ -168,29 +140,17 @@ layout_mode = 2
 size_flags_vertical = 3
 horizontal_scroll_mode = 0
 
-[node name="EngineeringSchematic" type="VBoxContainer" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/TechnicalWorkspace/SchematicPanel/SchematicStack/SchematicScroll"]
+[node name="EngineeringSchematic" type="Control" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/TechnicalWorkspace/SchematicPanel/SchematicStack/SchematicScroll"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(360, 230)
 layout_mode = 2
 size_flags_horizontal = 3
-theme_override_constants/separation = 10
-
-[node name="SchematicComponents" type="GridContainer" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/TechnicalWorkspace/SchematicPanel/SchematicStack/SchematicScroll/EngineeringSchematic"]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-theme_override_constants/h_separation = 8
-theme_override_constants/v_separation = 8
-columns = 3
-
-[node name="SchematicLinks" type="VBoxContainer" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/TechnicalWorkspace/SchematicPanel/SchematicStack/SchematicScroll/EngineeringSchematic"]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-theme_override_constants/separation = 3
+mouse_filter = 0
+script = ExtResource("3_schematic")
 
 [node name="PowerAllocationSummary" type="PanelContainer" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/TechnicalWorkspace"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 118)
+custom_minimum_size = Vector2(0, 104)
 layout_mode = 2
 
 [node name="PowerAllocationContent" type="VBoxContainer" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/TechnicalWorkspace/PowerAllocationSummary"]
@@ -205,33 +165,43 @@ size_flags_horizontal = 3
 size_flags_stretch_ratio = 2.0
 theme_override_constants/separation = 8
 
-[node name="ComponentInspector" type="PanelContainer" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/InspectorColumn"]
+[node name="EngineeringInspectorScroll" type="ScrollContainer" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/InspectorColumn"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="InspectorContentStack" type="VBoxContainer" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/InspectorColumn/EngineeringInspectorScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="ComponentInspector" type="PanelContainer" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/InspectorColumn/EngineeringInspectorScroll/InspectorContentStack"]
+unique_name_in_owner = true
+layout_mode = 2
 theme_type_variation = &"InspectorPanel"
 
-[node name="ComponentInspectorContent" type="VBoxContainer" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/InspectorColumn/ComponentInspector"]
+[node name="ComponentInspectorContent" type="VBoxContainer" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/InspectorColumn/EngineeringInspectorScroll/InspectorContentStack/ComponentInspector"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 5
 
-[node name="ConnectedLoads" type="PanelContainer" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/InspectorColumn"]
+[node name="ConnectedLoads" type="PanelContainer" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/InspectorColumn/EngineeringInspectorScroll/InspectorContentStack"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 120)
 layout_mode = 2
 
-[node name="ConnectedLoadsContent" type="VBoxContainer" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/InspectorColumn/ConnectedLoads"]
+[node name="ConnectedLoadsContent" type="VBoxContainer" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/InspectorColumn/EngineeringInspectorScroll/InspectorContentStack/ConnectedLoads"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 3
 
-[node name="EngineeringActions" type="PanelContainer" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/InspectorColumn"]
+[node name="EngineeringActions" type="PanelContainer" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/InspectorColumn/EngineeringInspectorScroll/InspectorContentStack"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 160)
 layout_mode = 2
 
-[node name="EngineeringActionsContent" type="VBoxContainer" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/InspectorColumn/EngineeringActions"]
+[node name="EngineeringActionsContent" type="VBoxContainer" parent="WorkspaceMargin/WorkspaceStack/PrimaryAndInspector/InspectorColumn/EngineeringInspectorScroll/InspectorContentStack/EngineeringActions"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 5

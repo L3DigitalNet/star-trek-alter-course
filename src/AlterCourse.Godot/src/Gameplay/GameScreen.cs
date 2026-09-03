@@ -118,10 +118,6 @@ public partial class GameScreen : Control
             SetSimulationRate(1);
             ShowStrategicView();
             _messageLabel.Text = "Command systems ready.";
-
-            // Engineering grabs focus during its own child-ready callback. The deferred shell focus
-            // runs after the complete scene enters the tree so a hidden workspace cannot retain it.
-            _commandStationButton.CallDeferred(Control.MethodName.GrabFocus);
         }
         catch (Exception exception)
         {
@@ -494,7 +490,7 @@ public partial class GameScreen : Control
         PresentWorkspace(presentation);
         PresentShell(presentation);
         _messageLabel.Text = "Illustrative preview — no command can change the running simulation.";
-        CurrentWorkspaceButton().CallDeferred(Control.MethodName.GrabFocus);
+        FocusCurrentWorkspace();
     }
 
     /// <summary>Restores the authoritative projection for the currently selected workspace.</summary>
@@ -527,7 +523,6 @@ public partial class GameScreen : Control
 
         _commandDeck.DestinationSelected += OnWorkspaceDestinationSelected;
         _commandDeck.PresentationActionRequested += OnPresentationActionRequested;
-        _engineering.ReturnToCommandRequested += OnReturnToCommandRequested;
         _engineering.EngineeringCommandRequested += OnEngineeringCommandRequested;
         _travelButton.Pressed += RequestSelectedTravel;
         _courseButton.Pressed += SetDemonstrationCourse;
@@ -642,7 +637,7 @@ public partial class GameScreen : Control
             RefreshProjection();
         }
 
-        CurrentWorkspaceButton().CallDeferred(Control.MethodName.GrabFocus);
+        FocusCurrentWorkspace();
     }
 
     private void SetWorkspaceVisibility()
@@ -710,9 +705,9 @@ public partial class GameScreen : Control
 
         _viewStatusLabel.Text = presentation.Mode switch
         {
-            CommandInterfaceMode.Travel => "COMMAND / TRAVEL",
-            CommandInterfaceMode.Combat => "COMMAND / COMBAT",
-            CommandInterfaceMode.Engineering => "ENGINEERING",
+            CommandInterfaceMode.Travel => "COMMAND DECK / TRAVEL",
+            CommandInterfaceMode.Combat => "COMMAND DECK / COMBAT",
+            CommandInterfaceMode.Engineering => "ENGINEERING WORKSPACE",
             _ => "WORKSPACE UNAVAILABLE",
         };
         RenderBottomArea(presentation);
@@ -855,8 +850,8 @@ public partial class GameScreen : Control
         }
 
         _travelButton.TooltipText = _travelButton.Disabled
-            ? "Travel is unavailable until a connected live destination is selected."
-            : $"Engage direct travel to {FindLocationName(_selectedDestination!.Value)}. Shortcut: E.";
+            ? "Travel is unavailable until a live destination is selected."
+            : $"Submit travel intent to {FindLocationName(_selectedDestination!.Value)}. Shortcut: E.";
         _courseButton.TooltipText = _courseButton.Disabled
             ? "Course changes are unavailable during strategic travel or preview."
             : "Submit heading 045° and speed 2 km/s. Shortcut: C.";
@@ -920,11 +915,6 @@ public partial class GameScreen : Control
             default:
                 throw new ArgumentOutOfRangeException(nameof(intent), intent, "Unknown command-interface intent.");
         }
-    }
-
-    private void OnReturnToCommandRequested(object? sender, EventArgs args)
-    {
-        ShowCommandWorkspace();
     }
 
     private string FindLocationName(LocationId id) =>
@@ -1040,6 +1030,18 @@ public partial class GameScreen : Control
 
     private Button CurrentWorkspaceButton() =>
         _engineeringWorkspaceActive ? _engineeringStationButton : _commandStationButton;
+
+    private void FocusCurrentWorkspace()
+    {
+        if (_engineeringWorkspaceActive)
+        {
+            _engineering.GrabEntryFocus();
+        }
+        else
+        {
+            _commandStationButton.CallDeferred(Control.MethodName.GrabFocus);
+        }
+    }
 
     private static string DisplayQueueEstimate(CommandInterfaceField estimate) =>
         estimate.Availability == CommandInterfaceAvailability.Available ? estimate.Value : "UNAVAILABLE";
