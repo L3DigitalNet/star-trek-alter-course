@@ -52,7 +52,7 @@ The pure policy evaluates Hold, Approach, and Withdraw with explicit constraints
 
 Contact-sensitive local simulation uses the existing 100 ms tactical grid only when motion or changing sensor integrity can change local knowledge. At each such boundary, Core captures one world-truth snapshot, evaluates observer/target pairs in observer ship-ID then target ship-ID order, applies contact changes in that order, and schedules same-time decision wakes in observer order. The existing scheduler then resolves due work with finite budgets. Contact-loss, scan-completion, and decision work use exact saved correlations and revalidate prerequisites rather than trusting an old assumption.
 
-Inactive strategic work remains event-to-event; there is no global recurring sensor sweep or future range-crossing solver. `AdvanceUntilNextPlayerRelevantEvent` processes hidden NPC observation and decision work without reporting it. It may return early for player-safe contact lifecycle or scan events, each carrying only an optional local contact ID.
+Inactive strategic work remains event-to-event; there is no global recurring sensor sweep or future range-crossing solver. `AdvanceUntilNextPlayerRelevantEvent` processes hidden NPC observation and decision work without reporting it. It may return early for player-safe contact lifecycle or scan events. Each event carries its exact Core simulation occurrence time plus only an optional local contact ID, so presentation preserves the chronology of batched consequences without reconstructing time from the final projection.
 
 ## Content and persistence
 
