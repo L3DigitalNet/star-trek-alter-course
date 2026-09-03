@@ -6,6 +6,9 @@ command = "\"$(git rev-parse --show-toplevel)/.agents/hooks/agent-handoff/sessio
 timeout = 10
 statusMessage = "Loading agent handoff state..."
 
+[mcp_servers.figma]
+url = "https://mcp.figma.com/mcp"
+
 [[skills.config]]
 path = ".codex/skills/godot-csharp/SKILL.md"
 enabled = true
@@ -24,4 +27,60 @@ enabled = true
 
 [[skills.config]]
 path = ".codex/skills/stac-architecture/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = ".codex/skills/figma-code-connect/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = ".codex/skills/figma-create-new-file/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = ".codex/skills/figma-design-to-code/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = ".codex/skills/figma-generate-design/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = ".codex/skills/figma-generate-diagram/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = ".codex/skills/figma-generate-library/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = ".codex/skills/figma-generative-plugins/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = ".codex/skills/figma-implement-motion/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = ".codex/skills/figma-shaders/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = ".codex/skills/figma-swiftui/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = ".codex/skills/figma-use/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = ".codex/skills/figma-use-figjam/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = ".codex/skills/figma-use-motion/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = ".codex/skills/figma-use-slides/SKILL.md"
 enabled = true

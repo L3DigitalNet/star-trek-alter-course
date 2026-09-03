@@ -1,5 +1,6 @@
 {
 	"mcpServers": {
-		"project-standards": { "command": "project-standards", "args": ["mcp"] }
+		"project-standards": { "command": "project-standards", "args": ["mcp"] },
+		"figma": { "type": "http", "url": "https://mcp.figma.com/mcp" }
 	}
 }
