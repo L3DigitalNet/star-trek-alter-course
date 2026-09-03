@@ -176,7 +176,11 @@ public sealed class Milestone3ProofScenarioTests
         Assert.Equal(29100, loss.FinalTime.Milliseconds);
         Assert.Equal(loss, resumedLoss);
         Assert.Equal(PlayerAdvanceEventKind.SensorContactLost, Assert.Single(loss.ResolvedEvents).Kind);
-        Assert.Equal(SensorContactStatus.Lost, Assert.Single(loss.Projection.Ship.Sensors.Contacts).Status);
+        Assert.Empty(loss.Projection.Ship.Sensors.Contacts);
+        Assert.Equal(
+            SensorContactStatus.Lost,
+            Assert.Single(Milestone3ProofFixture.Player(uninterrupted).SensorKnowledge.Contacts).Status
+        );
         AssertSameSave(uninterrupted, resumed);
     }
 
