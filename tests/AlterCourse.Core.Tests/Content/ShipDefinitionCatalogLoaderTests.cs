@@ -230,10 +230,7 @@ public sealed class ShipDefinitionCatalogLoaderTests
 
     /// <summary>Confirms structural constraints reject values that cannot reach domain construction.</summary>
     [Theory]
-    [InlineData(
-        "\"maximumTacticalSpeedKilometersPerSecond\": 10",
-        "\"maximumTacticalSpeedKilometersPerSecond\": -1"
-    )]
+    [InlineData("\"maximumTacticalSpeedKilometersPerSecond\": 10", "\"maximumTacticalSpeedKilometersPerSecond\": -1")]
     [InlineData("\"passiveSensorRangeKilometers\": 30.0", "\"passiveSensorRangeKilometers\": -1")]
     [InlineData("\"activeScanDurationMilliseconds\": 2000", "\"activeScanDurationMilliseconds\": 0")]
     public void RejectsStructurallyInvalidDefinition(string original, string replacement)
