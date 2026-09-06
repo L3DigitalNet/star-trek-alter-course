@@ -35,6 +35,12 @@ Keep pure simulation and domain behavior in `AlterCourse.Core`, independent of G
 
 The architecture decisions in [`docs/adr/`](docs/adr/) are active project constraints. [ADR 0013](docs/adr/0013-use-dev-for-development-and-main-for-releases.md) defines branch, pull-request, hotfix, and release governance.
 
+## Design changes
+
+The [design wiki](docs/wiki/README.md) is the single source of truth for the game's design. Read the relevant wiki page before proposing work that changes how a system behaves, and record the design change on that page in the same pull request as the implementation. Documents under `docs/design/` and `docs/specs/` supply supporting detail for wiki pages; update them so they keep matching the wiki, but do not introduce design there that the wiki does not record.
+
+A design idea the owner has not approved belongs in [open questions](docs/wiki/open-questions.md), not on a wiki system page. An architectural boundary changes only through a new or amended ADR; the wiki then reflects it.
+
 ## Verify the change
 
 Run formatting when appropriate, then the canonical gate:

@@ -23,9 +23,9 @@ related:
 
 ## Coverage and authority
 
-This catalog inventories the project-owned design/specification corpus present in `dev` at `42481ca7fbc6c5c9da96985e02565f78a236cab7`, reviewed September 6, 2026, and links the new political decision record. Original files remain in place. The wiki synthesizes them; it does not claim to have freshly executed every test or externally reverified every historical citation.
+This catalog inventories the project-owned design/specification corpus present in `dev` at `42481ca7fbc6c5c9da96985e02565f78a236cab7`, reviewed September 6, 2026, and links the new political decision record. Original files remain in place as supporting detail and evidence. The wiki does not claim to have freshly executed every test or externally reverified every historical citation.
 
-Active ADRs are architectural authority. Detailed documents retain their scoped contracts. Historical records explain origin, and current code/tests resolve implementation claims. A source's future tense, example, package candidate, or archived assistant recommendation is not evidence of an implemented feature or owner approval.
+The wiki is the single source of truth for design; this catalog lists the documents that supply supporting detail, architectural decisions, implementation evidence, and history. Active ADRs record architectural decisions. Supporting design and specification documents supply detail within the scope their owning wiki page assigns them and may not contradict it. Historical records explain origin, and current code/tests resolve implementation claims. A source's future tense, example, package candidate, or archived assistant recommendation is not evidence of an implemented feature or owner approval.
 
 ## All active ADRs
 
@@ -43,7 +43,7 @@ Active ADRs are architectural authority. Detailed documents retain their scoped 
 - [0012 — Narrative subordinate to simulation](../adr/0012-keep-branching-narrative-subordinate-to-simulation.md): future Narrative boundary, typed consequences, and Ink prototype trigger.
 - [0013 — Dev development and main releases](../adr/0013-use-dev-for-development-and-main-for-releases.md): branch/merge policy, governed admission, tags, and immutable releases.
 
-## Existing design and specification documents
+## Supporting design and specification documents
 
 - [Root overview and controls](../../README.md): present gameplay and source launch instructions.
 - [Development roadmap](../../ROADMAP.md): strategic direction, M1-M4 outcomes, and M5-M9 scope/refinement questions.
@@ -89,4 +89,4 @@ Active ADRs are architectural authority. Detailed documents retain their scoped 
 
 ## Maintaining coverage
 
-When a new design, ADR, specification, or system family is admitted, link its owning source here and update the corresponding topic page. Keep detailed formulas, schemas, and operating procedures at their canonical locations. Preserve historical records with clear scope rather than silently rewriting them as present-day implementation truth.
+When a new ADR, supporting specification, or system family is admitted, record the design on its wiki topic page first, then link the supporting source here. Keep detailed formulas, schemas, and operating procedures in their supporting documents. Preserve historical records with clear scope rather than silently rewriting them as present-day implementation truth.

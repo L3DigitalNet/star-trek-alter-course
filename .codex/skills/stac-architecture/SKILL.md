@@ -5,7 +5,7 @@ description: Route Star Trek: Alter Course work across the pure deterministic Co
 
 # ST:AC architecture router
 
-Load this skill before project implementation. Active ADRs and normative repository documentation remain authoritative; this is a compact routing aid, not a substitute.
+Load this skill before project implementation. The design wiki under `docs/wiki/` is the single source of truth for game design, and active ADRs record architectural decisions; this is a compact routing aid, not a substitute for either.
 
 ## Boundary
 
@@ -24,6 +24,26 @@ Load this skill before project implementation. Active ADRs and normative reposit
 - Physical quantities use explicit units and conversions. Never pass ambiguous numeric distance, duration, velocity, mass, or energy values.
 - Branching narrative consumes read-only typed context and requests finite typed consequences. Core validates outcomes; narrative flow never becomes a second rules engine.
 - Prefer native Godot/.NET capabilities. Add packages, addons, frameworks, or managers only with demonstrated need and ADR 0003 admission evidence.
+
+## Design routing
+
+Read the owning wiki page before changing a system, and record the design change on that page in the same change that implements it. `docs/design/` and `docs/specs/` hold supporting detail; correct them when they disagree with the wiki. Unapproved ideas belong in the open-question register, not on a system page.
+
+| Concern | Wiki page |
+| --- | --- |
+| Vision, non-goals, priorities | `docs/wiki/vision-and-scope.md` |
+| Implemented versus planned | `docs/wiki/implementation-status.md` |
+| Project boundaries, dependencies, testing | `docs/wiki/architecture.md` |
+| Ships, bootstrap, orders, space, time | `docs/wiki/world-navigation-and-time.md` |
+| Sensors, contacts, scan/hail, AI | `docs/wiki/sensors-knowledge-and-ai.md` |
+| Power, condition, repair, combat plans | `docs/wiki/engineering-and-combat.md` |
+| Factions, organizations, jurisdiction | `docs/wiki/factions-and-organizations.md` |
+| Diplomacy, economy, campaigns, narrative | `docs/wiki/diplomacy-economy-and-campaigns.md` |
+| Command Deck, Engineering UI, controls | `docs/wiki/interface-and-player-commands.md` |
+| Content JSON, saves, AssetCtl | `docs/wiki/content-assets-and-persistence.md` |
+| Toolchain, gate, branches, documentation | `docs/wiki/development-and-governance.md` |
+| Settled decisions | `docs/wiki/decision-register.md` |
+| Unresolved questions | `docs/wiki/open-questions.md` |
 
 ## ADR routing
 

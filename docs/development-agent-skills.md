@@ -6,7 +6,7 @@ description: 'Provenance, adaptation policy, harness installation, and update pr
 doc_type: 'reference'
 status: 'active'
 created: '2026-09-01'
-updated: '2026-09-02'
+updated: '2026-09-06'
 owner: 'project-maintainers'
 consumer: 'agent'
 tags:
@@ -28,7 +28,7 @@ license: 'MIT, Apache-2.0, and Figma Developer Terms'
 
 # Development agent skills
 
-This repository carries five project-local Godot skills and 14 official Figma MCP skills for both Claude Code and Codex. Four Godot skills are pinned adaptations of upstream guidance; `stac-architecture` is project-owned and routes every implementation through the active architecture decisions.
+This repository carries five project-local Godot skills and 14 official Figma MCP skills for both Claude Code and Codex. Four Godot skills are pinned adaptations of upstream guidance; `stac-architecture` is project-owned and routes every implementation through the design wiki and the active architecture decisions.
 
 ## Installed skills
 
@@ -38,7 +38,7 @@ This repository carries five project-local Godot skills and 14 official Figma MC
 | `godot-nodes-scenes` | Scene composition, instancing, lifecycle, ownership, and bounded autoload use | Adapted upstream |
 | `godot-ui-control` | Responsive Control layout, themes, focus, mouse input, and accessible resizing | Adapted upstream |
 | `godot-signals-groups` | Scene-local notification, groups, presentation, and adapter patterns | Adapted upstream |
-| `stac-architecture` | Concise project boundary and ADR router | Project-owned |
+| `stac-architecture` | Concise project boundary, design-wiki, and ADR router | Project-owned |
 | `figma-*` (14 skills) | Figma design, FigJam, Slides, diagrams, motion, code-connect, and design-to-code workflows | Figma official |
 
 Each skill is present as a byte-identical pair under `.claude/skills/<name>/` and `.codex/skills/<name>/`. Harness metadata therefore does not diverge from substantive guidance.

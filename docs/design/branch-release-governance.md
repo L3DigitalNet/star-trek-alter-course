@@ -6,7 +6,7 @@ description: 'Approved design for development branches, pull-request admission, 
 doc_type: 'decision'
 status: 'active'
 created: '2026-09-01'
-updated: '2026-09-01'
+updated: '2026-09-06'
 reviewed: '2026-09-01'
 owner: 'project-maintainers'
 consumer: 'mix'
@@ -17,6 +17,7 @@ tags:
 aliases: []
 related:
   - 'docs/adr/0013-use-dev-for-development-and-main-for-releases.md'
+  - 'docs/wiki/development-and-governance.md'
 source:
   - 'https://github.com/L3DigitalNet/star-trek-alter-course/issues/9'
   - 'https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/managing-a-branch-protection-rule'
@@ -28,6 +29,8 @@ license: 'MIT'
 ---
 
 # Branch and release governance
+
+> **Supporting detail.** The [design wiki](../wiki/README.md) is the single source of truth for design; [Development and governance](../wiki/development-and-governance.md) owns this topic. ADR 0013 records the adopted outcome; this document preserves the discovery rationale. If this document disagrees with the wiki, the wiki governs and this document is corrected.
 
 ## Status and provenance
 

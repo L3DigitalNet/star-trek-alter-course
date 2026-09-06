@@ -6,7 +6,7 @@ description: 'Implementation specification for a configuration-driven AI-assiste
 doc_type: 'spec'
 status: 'active'
 created: '2026-09-01'
-updated: '2026-09-01'
+updated: '2026-09-06'
 reviewed: '2026-09-01'
 owner: 'project-maintainers'
 consumer: 'agent'
@@ -25,6 +25,7 @@ related:
   - 'docs/adr/0008-use-structured-observability-with-serilog.md'
   - 'docs/adr/0009-use-layered-testing-and-architecture-conformance.md'
   - 'docs/development-quality.md'
+  - 'docs/wiki/content-assets-and-persistence.md'
   - 'LICENSE.md'
   - 'LEGAL.md'
 confidence: 'high'
@@ -33,6 +34,8 @@ license: 'MIT'
 ---
 
 # Asset pipeline tool specification
+
+> **Supporting detail.** The [design wiki](../wiki/README.md) is the single source of truth for design; [Content, assets, and persistence](../wiki/content-assets-and-persistence.md) owns this topic. This specification supplies the detailed implementation contract for the tool within that scope. If this document disagrees with the wiki, the wiki governs and this document is corrected.
 
 Date: 2026-09-01
 

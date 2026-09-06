@@ -35,6 +35,8 @@ license: 'MIT'
 
 # Command Deck UI
 
+> **Supporting detail.** The [design wiki](../wiki/README.md) is the single source of truth for design; [Interface and player commands](../wiki/interface-and-player-commands.md) owns this topic. This document supplies the detailed presentation and ownership rules within that scope. If this document disagrees with the wiki, the wiki governs and this document is corrected.
+
 ## Decision
 
 Use one persistent, map-dominant Command Deck shell for command work and a screen-dominant Engineering Workspace for engineering work. `GameScreen` owns the session-lifetime `GameSimulation`, player projection, selection, workspace switching, save/load, and simulation-rate continuity. Switching workspaces must not recreate or replace simulation state.

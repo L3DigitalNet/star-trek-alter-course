@@ -44,15 +44,15 @@ ADRs and the repository's adopted workflow remain authoritative. Ordinary work s
 
 The installed `gh-workflow` tool owns typed issue fields and lifecycle validation, readiness, merge, and terminal-state synchronization. Follow [AGENTS.md](../../AGENTS.md), the installed skill, and [CONTRIBUTING](../../CONTRIBUTING.md). A connected-session capability gap must be disclosed in its work record; it does not create a standing alternative workflow or permission to bypass checks.
 
-Release promotion uses a governed merge commit, a corresponding tag and immutable release, and synchronization back to `dev`. A source-only release does not imply a binary, installer, Godot export, or distribution pipeline. Narrow T0 and Handoff direct-admission exceptions do not apply to substantial design specifications or normative decisions.
+Release promotion uses a governed merge commit, a corresponding tag and immutable release, and synchronization back to `dev`. A source-only release does not imply a binary, installer, Godot export, or distribution pipeline. Narrow T0 and Handoff direct-admission exceptions cannot touch the design wiki, ADRs, supporting design documents, or specifications; the branch policy enforces this.
 
 ## Documentation and agent ownership
 
-This wiki organizes durable design knowledge. Existing ADRs, detailed designs, and specifications retain their authority. The [source catalog](sources.md) is the coverage index, the [decision register](decision-register.md) distinguishes decisions from implementation, and [open questions](open-questions.md) prevents proposals from becoming accidental commitments.
+This wiki is the single source of truth for design. ADRs record architectural decisions; the documents under `docs/design/` and `docs/specs/` supply supporting detail for wiki pages and may not contradict them. The [source catalog](sources.md) is the coverage index, the [decision register](decision-register.md) distinguishes decisions from implementation, and [open questions](open-questions.md) prevents proposals from becoming accidental commitments.
 
 Operational facts still belong in STATUS, TODO, and the appropriate handoff files. Keep eager state small. Preserve owner-authored tasks and historical records. Do not edit standard-owned skills, hooks, or lock inventories merely to make documentation checks pass.
 
-Managed Markdown uses the existing frontmatter schema, stable IDs, canonical quoted fields, Prettier, and markdownlint. A page being active does not mean its planned system is implemented. Future changes should update an owning design, implementation evidence, and wiki summary in the same governed work where practical.
+Managed Markdown uses the existing frontmatter schema, stable IDs, canonical quoted fields, Prettier, and markdownlint. A page being active does not mean its planned system is implemented. A design change lands on its wiki page in the same governed work that implements it, together with implementation evidence and any supporting document that restates the detail.
 
 ## Licensing and external content
 

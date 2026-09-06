@@ -117,4 +117,11 @@ git add docs/adr/0000-test.md
 git commit -qm 'docs: correct decision prose' -m 'Workflow-Admission: T0'
 expect_fail "${policy}" range dev "${base}" "$(git rev-parse HEAD)"
 
+git switch -q -c protected-t0-wiki "${base}"
+mkdir -p docs/wiki
+printf 'design\n' > docs/wiki/architecture.md
+git add docs/wiki/architecture.md
+git commit -qm 'docs: correct design prose' -m 'Workflow-Admission: T0'
+expect_fail "${policy}" range dev "${base}" "$(git rev-parse HEAD)"
+
 printf 'Branch policy tests passed.\n'

@@ -24,6 +24,8 @@ related:
 
 # First Observed Contact
 
+> **Supporting detail.** The [design wiki](../wiki/README.md) is the single source of truth for design; [Sensors, knowledge, and AI](../wiki/sensors-knowledge-and-ai.md) owns this topic. This document supplies the detailed M3A rules and their historical contract within that scope. If this document disagrees with the wiki, the wiki governs and this document is corrected.
+
 ## Scope and subsequent Engineering changes
 
 This document records the M3A implementation boundary and its original V3 content/V4 save contract. M3A is included in v0.4.0, but the current implementation also includes [Milestone 4 Engineering](engineering-backbone.md): effective sensor capability now combines condition and allocated power, repair is system-targeted, content is V4, and saves are V5. Engineering is live rather than preview-only for its implemented systems. References below to integrity-only range, V3/V4, and deferred sensor power describe M3A history, not the complete current runtime. The [wiki knowledge page](../wiki/sensors-knowledge-and-ai.md) consolidates the present boundary.

@@ -6,7 +6,7 @@ This roadmap defines the near- and mid-term development direction for **Star Tre
 
 The roadmap is deliberately more concrete than a list of desired systems and deliberately less prescriptive than an implementation specification. Each milestone is expected to become a separately governed issue or feature specification before coding begins. That refinement step may change internal design, divide a milestone, reorder bounded work, or narrow acceptance criteria when new evidence from the codebase makes that appropriate.
 
-The architecture decisions in [`docs/adr/`](docs/adr/) remain authoritative. If this roadmap conflicts with an active ADR, the ADR wins. If a future milestone reveals that an ADR should change, that architectural decision must be made explicitly rather than being smuggled into feature implementation.
+The [design wiki](docs/wiki/README.md) is the single source of truth for design. This roadmap describes sequence, scope, and the architectural question each slice must prove; where it describes how a system behaves, it summarizes the wiki, and if the two disagree the wiki governs and this roadmap is corrected. The architecture decisions in [`docs/adr/`](docs/adr/) remain authoritative for architectural boundaries. If this roadmap conflicts with an active ADR, the ADR wins. If a future milestone reveals that an ADR should change, that architectural decision must be made explicitly rather than being smuggled into feature implementation.
 
 ## Planning horizon and execution model
 
@@ -1372,6 +1372,7 @@ Update it when:
 
 - a milestone is completed and evidence changes later priorities;
 - a milestone is split, combined, or substantially re-scoped;
+- a design decision recorded in the wiki changes what a milestone assumed;
 - a new ADR changes an architectural boundary assumed here;
 - performance or testing evidence invalidates an assumption;
 - a deferred feature becomes necessary to complete an earlier architectural proof;
