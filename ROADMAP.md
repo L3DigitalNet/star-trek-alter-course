@@ -71,7 +71,7 @@ Canon should establish the chosen campaign's required historical and political s
 | --- | --- | --- | --- |
 | 1 | **World State and Bootstrap Generalization** | **Implemented** | The world owns plural persistent ships and explicit player identity rather than treating the player ship as the world root. |
 | 2 | **Active World and Persistent Orders** | **Implemented** | Ships can own durable intent, progress offscreen, and retain that intent across save/load. |
-| 3 | **Sensor Knowledge and First Contact** | **Partial — M3A implemented** | World truth is separated from observer-local knowledge; the remaining work must determine the smallest strategic knowledge/identity bridge required by later systems. |
+| 3 | **Sensor Knowledge and First Contact** | **Partial — M3A implemented** | M3A proves observer-local knowledge and information-limited ship behavior; the remaining scope and sequencing are governed by Q-01 rather than an assumed M3B plan. |
 | 4 | **Engineering Backbone and Degraded Operations** | **Implemented** | Power, condition, capability, and repair interact with existing sensing and maneuvering rather than living in a parallel subsystem. |
 | 5 | **Living Sector and Faction Autonomy** | **Future** | Faction intent can cause explainable autonomous assignments, offscreen activity, and durable world change using actor-appropriate information. |
 | 6 | **Tactical Combat Foundation** | **Future** | Combat composes motion, observation, Engineering, AI, persistence, and withdrawal instead of becoming a separate hit-point game. |
@@ -139,24 +139,20 @@ The milestone intentionally stops short of a universal component system, arbitra
 
 ---
 
-## Remaining Milestone 3 — Strategic knowledge boundary
+## Milestone 3 completion remains under refinement
 
-### Goal
+M3A proved the core local-contact architecture: different actors can hold different knowledge about the same world truth, player projection remains actor-safe, and autonomous ship behavior can consume bounded knowledge rather than hidden target state.
 
-Complete only the knowledge/identity behavior required for later autonomous political and strategic consumers while preserving the separation between world truth and actor knowledge established by M3A.
+The original Milestone 3 scope also left affiliation/intent knowledge, strategic contacts, broader reporting, and related identity questions unresolved. The repository has **not** approved a specific follow-on slice that must complete those items before Milestone 5.
 
-### Refinement questions
+Q-01 through Q-04 in the [open-question register](docs/wiki/open-questions.md) govern the next refinement. The governing issue may decide that the next bounded work:
 
-Use Q-01 through Q-04 in the [open-question register](docs/wiki/open-questions.md) rather than inventing answers in implementation. The selected slice must decide only what it actually consumes, such as:
+- is a separate continuation of Milestone 3;
+- is a prerequisite slice attached to Milestone 5;
+- belongs inside the first Milestone 5 vertical slice; or
+- should use another division supported by code and design evidence.
 
-- whether remembered vessel identity must outlive a local sensor track;
-- what first establishes known affiliation, if anything;
-- how a ship's observation can become faction knowledge without omniscience; and
-- what information is available at strategic rather than local tactical scale.
-
-### Exit condition
-
-Milestone 3 should be declared complete only when the project has a coherent actor-safe path from observation or report to the minimum durable knowledge needed by subsequent strategic decisions. It does not require a final intelligence, confidence, espionage, communications-network, or galaxy-wide contact model.
+Do not declare a final Milestone 3 completion contract, strategic knowledge schema, durable known-vessel identity, affiliation-learning rule, or faction reporting model until that refinement is admitted.
 
 ---
 
