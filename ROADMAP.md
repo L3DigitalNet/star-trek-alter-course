@@ -10,7 +10,7 @@ The current operational state is tracked in [STATUS](docs/STATUS.md), while [Imp
 
 ## Current reviewed baseline — September 6, 2026
 
-- **v0.4.0 — First Contact & Engineering Backbone** is the current immutable source-only release.
+- **v0.5.0 — Strategic Contact Reporting** is the current immutable source-only release; it succeeds v0.4.0 — First Contact & Engineering Backbone.
 - **Milestone 1** and **Milestone 2** are implemented.
 - **Milestone 3A — First Observed Contact** is implemented, but **Milestone 3 as a whole is not complete**.
 - **Milestone 4 — Engineering Backbone and Degraded Operations** is implemented.
@@ -119,7 +119,7 @@ The milestone intentionally stops short of a universal component system, arbitra
 
 ### Strategic Contact Reporting
 
-**Implemented by Feature #77 / Final PR #78.**
+**Implemented by Feature #77 / Final PR #78; included in v0.5.0.**
 
 Q-01 is resolved. This bounded slice bridges M3A's local observer knowledge to strategically meaningful last-known information before M5 introduces faction autonomy, proving:
 
