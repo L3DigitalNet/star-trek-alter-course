@@ -11,5 +11,6 @@
 - The shell retains strategic travel, tactical movement, Engineering power and repair, deterministic time controls, and quick save/load.
 - Core owns plural ordinary `ShipState`; Godot projects player-visible state and does not own authoritative simulation state.
 - The tracked launch script restores and builds before Godot starts, preventing stale local Debug content after branch changes.
-- [Design wiki](wiki/README.md) consolidates decisions and sources; [political design](wiki/factions-and-organizations.md) is approved, not implemented.
+- [Design wiki](wiki/README.md) is the single source of truth for design; [political design](wiki/factions-and-organizations.md) is approved, not implemented.
+- Task #70 aligned README, CONTRIBUTING, agent instructions, handoff, and supporting design documents with that authority; `docs/wiki/` is a protected T0 surface.
 - [Open questions](wiki/open-questions.md) records deferred choices; the proposed M3B sequence is not an admitted gameplay plan.

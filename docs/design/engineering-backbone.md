@@ -6,7 +6,7 @@ description: 'Defines the authoritative power, condition, repair, capability, pe
 doc_type: 'concept'
 status: 'active'
 created: '2026-09-03'
-updated: '2026-09-03'
+updated: '2026-09-06'
 tags:
   - 'architecture'
   - 'engineering'
@@ -16,6 +16,7 @@ related:
   - 'ROADMAP.md'
   - 'docs/design/first-observed-contact.md'
   - 'docs/design/command-deck-ui.md'
+  - 'docs/wiki/engineering-and-combat.md'
   - 'docs/adr/0001-separate-simulation-from-godot.md'
   - 'docs/adr/0005-use-json-and-schema-validation-for-domain-content.md'
   - 'docs/adr/0006-use-versioned-json-snapshot-saves.md'
@@ -24,6 +25,8 @@ related:
 ---
 
 # Engineering Backbone
+
+> **Supporting detail.** The [design wiki](../wiki/README.md) is the single source of truth for design; [Engineering and combat](../wiki/engineering-and-combat.md) owns this topic. This document supplies the detailed M4 rules, formulas, content, and save contract within that scope. If this document disagrees with the wiki, the wiki governs and this document is corrected.
 
 Milestone 4 establishes one concrete Engineering chain: generated power constrains allocation; allocation and condition derive sensor and impulse capability; those capabilities alter contacts, scans, tactical courses, and cautious AI; one analytical repair changes a selected system over simulation time. The ordinary Kestrel encounter is the player-visible proof. It is included in the source-only v0.4.0 release.
 

@@ -2,7 +2,7 @@
 
 ## Design entry points
 
-- [Project design wiki](../wiki/README.md) organizes implemented systems, approved plans, and source references.
+- [Project design wiki](../wiki/README.md) is the single source of truth for design; `docs/design/` and `docs/specs/` are supporting detail it links.
 - [Political model](../wiki/factions-and-organizations.md) records approved conceptual decisions; no political runtime is implemented.
 - [Open questions](../wiki/open-questions.md) retains unapproved proposals and deferred refinements; it does not admit gameplay work.
 

@@ -6,10 +6,11 @@ description: 'Defines project-specific guidance for ChatGPT conversations about 
 doc_type: 'prompt'
 status: 'active'
 created: '2026-09-01'
-updated: '2026-09-01'
+updated: '2026-09-06'
 tags: []
 aliases: []
-related: []
+related:
+  - 'docs/wiki/README.md'
 ---
 
 # Star Trek: Alter Course — Project Instructions
@@ -17,6 +18,8 @@ related: []
 ## Source of Truth and References
 
 [**GitHub repository:**](https://github.com/L3DigitalNet/star-trek-alter-course)
+
+**Design wiki:** The [design wiki](https://github.com/L3DigitalNet/star-trek-alter-course/tree/dev/docs/wiki) is the single source of truth for the game's design. Read the relevant page before brainstorming or proposing a change; the guidance below is a summary that defers to it.
 
 **Review:** Always review the [ADRs](https://github.com/L3DigitalNet/star-trek-alter-course/tree/main/docs/adr) when starting a new chat, brainstorming, performing development work, etc.
 

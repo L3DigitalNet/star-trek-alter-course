@@ -7,4 +7,4 @@
 ## Agent tasks
 
 - No active implementation. No Milestone 5 work is admitted.
-- Restart from `docs/STATUS.md`, `docs/handoff/state.md`, and the next governed scope when admitted.
+- Restart from `docs/STATUS.md`, `docs/handoff/state.md`, the design wiki, and the next governed scope when admitted.

@@ -4,7 +4,7 @@
 
 **Star Trek: Alter Course (ST:AC)** is an early-development, single-player Star Trek strategy and starship-command fan game inspired by EGA Trek, Super Star Trek, and Netrek. It is being built with Godot and C#.
 
-Explore the [project design wiki](docs/wiki/README.md) for consolidated systems, architecture, approved decisions, and open questions.
+The [project design wiki](docs/wiki/README.md) is the single source of truth for the game's design: systems, architecture, approved decisions, and open questions.
 
 ## Project status
 
@@ -22,7 +22,7 @@ The design centers on a persistent simulation in which the player commands one s
 - progression through lasting consequences rather than captain levels;
 - a deterministic simulation core that can be tested without Godot.
 
-These are design goals, not claims about currently playable features. The architecture decisions under [`docs/adr/`](docs/adr/) record the approved technical direction. The near- and mid-term sequence of major development slices is tracked in [`ROADMAP.md`](ROADMAP.md).
+These are design goals, not claims about currently playable features; the [design wiki](docs/wiki/README.md) records each in detail and distinguishes implemented from planned. The architecture decisions under [`docs/adr/`](docs/adr/) record the approved technical direction. The near- and mid-term sequence of major development slices is tracked in [`ROADMAP.md`](ROADMAP.md).
 
 ## Technology
 
