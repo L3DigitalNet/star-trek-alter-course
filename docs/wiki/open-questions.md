@@ -2,7 +2,7 @@
 schema_version: '1.1'
 id: 'plan-o0oaje-open-questions'
 title: 'Open Design Questions'
-description: 'Deferred high-level choices and unapproved proposals organized by the next concrete consumer.'
+description: 'Deferred high-level choices organized by the next concrete consumer; Q-01 is resolved by Strategic Contact Reporting.'
 doc_type: 'plan'
 status: 'active'
 created: '2026-09-06'
@@ -12,31 +12,36 @@ tags:
 aliases: []
 related:
   - 'docs/wiki/decision-register.md'
+  - 'docs/wiki/strategic-contact-reporting.md'
   - 'docs/wiki/factions-and-organizations.md'
   - 'ROADMAP.md'
 ---
 
 # Open design questions
 
-[Wiki home](README.md) · [Approved decisions](decision-register.md) · [Current implementation](implementation-status.md)
+[Wiki home](README.md) · [Approved decisions](decision-register.md) · [Strategic Contact Reporting](strategic-contact-reporting.md) · [Current implementation](implementation-status.md)
 
 ## How to use this register
 
 The owner stopped refinement to avoid premature detail. These questions preserve unfinished choices; they are not a request to answer everything now, a new implementation backlog, or permission for an agent to choose silently. Resolve only what blocks the next governed vertical slice. The political principles in [Factions and organizations](factions-and-organizations.md) are settled and should not be repeatedly re-asked.
 
-## Before admitting the next knowledge or political slice
+## Resolved sequencing decision
 
-**Q-01 — Scope and sequence.** Should the next feature be a bounded strategic-knowledge/faction-identity prerequisite, a minimal living-sector feature, or a different division? The proposed name M3B and M3B→M5→M6 sequence remain recommendations. M3A is implemented, M3 as a whole remains incomplete, and the roadmap's next major listed milestone is M5.
+**Q-01 — Scope and sequence — RESOLVED September 6, 2026.** The next approved development slice is [Strategic Contact Reporting](strategic-contact-reporting.md): a bounded bridge from M3A's local observer knowledge to durable, reference-frame-qualified strategic last-known contact information. It is intentionally implemented before the broader M5 Living Sector/faction-autonomy proof so that later political AI does not need to invent its information seam at the same time as faction state and decision logic.
 
-**Q-02 — Durable known-vessel identity.** Should an observer's remembered vessel identity be distinct from a sensor track? How should a report about a never-locally-observed ship be represented? A separate `KnownShipId` was proposed, not approved; the current implementation uses observer-local `SensorContactId` and hidden Core target correlation.
+The slice is **not** canonically named `M3B`. It does not itself complete Milestone 3 or begin Milestone 5; historical milestone classification can be decided after implementation. The previously proposed `M3B→M5→M6` label/sequence is therefore superseded as a planning recommendation by this narrower approved decision, without approving any of the previously proposed identity or faction-sharing mechanisms.
 
-**Q-03 — Strategic knowledge and affiliation.** What facts can the first observer learn, from which sources, at which spatial scale? Does scanning establish affiliation, do communications supply it, or is it initially reported/inferred? The current scan learns names, not allegiance. Distinguish true control/affiliation from what an observer knows, without selecting a confidence model prematurely.
+## Still open around Strategic Contact Reporting and later political work
 
-**Q-04 — Knowledge ownership and sharing.** What information does a faction receive from its ships or organizations, and what reaches the player? Actor-appropriate information is already an ADR requirement; the reporting/distribution mechanism, delay, and granularity are not selected. The explicit-report proposal must not become an unreviewed intelligence network.
+**Q-02 — Durable known-vessel identity.** Should an observer's remembered vessel identity eventually be distinct from a sensor track? How should a report about a never-locally-observed ship be represented? Strategic Contact Reporting deliberately reuses observer-local `SensorContactId` as far as it remains sufficient and does **not** approve `KnownShipId`. Cross-observer correlation and never-observed reports remain open for the first consumer that needs them.
 
-**Q-05 — Smallest political gameplay proof.** Which actors, one objective/resource constraint, and one offscreen interaction best demonstrate actual choice? The three-depth political design is a permitted structure, not a requirement that every depth/type be fully simulated in the first feature.
+**Q-03 — Strategic knowledge and affiliation.** What facts can an observer learn, from which sources, and at which spatial scale? Strategic Contact Reporting approves retention of legitimate last-known observation facts but does not change identification semantics: the current scan learns vessel/design names, not allegiance. Affiliation, controller, intent, transponder/communication intelligence, and confidence models remain open.
 
-**Q-06 — Era and region for initial content.** Select a development reference epoch or explicitly use an era-neutral test scenario before writing political assumptions into content. No specific campaign year has been approved here; 2378 remains an archived assistant proposal.
+**Q-04 — Knowledge ownership and sharing.** What information does a faction receive from its ships or organizations, by what mechanism, with what delay/granularity, and what reaches the player? Strategic Contact Reporting creates an actor-safe report/projection seam for the observing ship/player knowledge boundary only. It does not approve automatic faction ingestion or an intelligence network.
+
+**Q-05 — Smallest political gameplay proof.** Which actors, one objective/resource constraint, and one offscreen interaction best demonstrate actual choice in M5? The three-depth political design is a permitted structure, not a requirement that every depth/type be fully simulated in the first feature. Resolve this after Strategic Contact Reporting provides the information seam M5 can consume.
+
+**Q-06 — Era and region for initial content.** Select a development reference epoch or explicitly use an era-neutral test scenario before writing political assumptions into content. No specific campaign year has been approved here; 2378 remains an archived assistant proposal. Strategic Contact Reporting should reuse existing proof content where practical and does not require resolving campaign era.
 
 ## When political presentation and government mechanics become consumers
 
@@ -58,12 +63,14 @@ The owner stopped refinement to avoid premature detail. These questions preserve
 
 **Q-13 — Resources, officers, and trade.** Define the first useful logistics or crew interaction before selecting economic resource catalogs, officer progression formulas, markets, repair staffing, or fuel models. Preserve captain-without-levels and the existing abstract Engineering model until a governed feature changes them.
 
-**Q-14 — Compatibility and stochastic behavior.** Select and validate a versioned random algorithm when a genuine random consumer arrives. Decide supported development-save compatibility when new durable political state is introduced. Do not invent allegiance, treaty history, or knowledge during migration merely to satisfy a new schema.
+**Q-14 — Compatibility and stochastic behavior.** Select and validate a versioned random algorithm when a genuine random consumer arrives. Decide supported development-save compatibility when new durable political state is introduced. Strategic Contact Reporting may require an adjacent save migration if new authoritative observation state cannot be reconstructed safely, but that is an implementation outcome rather than permission to invent historical knowledge. Do not invent allegiance, treaty history, reports, or cross-observer identity merely to satisfy a new schema.
 
 ## Implementation questions that are not product approvals
 
-Faction-owned decision wakes may require extending the current ship-only scheduler target; a closed typed Ship/Faction target is one proposal, not a mandatory framework. Reference-frame-qualified strategic observations, efficient knowledge retention, safe reparenting, and input/work bounds must be resolved against concrete code and the active ADRs. Avoid speculative schemas or a generic actor/rules engine while these consumers are absent.
+Strategic Contact Reporting requires reference-frame-qualified last-known observations but does not prescribe the exact runtime type. Efficient knowledge retention and input/work bounds must be resolved against the current M3A code and active ADRs. Faction-owned decision wakes may later require extending the current ship-only scheduler target; a closed typed Ship/Faction target remains only one proposal, not a mandatory framework. Safe reparenting and faction knowledge propagation also remain later questions.
+
+Avoid speculative schemas or a generic actor/rules engine while these consumers are absent. If implementation discovery for Strategic Contact Reporting proves that one of Q-02 through Q-04 is actually required to meet that slice's approved exit condition, stop and return to governed design refinement rather than choosing silently.
 
 ## Sources
 
-This register combines unresolved topics from the [roadmap](../../ROADMAP.md), the current conversation recorded under [issue #68](https://github.com/L3DigitalNet/star-trek-alter-course/issues/68), and the boundary between implemented [local knowledge](sensors-knowledge-and-ai.md) and the approved [political design](factions-and-organizations.md).
+This register combines unresolved topics from the [roadmap](../../ROADMAP.md), the political discussion recorded under [issue #68](https://github.com/L3DigitalNet/star-trek-alter-course/issues/68), the approved next-slice decision recorded under [issue #74](https://github.com/L3DigitalNet/star-trek-alter-course/issues/74), and the boundary between implemented [local knowledge](sensors-knowledge-and-ai.md), approved [Strategic Contact Reporting](strategic-contact-reporting.md), and the approved [political design](factions-and-organizations.md).
