@@ -7,3 +7,4 @@
 | [003](003-stale-godot-debug-assembly.md) | Direct Godot launch could reuse a stale Debug assembly after branch changes. | Fixed |
 | [004](004-unimported-godot-source-assets.md) | Direct game launch skipped imports required by new presentation assets. | Fixed |
 | [005](005-command-context-actions-recreated.md) | Live projection refreshes replaced active Command Deck action controls. | Fixed |
+| [006](006-paused-shell-ignores-manual-input.md) | A paused simulation does not re-present manual proof input until the next tick. | Fixed |

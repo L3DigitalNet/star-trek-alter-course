@@ -6,8 +6,8 @@ description: 'Approved ownership and presentation decisions for the Command Deck
 doc_type: 'decision'
 status: 'active'
 created: '2026-09-02'
-updated: '2026-09-02'
-reviewed: '2026-09-02'
+updated: '2026-09-06'
+reviewed: '2026-09-06'
 owner: 'project-maintainers'
 consumer: 'mix'
 tags:
@@ -21,6 +21,8 @@ related:
   - 'docs/adr/0004-own-semantic-spatial-model-and-adapt-godot-rendering.md'
   - 'docs/adr/0009-use-layered-testing-and-architecture-conformance.md'
   - 'docs/adr/0013-use-dev-for-development-and-main-for-releases.md'
+  - 'docs/design/engineering-backbone.md'
+  - 'docs/wiki/interface-and-player-commands.md'
 source:
   - 'https://www.figma.com/design/9lH6uDhXSqhELwg05j8wEC'
   - 'docs/ui/reference/command-deck-travel.png'
@@ -32,6 +34,8 @@ license: 'MIT'
 ---
 
 # Command Deck UI
+
+> **Supporting detail.** The [design wiki](../wiki/README.md) is the single source of truth for design; [Interface and player commands](../wiki/interface-and-player-commands.md) owns this topic. This document supplies the detailed presentation and ownership rules within that scope. If this document disagrees with the wiki, the wiki governs and this document is corrected.
 
 ## Decision
 
@@ -54,7 +58,7 @@ Resolve displayed and actionable targets in this order:
 3. A deterministic preview fixture supplies illustrative data only while an explicit development or test preview mode is active.
 4. When no real projection exists, production presentation labels the value or action `Unavailable`; it does not substitute preview values.
 
-Travel uses real orders and status. Combat contacts, fire solutions, actions, and attention badges are preview-only until Core owns them. Engineering power distribution, component loads and controls, logs, and repair queues are also preview-only, except for current real sensor-repair state. Preview data never enters `GameSimulation`, persistence, or production gameplay truth.
+Travel uses real orders and status. Milestone 3A supplies live actor-local tactical contacts, identification, and hail; combat fire solutions, weapon/shield actions, and unsupported combat telemetry remain preview-only or unavailable. Milestone 4 supplies live Engineering generation, allocation, sensor/impulse condition and capability, and one active sensor or impulse repair. Detailed EPS topology, unsupported component telemetry, and repair-team queues remain preview-only or unavailable. Preview data never enters `GameSimulation`, persistence, or production gameplay truth. The current Engineering rules and action boundary are defined in [Engineering Backbone](engineering-backbone.md); the [wiki interface page](../wiki/interface-and-player-commands.md) summarizes current controls and implementation status.
 
 ## Visual and layout rules
 
@@ -76,7 +80,7 @@ The approved Figma file is `https://www.figma.com/design/9lH6uDhXSqhELwg05j8wEC`
 - `docs/ui/reference/command-deck-combat.png`
 - `docs/ui/reference/engineering-workspace.png`
 
-This decision does not create combat, power-network, damage, general repair, or engineering simulation. It also does not commit the project to future Tactical, Navigation, Science, Comms, or Operations station workspaces. Any such workspace needs an independently owned domain capability and a later decision when its user and simulation needs are demonstrated.
+This presentation decision did not itself create combat, power-network, damage, or general repair simulation. Subsequent Milestone 4 implemented the bounded Engineering model described above; combat, detailed power networks, and broader repair systems remain deferred. This decision does not commit the project to future Tactical, Navigation, Science, Comms, or Operations station workspaces. Any such workspace needs an independently owned domain capability and a later decision when its user and simulation needs are demonstrated.
 
 ## Consequences
 

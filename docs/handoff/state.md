@@ -2,9 +2,10 @@
 
 ## Current focus
 
-- Milestones 3A and 4 merged to `dev` as `a104e3f` and `0f2278e`; Features #58 and #62 are Done.
-- v0.4.0 release preparation from the accepted `dev` candidate is the only current focus; it remains unreleased.
-- `main` remains the immutable v0.3.0 source-only release at `fae21bd`.
+- Feature #77 Strategic Contact Reporting merged to `dev` as squash `80c3084`; Final PR #78 closed, Workflow Done.
+- Next development slice not yet selected; picking the next slice is an owner decision, not an agent default.
+- [Open questions](../wiki/open-questions.md) Q-02 through Q-05 remain open; Milestone 3 is not complete, Milestone 5 not started.
+- Resume from the wiki, ROADMAP, STATUS, and active ADRs; remaining design questions are recorded, not silently decided.
 
 ## Active incidents
 

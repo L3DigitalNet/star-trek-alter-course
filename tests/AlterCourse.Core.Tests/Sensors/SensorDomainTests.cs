@@ -3,6 +3,7 @@ using AlterCourse.Core.Identity;
 using AlterCourse.Core.Sensors;
 using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
+using AlterCourse.Core.Strategic;
 using AlterCourse.Core.Tactical;
 
 namespace AlterCourse.Core.Tests.Sensors;
@@ -111,6 +112,7 @@ public sealed class SensorDomainTests
             new ShipInstanceId(targetId),
             new TacticalPosition(id, targetId),
             new SimulationTime(0),
+            new LocationId("observed-location"),
             status,
             identification,
             vesselName,

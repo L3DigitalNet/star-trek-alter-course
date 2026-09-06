@@ -1,0 +1,61 @@
+---
+schema_version: '1.1'
+id: 'reference-g40auc-implementation-status'
+title: 'Implementation Status'
+description: 'Reviewed gameplay baseline and explicit boundaries between runtime, previews, and future work.'
+doc_type: 'reference'
+status: 'active'
+created: '2026-09-06'
+updated: '2026-09-06'
+tags:
+  - 'simulation'
+  - 'design'
+aliases: []
+related:
+  - 'docs/STATUS.md'
+  - 'README.md'
+  - 'ROADMAP.md'
+  - 'docs/wiki/strategic-contact-reporting.md'
+---
+
+# Implementation status
+
+[Wiki home](README.md) · [Sources](sources.md) · [Open questions](open-questions.md)
+
+## Reviewed baseline
+
+Reviewed September 6, 2026 against `dev` at `80c308483fafb3b6d42de8f3a3382bec1ad7158b`. v0.5.0 is an immutable source-only release, not a packaged game; v0.4.0 is its predecessor. This documentation PR changes no gameplay, content schema, save schema, or dependencies. For the current operational snapshot after this review, consult [STATUS](../STATUS.md).
+
+## Implemented gameplay
+
+Core owns multiple ordinary persistent ships and an explicit `PlayerShipId`; the default world contains four ships across three strategic locations. The player ship is not a separate world-root entity type. Typed bootstrap distinguishes reusable design definitions from vessel names and starting condition.
+
+Strategic travel has scheduled arrival. Durable `TravelTo`, `PatrolRoute`, and `HoldUntil` orders exist, with offscreen progression and long-horizon tests. Not every ship in the default contact proof has an active order; order machinery and the currently authored proof scenario are different things.
+
+Local tactical space has continuous 2D positions and course/speed commands. Observer-local contacts support Current, Stale, Lost, reacquisition, active identification, and a typed hail acknowledgement. A bounded cautious-contact policy acts from its own knowledge rather than hidden target state.
+
+Engineering owns generation condition, constrained allocation, sensor and impulse condition, derived capability, and one sensor or impulse repair per ship. Those values affect actual detection and tactical course limits. The live Engineering UI is not merely a preview.
+
+The shell supports map/workspace switching, explicit pause and rates, player-relevant event advancement, and a quick-save/load slot. Save V6 retains the world and exact scheduler correlations, plus the actor-safe `KnownContactReports` projection state under simulation rules identity `strategic-contact-reporting-v1`; adjacent migration supports V1 through V6. Ship-definition content V4 is current.
+
+Implementation evidence: [FirstGameSetup](../../src/AlterCourse.Core/Gameplay/FirstGameSetup.cs), [ShipState](../../src/AlterCourse.Core/Ships/ShipState.cs), [SimulationState](../../src/AlterCourse.Core/Gameplay/SimulationState.cs), [GameSimulation](../../src/AlterCourse.Core/Gameplay/GameSimulation.cs), [Core gameplay tests](../../tests/AlterCourse.Core.Tests/Gameplay/), and the [Engineering design](../design/engineering-backbone.md).
+
+## Milestones and release boundaries
+
+Milestone 1 world/bootstrap and Milestone 2 active-world orders are implemented. Milestone 3A first observed contact and [Strategic Contact Reporting](strategic-contact-reporting.md) are implemented, but the roadmap explicitly does not declare all of Milestone 3 complete. Milestone 4 Engineering Backbone is implemented. M3A and M4 are included in v0.4.0; Strategic Contact Reporting is delivered in Feature #77 / Final PR #78, merged into `dev` as `80c3084`, and included in v0.5.0.
+
+Milestones 5 through 9 remain future slices: living sector/faction autonomy, tactical combat, diplomacy/incidents, canon-anchored bootstrap, and regional campaign integration. The proposed M3B knowledge/faction-identity prerequisite is a discussion proposal, not an admitted milestone or implementation plan.
+
+## Preview-only or absent
+
+Combat mockups do not establish authoritative shields, weapons, fire-control solutions, or damage resolution. Detailed EPS networks, batteries, warp Engineering, life support, transporters, repair teams/queues, crew systems, fuel, inventory, and economy are absent. The actual repair model has one active repair, not the multi-team queue illustrated by earlier UI references.
+
+Strategic long-range sensor simulation, affiliation/intent knowledge, faction runtime state, organizations, governments, political hierarchies, treaties, espionage, and layered jurisdiction are not implemented; durable last-known strategic contact reporting is (see [Strategic Contact Reporting](strategic-contact-reporting.md)). The [approved political model](factions-and-organizations.md) describes intended future behavior only.
+
+No new `FactionId`, `KnownShipId`, organization controller, faction-owned scheduler target, narrative runtime, database, ECS, or public mod API is created by this wiki. Current scheduled work remains ship-targeted.
+
+## Verification evidence, not a fresh execution claim
+
+The v0.5.0 release candidate gate reports 406 Core tests, 324 AssetCtl tests, 63 gameplay/UI tests, one Godot integration test, and two generated-asset import tests, with warning-free builds; the v0.4.0 release and M4 admission record reported 376, 324, 60, one, and two. These are baseline release results, not tests rerun merely by writing this page. The documentation PR records its own actual checks separately.
+
+[v0.5.0 release](https://github.com/L3DigitalNet/star-trek-alter-course/releases/tag/v0.5.0) · [v0.4.0 release](https://github.com/L3DigitalNet/star-trek-alter-course/releases/tag/v0.4.0) · [M4 PR #63](https://github.com/L3DigitalNet/star-trek-alter-course/pull/63) · [Roadmap outcomes](../../ROADMAP.md)

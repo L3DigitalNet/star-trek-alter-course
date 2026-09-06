@@ -178,7 +178,7 @@ validate_t0_commit() {
       *) fail "T0 commit ${commit} changes non-Markdown path '${path}'." ;;
     esac
     case "${path}" in
-      AGENTS.md | CLAUDE.md | .agents/* | .claude/* | .github/* | docs/adr/* | docs/design/* | docs/specs/* | docs/handoff/* | docs/STATUS.md | docs/TODO.md)
+      AGENTS.md | CLAUDE.md | .agents/* | .claude/* | .github/* | docs/adr/* | docs/design/* | docs/specs/* | docs/wiki/* | docs/handoff/* | docs/STATUS.md | docs/TODO.md)
         fail "T0 commit ${commit} changes protected surface '${path}'."
         ;;
     esac

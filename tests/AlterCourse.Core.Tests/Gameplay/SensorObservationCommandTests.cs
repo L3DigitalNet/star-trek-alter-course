@@ -263,6 +263,7 @@ public sealed class SensorObservationCommandTests
             new ShipInstanceId(2),
             default,
             new SimulationTime(0),
+            Local,
             SensorContactStatus.Stale,
             SensorContactIdentification.Detected,
             LossWorkId: lossWork.Id,

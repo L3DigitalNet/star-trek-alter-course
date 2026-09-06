@@ -6,7 +6,7 @@ description: 'Defines the authoritative power, condition, repair, capability, pe
 doc_type: 'concept'
 status: 'active'
 created: '2026-09-03'
-updated: '2026-09-03'
+updated: '2026-09-06'
 tags:
   - 'architecture'
   - 'engineering'
@@ -16,6 +16,8 @@ related:
   - 'ROADMAP.md'
   - 'docs/design/first-observed-contact.md'
   - 'docs/design/command-deck-ui.md'
+  - 'docs/wiki/engineering-and-combat.md'
+  - 'docs/wiki/strategic-contact-reporting.md'
   - 'docs/adr/0001-separate-simulation-from-godot.md'
   - 'docs/adr/0005-use-json-and-schema-validation-for-domain-content.md'
   - 'docs/adr/0006-use-versioned-json-snapshot-saves.md'
@@ -24,6 +26,8 @@ related:
 ---
 
 # Engineering Backbone
+
+> **Supporting detail.** The [design wiki](../wiki/README.md) is the single source of truth for design; [Engineering and combat](../wiki/engineering-and-combat.md) owns this topic. This document supplies the detailed M4 rules, formulas, content, and save contract within that scope. If this document disagrees with the wiki, the wiki governs and this document is corrected.
 
 Milestone 4 establishes one concrete Engineering chain: generated power constrains allocation; allocation and condition derive sensor and impulse capability; those capabilities alter contacts, scans, tactical courses, and cautious AI; one analytical repair changes a selected system over simulation time. The ordinary Kestrel encounter is the player-visible proof. It is included in the source-only v0.4.0 release.
 
@@ -106,11 +110,13 @@ The four ordinary ships and Survey Vessel Kestrel's cautious posture remain. USS
 
 ## Persistence V5
 
+[Strategic Contact Reporting](../wiki/strategic-contact-reporting.md) has since advanced saves to V6, adding an observation-location frame to each retained contact and the actor-safe known-contact-report state; it does not change any Engineering-specific field described below.
+
 Save V5 uses a new explicit model and simulation-rules version. Each ship stores three conditions, exact sensor/impulse allocation, and optional system repair target/conditions/times/exact work identity. It does not store derived power, reserve, capability, range, speed, labels, progress, presentation, preview, or cached projections.
 
 The adjacent V4-to-V5 migration maps `SensorIntegrity` to sensor condition and an active V4 sensor repair to a V5 repair targeting `sensors`, preserving all times and exact scheduled-work identity while changing the known work kind. It initializes generator and impulse condition to one and allocates both consumers at full nominal demand. Because migrated V4 content has nominal generation equal to total demand, historical passive range and tactical speed are preserved. The migration validates the complete V5 candidate against the resolved definition before constructing live state; impossible allocations or content mismatch fail clearly.
 
-The V1-to-V2-to-V3-to-V4-to-V5 chain remains adjacent. Simulation time, contact knowledge and local IDs, active scans, autonomous posture/wakes, orders, scheduler ordering, and allocator continuation are preserved. Maximum-shape V5 serialization measures 95,677,740 bytes under the 134,217,728-byte (128 MiB) envelope, and failed load never replaces live state.
+The V1-to-V2-to-V3-to-V4-to-V5 chain remains adjacent (the chain now continues through V6; see Strategic Contact Reporting). Simulation time, contact knowledge and local IDs, active scans, autonomous posture/wakes, orders, scheduler ordering, and allocator continuation are preserved. Maximum-shape V5 serialization measured 95,677,740 bytes under the 134,217,728-byte (128 MiB) envelope; V6 now measures 106,775,347 bytes under the same envelope. Failed load never replaces live state.
 
 ## Player projection and live Engineering
 

@@ -321,6 +321,7 @@ internal sealed record SimulationState
             }
 
             ValidateObservedFacts(contact, target, catalog);
+            ValidateObservedLocation(observer, contact);
             ValidateContactLoss(observer, contact, contactWorkIds);
         }
 
@@ -379,6 +380,60 @@ internal sealed record SimulationState
                 throw new InvalidOperationException(
                     "Sensor contact identification and learned names are inconsistent."
                 );
+        }
+    }
+
+    /// <remarks>
+    /// A null frame is an explicitly unqualified legacy observation and carries no constraint. A
+    /// stale or lost contact's frame is deliberately never compared with either ship's present
+    /// location: a retained report records where an observation happened, and later movement by the
+    /// observer or the target must not invalidate or rewrite it.
+    /// </remarks>
+    private void ValidateObservedLocation(ShipState observer, SensorContactTrack contact)
+    {
+        if (contact.ObservedAtLocationId is not { } observedAtLocation)
+        {
+            return;
+        }
+
+        // LocationId is a struct, so a nullable holding default(LocationId) is non-null with a null
+        // Value. Rejecting it here turns an uninitialized identity into a domain diagnostic instead
+        // of an argument exception thrown from deep inside the map lookup.
+        if (string.IsNullOrWhiteSpace(observedAtLocation.Value))
+        {
+            throw new InvalidOperationException(
+                "A sensor contact's observed location requires an initialized identity."
+            );
+        }
+
+        try
+        {
+            StrategicMap.GetLocation(observedAtLocation);
+        }
+        catch (ArgumentException exception)
+        {
+            throw new InvalidOperationException(
+                "A sensor contact's observed location must exist on the strategic map.",
+                exception
+            );
+        }
+
+        // A current contact is only ever produced by an observation pass that runs after every
+        // strategic-state change and immediately stales anything no longer observable, so a current
+        // contact's frame is the observer's present location by construction.
+        if (contact.Status != SensorContactStatus.Current)
+        {
+            return;
+        }
+
+        if (
+            observer.StrategicState is not AtLocationState observerLocation
+            || observerLocation.LocationId != observedAtLocation
+        )
+        {
+            throw new InvalidOperationException(
+                "A current sensor contact must have been observed at the observer's current location."
+            );
         }
     }
 

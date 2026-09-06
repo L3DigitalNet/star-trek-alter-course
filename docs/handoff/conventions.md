@@ -11,6 +11,7 @@
 | C-005 | Keep formatter and semantic-style ownership separate. |
 | C-006 | Keep Godot project metadata editor-discoverable.      |
 | C-007 | Keep Godot UI styling in the project-owned Theme.     |
+| C-008 | Record design in the wiki before anywhere else.       |
 
 ## C-001: Canonical quality gate
 
@@ -39,3 +40,7 @@ Set `config/features` so Godot Tools detects Godot 4 C#. Reload VS Code after me
 ## C-007: Godot command-interface presentation
 
 Use the project-owned Godot Theme for semantic colors, typography, control states, and focus treatment. Keep Figma and PNGs as visual references; Core remains simulation truth.
+
+## C-008: Design wiki is the single source of truth
+
+Record a design change on its `docs/wiki/` page in the same PR that implements it. `docs/design/` and `docs/specs/` hold supporting detail and must match the wiki; `ROADMAP.md` is sequence, not design. Architectural boundaries still change only through an ADR, and `docs/wiki/` is a protected T0 surface.

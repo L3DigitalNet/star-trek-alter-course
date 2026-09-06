@@ -16,6 +16,12 @@ Use the repo-local `agent-handoff` skill at session startup and closeout. Do not
 - Fix compiler, analyzer, formatting, and test failures at their cause. Never weaken central settings or add suppression merely to pass CI.
 - Keep pure simulation/domain code in `AlterCourse.Core` independent from Godot. Add behavioral and regression tests at the lowest applicable layer.
 
+## Design authority
+
+- `docs/wiki/` is the single source of truth for game design. Read the owning wiki page before work that adds or changes a system's behavior, and record the design change on that page in the same pull request.
+- `docs/design/` and `docs/specs/` are supporting detail for wiki pages; `ROADMAP.md` is sequence, not design; archived conversations are history. When any of them disagrees with the wiki, fix the other document.
+- Do not approve design in prose. Unapproved ideas go to `docs/wiki/open-questions.md`; architectural boundaries change only through an ADR.
+
 ## Visual asset workflow
 
 - Search the tracked AssetCtl catalog before creating a visual asset and reuse an asset when its semantic purpose and output contract fit.

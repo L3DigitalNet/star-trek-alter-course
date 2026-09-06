@@ -20,6 +20,7 @@ using SaveEnvelopeV2 = AlterCourse.Core.Persistence.SaveModelsV2.SaveEnvelopeV2;
 using SaveEnvelopeV3 = AlterCourse.Core.Persistence.SaveModelsV3.SaveEnvelopeV3;
 using SaveEnvelopeV4 = AlterCourse.Core.Persistence.SaveModelsV4.SaveEnvelopeV4;
 using SaveEnvelopeV5 = AlterCourse.Core.Persistence.SaveModelsV5.SaveEnvelopeV5;
+using SaveEnvelopeV6 = AlterCourse.Core.Persistence.SaveModelsV6.SaveEnvelopeV6;
 using SaveMetadataV2 = AlterCourse.Core.Persistence.SaveModelsV2.SaveMetadataV2;
 using ScheduledWorkSnapshotV2 = AlterCourse.Core.Persistence.SaveModelsV2.ScheduledWorkSnapshotV2;
 using SchedulerSnapshotV1 = AlterCourse.Core.Persistence.SaveModelsV1.SchedulerSnapshotV1;
@@ -31,11 +32,13 @@ using ShipSnapshotV2 = AlterCourse.Core.Persistence.SaveModelsV2.ShipSnapshotV2;
 using ShipSnapshotV3 = AlterCourse.Core.Persistence.SaveModelsV3.ShipSnapshotV3;
 using ShipSnapshotV4 = AlterCourse.Core.Persistence.SaveModelsV4.ShipSnapshotV4;
 using ShipSnapshotV5 = AlterCourse.Core.Persistence.SaveModelsV5.ShipSnapshotV5;
+using ShipSnapshotV6 = AlterCourse.Core.Persistence.SaveModelsV6.ShipSnapshotV6;
 using SimulationSnapshotV1 = AlterCourse.Core.Persistence.SaveModelsV1.SimulationSnapshotV1;
 using SimulationSnapshotV2 = AlterCourse.Core.Persistence.SaveModelsV2.SimulationSnapshotV2;
 using SimulationSnapshotV3 = AlterCourse.Core.Persistence.SaveModelsV3.SimulationSnapshotV3;
 using SimulationSnapshotV4 = AlterCourse.Core.Persistence.SaveModelsV4.SimulationSnapshotV4;
 using SimulationSnapshotV5 = AlterCourse.Core.Persistence.SaveModelsV5.SimulationSnapshotV5;
+using SimulationSnapshotV6 = AlterCourse.Core.Persistence.SaveModelsV6.SimulationSnapshotV6;
 using StrategicLocationSnapshotV2 = AlterCourse.Core.Persistence.SaveModelsV2.StrategicLocationSnapshotV2;
 using StrategicMapSnapshotV1 = AlterCourse.Core.Persistence.SaveModelsV1.StrategicMapSnapshotV1;
 using StrategicMapSnapshotV2 = AlterCourse.Core.Persistence.SaveModelsV2.StrategicMapSnapshotV2;
@@ -59,12 +62,18 @@ public static class GamePersistence
     private const int V2SchemaVersion = 2;
     private const int V3SchemaVersion = 3;
     private const int V4SchemaVersion = 4;
-    private const int CurrentSchemaVersion = 5;
+    private const int V5SchemaVersion = 5;
+    private const int CurrentSchemaVersion = 6;
     private const string V1SimulationRulesVersion = "first-playable-v1";
     private const string V2SimulationRulesVersion = "first-playable-v1";
     private const string V3SimulationRulesVersion = "active-world-orders-v1";
     private const string V4SimulationRulesVersion = "sensor-knowledge-first-contact-v1";
-    private const string CurrentSimulationRulesVersion = "engineering-backbone-v1";
+    private const string V5SimulationRulesVersion = "engineering-backbone-v1";
+
+    // The rules identity names the design slice a schema admits, not the schema number: V1 and V2
+    // share "first-playable-v1". Godot's gameplay shell asserts this literal from the written save
+    // (src/AlterCourse.Godot/tests/GameplayShellTest.gd), so changing it requires updating that end.
+    private const string CurrentSimulationRulesVersion = "strategic-contact-reporting-v1";
     private const string TravelArrivalKind = "travelArrival";
     private const string SensorRepairCompletionKind = "sensorRepairCompletion";
     private const string SystemRepairCompletionKind = "systemRepairCompletion";
@@ -92,18 +101,18 @@ public static class GamePersistence
         MaxDepth = MaximumJsonDepth,
     };
 
-    /// <summary>Serializes a validated simulation and caller-supplied organization metadata as V5 UTF-8 JSON.</summary>
+    /// <summary>Serializes a validated simulation and caller-supplied organization metadata as V6 UTF-8 JSON.</summary>
     public static byte[] Serialize(GameSimulation simulation, GameSaveMetadata metadata)
     {
         ArgumentNullException.ThrowIfNull(simulation);
         ArgumentNullException.ThrowIfNull(metadata);
         ValidateMetadata(metadata);
 
-        SaveEnvelopeV5 envelope = CaptureV5(simulation.CaptureState(), metadata);
+        SaveEnvelopeV6 envelope = CaptureV6(simulation.CaptureState(), metadata);
         byte[] json = JsonSerializer.SerializeToUtf8Bytes(envelope, SerializerOptions);
         if (json.Length > MaximumSaveBytes)
         {
-            throw new InvalidOperationException($"The V5 save exceeds the {MaximumSaveBytes}-byte contract limit.");
+            throw new InvalidOperationException($"The V6 save exceeds the {MaximumSaveBytes}-byte contract limit.");
         }
 
         return json;
@@ -140,7 +149,8 @@ public static class GamePersistence
                 V2SchemaVersion => LoadV2(documentBytes, catalog, sourceIdentity),
                 V3SchemaVersion => LoadV3(documentBytes, catalog, sourceIdentity),
                 V4SchemaVersion => LoadV4(documentBytes, catalog, sourceIdentity),
-                CurrentSchemaVersion => LoadV5(documentBytes, catalog, sourceIdentity),
+                V5SchemaVersion => LoadV5(documentBytes, catalog, sourceIdentity),
+                CurrentSchemaVersion => LoadV6(documentBytes, catalog, sourceIdentity),
                 _ => throw Failure(
                     GamePersistenceFailure.UnsupportedVersion,
                     sourceIdentity,
@@ -268,16 +278,16 @@ public static class GamePersistence
         }
     }
 
-    private static SaveEnvelopeV5 CaptureV5(SimulationState state, GameSaveMetadata metadata)
+    private static SaveEnvelopeV6 CaptureV6(SimulationState state, GameSaveMetadata metadata)
     {
         if (state.Ships.Length > SimulationState.MaximumShips)
         {
             throw new InvalidOperationException(
-                $"V5 persistence supports at most {SimulationState.MaximumShips} ships."
+                $"V6 persistence supports at most {SimulationState.MaximumShips} ships."
             );
         }
 
-        return new SaveEnvelopeV5
+        return new SaveEnvelopeV6
         {
             SchemaVersion = CurrentSchemaVersion,
             SimulationRulesVersion = CurrentSimulationRulesVersion,
@@ -288,7 +298,7 @@ public static class GamePersistence
                 CreatedAtUtc = metadata.CreatedAtUtc,
                 SavedAtUtc = metadata.SavedAtUtc,
             },
-            Simulation = new SimulationSnapshotV5
+            Simulation = new SimulationSnapshotV6
             {
                 TimeMilliseconds = state.Time.Milliseconds,
                 ShipAllocatorNextId = state.ShipIdAllocator.NextId,
@@ -296,7 +306,7 @@ public static class GamePersistence
                 PlayerShipId = state.PlayerShipId.Value,
                 Scheduler = CaptureSchedulerV2(state.Scheduler),
                 StrategicMap = CaptureStrategicMapV2(state.StrategicMap),
-                Ships = [.. state.Ships.OrderBy(ship => ship.InstanceId.Value).Select(CaptureShipV5)],
+                Ships = [.. state.Ships.OrderBy(ship => ship.InstanceId.Value).Select(CaptureShipV6)],
             },
         };
     }
@@ -346,7 +356,7 @@ public static class GamePersistence
             ],
         };
 
-    private static ShipSnapshotV5 CaptureShipV5(ShipState ship) =>
+    private static ShipSnapshotV6 CaptureShipV6(ShipState ship) =>
         new()
         {
             InstanceId = ship.InstanceId.Value,
@@ -383,15 +393,15 @@ public static class GamePersistence
             },
             StrategicState = CaptureStrategicStateV2(ship.StrategicState),
             ActiveOrder = CaptureOrderV3(ship.ActiveOrder),
-            SensorKnowledge = CaptureSensorKnowledgeV4(ship.SensorKnowledge),
+            SensorKnowledge = CaptureSensorKnowledgeV6(ship.SensorKnowledge),
             AutonomousState = CaptureAutonomousStateV4(ship.AutonomousState),
         };
 
-    private static SaveModelsV4.SensorKnowledgeSnapshotV4 CaptureSensorKnowledgeV4(SensorKnowledge knowledge) =>
+    private static SaveModelsV6.SensorKnowledgeSnapshotV6 CaptureSensorKnowledgeV6(SensorKnowledge knowledge) =>
         new()
         {
             NextContactId = knowledge.NextContactId,
-            Contacts = [.. knowledge.Contacts.Select(CaptureContactV4)],
+            Contacts = [.. knowledge.Contacts.Select(CaptureContactV6)],
             ActiveScan = knowledge.ActiveScan is null
                 ? null
                 : new SaveModelsV4.ActiveSensorScanSnapshotV4
@@ -403,7 +413,7 @@ public static class GamePersistence
                 },
         };
 
-    private static SaveModelsV4.SensorContactSnapshotV4 CaptureContactV4(SensorContactTrack contact) =>
+    private static SaveModelsV6.SensorContactSnapshotV6 CaptureContactV6(SensorContactTrack contact) =>
         new()
         {
             Id = contact.Id.Value,
@@ -414,6 +424,10 @@ public static class GamePersistence
                 YKilometers = contact.LastObservedPosition.YKilometers,
             },
             LastObservedAtMilliseconds = contact.LastObservedAt.Milliseconds,
+            // A null frame is written through as null rather than substituted: it marks a legacy
+            // observation the schema history genuinely never qualified, and a save must not gain a
+            // location the observer never recorded just because the writer had one available.
+            ObservedAtLocationId = contact.ObservedAtLocationId?.Value,
             Status = CaptureContactStatus(contact.Status),
             Identification = CaptureContactIdentification(contact.Identification),
             KnownVesselDisplayName = contact.KnownVesselDisplayName,
@@ -536,7 +550,9 @@ public static class GamePersistence
             ValidateCandidateV3(migratedV3, catalog);
             SaveEnvelopeV4 migratedV4 = MigrateV3ToV4(migratedV3);
             ValidateCandidateV4(migratedV4, catalog);
-            return RestoreV5(MigrateV4ToV5(migratedV4, catalog), catalog);
+            SaveEnvelopeV5 migratedV5 = MigrateV4ToV5(migratedV4, catalog);
+            ValidateCandidateV5(migratedV5, catalog);
+            return RestoreV6(MigrateV5ToV6(migratedV5), catalog);
         }
         catch (GamePersistenceException)
         {
@@ -575,7 +591,9 @@ public static class GamePersistence
             ValidateCandidateV3(migrated, catalog);
             SaveEnvelopeV4 migratedV4 = MigrateV3ToV4(migrated);
             ValidateCandidateV4(migratedV4, catalog);
-            return RestoreV5(MigrateV4ToV5(migratedV4, catalog), catalog);
+            SaveEnvelopeV5 migratedV5 = MigrateV4ToV5(migratedV4, catalog);
+            ValidateCandidateV5(migratedV5, catalog);
+            return RestoreV6(MigrateV5ToV6(migratedV5), catalog);
         }
         catch (GamePersistenceException)
         {
@@ -612,7 +630,9 @@ public static class GamePersistence
             ValidateCandidateV3(envelope, catalog);
             SaveEnvelopeV4 migratedV4 = MigrateV3ToV4(envelope);
             ValidateCandidateV4(migratedV4, catalog);
-            return RestoreV5(MigrateV4ToV5(migratedV4, catalog), catalog);
+            SaveEnvelopeV5 migratedV5 = MigrateV4ToV5(migratedV4, catalog);
+            ValidateCandidateV5(migratedV5, catalog);
+            return RestoreV6(MigrateV5ToV6(migratedV5), catalog);
         }
         catch (GamePersistenceException)
         {
@@ -647,7 +667,9 @@ public static class GamePersistence
                 JsonSerializer.Deserialize<SaveEnvelopeV4>(json, SerializerOptions)
                 ?? throw new JsonException("The save root must be an object.");
             ValidateCandidateV4(envelope, catalog);
-            return RestoreV5(MigrateV4ToV5(envelope, catalog), catalog);
+            SaveEnvelopeV5 migratedV5 = MigrateV4ToV5(envelope, catalog);
+            ValidateCandidateV5(migratedV5, catalog);
+            return RestoreV6(MigrateV5ToV6(migratedV5), catalog);
         }
         catch (GamePersistenceException)
         {
@@ -681,7 +703,8 @@ public static class GamePersistence
             SaveEnvelopeV5 envelope =
                 JsonSerializer.Deserialize<SaveEnvelopeV5>(json, SerializerOptions)
                 ?? throw new JsonException("The save root must be an object.");
-            return RestoreV5(envelope, catalog);
+            ValidateCandidateV5(envelope, catalog);
+            return RestoreV6(MigrateV5ToV6(envelope), catalog);
         }
         catch (GamePersistenceException)
         {
@@ -703,6 +726,40 @@ public static class GamePersistence
                 GamePersistenceFailure.InvalidData,
                 sourceIdentity,
                 $"violates the V5 semantic contract: {exception.Message}",
+                exception
+            );
+        }
+    }
+
+    private static LoadedGameSave LoadV6(byte[] json, ShipDefinitionCatalog catalog, string sourceIdentity)
+    {
+        try
+        {
+            SaveEnvelopeV6 envelope =
+                JsonSerializer.Deserialize<SaveEnvelopeV6>(json, SerializerOptions)
+                ?? throw new JsonException("The save root must be an object.");
+            return RestoreV6(envelope, catalog);
+        }
+        catch (GamePersistenceException)
+        {
+            throw;
+        }
+        catch (JsonException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+            when (exception
+                    is ArgumentException
+                        or InvalidOperationException
+                        or KeyNotFoundException
+                        or OverflowException
+            )
+        {
+            throw Failure(
+                GamePersistenceFailure.InvalidData,
+                sourceIdentity,
+                $"violates the V6 semantic contract: {exception.Message}",
                 exception
             );
         }
@@ -841,8 +898,8 @@ public static class GamePersistence
     private static SaveEnvelopeV5 MigrateV4ToV5(SaveEnvelopeV4 envelope, ShipDefinitionCatalog catalog) =>
         new()
         {
-            SchemaVersion = CurrentSchemaVersion,
-            SimulationRulesVersion = CurrentSimulationRulesVersion,
+            SchemaVersion = V5SchemaVersion,
+            SimulationRulesVersion = V5SimulationRulesVersion,
             Metadata = envelope.Metadata,
             Simulation = new SimulationSnapshotV5
             {
@@ -913,6 +970,76 @@ public static class GamePersistence
             AutonomousState = ship.AutonomousState,
         };
     }
+
+    /// <remarks>
+    /// Every migrated contact keeps a null observed location. The frame is deliberately NOT derived
+    /// from the observer's <c>StrategicStateSnapshotV2</c>, nor from the target's:
+    /// <list type="bullet">
+    /// <item>V5 never validated observer/target co-location, so a structurally valid V5 file may hold
+    /// a current contact whose observer is traveling or somewhere else entirely.</item>
+    /// <item>A stale or lost contact's observation location is unrecoverable in principle — V5 keeps
+    /// the observed position and time while both ships remain free to travel afterwards, and those
+    /// contacts are exactly the population retained reports exist to serve.</item>
+    /// <item>ADR 0006 treats save data as untrusted input and forbids a migration from silently
+    /// inventing consequential state; a derived frame would be an unverifiable claim presented to the
+    /// player as an observation the observer never recorded.</item>
+    /// </list>
+    /// Downstream, a null frame keeps the contact on the tactical surface while omitting it from the
+    /// strategic report projection, so a V5 save loses nothing it ever carried.
+    /// </remarks>
+    private static SaveEnvelopeV6 MigrateV5ToV6(SaveEnvelopeV5 envelope) =>
+        new()
+        {
+            SchemaVersion = CurrentSchemaVersion,
+            SimulationRulesVersion = CurrentSimulationRulesVersion,
+            Metadata = envelope.Metadata,
+            Simulation = new SimulationSnapshotV6
+            {
+                TimeMilliseconds = envelope.Simulation.TimeMilliseconds,
+                ShipAllocatorNextId = envelope.Simulation.ShipAllocatorNextId,
+                OrderAllocatorNextId = envelope.Simulation.OrderAllocatorNextId,
+                PlayerShipId = envelope.Simulation.PlayerShipId,
+                Scheduler = envelope.Simulation.Scheduler,
+                StrategicMap = envelope.Simulation.StrategicMap,
+                Ships = [.. envelope.Simulation.Ships.Select(MigrateShipV5)],
+            },
+        };
+
+    private static ShipSnapshotV6 MigrateShipV5(ShipSnapshotV5 ship) =>
+        new()
+        {
+            InstanceId = ship.InstanceId,
+            DefinitionId = ship.DefinitionId,
+            DisplayName = ship.DisplayName,
+            TacticalPosition = ship.TacticalPosition,
+            TacticalMotion = ship.TacticalMotion,
+            Engineering = ship.Engineering,
+            StrategicState = ship.StrategicState,
+            ActiveOrder = ship.ActiveOrder,
+            SensorKnowledge = new SaveModelsV6.SensorKnowledgeSnapshotV6
+            {
+                NextContactId = ship.SensorKnowledge.NextContactId,
+                Contacts =
+                [
+                    .. ship.SensorKnowledge.Contacts.Select(contact => new SaveModelsV6.SensorContactSnapshotV6
+                    {
+                        Id = contact.Id,
+                        TargetShipId = contact.TargetShipId,
+                        LastObservedPosition = contact.LastObservedPosition,
+                        LastObservedAtMilliseconds = contact.LastObservedAtMilliseconds,
+                        ObservedAtLocationId = null,
+                        Status = contact.Status,
+                        Identification = contact.Identification,
+                        KnownVesselDisplayName = contact.KnownVesselDisplayName,
+                        KnownDesignDisplayName = contact.KnownDesignDisplayName,
+                        LossWorkId = contact.LossWorkId,
+                        LossDueTimeMilliseconds = contact.LossDueTimeMilliseconds,
+                    }),
+                ],
+                ActiveScan = ship.SensorKnowledge.ActiveScan,
+            },
+            AutonomousState = ship.AutonomousState,
+        };
 
     private static SchedulerSnapshotV2 MigrateSchedulerV1(SchedulerSnapshotV1 source, long targetShipId)
     {
@@ -1070,13 +1197,13 @@ public static class GamePersistence
         }
     }
 
-    private static LoadedGameSave RestoreV5(SaveEnvelopeV5 envelope, ShipDefinitionCatalog catalog)
+    private static LoadedGameSave RestoreV6(SaveEnvelopeV6 envelope, ShipDefinitionCatalog catalog)
     {
-        ValidateCandidateV5(envelope, catalog);
-        SimulationSnapshotV5 snapshot = envelope.Simulation;
+        ValidateCandidateV6(envelope, catalog);
+        SimulationSnapshotV6 snapshot = envelope.Simulation;
         var time = new SimulationTime(snapshot.TimeMilliseconds);
         StrategicMap map = RestoreMapV2(snapshot.StrategicMap);
-        ShipState[] ships = [.. snapshot.Ships.Select(RestoreShipV5)];
+        ShipState[] ships = [.. snapshot.Ships.Select(RestoreShipV6)];
         SimulationScheduler scheduler = RestoreSchedulerV2(snapshot.Scheduler, CurrentSchemaVersion);
         var state = new SimulationState(
             time,
@@ -1207,12 +1334,12 @@ public static class GamePersistence
 
     private static void ValidateCandidateV5(SaveEnvelopeV5 envelope, ShipDefinitionCatalog catalog)
     {
-        if (envelope.SchemaVersion != CurrentSchemaVersion)
+        if (envelope.SchemaVersion != V5SchemaVersion)
         {
             throw new InvalidOperationException("The V5 mapper received a different schema version.");
         }
 
-        if (!string.Equals(envelope.SimulationRulesVersion, CurrentSimulationRulesVersion, StringComparison.Ordinal))
+        if (!string.Equals(envelope.SimulationRulesVersion, V5SimulationRulesVersion, StringComparison.Ordinal))
         {
             throw new InvalidOperationException(
                 $"Simulation rules version '{envelope.SimulationRulesVersion}' is unsupported."
@@ -1233,7 +1360,57 @@ public static class GamePersistence
             )
         );
 
-        SimulationSnapshotV5 snapshot = envelope.Simulation;
+        ValidateSimulationCandidateV5(envelope.Simulation, catalog, V5SchemaVersion);
+    }
+
+    private static void ValidateCandidateV6(SaveEnvelopeV6 envelope, ShipDefinitionCatalog catalog)
+    {
+        if (envelope.SchemaVersion != CurrentSchemaVersion)
+        {
+            throw new InvalidOperationException("The V6 mapper received a different schema version.");
+        }
+
+        if (!string.Equals(envelope.SimulationRulesVersion, CurrentSimulationRulesVersion, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Simulation rules version '{envelope.SimulationRulesVersion}' is unsupported."
+            );
+        }
+
+        if (envelope.Metadata is null || envelope.Simulation is null)
+        {
+            throw new InvalidOperationException("Required V6 envelope members cannot be null.");
+        }
+
+        ValidateMetadata(
+            new GameSaveMetadata(
+                envelope.Metadata.SaveId,
+                envelope.Metadata.DisplayName,
+                envelope.Metadata.CreatedAtUtc,
+                envelope.Metadata.SavedAtUtc
+            )
+        );
+
+        SimulationSnapshotV6 snapshot = envelope.Simulation;
+        if (snapshot.Ships is null || snapshot.Scheduler is null || snapshot.StrategicMap is null)
+        {
+            throw new InvalidOperationException("Required V6 simulation members cannot be null.");
+        }
+
+        // V6 changes exactly one leaf member, so the whole V5 candidate contract is reused against a
+        // downgraded view rather than restated. Ordering is load-bearing: the shared pass establishes
+        // that ships, contacts, and the strategic map are structurally present and well formed, which
+        // the observed-location pass below then relies on instead of repeating.
+        ValidateSimulationCandidateV5(ToBaseSnapshotV5(snapshot), catalog, CurrentSchemaVersion);
+        ValidateObservedLocationCandidatesV6(snapshot);
+    }
+
+    private static void ValidateSimulationCandidateV5(
+        SimulationSnapshotV5 snapshot,
+        ShipDefinitionCatalog catalog,
+        int sourceSchemaVersion
+    )
+    {
         if (snapshot.Ships is null || snapshot.Scheduler is null || snapshot.StrategicMap is null)
         {
             throw new InvalidOperationException("Required V5 simulation members cannot be null.");
@@ -1245,7 +1422,7 @@ public static class GamePersistence
         ValidateSensorCandidatesV4(ToSensorSnapshotV4(snapshot));
 
         HashSet<long> shipIds = [.. snapshot.Ships.Select(ship => ship.InstanceId)];
-        ValidateSchedulerCandidateV2(snapshot.Scheduler, snapshot.TimeMilliseconds, shipIds, CurrentSchemaVersion);
+        ValidateSchedulerCandidateV2(snapshot.Scheduler, snapshot.TimeMilliseconds, shipIds, sourceSchemaVersion);
         foreach (ShipSnapshotV5 ship in snapshot.Ships)
         {
             ValidateEngineeringCandidateV5(
@@ -1256,6 +1433,100 @@ public static class GamePersistence
             );
         }
     }
+
+    /// <remarks>
+    /// Runs after the shared V5 candidate pass, which has already rejected null ships, null sensor
+    /// knowledge, and a malformed strategic map, so this pass only has to decide the new member. A
+    /// present frame is bounded and resolved here rather than left to the aggregate, so an unknown
+    /// location identity fails as untrusted input before any live state is replaced.
+    /// </remarks>
+    private static void ValidateObservedLocationCandidatesV6(SimulationSnapshotV6 snapshot)
+    {
+        HashSet<string> locationIds = [.. snapshot.StrategicMap.Locations.Select(location => location.Id)];
+        foreach (ShipSnapshotV6 ship in snapshot.Ships)
+        {
+            foreach (SaveModelsV6.SensorContactSnapshotV6 contact in ship.SensorKnowledge.Contacts)
+            {
+                if (contact.ObservedAtLocationId is null)
+                {
+                    continue;
+                }
+
+                ValidateText(
+                    contact.ObservedAtLocationId,
+                    "Observed contact location identity",
+                    LocationId.MaximumLength
+                );
+                if (!locationIds.Contains(contact.ObservedAtLocationId))
+                {
+                    throw new InvalidOperationException(
+                        "Every observed contact location must exist in the strategic map."
+                    );
+                }
+            }
+        }
+    }
+
+    /// <remarks>
+    /// Drops the V6 observed-location frame to reuse the V5 candidate contract. Every collection is
+    /// copied defensively because this runs before validation: a null ship or null contact array in an
+    /// untrusted document must reach the V5 checks that report it, not raise a null dereference here
+    /// that escapes the load path's typed failure translation.
+    /// </remarks>
+    private static SimulationSnapshotV5 ToBaseSnapshotV5(SimulationSnapshotV6 snapshot) =>
+        new()
+        {
+            TimeMilliseconds = snapshot.TimeMilliseconds,
+            ShipAllocatorNextId = snapshot.ShipAllocatorNextId,
+            OrderAllocatorNextId = snapshot.OrderAllocatorNextId,
+            PlayerShipId = snapshot.PlayerShipId,
+            Scheduler = snapshot.Scheduler,
+            StrategicMap = snapshot.StrategicMap,
+            Ships = [.. snapshot.Ships.Select(ship => ship is null ? null! : ToBaseShipV5(ship))],
+        };
+
+    private static ShipSnapshotV5 ToBaseShipV5(ShipSnapshotV6 ship) =>
+        new()
+        {
+            InstanceId = ship.InstanceId,
+            DefinitionId = ship.DefinitionId,
+            DisplayName = ship.DisplayName,
+            TacticalPosition = ship.TacticalPosition,
+            TacticalMotion = ship.TacticalMotion,
+            Engineering = ship.Engineering,
+            StrategicState = ship.StrategicState,
+            ActiveOrder = ship.ActiveOrder,
+            SensorKnowledge = ship.SensorKnowledge is null
+                ? null!
+                : new SaveModelsV4.SensorKnowledgeSnapshotV4
+                {
+                    NextContactId = ship.SensorKnowledge.NextContactId,
+                    Contacts = ship.SensorKnowledge.Contacts is null
+                        ? null!
+                        :
+                        [
+                            .. ship.SensorKnowledge.Contacts.Select(contact =>
+                                contact is null
+                                    ? null!
+                                    : new SaveModelsV4.SensorContactSnapshotV4
+                                    {
+                                        Id = contact.Id,
+                                        TargetShipId = contact.TargetShipId,
+                                        LastObservedPosition = contact.LastObservedPosition,
+                                        LastObservedAtMilliseconds = contact.LastObservedAtMilliseconds,
+                                        Status = contact.Status,
+                                        Identification = contact.Identification,
+                                        KnownVesselDisplayName = contact.KnownVesselDisplayName,
+                                        KnownDesignDisplayName = contact.KnownDesignDisplayName,
+                                        LossWorkId = contact.LossWorkId,
+                                        LossDueTimeMilliseconds = contact.LossDueTimeMilliseconds,
+                                    }
+                            ),
+                        ],
+                    ActiveScan = ship.SensorKnowledge.ActiveScan,
+                },
+            AutonomousState = ship.AutonomousState,
+        };
 
     private static SimulationSnapshotV3 ToBaseSnapshotV3(SimulationSnapshotV5 snapshot) =>
         new()
@@ -2113,7 +2384,7 @@ public static class GamePersistence
             ))
         );
 
-    private static ShipState RestoreShipV5(ShipSnapshotV5 snapshot) =>
+    private static ShipState RestoreShipV6(ShipSnapshotV6 snapshot) =>
         new(
             new ShipInstanceId(snapshot.InstanceId),
             new ShipDefinitionId(snapshot.DefinitionId),
@@ -2135,11 +2406,11 @@ public static class GamePersistence
             ),
             RestoreStrategicStateV2(snapshot.StrategicState),
             RestoreOrderV3(snapshot.ActiveOrder),
-            RestoreSensorKnowledgeV4(snapshot.SensorKnowledge),
+            RestoreSensorKnowledgeV6(snapshot.SensorKnowledge),
             RestoreAutonomousStateV4(snapshot.AutonomousState)
         );
 
-    private static SensorKnowledge RestoreSensorKnowledgeV4(SaveModelsV4.SensorKnowledgeSnapshotV4 snapshot) =>
+    private static SensorKnowledge RestoreSensorKnowledgeV6(SaveModelsV6.SensorKnowledgeSnapshotV6 snapshot) =>
         new(
             snapshot.NextContactId,
             snapshot.Contacts.Select(contact => new SensorContactTrack(
@@ -2150,6 +2421,14 @@ public static class GamePersistence
                     contact.LastObservedPosition.YKilometers
                 ),
                 new SimulationTime(contact.LastObservedAtMilliseconds),
+                // A null frame is restored as a null frame: the document records an observation that
+                // predates the schema recording locations, and no location may be synthesized for it.
+                // Candidate validation has already bounded and resolved every non-null identity, so
+                // the aggregate's own observed-location rules are the only remaining check.
+                contact.ObservedAtLocationId
+                    is null
+                    ? null
+                    : new LocationId(contact.ObservedAtLocationId),
                 ParseContactStatus(contact.Status),
                 ParseContactIdentification(contact.Identification),
                 contact.KnownVesselDisplayName,
@@ -2236,8 +2515,10 @@ public static class GamePersistence
                 sourceSchemaVersion <= V4SchemaVersion
                 && string.Equals(kind, SystemRepairCompletionKind, StringComparison.Ordinal)
             )
+            // The sensor-specific repair kind was replaced by the general system kind in V5, so every
+            // schema from V5 onward rejects the legacy token rather than silently accepting both.
             || (
-                sourceSchemaVersion == CurrentSchemaVersion
+                sourceSchemaVersion >= V5SchemaVersion
                 && string.Equals(kind, SensorRepairCompletionKind, StringComparison.Ordinal)
             )
         )
@@ -2273,7 +2554,7 @@ public static class GamePersistence
                     or ScheduledWorkKind.SensorContactLoss
                     or ScheduledWorkKind.ActiveSensorScanCompletion
                     or ScheduledWorkKind.ShipContactDecisionWake,
-            CurrentSchemaVersion => parsed
+            V5SchemaVersion or CurrentSchemaVersion => parsed
                 is ScheduledWorkKind.TravelArrival
                     or ScheduledWorkKind.SystemRepairCompletion
                     or ScheduledWorkKind.OrderWake

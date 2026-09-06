@@ -12,6 +12,10 @@ namespace AlterCourse.Godot.Gameplay;
 /// <summary>Maps a fresh player-known Core projection into immutable command-interface display data.</summary>
 public static class CommandInterfacePresenter
 {
+    // Bounds the retained-report section so an unbounded knowledge history can never grow the inspector
+    // panel past the 1600x900 practical minimum the layout tests pin; the surplus is summarised in one row.
+    private const int MaxKnownContactReportRows = 8;
+
     /// <summary>Represents one player-visible activity retained by the command-interface log.</summary>
     public abstract record ActivityEvent(long SimulationTimeMilliseconds);
 
@@ -133,44 +137,19 @@ public static class CommandInterfacePresenter
         StrategicLocationProjection? selectedLocation
     )
     {
-        ImmutableArray<CommandInterfaceField> destinationFields = selectedLocation is null
-            ? [Unavailable("DESTINATION")]
-            :
-            [
-                Available("DESTINATION", selectedLocation.DisplayName, CommandInterfaceTone.Navigation),
-                Available("LOCATION ID", selectedLocation.Id.Value),
-                Unavailable("CLASS"),
-                Unavailable("POPULATION"),
-            ];
-        ImmutableArray<CommandInterfaceField> strategicFields = projection.Strategic.Travel is TravelProjection travel
-            ?
-            [
-                Available("STATE", "UNDERWAY", CommandInterfaceTone.Navigation),
-                Available("ORIGIN", FindLocationName(projection.Strategic, travel.Origin)),
-                Available("DESTINATION", FindLocationName(projection.Strategic, travel.Destination)),
-                Available("DEPARTURE", FormatSeconds(travel.Departure.Milliseconds)),
-                Available("ARRIVAL", FormatSeconds(travel.ExpectedArrival.Milliseconds)),
-                Available("ACTIVE", travel.IsActive ? "YES" : "NO"),
-            ]
-            :
-            [
-                Available("STATE", "AT LOCATION", CommandInterfaceTone.Nominal),
-                Available("LOCATION", projection.Strategic.CurrentLocation?.DisplayName ?? "UNKNOWN"),
-                Unavailable("ARRIVAL"),
-            ];
         return
         [
             new CommandInterfaceTelemetrySection(
                 "destination",
                 "DESTINATION",
                 CommandInterfaceTone.Navigation,
-                destinationFields
+                BuildDestinationFields(selectedLocation)
             ),
             new CommandInterfaceTelemetrySection(
                 "strategic",
                 "ROUTE",
                 CommandInterfaceTone.Navigation,
-                strategicFields
+                BuildRouteFields(projection.Strategic)
             ),
             new CommandInterfaceTelemetrySection(
                 "tactical",
@@ -189,8 +168,126 @@ public static class CommandInterfacePresenter
                 CommandInterfaceTone.Critical,
                 [Unavailable("CONTACTS"), Unavailable("FIRE SOLUTION"), Unavailable("SHIELDS"), Unavailable("WEAPONS")]
             ),
+            new CommandInterfaceTelemetrySection(
+                "last-known-contacts",
+                "LAST KNOWN CONTACTS",
+                CommandInterfaceTone.Muted,
+                BuildKnownContactReportFields(projection.Strategic)
+            ),
         ];
     }
+
+    private static ImmutableArray<CommandInterfaceField> BuildDestinationFields(
+        StrategicLocationProjection? selectedLocation
+    ) =>
+        selectedLocation is null
+            ? [Unavailable("DESTINATION")]
+            :
+            [
+                Available("DESTINATION", selectedLocation.DisplayName, CommandInterfaceTone.Navigation),
+                Available("LOCATION ID", selectedLocation.Id.Value),
+                Unavailable("CLASS"),
+                Unavailable("POPULATION"),
+            ];
+
+    private static ImmutableArray<CommandInterfaceField> BuildRouteFields(StrategicProjection strategic) =>
+        strategic.Travel is TravelProjection travel
+            ?
+            [
+                Available("STATE", "UNDERWAY", CommandInterfaceTone.Navigation),
+                Available("ORIGIN", FindLocationName(strategic, travel.Origin)),
+                Available("DESTINATION", FindLocationName(strategic, travel.Destination)),
+                Available("DEPARTURE", FormatSeconds(travel.Departure.Milliseconds)),
+                Available("ARRIVAL", FormatSeconds(travel.ExpectedArrival.Milliseconds)),
+                Available("ACTIVE", travel.IsActive ? "YES" : "NO"),
+            ]
+            :
+            [
+                Available("STATE", "AT LOCATION", CommandInterfaceTone.Nominal),
+                Available("LOCATION", strategic.CurrentLocation?.DisplayName ?? "UNKNOWN"),
+                Unavailable("ARRIVAL"),
+            ];
+
+    /// <summary>Builds the retained last-observed contact rows shown beside, and never as, live tactical truth.</summary>
+    /// <remarks>
+    /// Sourced only from <see cref="StrategicProjection.KnownContactReports"/>, so nothing here can drift toward
+    /// hidden world truth: a report keeps its recorded location, time, and position after the contact goes Lost or
+    /// the ship travels away. Lost reports are deliberately retained even though the tactical surface drops them —
+    /// that divergence is the player-visible proof of the durable knowledge boundary. Every row states "Last seen"
+    /// and carries the observation time so it can never be read as a current position.
+    /// </remarks>
+    private static ImmutableArray<CommandInterfaceField> BuildKnownContactReportFields(StrategicProjection strategic)
+    {
+        if (strategic.KnownContactReports.Count == 0)
+        {
+            return [Available("REPORTS", "No retained contact reports", CommandInterfaceTone.Muted)];
+        }
+
+        ImmutableArray<CommandInterfaceField>.Builder fields = ImmutableArray.CreateBuilder<CommandInterfaceField>();
+        foreach (
+            StrategicContactReportProjection report in strategic.KnownContactReports.Take(MaxKnownContactReportRows)
+        )
+        {
+            fields.Add(
+                new CommandInterfaceField(
+                    FormatReportLabel(report),
+                    FormatReportValue(strategic, report),
+                    CommandInterfaceAvailability.Available,
+                    ReportTone(report.Status)
+                )
+            );
+        }
+
+        int hidden = strategic.KnownContactReports.Count - fields.Count;
+        if (hidden > 0)
+        {
+            fields.Add(
+                Available(
+                    "MORE",
+                    string.Create(CultureInfo.InvariantCulture, $"{hidden} further retained report(s)"),
+                    CommandInterfaceTone.Muted
+                )
+            );
+        }
+
+        return fields.ToImmutable();
+    }
+
+    private static string FormatReportLabel(StrategicContactReportProjection report) =>
+        report.Identification == SensorContactIdentification.Identified
+        && report.KnownVesselDisplayName is { Length: > 0 } vessel
+            ? vessel
+            // Matches the tactical contact naming exactly, so an unidentified report and its tactical marker
+            // read as the same contact rather than two separate sightings.
+            : string.Create(CultureInfo.InvariantCulture, $"Contact {report.ContactId.Value}");
+
+    private static string FormatReportValue(StrategicProjection strategic, StrategicContactReportProjection report)
+    {
+        string value = string.Create(
+            CultureInfo.InvariantCulture,
+            $"Last seen at {FindReportLocationName(strategic, report.ObservedAtLocationId)} · t={FormatSeconds(report.LastObservedAt.Milliseconds)} · {FormatReportStatus(report.Status)}"
+        );
+        if (
+            report.Identification == SensorContactIdentification.Identified
+            && report.KnownDesignDisplayName is { Length: > 0 } design
+        )
+        {
+            value += $" · {design}";
+        }
+
+        return value
+            + $" · {FormatKilometers(report.LastObservedPosition.XKilometers)} / {FormatKilometers(report.LastObservedPosition.YKilometers)}";
+    }
+
+    private static string FormatReportStatus(SensorContactStatus status) => status.ToString().ToUpperInvariant();
+
+    private static CommandInterfaceTone ReportTone(SensorContactStatus status) =>
+        status switch
+        {
+            SensorContactStatus.Current => CommandInterfaceTone.Nominal,
+            SensorContactStatus.Stale => CommandInterfaceTone.Caution,
+            _ => CommandInterfaceTone.Muted,
+        };
 
     private static ImmutableArray<CommandInterfaceAction> BuildActions(
         PlayerProjection projection,
@@ -801,6 +898,12 @@ public static class CommandInterfacePresenter
 
     private static string FindLocationName(StrategicProjection strategic, LocationId id) =>
         strategic.Locations.Single(location => location.Id == id).DisplayName;
+
+    // Unlike FindLocationName, this never throws: a retained report can name a location the current
+    // strategic projection no longer lists, and losing the whole command deck to one unresolvable
+    // historical id would be a far worse failure than showing the raw id.
+    private static string FindReportLocationName(StrategicProjection strategic, LocationId id) =>
+        strategic.Locations.FirstOrDefault(location => location.Id == id)?.DisplayName ?? id.Value;
 
     private static string FormatClock(long milliseconds) =>
         TimeSpan.FromMilliseconds(milliseconds).ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture);

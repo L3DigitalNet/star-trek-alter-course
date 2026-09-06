@@ -78,6 +78,19 @@ public static class CommandInterfacePreviewFixtures
                 Field("CROSSINGS", "No restricted space crossings"),
                 Field("FUEL RESERVE", "82%")
             ),
+            // Invented flavour rows, deliberately naming a vessel no Core content defines: a live
+            // presentation can never produce this text, which is what the live/preview isolation test
+            // asserts on. Never source preview rows from a real projection.
+            Section(
+                "last-known-contacts",
+                "LAST KNOWN CONTACTS",
+                CommandInterfaceTone.Muted,
+                Field(
+                    "IKS Rotarran",
+                    "Last seen at BETAZED · t=14:22:10 · LOST · B'rel-class scout · 118.0 km / -42.0 km",
+                    CommandInterfaceTone.Muted
+                )
+            ),
         ];
 
     private static ImmutableArray<CommandInterfaceAction> TravelActions() =>
