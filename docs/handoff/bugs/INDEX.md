@@ -8,3 +8,4 @@
 | [004](004-unimported-godot-source-assets.md) | Direct game launch skipped imports required by new presentation assets. | Fixed |
 | [005](005-command-context-actions-recreated.md) | Live projection refreshes replaced active Command Deck action controls. | Fixed |
 | [006](006-paused-shell-ignores-manual-input.md) | A paused simulation does not re-present manual proof input until the next tick. | Fixed |
+| [007](007-hosted-gdunit-teardown-segfault.md) | Hosted gdUnit process segfaulted at teardown after all suites passed. | Open |
