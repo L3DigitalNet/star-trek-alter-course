@@ -61,7 +61,7 @@ M9 then integrates navigation, observations, engineering, autonomy, combat or av
 
 ## Missions and narrative
 
-Missions/events should reflect the persistent world rather than freeze it into a sequence waiting for the player. Patrol, escort, aid, diplomacy, and investigation are design examples, not a implemented mission catalog.
+Missions/events should reflect the persistent world rather than freeze it into a sequence waiting for the player. Patrol, escort, aid, diplomacy, and investigation are design examples, not an implemented mission catalog.
 
 ADR 0012 permits a future narrative runtime only when genuine branching authoring needs justify it. Ink is the first prototype candidate, with a separate pure-.NET Narrative boundary if admitted. Narrative receives allowed context and requests finite typed Core consequences; it never owns faction relationships, resources, time, or game-rule outcomes. Linear reports and the present hail seam do not require it.
 

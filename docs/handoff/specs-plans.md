@@ -1,5 +1,11 @@
 # Specifications and Plans
 
+## Design entry points
+
+- [Project design wiki](../wiki/README.md) organizes implemented systems, approved plans, and source references.
+- [Political model](../wiki/factions-and-organizations.md) records approved conceptual decisions; no political runtime is implemented.
+- [Open questions](../wiki/open-questions.md) retains unapproved proposals and deferred refinements; it does not admit gameplay work.
+
 ## Tracked artifacts
 
 | Artifact | Status | Purpose |
@@ -14,7 +20,7 @@
 | Bug #51 | Merged / Done | Live Command Deck action stability repair merged through Final PR #52 as `c5602cc` into `dev`. |
 | Task #53 | Merged / Done | Source-only v0.3.0 release Final PR #54 merged as `fae21bd` into `main`; supporting PR #55 restored release ancestry to `dev`. |
 | Task #56 | Merged / Done | Project-scoped Figma tooling merged through Final PR #57 as `24cf7b0` into `dev`; it did not change gameplay. |
-| Feature #58 | Merged / Done | Milestone 3A merged to `dev` through Final PR #61 as squash `a104e3f`; unreleased. |
+| Feature #58 | Merged / Done | Milestone 3A merged to `dev` through Final PR #61 as squash `a104e3f`; released in v0.4.0. |
 | Task #59 | Merged / Done | Godot UID and import metadata merged through Final PR #60 as `ce454f5` into `dev`. |
-| Feature #62 | Merged / Done | Milestone 4 Engineering merged through Final PR #63 as `0f2278e` into `dev`; unreleased. |
+| Feature #62 | Merged / Done | Milestone 4 Engineering merged through Final PR #63 as `0f2278e` into `dev`; released in v0.4.0. |
 | Task #64 | Merged / Done | v0.4.0 Final PR #66 released as `b3b6635`; sync PR #67 put the release ancestry on `dev` at `2edd194`. |
