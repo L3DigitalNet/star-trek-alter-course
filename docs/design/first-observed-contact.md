@@ -6,7 +6,7 @@ description: 'Defines the implemented actor-specific sensor knowledge boundary f
 doc_type: 'concept'
 status: 'active'
 created: '2026-09-03'
-updated: '2026-09-03'
+updated: '2026-09-06'
 tags:
   - 'architecture'
   - 'sensors'
@@ -18,9 +18,15 @@ related:
   - 'docs/adr/0006-use-versioned-json-snapshot-saves.md'
   - 'docs/adr/0007-use-deterministic-simulation-time-scheduling-and-randomness.md'
   - 'docs/adr/0010-use-explainable-domain-ai-and-demand-driven-state-machines.md'
+  - 'docs/design/engineering-backbone.md'
+  - 'docs/wiki/sensors-knowledge-and-ai.md'
 ---
 
 # First Observed Contact
+
+## Scope and subsequent Engineering changes
+
+This document records the M3A implementation boundary and its original V3 content/V4 save contract. M3A is included in v0.4.0, but the current implementation also includes [Milestone 4 Engineering](engineering-backbone.md): effective sensor capability now combines condition and allocated power, repair is system-targeted, content is V4, and saves are V5. Engineering is live rather than preview-only for its implemented systems. References below to integrity-only range, V3/V4, and deferred sensor power describe M3A history, not the complete current runtime. The [wiki knowledge page](../wiki/sensors-knowledge-and-ai.md) consolidates the present boundary.
 
 Milestone 3A establishes the first durable, noncombat boundary between world truth and what a ship knows. It is deliberately a small vertical slice: a damaged player ship and a full-integrity cautious vessel can have different knowledge of the same local encounter, scan and hail through Core commands, and retain their consequential state through save/load.
 
