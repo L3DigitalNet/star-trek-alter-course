@@ -15,6 +15,7 @@ related:
   - 'docs/STATUS.md'
   - 'README.md'
   - 'ROADMAP.md'
+  - 'docs/wiki/strategic-contact-reporting.md'
 ---
 
 # Implementation status
@@ -35,13 +36,13 @@ Local tactical space has continuous 2D positions and course/speed commands. Obse
 
 Engineering owns generation condition, constrained allocation, sensor and impulse condition, derived capability, and one sensor or impulse repair per ship. Those values affect actual detection and tactical course limits. The live Engineering UI is not merely a preview.
 
-The shell supports map/workspace switching, explicit pause and rates, player-relevant event advancement, and a quick-save/load slot. Save V5 retains the world and exact scheduler correlations; adjacent migration supports V1 through V5. Ship-definition content V4 is current.
+The shell supports map/workspace switching, explicit pause and rates, player-relevant event advancement, and a quick-save/load slot. Save V6 retains the world and exact scheduler correlations, plus the actor-safe `KnownContactReports` projection state under simulation rules identity `strategic-contact-reporting-v1`; adjacent migration supports V1 through V6. Ship-definition content V4 is current.
 
 Implementation evidence: [FirstGameSetup](../../src/AlterCourse.Core/Gameplay/FirstGameSetup.cs), [ShipState](../../src/AlterCourse.Core/Ships/ShipState.cs), [SimulationState](../../src/AlterCourse.Core/Gameplay/SimulationState.cs), [GameSimulation](../../src/AlterCourse.Core/Gameplay/GameSimulation.cs), [Core gameplay tests](../../tests/AlterCourse.Core.Tests/Gameplay/), and the [Engineering design](../design/engineering-backbone.md).
 
 ## Milestones and release boundaries
 
-Milestone 1 world/bootstrap and Milestone 2 active-world orders are implemented. Milestone 3A first observed contact is implemented, but the roadmap explicitly does not declare all of Milestone 3 complete. Milestone 4 Engineering Backbone is implemented. M3A and M4 are included in v0.4.0.
+Milestone 1 world/bootstrap and Milestone 2 active-world orders are implemented. Milestone 3A first observed contact and [Strategic Contact Reporting](strategic-contact-reporting.md) are implemented, but the roadmap explicitly does not declare all of Milestone 3 complete. Milestone 4 Engineering Backbone is implemented. M3A and M4 are included in v0.4.0; Strategic Contact Reporting follows in Feature #77 / Final PR #78 and is pending merge to `dev`.
 
 Milestones 5 through 9 remain future slices: living sector/faction autonomy, tactical combat, diplomacy/incidents, canon-anchored bootstrap, and regional campaign integration. The proposed M3B knowledge/faction-identity prerequisite is a discussion proposal, not an admitted milestone or implementation plan.
 
@@ -49,7 +50,7 @@ Milestones 5 through 9 remain future slices: living sector/faction autonomy, tac
 
 Combat mockups do not establish authoritative shields, weapons, fire-control solutions, or damage resolution. Detailed EPS networks, batteries, warp Engineering, life support, transporters, repair teams/queues, crew systems, fuel, inventory, and economy are absent. The actual repair model has one active repair, not the multi-team queue illustrated by earlier UI references.
 
-Strategic sensor contacts, affiliation/intent knowledge, faction runtime state, organizations, governments, political hierarchies, treaties, espionage, and layered jurisdiction are not implemented. The [approved political model](factions-and-organizations.md) describes intended future behavior only.
+Strategic long-range sensor simulation, affiliation/intent knowledge, faction runtime state, organizations, governments, political hierarchies, treaties, espionage, and layered jurisdiction are not implemented; durable last-known strategic contact reporting is (see [Strategic Contact Reporting](strategic-contact-reporting.md)). The [approved political model](factions-and-organizations.md) describes intended future behavior only.
 
 No new `FactionId`, `KnownShipId`, organization controller, faction-owned scheduler target, narrative runtime, database, ECS, or public mod API is created by this wiki. Current scheduled work remains ship-targeted.
 

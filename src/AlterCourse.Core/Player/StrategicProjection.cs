@@ -7,8 +7,16 @@ public sealed record StrategicProjection
         IReadOnlyList<StrategicLocationProjection> locations,
         IReadOnlyList<StrategicRouteProjection> routes,
         StrategicLocationProjection? currentLocation,
-        TravelProjection? travel
-    ) => (Locations, Routes, CurrentLocation, Travel) = (locations, routes, currentLocation, travel);
+        TravelProjection? travel,
+        IReadOnlyList<StrategicContactReportProjection> knownContactReports
+    ) =>
+        (Locations, Routes, CurrentLocation, Travel, KnownContactReports) = (
+            locations,
+            routes,
+            currentLocation,
+            travel,
+            knownContactReports
+        );
 
     /// <summary>Gets a fresh read-only location collection.</summary>
     public IReadOnlyList<StrategicLocationProjection> Locations { get; }
@@ -21,4 +29,11 @@ public sealed record StrategicProjection
 
     /// <summary>Gets active travel, or null while at a location.</summary>
     public TravelProjection? Travel { get; }
+
+    /// <summary>Gets retained contact reports, each qualified by the location it was observed in.</summary>
+    /// <remarks>
+    /// Unlike the tactical contact surface, this collection retains lost contacts: a report is a
+    /// record of a past observation, not a claim about the present.
+    /// </remarks>
+    public IReadOnlyList<StrategicContactReportProjection> KnownContactReports { get; }
 }

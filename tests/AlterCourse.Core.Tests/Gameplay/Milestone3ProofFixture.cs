@@ -48,6 +48,27 @@ internal sealed class Milestone3ProofFixture
         return simulation;
     }
 
+    /// <summary>
+    /// Creates the proof world with one declared Kestrel order and nothing else changed.
+    /// </summary>
+    /// <remarks>
+    /// Shares <see cref="CreateStarts"/> with <see cref="CreateWithBootstrapOrder"/> so a caller comparing two
+    /// worlds that differ only in Kestrel's hidden order cannot accidentally vary anything else about the world.
+    /// </remarks>
+    internal GameSimulation CreateWithKestrelOrder(ShipOrderStart? kestrelOrder)
+    {
+        ShipStart[] starts = CreateStarts();
+        starts[3] = starts[3] with { ActiveOrder = kestrelOrder };
+        GameSimulation simulation = new GameBootstrap(
+            new SimulationTime(0),
+            CreateMap(),
+            starts[0].InstanceId,
+            starts
+        ).CreateSimulation(Catalog);
+        simulation.BootstrapHiddenCautiousContactObservation(starts[3].InstanceId);
+        return simulation;
+    }
+
     internal GameSimulation RoundTrip(GameSimulation simulation, string sourceName) =>
         GamePersistence.Deserialize(GamePersistence.Serialize(simulation, Metadata), Catalog, sourceName).Simulation;
 

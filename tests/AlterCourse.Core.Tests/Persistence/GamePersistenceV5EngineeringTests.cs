@@ -20,8 +20,8 @@ public sealed class GamePersistenceV5EngineeringTests
         JsonObject ship = simulation["ships"]![0]!.AsObject();
         JsonObject engineering = ship["engineering"]!.AsObject();
 
-        Assert.Equal(5, root["schemaVersion"]!.GetValue<int>());
-        Assert.Equal("engineering-backbone-v1", root["simulationRulesVersion"]!.GetValue<string>());
+        Assert.Equal(6, root["schemaVersion"]!.GetValue<int>());
+        Assert.Equal("strategic-contact-reporting-v1", root["simulationRulesVersion"]!.GetValue<string>());
         Assert.Equal(0.625, engineering["generationCondition"]!.GetValue<double>());
         Assert.Equal(0.4, engineering["sensorCondition"]!.GetValue<double>());
         Assert.Equal(1, engineering["impulseCondition"]!.GetValue<double>());

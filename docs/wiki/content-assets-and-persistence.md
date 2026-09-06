@@ -15,6 +15,7 @@ related:
   - 'docs/adr/0005-use-json-and-schema-validation-for-domain-content.md'
   - 'docs/adr/0006-use-versioned-json-snapshot-saves.md'
   - 'docs/specs/asset-pipeline-tool.md'
+  - 'docs/wiki/strategic-contact-reporting.md'
 ---
 
 # Content, assets, and persistence
@@ -39,11 +40,11 @@ Stable definition IDs are not display names or file paths. Content migration and
 
 ADR 0006 selects explicit versioned JSON snapshots, not serialization of live C# graphs, Godot scenes, an event store, or a database. Persist consequential state, stable references, ordering, and allocator continuation. Do not persist derived UI values, caches, logger objects, callbacks, or package-specific runtime identities.
 
-Current save V5 uses rules identity `engineering-backbone-v1` and includes every ship, player identity, strategic/tactical state, Engineering condition/allocation/repair, active orders, actor-local contacts, scans, contact posture, correlated scheduled work, and counters. The active save schema is not advanced by documenting future factions.
+Current save V6 uses rules identity `strategic-contact-reporting-v1` and includes every ship, player identity, strategic/tactical state, Engineering condition/allocation/repair, active orders, actor-local contacts, scans, contact posture, the observation-location frame on each contact, the `KnownContactReports` projection-backing state, correlated scheduled work, and counters. The active save schema is not advanced by documenting future factions.
 
-Supported adjacent migrations are V1→V2→V3→V4→V5. V1 reconstructs the representable single ship in a plural world; V3 adds orders without inventing historical intentions; V4 adds empty knowledge/no autonomous posture to older saves; V5 maps sensor integrity/repair into Engineering while preserving compatible historical capability and exact completion identity. The detailed migration contract remains in [Engineering Backbone](../design/engineering-backbone.md) and [GamePersistence](../../src/AlterCourse.Core/Persistence/GamePersistence.cs).
+Supported adjacent migrations are V1→V2→V3→V4→V5→V6. V1 reconstructs the representable single ship in a plural world; V3 adds orders without inventing historical intentions; V4 adds empty knowledge/no autonomous posture to older saves; V5 maps sensor integrity/repair into Engineering while preserving compatible historical capability and exact completion identity; V6 sets a null observation-location frame on every legacy contact and derives nothing, so a migrated contact stays on the tactical surface without appearing in strategic reports until a new qualifying observation is recorded. The detailed migration contract remains in [Engineering Backbone](../design/engineering-backbone.md), [Strategic Contact Reporting](strategic-contact-reporting.md), and [GamePersistence](../../src/AlterCourse.Core/Persistence/GamePersistence.cs).
 
-Loading validates an entire candidate before replacing the live simulation. The current bounded envelope is 128 MiB; M4 records a 95,677,740-byte maximum-shape serialization test, not a normal four-ship save size. These are present admission bounds, not a rationale to redesign storage without measurement.
+Loading validates an entire candidate before replacing the live simulation. The current bounded envelope is 128 MiB; V6 records a 106,775,347-byte maximum-shape serialization test (previously 95,677,740 bytes under V5), not a normal four-ship save size. These are present admission bounds, not a rationale to redesign storage without measurement.
 
 The shell uses `user://quick-save.json`. The legacy default `quick-save-v1.json` fallback is consulted only if the generic slot is absent; custom paths do not use it. Broader compatibility promises, autosave policies, and eventual distribution remain separate decisions. Pre-1.0 does not promise perpetual migration support.
 

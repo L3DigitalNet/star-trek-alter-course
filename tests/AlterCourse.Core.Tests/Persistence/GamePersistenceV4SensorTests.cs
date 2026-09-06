@@ -33,8 +33,8 @@ public sealed class GamePersistenceV4SensorTests
         JsonArray ships = root["simulation"]!["ships"]!.AsArray();
 
         Assert.Equal(first, second);
-        Assert.Equal(5, root["schemaVersion"]!.GetValue<int>());
-        Assert.Equal("engineering-backbone-v1", root["simulationRulesVersion"]!.GetValue<string>());
+        Assert.Equal(6, root["schemaVersion"]!.GetValue<int>());
+        Assert.Equal("strategic-contact-reporting-v1", root["simulationRulesVersion"]!.GetValue<string>());
         Assert.Equal(
             "identified",
             ships[0]!["sensorKnowledge"]!["contacts"]![0]!["identification"]!.GetValue<string>()
@@ -58,7 +58,7 @@ public sealed class GamePersistenceV4SensorTests
         JsonNode simulation = current["simulation"]!;
         JsonNode npc = simulation["ships"]![1]!;
 
-        Assert.Equal(5, current["schemaVersion"]!.GetValue<int>());
+        Assert.Equal(6, current["schemaVersion"]!.GetValue<int>());
         Assert.Equal("holdUntil", npc["activeOrder"]!["kind"]!.GetValue<string>());
         Assert.Equal("orderWake", simulation["scheduler"]!["outstandingWork"]![0]!["kind"]!.GetValue<string>());
         Assert.Equal(1, npc["sensorKnowledge"]!["nextContactId"]!.GetValue<long>());
@@ -81,9 +81,9 @@ public sealed class GamePersistenceV4SensorTests
         LoadedGameSave migrated = GamePersistence.Deserialize(fixture, Catalog(), "native-populated-v4.json");
         AssertPopulatedNativeV4Migration(migrated.Simulation);
 
-        byte[] migratedV5 = GamePersistence.Serialize(migrated.Simulation, migrated.Metadata);
-        AssertCurrentOrdering(migratedV5);
-        LoadedGameSave resumed = GamePersistence.Deserialize(migratedV5, Catalog(), "native-populated-v5.json");
+        byte[] migratedCurrent = GamePersistence.Serialize(migrated.Simulation, migrated.Metadata);
+        AssertCurrentOrdering(migratedCurrent);
+        LoadedGameSave resumed = GamePersistence.Deserialize(migratedCurrent, Catalog(), "native-populated-v6.json");
 
         AssertNativeV4Continuation(migrated, resumed);
     }
@@ -104,6 +104,9 @@ public sealed class GamePersistenceV4SensorTests
         Assert.Equal([1L, 2L, 3L], state.Ships.Select(ship => ship.InstanceId.Value));
         Assert.Equal(9, player.SensorKnowledge.NextContactId);
         Assert.Equal(new ShipInstanceId(2), learned.TargetShipId);
+        // The V4 shape records no location, so the chain to V6 must leave the frame unqualified
+        // rather than derive one from either ship's present strategic state.
+        Assert.Null(learned.ObservedAtLocationId);
         Assert.Equal(SensorContactIdentification.Identified, learned.Identification);
         Assert.Equal("NPC One", learned.KnownVesselDisplayName);
         Assert.Equal("Pathfinder", learned.KnownDesignDisplayName);
@@ -132,10 +135,10 @@ public sealed class GamePersistenceV4SensorTests
         );
     }
 
-    private static void AssertCurrentOrdering(byte[] migratedV5)
+    private static void AssertCurrentOrdering(byte[] migratedCurrent)
     {
-        JsonObject current = Parse(migratedV5);
-        Assert.Equal(5, current["schemaVersion"]!.GetValue<int>());
+        JsonObject current = Parse(migratedCurrent);
+        Assert.Equal(6, current["schemaVersion"]!.GetValue<int>());
         Assert.Equal(
             [1L, 2L, 3L],
             current["simulation"]!["ships"]!.AsArray().Select(ship => ship!["instanceId"]!.GetValue<long>())
@@ -245,7 +248,11 @@ public sealed class GamePersistenceV4SensorTests
         Assert.Equal(SimulationScheduler.MaximumOutstandingWork, conservativeMaximum);
     }
 
-    /// <summary>Confirms the maximum retained-contact graph has a bounded, stable V4 representation.</summary>
+    /// <summary>Confirms the maximum retained-contact graph has a bounded, stable V6 representation.</summary>
+    /// <remarks>
+    /// The fixture gives every contact a maximum-length observed location so the measured figure stays
+    /// the largest shape the V6 contract admits, not merely the largest V5 shape re-measured.
+    /// </remarks>
     [Fact]
     public void MaximumContactWorldRoundTripsWithinSaveEnvelope()
     {
@@ -253,9 +260,9 @@ public sealed class GamePersistenceV4SensorTests
         var metadata = new GameSaveMetadata(new string('\u0080', 128), new string('\u0080', 128), Timestamp, Timestamp);
 
         byte[] saved = GamePersistence.Serialize(simulation, metadata);
-        LoadedGameSave loaded = GamePersistence.Deserialize(saved, catalog, "maximum-contacts-v4.json");
+        LoadedGameSave loaded = GamePersistence.Deserialize(saved, catalog, "maximum-contacts-v6.json");
 
-        Assert.Equal(95_677_740, saved.Length);
+        Assert.Equal(106_775_347, saved.Length);
         Assert.InRange(saved.Length, 1, 128 * 1024 * 1024);
         Assert.Equal(256, loaded.Simulation.CaptureState().Ships.Length);
         Assert.All(
@@ -343,6 +350,7 @@ public sealed class GamePersistenceV4SensorTests
                 new ShipInstanceId(targetIndex + 1L),
                 new TacticalPosition(targetIndex, -targetIndex),
                 new SimulationTime(0),
+                locationId,
                 SensorContactStatus.Stale,
                 SensorContactIdentification.Identified,
                 maximumName,
@@ -467,6 +475,7 @@ public sealed class GamePersistenceV4SensorTests
             target,
             new TacticalPosition(id, -id),
             new SimulationTime(100),
+            null,
             SensorContactStatus.Current,
             identification,
             identification == SensorContactIdentification.Identified ? targetName : null,

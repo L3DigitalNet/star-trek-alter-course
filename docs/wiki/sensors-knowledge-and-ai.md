@@ -2,7 +2,7 @@
 schema_version: '1.1'
 id: 'concept-s51phf-sensors-knowledge-and-ai'
 title: 'Sensors Knowledge and AI'
-description: 'Implemented local contact rules, actor-safe decisions, and the approved Strategic Contact Reporting bridge.'
+description: 'Implemented local contact rules, actor-safe decisions, and Strategic Contact Reporting.'
 doc_type: 'concept'
 status: 'active'
 created: '2026-09-06'
@@ -35,7 +35,7 @@ The implemented knowledge model is ship-local and tactical. A passive observatio
 
 Detection creates a Current, Detected contact. Continued observation refreshes last observed position/time. Loss of detectability makes it Stale and schedules one exactly correlated loss consequence five seconds later. If it remains undetectable, it becomes Lost. Reacquisition preserves its local ID and learned identity while canceling the old loss work. Lost tracks remain bounded internal correlation memory but are absent from live tactical presentation.
 
-A last observation is not the target's current hidden position. The current implementation does not provide strategic reports, inferred trajectories, affiliation/intent assessment, confidence/error fields, or a faction-wide intelligence view.
+A last observation is not the target's current hidden position. The current implementation does not provide inferred trajectories, affiliation/intent assessment, confidence/error fields, or a faction-wide intelligence view.
 
 ## Scan and hail
 
@@ -51,15 +51,15 @@ An explanation is diagnostic/test data, not automatically player-visible or dura
 
 ADR 0010 generalizes the decision discipline, not a mandatory algorithm: actor snapshot, goals/constraints, candidates, rejection, evaluation, deterministic selection, typed command or no-action, and explanation. Faction strategic AI is still future work; no behavior-tree framework or external LLM is gameplay authority.
 
-## Approved next slice: Strategic Contact Reporting
+## Strategic Contact Reporting
 
-The owner approved [Strategic Contact Reporting](strategic-contact-reporting.md) as the next development slice after v0.4.0. It is **approved design, not implemented**.
+[Strategic Contact Reporting](strategic-contact-reporting.md) is implemented (Feature #77, Final PR #78).
 
-The slice extends the existing information boundary rather than replacing it. Its purpose is to carry a legitimate local observation into durable, reference-frame-qualified last-known strategic information. A retained report must continue to describe where and when the observer actually saw a contact even after the observer or target moves elsewhere, and later hidden target truth must not backfill the report.
+The slice extends the existing information boundary rather than replacing it. Its purpose is to carry a legitimate local observation into durable, reference-frame-qualified last-known strategic information. A retained report continues to describe where and when the observer actually saw a contact even after the observer or target moves elsewhere, and later hidden target truth does not backfill the report.
 
-The approved slice deliberately reuses observer-local `SensorContactId` as far as it remains sufficient. It does not approve `KnownShipId`, global vessel correlation, affiliation/intent learning, faction knowledge sharing, faction AI, faction scheduler targets, or a general intelligence network. Q-02 through Q-05 remain open for later consumers.
+The implementation reuses observer-local `SensorContactId` as far as it remains sufficient. It does not add `KnownShipId`, global vessel correlation, affiliation/intent learning, faction knowledge sharing, faction AI, faction scheduler targets, or a general intelligence network. Q-02 through Q-05 remain open for later consumers.
 
-A tactical position in the retained observation must be qualified by the strategic location/reference frame in which it was observed. The exact runtime type and persistence mapping remain implementation decisions constrained by the canonical Strategic Contact Reporting page and active ADRs.
+Each retained tactical position is qualified by the strategic location it was observed in: `SensorContactTrack` carries `ObservedAtLocationId`, and `StrategicProjection.KnownContactReports` exposes the resulting `StrategicContactReportProjection` list. See Strategic Contact Reporting's Implementation outcome for the full shape.
 
 ## Strategic knowledge still deferred beyond this slice
 

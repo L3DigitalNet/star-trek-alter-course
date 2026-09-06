@@ -14,9 +14,9 @@ The current operational state is tracked in [STATUS](docs/STATUS.md), while [Imp
 - **Milestone 1** and **Milestone 2** are implemented.
 - **Milestone 3A — First Observed Contact** is implemented, but **Milestone 3 as a whole is not complete**.
 - **Milestone 4 — Engineering Backbone and Degraded Operations** is implemented.
-- Content schema **V4** and save schema **V5** are current.
+- Content schema **V4** and save schema **V6** are current.
 - The approved [factions and organizations](docs/wiki/factions-and-organizations.md) political model is **design only**. No faction hierarchy, organization runtime, government model, treaty system, layered jurisdiction runtime, or strategic affiliation-knowledge system exists yet.
-- [Strategic Contact Reporting](docs/wiki/strategic-contact-reporting.md) is the **owner-approved next development slice**, resolving Q-01. It is not implemented by this planning decision, is not canonically named `M3B`, and does not itself begin M5.
+- [Strategic Contact Reporting](docs/wiki/strategic-contact-reporting.md) is **implemented** (Feature #77, Final PR #78), resolving Q-01. It is not canonically named `M3B`, does not complete Milestone 3, and does not itself begin M5.
 
 ## Execution model
 
@@ -71,7 +71,7 @@ Canon should establish the chosen campaign's required historical and political s
 | --- | --- | --- | --- |
 | 1 | **World State and Bootstrap Generalization** | **Implemented** | The world owns plural persistent ships and explicit player identity rather than treating the player ship as the world root. |
 | 2 | **Active World and Persistent Orders** | **Implemented** | Ships can own durable intent, progress offscreen, and retain that intent across save/load. |
-| 3 | **Sensor Knowledge and First Contact** | **Partial — M3A implemented; Strategic Contact Reporting next** | M3A proves observer-local knowledge and information-limited ship behavior; the next approved slice carries legitimate last-known contact information into strategic context without defining the final intelligence model. |
+| 3 | **Sensor Knowledge and First Contact** | **Partial — M3A and Strategic Contact Reporting implemented; M3 not complete** | M3A proves observer-local knowledge and information-limited ship behavior; Strategic Contact Reporting carries legitimate last-known contact information into strategic context without defining the final intelligence model. |
 | 4 | **Engineering Backbone and Degraded Operations** | **Implemented** | Power, condition, capability, and repair interact with existing sensing and maneuvering rather than living in a parallel subsystem. |
 | 5 | **Living Sector and Faction Autonomy** | **Future** | Faction intent can cause explainable autonomous assignments, offscreen activity, and durable world change using actor-appropriate information. |
 | 6 | **Tactical Combat Foundation** | **Future** | Combat composes motion, observation, Engineering, AI, persistence, and withdrawal instead of becoming a separate hit-point game. |
@@ -80,34 +80,6 @@ Canon should establish the chosen campaign's required historical and political s
 | 9 | **Persistent Regional Campaign Integration** | **Future** | The preceding systems form one durable regional gameplay loop that remains coherent over extended simulation time. |
 
 The order expresses current dependency and risk, not an immutable release schedule. A governed refinement may split or combine adjacent work when code and design evidence justify it.
-
----
-
-## Next approved development slice — Strategic Contact Reporting
-
-Q-01 is resolved. The owner approved [Strategic Contact Reporting](docs/wiki/strategic-contact-reporting.md) as the next bounded development slice after v0.4.0.
-
-The purpose is to bridge M3A's local observer knowledge to strategically meaningful last-known information before M5 introduces faction autonomy. The approved proof is deliberately narrow:
-
-> **local tactical observation → durable reference-frame-qualified last-known information → actor-safe strategic report/projection**
-
-The slice should reuse existing observer-local `SensorContactId` as far as it remains sufficient, qualify retained tactical observations with the strategic location/reference frame where they occurred, preserve legitimate last-known information after a contact becomes Stale/Lost or either ship moves, and prove that later hidden target truth does not backfill actor knowledge.
-
-The canonical wiki page owns the full behavior, persistence constraints, test themes, and player-visible proof. This roadmap records only sequence and major boundaries.
-
-The slice explicitly does **not** approve or introduce:
-
-- a canonical `M3B` label;
-- `KnownShipId` or global/cross-observer vessel identity;
-- affiliation or intent as scan results;
-- faction knowledge sharing or a report-distribution network;
-- faction runtime or faction strategic AI;
-- faction-owned scheduler targets;
-- strategic long-range sensor simulation;
-- combat; or
-- a generic actor/entity/rules framework.
-
-Q-02 through Q-05 remain open. If implementation discovery proves one of those deferred concepts is actually necessary to satisfy the approved Strategic Contact Reporting exit condition, return to governed design refinement rather than adding it silently.
 
 ---
 
@@ -141,15 +113,41 @@ This is a **partial Milestone 3 outcome**. Strategic contacts, affiliation/inten
 
 **Implemented by Feature #62 / Final PR #63; included in v0.4.0.**
 
-Core owns bounded generation, power allocation, concrete sensor/impulse condition, derived capability, and deterministic system repair. Those values affect real sensor reach, tactical speed, scan continuity, AI inputs, persistence, and the live Engineering workspace. Content V4 and save V5 are the current schemas.
+Core owns bounded generation, power allocation, concrete sensor/impulse condition, derived capability, and deterministic system repair. Those values affect real sensor reach, tactical speed, scan continuity, AI inputs, persistence, and the live Engineering workspace. Content V4 is current. Save V5 is the schema introduced by this milestone; save V6, added later by Strategic Contact Reporting, is current.
 
 The milestone intentionally stops short of a universal component system, arbitrary combat damage, detailed EPS topology, batteries, warp power, fuel, heat/coolant, repair teams/queues, shields, weapons, or crew simulation.
 
+### Strategic Contact Reporting
+
+**Implemented by Feature #77 / Final PR #78.**
+
+Q-01 is resolved. This bounded slice bridges M3A's local observer knowledge to strategically meaningful last-known information before M5 introduces faction autonomy, proving:
+
+> **local tactical observation → durable reference-frame-qualified last-known information → actor-safe strategic report/projection**
+
+It reuses existing observer-local `SensorContactId`, qualifies retained tactical observations with the strategic location/reference frame where they occurred via `SensorContactTrack.ObservedAtLocationId`, preserves legitimate last-known information after a contact becomes Stale/Lost or either ship moves, and proves that later hidden target truth does not backfill actor knowledge. Save schema advanced to V6 under rules identity `strategic-contact-reporting-v1`.
+
+The canonical wiki page owns the full behavior, persistence constraints, test themes, and player-visible proof. This roadmap records only sequence and major boundaries.
+
+The slice did **not** approve or introduce:
+
+- a canonical `M3B` label;
+- `KnownShipId` or global/cross-observer vessel identity;
+- affiliation or intent as scan results;
+- faction knowledge sharing or a report-distribution network;
+- faction runtime or faction strategic AI;
+- faction-owned scheduler targets;
+- strategic long-range sensor simulation;
+- combat; or
+- a generic actor/entity/rules framework.
+
+Q-02 through Q-05 remain open. It does not complete Milestone 3 and does not begin Milestone 5.
+
 ---
 
-## Milestone 3 completion remains open beyond the approved slice
+## Milestone 3 completion remains open beyond the implemented slice
 
-M3A proved the core local-contact architecture. Strategic Contact Reporting is now the approved next information slice, but it deliberately does **not** establish that its completion will automatically close Milestone 3.
+M3A proved the core local-contact architecture. Strategic Contact Reporting is now implemented as the next information slice, but its completion does **not** automatically close Milestone 3.
 
 The original Milestone 3 horizon also discussed affiliation/intent knowledge, strategic contacts, broader reporting, and identity questions. Strategic Contact Reporting resolves only the smallest behavior needed now: carrying legitimate local observations into actor-safe strategic last-known information.
 

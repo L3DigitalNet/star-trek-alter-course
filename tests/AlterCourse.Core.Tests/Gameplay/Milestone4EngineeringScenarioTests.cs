@@ -222,7 +222,7 @@ public sealed class Milestone4EngineeringScenarioTests
         JsonNode persistedPlayer = persistedSimulation["ships"]![0]!;
         JsonNode persistedKestrel = persistedSimulation["ships"]![3]!;
 
-        Assert.Equal(5, root["schemaVersion"]!.GetValue<int>());
+        Assert.Equal(6, root["schemaVersion"]!.GetValue<int>());
         Assert.Equal(4_500, persistedSimulation["timeMilliseconds"]!.GetValue<long>());
         Assert.Equal(70, persistedPlayer["engineering"]!["sensorAllocation"]!.GetValue<int>());
         Assert.Equal(5, persistedPlayer["engineering"]!["impulseAllocation"]!.GetValue<int>());

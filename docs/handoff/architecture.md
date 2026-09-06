@@ -12,8 +12,8 @@
 - Scheduled work, travel, and repairs target ships explicitly. Public player commands resolve `PlayerShipId`; arbitrary-ship control is not exposed.
 - Ship iteration is stable. Each advancement is capped at 1,000,000 moving-ship steps and 10,000 scheduled consequences.
 - Finite-long numeric exhaustion fails atomically; it is an explicit limitation rather than an indefinite-successor promise.
-- V5 persistence bounds world state, definition references, scheduler data, active orders, Engineering state, repairs, and the order allocator.
-- Loading resolves references through the supplied immutable catalog. The adjacent chain migrates V1 through V5 before candidate validation.
+- V6 persistence bounds world state, definitions, scheduler data, active orders, Engineering state, repairs, the order allocator, and known-contact reports.
+- Loading resolves references through the supplied immutable catalog. The adjacent chain migrates V1 through V6 before candidate validation.
 - Definitions are not serialized. V1 migration creates one ship, targets old work to the player, and uses its design label for the missing vessel name.
 - World construction and persistence admit at most 256 ships to bound untrusted input and fixed-step work; this is not a final capacity target.
 - Authored strategic-map order remains observable.
