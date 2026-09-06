@@ -26,4 +26,4 @@
 | Task #64 | Merged / Done | v0.4.0 Final PR #66 released as `b3b6635`; sync PR #67 put the release ancestry on `dev` at `2edd194`. |
 | Task #68 | Merged / Done | Project design wiki consolidated under `docs/wiki/` through Final PR #69 as `75ebb55` into `dev`. |
 | Task #70 | Merged / Done | Design wiki declared the single source of truth for design; Final PR #71 merged as `1b8eec4` into `dev`. |
-| Feature #77 | In review | Strategic Contact Reporting: V6 known-contact reports, observation-location frames, and Command Deck telemetry; Final PR #78 open against `dev`. |
+| Feature #77 | Merged / Done | Strategic Contact Reporting merged through Final PR #78 as squash `80c3084` into `dev`. |
