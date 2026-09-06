@@ -1,0 +1,64 @@
+---
+schema_version: '1.1'
+id: 'reference-n1jcy9-architecture'
+title: 'Architecture'
+description: 'Simulation authority, project boundaries, dependency policy, and architectural decision map.'
+doc_type: 'reference'
+status: 'active'
+created: '2026-09-06'
+updated: '2026-09-06'
+tags:
+  - 'architecture'
+aliases: []
+related:
+  - 'docs/adr/0001-separate-simulation-from-godot.md'
+  - 'docs/adr/0003-prefer-native-capabilities-and-demand-driven-dependencies.md'
+  - 'Directory.Packages.props'
+---
+
+# Architecture
+
+[Wiki home](README.md) · [Decision register](decision-register.md) · [Source catalog](sources.md)
+
+## Current project boundaries
+
+`AlterCourse.Core` owns the deterministic world, commands, rule evaluation, navigation, observations, engineering, orders, scheduling, authored-definition interpretation, and snapshot mapping. It has no Godot dependency. `AlterCourse.Godot` references Core and owns scenes, input, rendering, selection, presentation timing, coordinate conversion, and UI state. Player-facing projections are deliberately narrower than world truth.
+
+`AlterCourse.AssetCtl` is standalone development infrastructure. It references neither game project, and neither game project references it. It exchanges selected visual assets and provenance manifests through files, not runtime game authority.
+
+A future `AlterCourse.Narrative` assembly is an ADR-defined integration direction, not a current project. If a qualifying branching feature admits a narrative runtime, Narrative may reference Core and Godot may reference both; Core must not depend on Narrative.
+
+## Domain boundaries and transactions
+
+Model responsibilities according to systems, not UI screens. Existing `ShipState` composes strategic, tactical, engineering, order, sensor-knowledge, and autonomous state. `SimulationState` owns plural ships, scheduler, map, allocators, and player identity. Commands validate and construct candidate state before committing consequential changes where required; failed loading never partially replaces the live game.
+
+Avoid parallel mechanisms. New strategic decisions should consume established information projections and issue established domain commands where those fit. The political design does not authorize an entity framework, a universal faction/organization base class, or a generalized rules engine.
+
+## Dependency choices
+
+Start with existing domain code and the .NET standard library for Core, and native Godot capabilities for presentation. Admit focused packages for demonstrated needs, with compatibility, licensing, transitive/native dependency, headless determinism, and replacement-boundary evidence. Central versions and lock files remain authoritative; the wiki is not a competing version catalog.
+
+At this baseline, central package declarations include xUnit, JsonSchema.Net, Serilog and logging adapters, analyzers, and AssetCtl packages such as YamlDotNet, SkiaSharp, and Svg.Skia. Package presence does not mean every project consumes it. Inspect project references and the [dependency admission records](../dependency-admission/) before extending usage.
+
+CsCheck, ArchUnitNET, GdUnit4Net, UnitsNet, Stateless, LogicBlocks, Ink, and the geometry/addon candidates named by ADRs are conditional selections or evaluation candidates, not blanket installed dependencies. Current Godot integration uses vendored GdUnit4; do not confuse that with installed GdUnit4Net.
+
+## Cross-cutting decisions
+
+The complete ADR catalog is indexed in [Sources](sources.md). Its governing boundaries are:
+
+- ADRs 0001-0003: one-way Core/Godot separation, one canonical quality gate, and demand-driven dependency admission.
+- ADRs 0004-0007: semantic multi-scale space, validated ordinary JSON content, explicit versioned JSON saves, and deterministic time/scheduling/randomness.
+- ADRs 0008-0011: structured diagnostics, layered tests, information-limited explainable AI, and explicit quantities/units.
+- ADRs 0012-0013: narrative subordinate to simulation and permanent `dev` with release-only `main`.
+
+Logs are not state, events are not serialized delegates, and presentation clocks are not simulation clocks. Determinism means equivalent semantic outcomes for the same supported rules/content/snapshot/commands, not permanent bitwise replay compatibility across arbitrary versions.
+
+## Testing and observability
+
+Use the lowest layer that can prove a rule: ordinary Core tests for domain behavior, persistence, AI, and long-running scenarios; Godot-aware tests for engine lifecycle, input, focus, resource imports, and adapters. Project references and focused architecture tests protect authority boundaries. Mutation testing is deep validation, not a substitute for meaningful examples and negative cases.
+
+ADR 0008 selects Serilog configured at a composition boundary through Microsoft logging abstractions. Pure rules return typed facts/explanations when callers or tests need them. Diagnostic logging, sink configuration, and telemetry must not determine outcomes or expose hidden state to ordinary player projections.
+
+## Sources
+
+[Core/Godot separation](../adr/0001-separate-simulation-from-godot.md), [dependency policy](../adr/0003-prefer-native-capabilities-and-demand-driven-dependencies.md), [testing](../adr/0009-use-layered-testing-and-architecture-conformance.md), [narrative](../adr/0012-keep-branching-narrative-subordinate-to-simulation.md), [package declarations](../../Directory.Packages.props), and [development quality](../development-quality.md).
