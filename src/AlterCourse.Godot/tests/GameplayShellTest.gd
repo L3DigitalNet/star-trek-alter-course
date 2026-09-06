@@ -1077,9 +1077,9 @@ func test_default_quick_save_writes_schema_v5_without_touching_legacy_slot() -> 
 	var save_json: Dictionary = JSON.parse_string(
 		FileAccess.get_file_as_string(DEFAULT_QUICK_SAVE_PATH)
 	)
-	assert_int(int(save_json.get("schemaVersion", -1))).is_equal(5)
+	assert_int(int(save_json.get("schemaVersion", -1))).is_equal(6)
 	assert_str(save_json.get("simulationRulesVersion", "")).is_equal(
-		"engineering-backbone-v1"
+		"strategic-contact-reporting-v1"
 	)
 	assert_str(FileAccess.get_file_as_string(LEGACY_DEFAULT_QUICK_SAVE_PATH)).is_equal(
 		"legacy-slot-sentinel"
@@ -1105,9 +1105,9 @@ func test_default_quick_load_discovers_legacy_slot_path_then_saves_generic_v5() 
 	var save_json: Dictionary = JSON.parse_string(
 		FileAccess.get_file_as_string(DEFAULT_QUICK_SAVE_PATH)
 	)
-	assert_int(int(save_json.get("schemaVersion", -1))).is_equal(5)
+	assert_int(int(save_json.get("schemaVersion", -1))).is_equal(6)
 	assert_str(save_json.get("simulationRulesVersion", "")).is_equal(
-		"engineering-backbone-v1"
+		"strategic-contact-reporting-v1"
 	)
 	assert_str(FileAccess.get_file_as_string(LEGACY_DEFAULT_QUICK_SAVE_PATH)).is_equal(
 		legacy_contents
