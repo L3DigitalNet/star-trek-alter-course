@@ -24,7 +24,7 @@ related:
 
 ## Reviewed baseline
 
-Reviewed September 6, 2026 against `dev` at `80c308483fafb3b6d42de8f3a3382bec1ad7158b`. v0.4.0 is an immutable source-only release, not a packaged game. This documentation PR changes no gameplay, content schema, save schema, or dependencies. For the current operational snapshot after this review, consult [STATUS](../STATUS.md).
+Reviewed September 6, 2026 against `dev` at `80c308483fafb3b6d42de8f3a3382bec1ad7158b`. v0.5.0 is an immutable source-only release, not a packaged game; v0.4.0 is its predecessor. This documentation PR changes no gameplay, content schema, save schema, or dependencies. For the current operational snapshot after this review, consult [STATUS](../STATUS.md).
 
 ## Implemented gameplay
 
@@ -42,7 +42,7 @@ Implementation evidence: [FirstGameSetup](../../src/AlterCourse.Core/Gameplay/Fi
 
 ## Milestones and release boundaries
 
-Milestone 1 world/bootstrap and Milestone 2 active-world orders are implemented. Milestone 3A first observed contact and [Strategic Contact Reporting](strategic-contact-reporting.md) are implemented, but the roadmap explicitly does not declare all of Milestone 3 complete. Milestone 4 Engineering Backbone is implemented. M3A and M4 are included in v0.4.0; Strategic Contact Reporting is delivered in Feature #77 / Final PR #78, merged into `dev` as `80c3084`.
+Milestone 1 world/bootstrap and Milestone 2 active-world orders are implemented. Milestone 3A first observed contact and [Strategic Contact Reporting](strategic-contact-reporting.md) are implemented, but the roadmap explicitly does not declare all of Milestone 3 complete. Milestone 4 Engineering Backbone is implemented. M3A and M4 are included in v0.4.0; Strategic Contact Reporting is delivered in Feature #77 / Final PR #78, merged into `dev` as `80c3084`, and included in v0.5.0.
 
 Milestones 5 through 9 remain future slices: living sector/faction autonomy, tactical combat, diplomacy/incidents, canon-anchored bootstrap, and regional campaign integration. The proposed M3B knowledge/faction-identity prerequisite is a discussion proposal, not an admitted milestone or implementation plan.
 
@@ -56,6 +56,6 @@ No new `FactionId`, `KnownShipId`, organization controller, faction-owned schedu
 
 ## Verification evidence, not a fresh execution claim
 
-The v0.4.0 release and M4 admission record report 376 Core tests, 324 AssetCtl tests, 60 gameplay/UI tests, one Godot integration test, and two generated-asset import tests, with warning-free builds. These are baseline release results, not tests rerun merely by writing this page. The documentation PR records its own actual checks separately.
+The v0.5.0 release candidate gate reports 406 Core tests, 324 AssetCtl tests, 63 gameplay/UI tests, one Godot integration test, and two generated-asset import tests, with warning-free builds; the v0.4.0 release and M4 admission record reported 376, 324, 60, one, and two. These are baseline release results, not tests rerun merely by writing this page. The documentation PR records its own actual checks separately.
 
-[Release evidence](https://github.com/L3DigitalNet/star-trek-alter-course/releases/tag/v0.4.0) · [M4 PR #63](https://github.com/L3DigitalNet/star-trek-alter-course/pull/63) · [Roadmap outcomes](../../ROADMAP.md)
+[v0.5.0 release](https://github.com/L3DigitalNet/star-trek-alter-course/releases/tag/v0.5.0) · [v0.4.0 release](https://github.com/L3DigitalNet/star-trek-alter-course/releases/tag/v0.4.0) · [M4 PR #63](https://github.com/L3DigitalNet/star-trek-alter-course/pull/63) · [Roadmap outcomes](../../ROADMAP.md)
