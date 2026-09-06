@@ -2,7 +2,7 @@
 schema_version: '1.1'
 id: 'index-223j5h-decision-register'
 title: 'Design Decision Register'
-description: 'Stable index of architectural decisions, approved political principles, and nonapproved proposals.'
+description: 'Stable index of architectural decisions, approved implementation/design directions, political principles, and nonapproved proposals.'
 doc_type: 'index'
 status: 'active'
 created: '2026-09-06'
@@ -12,6 +12,7 @@ tags:
   - 'architecture'
 aliases: []
 related:
+  - 'docs/wiki/strategic-contact-reporting.md'
   - 'docs/wiki/factions-and-organizations.md'
   - 'docs/wiki/implementation-status.md'
   - 'docs/wiki/open-questions.md'
@@ -40,6 +41,12 @@ The governing themes are pure Core authority; one canonical gate; native-first, 
 **D-05 — Persistent native Command Deck and Engineering workspace.** Godot adapts Core projections; the runtime Theme owns visual styling; preview fixtures never become production truth. See [Interface](interface-and-player-commands.md) and the [owning UI decision](../design/command-deck-ui.md).
 
 **D-06 — Independent asset tooling.** AssetCtl is a separate .NET tool with configuration-driven providers, validated assets, provenance, local fallback, and owner-controlled approval. See [Content, assets, and persistence](content-assets-and-persistence.md) and the [full specification](../specs/asset-pipeline-tool.md).
+
+## Approved next-development decision — September 6, 2026
+
+**D-07 — Strategic Contact Reporting is the next development slice.** Before M5 faction autonomy, extend M3A's local actor-safe contact knowledge into bounded, durable, reference-frame-qualified last-known strategic contact information. Reuse observer-local `SensorContactId` as far as it remains sufficient; do not introduce global known-vessel identity, affiliation/intent learning, faction knowledge sharing, faction runtime, or faction AI as part of this slice. The slice is approved design and sequencing, **not implemented gameplay**. See [Strategic Contact Reporting](strategic-contact-reporting.md).
+
+D-07 resolves Q-01. The slice is intentionally not assigned the canonical name `M3B`; historical milestone classification can be decided after implementation. Q-02 through Q-05 remain open for later consumers.
 
 ## Political decisions approved September 6, 2026
 
@@ -72,9 +79,11 @@ P-10/P-17/P-19 must be read together: no mandatory Polity→member-state→movem
 
 ## Discussed but not approved
 
-A separate durable `KnownShipId`, a particular ship-to-faction reporting mechanism, a final campaign year, a specific random algorithm, a closed Ship/Faction scheduler-target implementation, and the proposed M3B→M5→M6 sequence were recommendations or future questions. They are not approved simply because the subsequent political decisions were accepted.
+A separate durable `KnownShipId`, cross-observer known-vessel correlation, a particular ship-to-faction report-distribution mechanism, political affiliation-learning rules, a final campaign year, a specific random algorithm, and a closed Ship/Faction scheduler-target implementation remain recommendations or future questions. They are not approved by D-07 or by the political framework.
 
-The [open-question register](open-questions.md) retains them and other milestone refinement topics. No detailed permission matrix, treaty engine, political scoring system, economic resource catalog, or complete organization taxonomy was approved in this conversation.
+The earlier proposed `M3B→M5→M6` sequence is no longer the governing planning recommendation: D-07 selects Strategic Contact Reporting as the next slice without canonically naming it M3B. This does not approve the rest of that proposed sequence or imply that Strategic Contact Reporting completes M3.
+
+The [open-question register](open-questions.md) retains the unresolved topics. No detailed permission matrix, treaty engine, political scoring system, economic resource catalog, or complete organization taxonomy was approved in these discussions.
 
 ## Maintaining the register
 
