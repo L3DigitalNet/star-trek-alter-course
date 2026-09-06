@@ -1067,7 +1067,7 @@ func test_normal_shell_never_projects_hidden_vessel_or_scheduler_truth() -> void
 	assert_str(presented).not_contains("ScheduledWork")
 
 
-func test_default_quick_save_writes_schema_v5_without_touching_legacy_slot() -> void:
+func test_default_quick_save_writes_schema_v6_without_touching_legacy_slot() -> void:
 	_write_text(LEGACY_DEFAULT_QUICK_SAVE_PATH, "legacy-slot-sentinel")
 	var screen := _create_default_screen()
 
@@ -1087,7 +1087,7 @@ func test_default_quick_save_writes_schema_v5_without_touching_legacy_slot() -> 
 	)
 
 
-func test_default_quick_load_discovers_legacy_slot_path_then_saves_generic_v5() -> void:
+func test_default_quick_load_discovers_legacy_slot_path_then_saves_generic_v6() -> void:
 	var snapshot_screen := _create_screen()
 	snapshot_screen.call("ProcessSyntheticDelta", 0.6)
 	snapshot_screen.call("QuickSave")

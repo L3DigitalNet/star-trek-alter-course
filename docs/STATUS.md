@@ -4,7 +4,7 @@
 
 - v0.4.0 is the current immutable source-only GitHub Release: `b3b6635470003d11260b99a2a56f03a3bfa201f6`, tagged `v0.4.0`; no assets are published.
 - Milestone 3A first observed contact and Milestone 4 Engineering Backbone are released; Features #58 and #62 are Done.
-- Strategic Contact Reporting is implemented on `dev`; Feature #77 is Final PR #78, In review.
+- Strategic Contact Reporting is delivered by Feature #77 / Final PR #78, In review; it is not yet merged to `dev`.
 - Content schema V4 and save schema V6 are current.
 - `main` contains the release merge; sync PR #67 brought that release ancestry into `dev` at `2edd19460d9b096863b9f3d8a2c2438c3b4dfab0`.
 - v0.4.0 verification passed: Core 376, AssetCtl 324, Godot 1+2+60, and zero warnings or errors; later PRs record their own checks.
