@@ -24,7 +24,7 @@ related:
 
 ## Reviewed baseline
 
-Reviewed September 6, 2026 against `dev` at `42481ca7fbc6c5c9da96985e02565f78a236cab7`. v0.4.0 is an immutable source-only release, not a packaged game. This documentation PR changes no gameplay, content schema, save schema, or dependencies. For the current operational snapshot after this review, consult [STATUS](../STATUS.md).
+Reviewed September 6, 2026 against `dev` at `80c308483fafb3b6d42de8f3a3382bec1ad7158b`. v0.4.0 is an immutable source-only release, not a packaged game. This documentation PR changes no gameplay, content schema, save schema, or dependencies. For the current operational snapshot after this review, consult [STATUS](../STATUS.md).
 
 ## Implemented gameplay
 
@@ -42,7 +42,7 @@ Implementation evidence: [FirstGameSetup](../../src/AlterCourse.Core/Gameplay/Fi
 
 ## Milestones and release boundaries
 
-Milestone 1 world/bootstrap and Milestone 2 active-world orders are implemented. Milestone 3A first observed contact and [Strategic Contact Reporting](strategic-contact-reporting.md) are implemented, but the roadmap explicitly does not declare all of Milestone 3 complete. Milestone 4 Engineering Backbone is implemented. M3A and M4 are included in v0.4.0; Strategic Contact Reporting follows in Feature #77 / Final PR #78 and is pending merge to `dev`.
+Milestone 1 world/bootstrap and Milestone 2 active-world orders are implemented. Milestone 3A first observed contact and [Strategic Contact Reporting](strategic-contact-reporting.md) are implemented, but the roadmap explicitly does not declare all of Milestone 3 complete. Milestone 4 Engineering Backbone is implemented. M3A and M4 are included in v0.4.0; Strategic Contact Reporting is delivered in Feature #77 / Final PR #78, merged into `dev` as `80c3084`.
 
 Milestones 5 through 9 remain future slices: living sector/faction autonomy, tactical combat, diplomacy/incidents, canon-anchored bootstrap, and regional campaign integration. The proposed M3B knowledge/faction-identity prerequisite is a discussion proposal, not an admitted milestone or implementation plan.
 

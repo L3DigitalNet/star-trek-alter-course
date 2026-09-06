@@ -34,7 +34,7 @@ source:
 
 ## Status and decision
 
-**Implemented** (Feature #77, Final PR #78). After reviewing the v0.4.0 implementation, the roadmap, the current sensor/AI code, and the approved political model, the owner selected **Strategic Contact Reporting** as the next bounded development step.
+**Implemented** (Feature #77, Final PR #78, merged into `dev` as `80c3084`). After reviewing the v0.4.0 implementation, the roadmap, the current sensor/AI code, and the approved political model, the owner selected **Strategic Contact Reporting** as the next bounded development step.
 
 This resolves the sequencing question in Q-01. The slice is intentionally a bridge between M3A's local observer knowledge and M5's later living-sector/faction autonomy. It should remove the largest information-model ambiguity before faction AI is introduced, while avoiding premature commitment to a complete intelligence system or political runtime.
 
