@@ -2,7 +2,7 @@
 
 ## Purpose and authority
 
-This roadmap defines the development sequence for **Star Trek: Alter Course (ST:AC)**. It is a planning document: it records what has been implemented, which architectural proof each remaining milestone must provide, and which unresolved question must be refined before new gameplay work is admitted.
+This roadmap defines the development sequence for **Star Trek: Alter Course (ST:AC)**. It is a planning document: it records what has been implemented, which architectural proof each remaining milestone must provide, and which approved bounded slice comes next.
 
 The [design wiki](docs/wiki/README.md) is the single source of truth for game design. This roadmap may summarize approved design only to explain sequencing. If a roadmap statement conflicts with the wiki, the wiki governs and this file should be corrected. Active [architecture decision records](docs/adr/) govern architectural boundaries and override this roadmap where they conflict.
 
@@ -16,7 +16,7 @@ The current operational state is tracked in [STATUS](docs/STATUS.md), while [Imp
 - **Milestone 4 — Engineering Backbone and Degraded Operations** is implemented.
 - Content schema **V4** and save schema **V5** are current.
 - The approved [factions and organizations](docs/wiki/factions-and-organizations.md) political model is **design only**. No faction hierarchy, organization runtime, government model, treaty system, layered jurisdiction runtime, or strategic affiliation-knowledge system exists yet.
-- No new gameplay feature is currently admitted. The next gameplay scope must first resolve the minimum sequencing question in [Open Design Questions](docs/wiki/open-questions.md).
+- [Strategic Contact Reporting](docs/wiki/strategic-contact-reporting.md) is the **owner-approved next development slice**, resolving Q-01. It is not implemented by this planning decision, is not canonically named `M3B`, and does not itself begin M5.
 
 ## Execution model
 
@@ -71,7 +71,7 @@ Canon should establish the chosen campaign's required historical and political s
 | --- | --- | --- | --- |
 | 1 | **World State and Bootstrap Generalization** | **Implemented** | The world owns plural persistent ships and explicit player identity rather than treating the player ship as the world root. |
 | 2 | **Active World and Persistent Orders** | **Implemented** | Ships can own durable intent, progress offscreen, and retain that intent across save/load. |
-| 3 | **Sensor Knowledge and First Contact** | **Partial — M3A implemented** | M3A proves observer-local knowledge and information-limited ship behavior; the remaining scope and sequencing are governed by Q-01 rather than an assumed M3B plan. |
+| 3 | **Sensor Knowledge and First Contact** | **Partial — M3A implemented; Strategic Contact Reporting next** | M3A proves observer-local knowledge and information-limited ship behavior; the next approved slice carries legitimate last-known contact information into strategic context without defining the final intelligence model. |
 | 4 | **Engineering Backbone and Degraded Operations** | **Implemented** | Power, condition, capability, and repair interact with existing sensing and maneuvering rather than living in a parallel subsystem. |
 | 5 | **Living Sector and Faction Autonomy** | **Future** | Faction intent can cause explainable autonomous assignments, offscreen activity, and durable world change using actor-appropriate information. |
 | 6 | **Tactical Combat Foundation** | **Future** | Combat composes motion, observation, Engineering, AI, persistence, and withdrawal instead of becoming a separate hit-point game. |
@@ -83,23 +83,31 @@ The order expresses current dependency and risk, not an immutable release schedu
 
 ---
 
-## Current planning gate — choose the next bounded gameplay slice
+## Next approved development slice — Strategic Contact Reporting
 
-Before admitting the next gameplay feature, resolve **Q-01 — Scope and sequence** in the [open-question register](docs/wiki/open-questions.md).
+Q-01 is resolved. The owner approved [Strategic Contact Reporting](docs/wiki/strategic-contact-reporting.md) as the next bounded development slice after v0.4.0.
 
-The current implementation has strong local contact knowledge and Engineering, but it does **not** yet have strategic affiliation knowledge, faction runtime state, ship-to-faction reporting, or durable remembered vessel identity beyond observer-local sensor contacts. Milestone 5 will require enough knowledge and identity to let a faction make a legitimate information-limited decision rather than reading hidden world truth.
+The purpose is to bridge M3A's local observer knowledge to strategically meaningful last-known information before M5 introduces faction autonomy. The approved proof is deliberately narrow:
 
-The current **risk-first recommendation for refinement** is therefore to evaluate a bounded strategic-knowledge/faction-identity bridge before attempting the full Living Sector proof. That recommendation is not an admitted feature and does not approve a particular representation. In particular:
+> **local tactical observation → durable reference-frame-qualified last-known information → actor-safe strategic report/projection**
 
-- the label **M3B** is provisional;
-- the proposed **M3B → M5 → M6** sequence is not approved merely by appearing in discussion;
-- a separate durable `KnownShipId` is not approved;
-- a closed Ship/Faction scheduler-target union is not approved;
-- scanning does not automatically imply political affiliation knowledge;
-- an unrestricted faction intelligence network must not emerge as an implementation convenience; and
-- the governing slice may instead prove that Milestone 5 can begin directly if the necessary knowledge seam can be introduced safely inside it.
+The slice should reuse existing observer-local `SensorContactId` as far as it remains sufficient, qualify retained tactical observations with the strategic location/reference frame where they occurred, preserve legitimate last-known information after a contact becomes Stale/Lost or either ship moves, and prove that later hidden target truth does not backfill actor knowledge.
 
-Resolve only Q-01 through Q-05 as required by the selected slice. Campaign era/region should be resolved only if concrete authored political content requires it.
+The canonical wiki page owns the full behavior, persistence constraints, test themes, and player-visible proof. This roadmap records only sequence and major boundaries.
+
+The slice explicitly does **not** approve or introduce:
+
+- a canonical `M3B` label;
+- `KnownShipId` or global/cross-observer vessel identity;
+- affiliation or intent as scan results;
+- faction knowledge sharing or a report-distribution network;
+- faction runtime or faction strategic AI;
+- faction-owned scheduler targets;
+- strategic long-range sensor simulation;
+- combat; or
+- a generic actor/entity/rules framework.
+
+Q-02 through Q-05 remain open. If implementation discovery proves one of those deferred concepts is actually necessary to satisfy the approved Strategic Contact Reporting exit condition, return to governed design refinement rather than adding it silently.
 
 ---
 
@@ -127,7 +135,7 @@ The milestone proved that NPC activity can proceed without the player while deli
 
 Observer-local sensor knowledge now supports stable local contact identity, Current/Stale/Lost/reacquired lifecycle, active Scan, typed Hail acknowledgement, exact occurrence times, and bounded cautious NPC behavior that acts from actor-safe information rather than hidden target state. Godot presents only the player-safe projection.
 
-This is a **partial Milestone 3 outcome**. Strategic contacts, affiliation/intent knowledge, durable reports beyond the current local-contact model, and faction information sharing remain absent.
+This is a **partial Milestone 3 outcome**. Strategic contacts, affiliation/intent knowledge, durable reports beyond the current local-contact model, and faction information sharing remain absent in v0.4.0.
 
 ### Milestone 4 — Engineering Backbone and Degraded Operations
 
@@ -139,20 +147,13 @@ The milestone intentionally stops short of a universal component system, arbitra
 
 ---
 
-## Milestone 3 completion remains under refinement
+## Milestone 3 completion remains open beyond the approved slice
 
-M3A proved the core local-contact architecture: different actors can hold different knowledge about the same world truth, player projection remains actor-safe, and autonomous ship behavior can consume bounded knowledge rather than hidden target state.
+M3A proved the core local-contact architecture. Strategic Contact Reporting is now the approved next information slice, but it deliberately does **not** establish that its completion will automatically close Milestone 3.
 
-The original Milestone 3 scope also left affiliation/intent knowledge, strategic contacts, broader reporting, and related identity questions unresolved. The repository has **not** approved a specific follow-on slice that must complete those items before Milestone 5.
+The original Milestone 3 horizon also discussed affiliation/intent knowledge, strategic contacts, broader reporting, and identity questions. Strategic Contact Reporting resolves only the smallest behavior needed now: carrying legitimate local observations into actor-safe strategic last-known information.
 
-Q-01 through Q-04 in the [open-question register](docs/wiki/open-questions.md) govern the next refinement. The governing issue may decide that the next bounded work:
-
-- is a separate continuation of Milestone 3;
-- is a prerequisite slice attached to Milestone 5;
-- belongs inside the first Milestone 5 vertical slice; or
-- should use another division supported by code and design evidence.
-
-Do not declare a final Milestone 3 completion contract, strategic knowledge schema, durable known-vessel identity, affiliation-learning rule, or faction reporting model until that refinement is admitted.
+After that implementation lands, evaluate remaining M3 scope against actual consumers. Q-02 through Q-04 remain the design register for durable known-vessel identity, affiliation knowledge, and faction knowledge sharing. Do not declare a final intelligence schema or M3 completion contract in advance of evidence.
 
 ---
 
@@ -297,6 +298,7 @@ Milestone 9 is the point to judge whether the established joints are strong enou
 - [Design wiki](docs/wiki/README.md)
 - [Implementation Status](docs/wiki/implementation-status.md)
 - [Design Decision Register](docs/wiki/decision-register.md)
+- [Strategic Contact Reporting](docs/wiki/strategic-contact-reporting.md)
 - [Open Design Questions](docs/wiki/open-questions.md)
 - [Architecture](docs/wiki/architecture.md)
 - [Factions and Organizations](docs/wiki/factions-and-organizations.md)
