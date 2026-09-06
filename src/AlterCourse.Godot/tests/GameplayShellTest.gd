@@ -379,7 +379,8 @@ func test_command_inspector_keeps_mode_sections_above_quick_actions() -> void:
 	assert_str((_command_deck(screen).get_node("%InspectorHeading") as Label).text).is_equal(
 		"DESTINATION / ROUTE"
 	)
-	assert_int(_command_deck(screen).get_node("%InspectorContent").get_child_count()).is_equal(2)
+	# Destination, route, and the travel preview's own last-known-contacts fixture section.
+	assert_int(_command_deck(screen).get_node("%InspectorContent").get_child_count()).is_equal(3)
 	assert_object(_command_deck(screen).get_node_or_null("%ContextActions")).is_instanceof(
 		VBoxContainer
 	)
@@ -1612,3 +1613,179 @@ func _remove_quick_save_files() -> void:
 func _remove_file(user_path: String) -> void:
 	if FileAccess.file_exists(user_path):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(user_path))
+
+
+func test_strategic_last_known_report_outlives_tactical_loss_travel_and_reload() -> void:
+	var screen := _create_screen()
+	_prepare_detected_contact(screen)
+	screen.call("ShowTacticalView")
+	screen.call("SelectContact", 1)
+	screen.call("RequestSelectedActiveScan")
+	screen.call("AdvanceUntilNextPlayerRelevantEvent")
+	assert_str(screen.get_meta("first_contact_identification", "")).is_equal("Identified")
+	# Read the observation time from the tactical inspector rather than the simulation clock: the
+	# report must repeat the observation Core recorded, which is not necessarily "now".
+	var observed_at := _tactical_observed_at(screen)
+	assert_str(observed_at).is_not_empty()
+	screen.call("ShowStrategicView")
+
+	var identified_row := _contact_report_value(screen, "Survey Vessel Kestrel")
+	assert_str(identified_row).contains("Last seen at Dawn Anchor")
+	assert_str(identified_row).contains("t=%s" % observed_at)
+	assert_str(identified_row).contains("CURRENT")
+
+	# Driven by elapsed simulation time rather than the 24100/29100 ms literals: staleness and loss
+	# are time-driven decays, and AdvanceUntilNextPlayerRelevantEvent stops advancing once the scan
+	# has resolved and nothing else is pending.
+	for _step in range(80):
+		if screen.get_meta("first_contact_status", "") == "Stale":
+			break
+		screen.call("ProcessSyntheticDelta", 0.6)
+	assert_str(screen.get_meta("first_contact_status", "")).is_equal("Stale")
+	assert_str(_contact_report_value(screen, "Survey Vessel Kestrel")).contains("STALE")
+	assert_str(_contact_report_tone(screen, "Survey Vessel Kestrel")).is_equal("StatusCaution")
+
+	for _step in range(80):
+		if screen.get_meta("sensor_contact_count", -1) == 0:
+			break
+		screen.call("ProcessSyntheticDelta", 0.6)
+	assert_int(screen.get_meta("sensor_contact_count", -1)).is_equal(0)
+	screen.call("ShowTacticalView")
+	assert_str(_collect_control_text(_command_deck(screen).get_node("%TacticalMap"))).not_contains(
+		"Survey Vessel Kestrel"
+	)
+	screen.call("ShowStrategicView")
+	var lost_row := _contact_report_value(screen, "Survey Vessel Kestrel")
+	assert_str(lost_row).contains("Last seen at Dawn Anchor")
+	assert_str(lost_row).contains("LOST")
+	assert_str(_contact_report_tone(screen, "Survey Vessel Kestrel")).is_equal("MutedTelemetry")
+	assert_str(_report_observed_at(lost_row)).is_not_empty()
+
+	screen.call("SelectDestination", "vesper-reach")
+	screen.call("RequestSelectedTravel")
+	for _step in range(20):
+		screen.call("ProcessSyntheticDelta", 0.6)
+	assert_bool(screen.get_meta("travel_active", true)).is_false()
+	assert_str(_collect_control_text(_command_deck(screen))).contains("Vesper Reach")
+	# Arriving elsewhere must not re-frame the observation. Only the Kestrel row is compared because
+	# fresh contacts observed at the new location legitimately add rows of their own.
+	assert_str(_contact_report_value(screen, "Survey Vessel Kestrel")).is_equal(lost_row)
+
+	screen.call("QuickSave")
+	screen.call("QuickLoad")
+	assert_str(screen.get_meta("quick_save_status", "")).is_equal("loaded")
+	assert_str(_contact_report_value(screen, "Survey Vessel Kestrel")).is_equal(lost_row)
+
+
+func test_strategic_last_known_section_shows_only_projection_sourced_actor_safe_facts() -> void:
+	var screen := _create_screen()
+
+	assert_str(_last_known_contacts_text(screen)).contains("No retained contact reports")
+
+	_prepare_detected_contact(screen)
+	screen.call("ShowStrategicView")
+	var unidentified_report := _last_known_contacts_text(screen)
+	assert_str(unidentified_report).contains("Contact 1")
+	assert_str(unidentified_report).not_contains("Survey Vessel Kestrel")
+	assert_str(unidentified_report).not_contains("IKS Rotarran")
+
+	var presented := _collect_control_text(screen)
+	assert_str(presented).not_contains("USS Wayfarer")
+	assert_str(presented).not_contains("USS Horizon")
+	assert_str(presented).not_contains("OrderWake")
+	assert_str(presented).not_contains("ScheduledWork")
+	assert_str(presented).not_contains("IKS Rotarran")
+
+	screen.call("ShowPreview", 1)
+	assert_str(_last_known_contacts_text(screen)).contains("IKS Rotarran")
+	screen.call("ShowStrategicView")
+	assert_str(_last_known_contacts_text(screen)).not_contains("IKS Rotarran")
+	assert_str(_last_known_contacts_text(screen)).contains("Contact 1")
+
+
+func test_strategic_last_known_refresh_preserves_reconciled_action_focus() -> void:
+	var screen := _create_screen()
+	_prepare_detected_contact(screen)
+	screen.call("ShowStrategicView")
+	screen.call("SelectDestination", "vesper-reach")
+	await get_tree().process_frame
+	var travel_action := _find_action_button(screen, "travel") as Button
+	var travel_instance_id := travel_action.get_instance_id()
+	travel_action.grab_focus()
+	assert_bool(travel_action.has_focus()).is_true()
+	var report_before := _last_known_contacts_text(screen)
+
+	# Advance until the retained report actually changes (a fresh observation time, then Stale, then
+	# Lost all rewrite it) so this pins focus stability across a refresh that rebuilds the section.
+	for _step in range(60):
+		screen.call("ProcessSyntheticDelta", 0.6)
+		if _last_known_contacts_text(screen) != report_before:
+			break
+	await get_tree().process_frame
+
+	# The section is rebuilt content, not an interactive control, so a changing report must not
+	# move focus off the reconciled action button.
+	assert_str(_last_known_contacts_text(screen)).is_not_equal(report_before)
+	assert_int((_find_action_button(screen, "travel") as Button).get_instance_id()).is_equal(
+		travel_instance_id
+	)
+	assert_bool((_find_action_button(screen, "travel") as Button).has_focus()).is_true()
+
+
+func _last_known_contacts_panel(screen: Node) -> Node:
+	return (
+		_command_deck(screen)
+		. get_node("%InspectorContent")
+		. get_node_or_null("Telemetry_last-known-contacts")
+	)
+
+
+func _last_known_contacts_text(screen: Node) -> String:
+	var panel := _last_known_contacts_panel(screen)
+	if panel == null:
+		return ""
+	return _collect_control_text(panel)
+
+
+func _contact_report_row(screen: Node, label: String) -> Node:
+	var panel := _last_known_contacts_panel(screen)
+	if panel == null:
+		return null
+	# Child 0 of the section body is the heading label; every later child is one field row of
+	# [label, value], matching CommandDeckWorkspace.PresentInspector.
+	var body := panel.get_child(0)
+	for index in range(1, body.get_child_count()):
+		var row := body.get_child(index)
+		if (row.get_child(0) as Label).text == label:
+			return row
+	return null
+
+
+func _contact_report_value(screen: Node, label: String) -> String:
+	var row := _contact_report_row(screen, label)
+	return "" if row == null else (row.get_child(1) as Label).text
+
+
+func _contact_report_tone(screen: Node, label: String) -> String:
+	var row := _contact_report_row(screen, label)
+	return "" if row == null else str((row.get_child(1) as Label).theme_type_variation)
+
+
+func _tactical_observed_at(screen: Node) -> String:
+	# The tactical inspector's OBSERVED AT field is the same Core observation timestamp the strategic
+	# report repeats, so comparing against it pins agreement between the two surfaces.
+	return _match_group(
+		_collect_control_text(_command_deck(screen).get_node("%InspectorContent")),
+		"OBSERVED AT\\s+([0-9.]+ s)"
+	)
+
+
+func _report_observed_at(report_text: String) -> String:
+	return _match_group(report_text, "t=([0-9.]+ s)")
+
+
+func _match_group(text: String, pattern: String) -> String:
+	var regex := RegEx.new()
+	regex.compile(pattern)
+	var found := regex.search(text)
+	return "" if found == null else found.get_string(1)
