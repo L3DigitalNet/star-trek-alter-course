@@ -24,3 +24,5 @@
 | Task #59 | Merged / Done | Godot UID and import metadata merged through Final PR #60 as `ce454f5` into `dev`. |
 | Feature #62 | Merged / Done | Milestone 4 Engineering merged through Final PR #63 as `0f2278e` into `dev`; released in v0.4.0. |
 | Task #64 | Merged / Done | v0.4.0 Final PR #66 released as `b3b6635`; sync PR #67 put the release ancestry on `dev` at `2edd194`. |
+| Task #68 | Merged / Done | Project design wiki consolidated under `docs/wiki/` through Final PR #69 as `75ebb55` into `dev`. |
+| Task #70 | Merged / Done | Design wiki declared the single source of truth for design; Final PR #71 merged as `1b8eec4` into `dev`. |
