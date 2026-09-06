@@ -63,7 +63,7 @@ The slice is **not** canonically named `M3B`. It does not itself complete Milest
 
 **Q-13 — Resources, officers, and trade.** Define the first useful logistics or crew interaction before selecting economic resource catalogs, officer progression formulas, markets, repair staffing, or fuel models. Preserve captain-without-levels and the existing abstract Engineering model until a governed feature changes them.
 
-**Q-14 — Compatibility and stochastic behavior.** Select and validate a versioned random algorithm when a genuine random consumer arrives. Decide supported development-save compatibility when new durable political state is introduced. Strategic Contact Reporting may require an adjacent save migration if new authoritative observation state cannot be reconstructed safely, but that is an implementation outcome rather than permission to invent historical knowledge. Do not invent allegiance, treaty history, reports, or cross-observer identity merely to satisfy a new schema.
+**Q-14 — Compatibility and stochastic behavior.** Select and validate a versioned random algorithm when a genuine random consumer arrives. Decide supported development-save compatibility when new durable political state is introduced. Strategic Contact Reporting shipped an adjacent V5→V6 save migration because the new observation-location frame could not be reconstructed safely from V5; the migration derived nothing and left every legacy contact's frame null. Any future schema change must hold to the same rule: do not invent allegiance, treaty history, reports, or cross-observer identity merely to satisfy a new schema.
 
 ## Implementation questions that are not product approvals
 

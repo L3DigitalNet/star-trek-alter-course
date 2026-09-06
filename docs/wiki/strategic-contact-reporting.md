@@ -25,6 +25,7 @@ related:
   - 'docs/adr/0010-use-explainable-domain-ai-and-demand-driven-state-machines.md'
 source:
   - 'https://github.com/L3DigitalNet/star-trek-alter-course/issues/74'
+  - 'https://github.com/L3DigitalNet/star-trek-alter-course/pull/78'
 ---
 
 # Strategic Contact Reporting
@@ -33,11 +34,23 @@ source:
 
 ## Status and decision
 
-**Approved as the next development slice; not implemented.** After reviewing the v0.4.0 implementation, the roadmap, the current sensor/AI code, and the approved political model, the owner selected **Strategic Contact Reporting** as the next bounded development step.
+**Implemented** (Feature #77, Final PR #78). After reviewing the v0.4.0 implementation, the roadmap, the current sensor/AI code, and the approved political model, the owner selected **Strategic Contact Reporting** as the next bounded development step.
 
 This resolves the sequencing question in Q-01. The slice is intentionally a bridge between M3A's local observer knowledge and M5's later living-sector/faction autonomy. It should remove the largest information-model ambiguity before faction AI is introduced, while avoiding premature commitment to a complete intelligence system or political runtime.
 
 Do **not** canonically call this slice `M3B` yet. It may later be described as a continuation of Milestone 3, a prerequisite to Milestone 5, or another historical subdivision once implementation evidence exists. The approved name for the work itself is **Strategic Contact Reporting**.
+
+### Implementation outcome
+
+The runtime chose the smallest representation that satisfies the required behavioral boundary below:
+
+- `SensorContactTrack` gained a `LocationId? ObservedAtLocationId` frame: the strategic location the observation was recorded in. A fresh observation always carries one (non-nullable plumbing, required positional parameter); the frame is null only for a contact migrated from a pre-V6 save.
+- `StrategicProjection.KnownContactReports` exposes `StrategicContactReportProjection`, one per retained contact still legitimately qualified by an observation location: contact id, observed-at `LocationId`, last observed tactical position, last observed time, retained status (Current, Stale, or Lost), identification, and the learned vessel/design display names. It omits the hidden `ShipInstanceId` and omits any legacy contact with no qualifying frame.
+- Save schema advanced to V6 with simulation rules identity `strategic-contact-reporting-v1`. The adjacent chain stays V1→V6; the new V5→V6 hop sets every legacy contact's frame to null and derives nothing, so a migrated contact stays on the tactical surface without appearing in strategic reports until it is observed again post-migration.
+- The Command Deck strategic inspector presents the reports in a "LAST KNOWN CONTACTS" telemetry section; the tactical surface is unchanged and still drops Lost contacts.
+- A headless Core-only Pathfinder/Kestrel scenario proves the full seam without Godot: observe at Dawn Anchor, go Stale/Lost, hidden NPC travel leaves the report unchanged, player travel leaves it unchanged, save/load equivalence holds, and reacquisition updates it.
+
+Q-02, Q-03, Q-04, and Q-05 remain open; this slice did not need to resolve them.
 
 ## Why this comes next
 
@@ -168,7 +181,7 @@ The presentation can be deliberately small. The architectural proof is the durab
 
 Follow ADR 0006. Persist authoritative meaning, not presentation caches or duplicated truth.
 
-If the approved behavior requires new durable state that cannot be reconstructed safely from the current V5 snapshot, advance the save schema through the normal adjacent migration process. A V5→V6 migration is a likely implementation outcome, **not a pre-approved requirement** if the same semantics can be represented without new persisted authority.
+If the approved behavior requires new durable state that cannot be reconstructed safely from the current V5 snapshot, advance the save schema through the normal adjacent migration process. The implementation used a V5→V6 adjacent migration under rules identity `strategic-contact-reporting-v1`: a migrated legacy contact carries no reference frame and is omitted from strategic reports until a new qualifying observation is recorded.
 
 Any migration must create only facts legitimately derivable from the older snapshot. It must not invent:
 

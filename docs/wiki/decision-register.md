@@ -44,7 +44,7 @@ The governing themes are pure Core authority; one canonical gate; native-first, 
 
 ## Approved next-development decision — September 6, 2026
 
-**D-07 — Strategic Contact Reporting is the next development slice.** Before M5 faction autonomy, extend M3A's local actor-safe contact knowledge into bounded, durable, reference-frame-qualified last-known strategic contact information. Reuse observer-local `SensorContactId` as far as it remains sufficient; do not introduce global known-vessel identity, affiliation/intent learning, faction knowledge sharing, faction runtime, or faction AI as part of this slice. The slice is approved design and sequencing, **not implemented gameplay**. See [Strategic Contact Reporting](strategic-contact-reporting.md).
+**D-07 — Strategic Contact Reporting is the next development slice.** Before M5 faction autonomy, extend M3A's local actor-safe contact knowledge into bounded, durable, reference-frame-qualified last-known strategic contact information. Reuse observer-local `SensorContactId` as far as it remains sufficient; do not introduce global known-vessel identity, affiliation/intent learning, faction knowledge sharing, faction runtime, or faction AI as part of this slice. The slice is implemented as the next development slice after v0.4.0; see [Implementation status](implementation-status.md). See [Strategic Contact Reporting](strategic-contact-reporting.md).
 
 D-07 resolves Q-01. The slice is intentionally not assigned the canonical name `M3B`; historical milestone classification can be decided after implementation. Q-02 through Q-05 remain open for later consumers.
 

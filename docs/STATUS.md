@@ -4,11 +4,12 @@
 
 - v0.4.0 is the current immutable source-only GitHub Release: `b3b6635470003d11260b99a2a56f03a3bfa201f6`, tagged `v0.4.0`; no assets are published.
 - Milestone 3A first observed contact and Milestone 4 Engineering Backbone are released; Features #58 and #62 are Done.
-- Content schema V4 and save schema V5 are current.
+- Strategic Contact Reporting is implemented on `dev`; Feature #77 is Final PR #78, In review.
+- Content schema V4 and save schema V6 are current.
 - `main` contains the release merge; sync PR #67 brought that release ancestry into `dev` at `2edd19460d9b096863b9f3d8a2c2438c3b4dfab0`.
 - v0.4.0 verification passed: Core 376, AssetCtl 324, Godot 1+2+60, and zero warnings or errors; later PRs record their own checks.
-- No gameplay feature is active or admitted. The next scope requires governed admission.
-- The shell retains strategic travel, tactical movement, Engineering power and repair, deterministic time controls, and quick save/load.
+- Strategic Contact Reporting (Feature #77 / PR #78) is in review; no further gameplay scope is admitted.
+- The shell retains strategic travel, tactical movement, Engineering power and repair, deterministic time controls, quick save/load, and last-known contact reporting.
 - Core owns plural ordinary `ShipState`; Godot projects player-visible state and does not own authoritative simulation state.
 - The tracked launch script restores and builds before Godot starts, preventing stale local Debug content after branch changes.
 - [Design wiki](wiki/README.md) is the single source of truth for design; [political design](wiki/factions-and-organizations.md) is approved, not implemented.

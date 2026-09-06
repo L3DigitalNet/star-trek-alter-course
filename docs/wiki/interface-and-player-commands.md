@@ -15,6 +15,7 @@ related:
   - 'docs/design/command-deck-ui.md'
   - 'docs/design/engineering-backbone.md'
   - 'README.md'
+  - 'docs/wiki/strategic-contact-reporting.md'
 ---
 
 # Interface and player commands
@@ -33,13 +34,15 @@ The [runtime theme](../../src/AlterCourse.Godot/assets/ui/command_theme.tres) ow
 
 Resolve display and actions from the current player-known Core projection. Selection supplies context, not permission. Deterministic preview fixtures are allowed only in explicit development/test preview mode. If no implemented production projection exists, show Unavailable rather than fabricated values.
 
-M3A made local contacts, identification, and hail live. M4 made power, sensors, impulse, and the single active repair live in Engineering. Combat fire solutions, shields/weapons, advanced engineering topology, and repair-team queues remain preview-only or absent. An earlier screenshot showing such a system is not an implementation commitment.
+M3A made local contacts, identification, and hail live. M4 made power, sensors, impulse, and the single active repair live in Engineering. Strategic Contact Reporting made a minimal "LAST KNOWN CONTACTS" telemetry section live on the strategic Command Deck inspector. Combat fire solutions, shields/weapons, advanced engineering topology, and repair-team queues remain preview-only or absent. An earlier screenshot showing such a system is not an implementation commitment.
 
 The live Engineering hierarchy is Overview, Power, Sensors, Propulsion, and Repairs. Allocation/repair controls carry Core-supplied availability and reasons. UI code does not locally simulate an allocation preview or optimistically mutate the ship.
 
 ## Current interaction surface
 
 The strategic map selects connected destinations and engages scheduled travel. Tactical view shows the local frame, actor-known contact markers, selected-contact facts, scan, and hail. The current demonstration course is 045 degrees at 2 km/s and remains constrained by effective impulse capability; it is not a complete navigation command console.
+
+The strategic inspector also lists the player's own `KnownContactReports`: one row per retained report, naming the learned vessel or the tactical contact label, the last-seen location and time, the retained Current/Stale/Lost status, and the learned design name, capped and summarized when it would overflow. This presentation deliberately stays minimal; it is not a strategic-map marker or intelligence dashboard.
 
 Current shortcuts are 1 for strategic view, 2 for tactical view, Space for pause/resume, R to cycle rate, U to advance to a player-relevant event, Ctrl+S/Ctrl+L for quick save/load, E to engage selected travel, and C for the demonstration tactical course. Presentation rates are 0.5x, 1x, 2x, and 4x, with pause separate.
 

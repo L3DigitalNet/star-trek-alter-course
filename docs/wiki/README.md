@@ -25,7 +25,7 @@ related:
 
 This wiki is the single source of truth for the design of the game: what it is intended to become, what the code actually does, which decisions are settled, and which questions remain open. Every other design document in the repository is either supporting detail linked from a wiki page or historical evidence; none of them may contradict the wiki.
 
-The initial implementation review is against `dev` commit `42481ca7fbc6c5c9da96985e02565f78a236cab7`, reviewed September 6, 2026. The current released gameplay baseline is source-only v0.4.0, First Contact & Engineering Backbone. Strategic Contact Reporting is the owner-approved next development slice, but this documentation decision implements no gameplay and creates no new release.
+The initial implementation review is against `dev` commit `42481ca7fbc6c5c9da96985e02565f78a236cab7`, reviewed September 6, 2026. The current released gameplay baseline is source-only v0.4.0, First Contact & Engineering Backbone. Strategic Contact Reporting has since landed on `dev` (Feature #77, Final PR #78); it does not complete Milestone 3 and does not begin Milestone 5, and no new numbered release has been cut for it.
 
 ## Read by topic
 
@@ -34,12 +34,12 @@ The initial implementation review is against `dev` commit `42481ca7fbc6c5c9da969
 - [Architecture](architecture.md): authority, project boundaries, dependencies, testing, and the ADR map.
 - [World, navigation, and time](world-navigation-and-time.md): ship identity, bootstrap, strategic orders, tactical space, and scheduling.
 - [Sensors, knowledge, and AI](sensors-knowledge-and-ai.md): actor-local observations, scan/hail, explainable decisions, and the current information boundary.
-- [Strategic Contact Reporting](strategic-contact-reporting.md): owner-approved next slice for durable, reference-frame-qualified actor-safe last-known contact information; not yet implemented.
+- [Strategic Contact Reporting](strategic-contact-reporting.md): durable, reference-frame-qualified actor-safe last-known contact information.
 - [Engineering and combat](engineering-and-combat.md): the implemented power/condition/repair model and the planned combat integration.
 - [Factions and organizations](factions-and-organizations.md): owner-approved political framework from the September 6 discussion; not yet implemented.
 - [Diplomacy, economy, and campaigns](diplomacy-economy-and-campaigns.md): political consequences, history, trade, canon, and later campaign work.
 - [Interface and player commands](interface-and-player-commands.md): Command Deck, Engineering, presentation authority, controls, and preview boundaries.
-- [Content, assets, and persistence](content-assets-and-persistence.md): JSON definitions, V5 snapshots, migration, and the independent AssetCtl pipeline.
+- [Content, assets, and persistence](content-assets-and-persistence.md): JSON definitions, V6 snapshots, migration, and the independent AssetCtl pipeline.
 - [Development and governance](development-and-governance.md): toolchain, quality gate, branch/release workflow, agent guidance, and legal references.
 
 For decisions rather than systems, use the [decision register](decision-register.md). For unfinished design, use [open questions](open-questions.md). The [source catalog](sources.md) indexes the original documents and implementation evidence.
