@@ -1,6 +1,6 @@
 ---
 schema_version: '1.1'
-id: 'decision-strategic-contact-reporting'
+id: 'decision-q4p7ns-strategic-contact-reporting'
 title: 'Strategic Contact Reporting'
 description: 'Owner-approved next development slice connecting local contact knowledge to durable strategic last-known information without introducing faction runtime.'
 doc_type: 'decision'
@@ -125,7 +125,7 @@ Use the existing observer-local `SensorContactId` as far as it remains sufficien
 
 > Pathfinder / Contact 1 — last observed at Dawn Anchor — identified as Survey Vessel Kestrel.
 
-The slice does not need to solve cross-observer correlation, reports about ships never personally observed, or whether two observers' reports refer to the same unknown vessel. Q-02 remains open for the first consumer that genuinely needs those semantics.
+The slice does not need to solve cross-observer correlation, reports about a vessel never personally observed, or whether two observers' reports refer to the same unknown vessel. Q-02 remains open for the first consumer that genuinely needs those semantics.
 
 If implementation evidence proves that the approved player-visible proof cannot be implemented correctly without a distinct identity concept, stop and return to governed design refinement rather than silently adding one.
 
