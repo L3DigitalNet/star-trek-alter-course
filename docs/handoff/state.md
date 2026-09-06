@@ -2,9 +2,9 @@
 
 ## Current focus
 
-- v0.4.0 remains source-only; sync PR #67 restored release ancestry to `dev`.
-- [Design wiki](../wiki/README.md) is the single source of truth for design; Task #70 and PR #71 aligned the repository (`1b8eec4`).
-- Political design is approved but unimplemented; no new gameplay or release scope is admitted.
+- Feature #77 Strategic Contact Reporting: draft Final PR #78 targets `dev`, declares `Final: #77`, open for owner review.
+- No merge or release followed; after PR #78 merges, run post-feature Handoff/STATUS parking as after v0.4.0.
+- [Open questions](../wiki/open-questions.md) Q-02 through Q-05 remain open; Milestone 3 is not complete, Milestone 5 not started.
 - Resume from the wiki, ROADMAP, STATUS, and active ADRs; remaining design questions are recorded, not silently decided.
 
 ## Active incidents
