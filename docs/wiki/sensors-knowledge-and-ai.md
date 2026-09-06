@@ -2,7 +2,7 @@
 schema_version: '1.1'
 id: 'concept-s51phf-sensors-knowledge-and-ai'
 title: 'Sensors Knowledge and AI'
-description: 'Implemented local contact rules, actor-safe decisions, and unresolved strategic intelligence design.'
+description: 'Implemented local contact rules, actor-safe decisions, and the approved Strategic Contact Reporting bridge.'
 doc_type: 'concept'
 status: 'active'
 created: '2026-09-06'
@@ -13,6 +13,7 @@ tags:
   - 'ai'
 aliases: []
 related:
+  - 'docs/wiki/strategic-contact-reporting.md'
   - 'docs/design/first-observed-contact.md'
   - 'docs/design/engineering-backbone.md'
   - 'docs/adr/0010-use-explainable-domain-ai-and-demand-driven-state-machines.md'
@@ -20,7 +21,7 @@ related:
 
 # Sensors, knowledge, and AI
 
-[Wiki home](README.md) · [Engineering](engineering-and-combat.md) · [Open questions](open-questions.md)
+[Wiki home](README.md) · [Strategic Contact Reporting](strategic-contact-reporting.md) · [Engineering](engineering-and-combat.md) · [Open questions](open-questions.md)
 
 ## The information boundary
 
@@ -50,12 +51,22 @@ An explanation is diagnostic/test data, not automatically player-visible or dura
 
 ADR 0010 generalizes the decision discipline, not a mandatory algorithm: actor snapshot, goals/constraints, candidates, rejection, evaluation, deterministic selection, typed command or no-action, and explanation. Faction strategic AI is still future work; no behavior-tree framework or external LLM is gameplay authority.
 
-## Strategic knowledge: proposals, not approvals
+## Approved next slice: Strategic Contact Reporting
 
-The conversation proposed separating world identity, a durable observer-local known-vessel identity, and live sensor tracks. It also proposed explicit reports between ships and faction knowledge. Neither proposal was approved in the subsequent political discussion. `KnownShipId` is not an existing type or a mandatory next migration.
+The owner approved [Strategic Contact Reporting](strategic-contact-reporting.md) as the next development slice after v0.4.0. It is **approved design, not implemented**.
 
-The approved requirement remains that actors act on information legitimately available to them. Whether reports require a separate identity model, how affiliations are learned, how knowledge propagates, and how tactical observations become strategic memory are listed in [Open questions](open-questions.md). Do not silently implement these suggestions while adding faction records.
+The slice extends the existing information boundary rather than replacing it. Its purpose is to carry a legitimate local observation into durable, reference-frame-qualified last-known strategic information. A retained report must continue to describe where and when the observer actually saw a contact even after the observer or target moves elsewhere, and later hidden target truth must not backfill the report.
+
+The approved slice deliberately reuses observer-local `SensorContactId` as far as it remains sufficient. It does not approve `KnownShipId`, global vessel correlation, affiliation/intent learning, faction knowledge sharing, faction AI, faction scheduler targets, or a general intelligence network. Q-02 through Q-05 remain open for later consumers.
+
+A tactical position in the retained observation must be qualified by the strategic location/reference frame in which it was observed. The exact runtime type and persistence mapping remain implementation decisions constrained by the canonical Strategic Contact Reporting page and active ADRs.
+
+## Strategic knowledge still deferred beyond this slice
+
+Strategic Contact Reporting does not answer how two observers correlate reports, how a report about a never-locally-observed vessel is represented, how affiliation is learned, or how ship knowledge reaches a faction. Those questions remain in [Open questions](open-questions.md).
+
+Do not convert the approved report seam into a second world-truth store. It must remain actor-safe, bounded, and causally tied to legitimate observation. If implementation proves that a deferred identity or sharing concept is actually required to satisfy the approved exit condition, return to governed design refinement rather than introducing it silently.
 
 ## Sources
 
-[First observed contact](../design/first-observed-contact.md) defines M3A; [Engineering Backbone](../design/engineering-backbone.md) supersedes its sensor-only condition and repair descriptions. See [AI ADR](../adr/0010-use-explainable-domain-ai-and-demand-driven-state-machines.md), [Core AI](../../src/AlterCourse.Core/AI/), [Core sensors](../../src/AlterCourse.Core/Sensors/), and [gameplay tests](../../tests/AlterCourse.Core.Tests/Gameplay/).
+[Strategic Contact Reporting](strategic-contact-reporting.md) owns the next approved slice. [First observed contact](../design/first-observed-contact.md) defines M3A; [Engineering Backbone](../design/engineering-backbone.md) supersedes its sensor-only condition and repair descriptions. See [AI ADR](../adr/0010-use-explainable-domain-ai-and-demand-driven-state-machines.md), [Core AI](../../src/AlterCourse.Core/AI/), [Core sensors](../../src/AlterCourse.Core/Sensors/), and [gameplay tests](../../tests/AlterCourse.Core.Tests/Gameplay/).
