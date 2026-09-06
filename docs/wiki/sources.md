@@ -56,7 +56,7 @@ The wiki is the single source of truth for design; this catalog lists the docume
 - [Development roadmap](../../ROADMAP.md): strategic direction, completed M1-M4 and Strategic Contact Reporting outcomes, and M5-M9 scope/refinement boundaries.
 - [Command Deck UI](../design/command-deck-ui.md): approved shell, Engineering workspace, visual language, runtime Theme, and preview policy.
 - [First observed contact](../design/first-observed-contact.md): detailed M3A knowledge, scan/hail, cautious behavior, and V4-era contract; M4 supersedes its sensor-only Engineering description.
-- [Engineering Backbone](../design/engineering-backbone.md): current M4 rules, proof values, content V4, save V5, repair/scan correlations, and live UI.
+- [Engineering Backbone](../design/engineering-backbone.md): current M4 rules, proof values, content V4, save V5 (superseded by V6), repair/scan correlations, and live UI.
 - [Branch/release governance discovery](../design/branch-release-governance.md): decision rationale; ADR 0013 governs the adopted outcome.
 - [Asset pipeline tool specification](../specs/asset-pipeline-tool.md): full provider/configuration, validation, lifecycle, provenance, cost, rights, and publishing contract.
 

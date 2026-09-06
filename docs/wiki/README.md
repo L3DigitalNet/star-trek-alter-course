@@ -25,7 +25,7 @@ related:
 
 This wiki is the single source of truth for the design of the game: what it is intended to become, what the code actually does, which decisions are settled, and which questions remain open. Every other design document in the repository is either supporting detail linked from a wiki page or historical evidence; none of them may contradict the wiki.
 
-The initial implementation review is against `dev` commit `42481ca7fbc6c5c9da96985e02565f78a236cab7`, reviewed September 6, 2026. The current released gameplay baseline is source-only v0.4.0, First Contact & Engineering Backbone. Strategic Contact Reporting is delivered by Feature #77, Final PR #78, and is pending merge to `dev`; it does not complete Milestone 3 and does not begin Milestone 5, and no new numbered release has been cut for it.
+The initial implementation review is against `dev` commit `42481ca7fbc6c5c9da96985e02565f78a236cab7`, reviewed September 6, 2026. The current released gameplay baseline is source-only v0.4.0, First Contact & Engineering Backbone. Strategic Contact Reporting is delivered by Feature #77, Final PR #78, and is merged into `dev` as `80c3084`; it does not complete Milestone 3 and does not begin Milestone 5, and no new numbered release has been cut for it.
 
 ## Read by topic
 
