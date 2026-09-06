@@ -19,6 +19,10 @@ public sealed class SensorKnowledgeValidationTests
     private static readonly ShipDefinitionId DefinitionId = new("test-ship");
     private static readonly LocationId Location = new("test-location");
 
+    // A second mapped location the aggregate's ships never occupy, so a contact frame naming it is
+    // resolvable but distinct from every observer's present location.
+    private static readonly LocationId OtherLocation = new("other-location");
+
     /// <summary>Confirms canonical valid current and identified contacts restore without behavior.</summary>
     [Fact]
     public void AcceptsValidBoundedKnowledgeWithoutScheduledWork()
@@ -108,6 +112,51 @@ public sealed class SensorKnowledgeValidationTests
                 ]
             )
         );
+    }
+
+    /// <summary>Confirms an observed location must resolve on the strategic map and carry an initialized identity.</summary>
+    [Fact]
+    public void RejectsUnresolvableAndUninitializedObservedLocations()
+    {
+        AssertInvalid(new SensorKnowledge(2, [Contact(1, NpcId, observedAtLocationId: new LocationId("absent"))]));
+        AssertInvalid(new SensorKnowledge(2, [Contact(1, NpcId, observedAtLocationId: default(LocationId))]));
+    }
+
+    /// <summary>Confirms a current contact cannot claim an observation the observer's present location contradicts.</summary>
+    [Fact]
+    public void RejectsCurrentContactObservedAwayFromTheObserver()
+    {
+        AssertInvalid(new SensorKnowledge(2, [Contact(1, NpcId, observedAtLocationId: OtherLocation)]));
+    }
+
+    /// <summary>Confirms a retained report keeps its own frame after the observer moves elsewhere.</summary>
+    [Fact]
+    public void AcceptsRetainedContactObservedAtAnotherLocation()
+    {
+        var knowledge = new SensorKnowledge(
+            2,
+            [Contact(1, NpcId, status: SensorContactStatus.Lost, observedAtLocationId: OtherLocation)]
+        );
+
+        SimulationState state = CreateState(knowledge);
+        state.Validate(CreateCatalog());
+
+        Assert.Equal(
+            OtherLocation,
+            Assert.Single(state.GetRequiredShip(PlayerId).SensorKnowledge.Contacts).ObservedAtLocationId
+        );
+    }
+
+    /// <summary>Confirms an explicitly unqualified legacy observation carries no location constraint.</summary>
+    [Fact]
+    public void AcceptsLegacyContactWithoutAnObservedLocation()
+    {
+        var knowledge = new SensorKnowledge(2, [Contact(1, NpcId) with { ObservedAtLocationId = null }]);
+
+        SimulationState state = CreateState(knowledge);
+        state.Validate(CreateCatalog());
+
+        Assert.Null(Assert.Single(state.GetRequiredShip(PlayerId).SensorKnowledge.Contacts).ObservedAtLocationId);
     }
 
     /// <summary>Confirms stale loss state requires one exact future scheduled correlation and no other status carries it.</summary>
@@ -248,13 +297,15 @@ public sealed class SensorKnowledgeValidationTests
         long id,
         ShipInstanceId target,
         SensorContactStatus status = SensorContactStatus.Current,
-        SensorContactIdentification identification = SensorContactIdentification.Detected
+        SensorContactIdentification identification = SensorContactIdentification.Detected,
+        LocationId? observedAtLocationId = null
     ) =>
         new(
             new SensorContactId(id),
             target,
             new TacticalPosition(id, id),
             new SimulationTime(100),
+            observedAtLocationId ?? Location,
             status,
             identification,
             identification == SensorContactIdentification.Identified ? "Ship 2" : null,
@@ -278,6 +329,7 @@ public sealed class SensorKnowledgeValidationTests
     )
     {
         var location = new StrategicLocation(Location, "Test", default);
+        var otherLocation = new StrategicLocation(OtherLocation, "Other", new StrategicMapPosition(1, 1));
         ShipState player = CreateShip(PlayerId) with { SensorKnowledge = knowledge };
         ShipState npc = CreateShip(NpcId) with { AutonomousState = npcAutonomy ?? ShipAutonomousState.Empty };
         ShipState additionalNpc = CreateShip(new ShipInstanceId(3));
@@ -285,7 +337,7 @@ public sealed class SensorKnowledgeValidationTests
             new SimulationTime(100),
             scheduler ?? SimulationScheduler.Create(),
             ShipInstanceIdAllocator.Restore(4),
-            new StrategicMap([location], []),
+            new StrategicMap([location, otherLocation], []),
             PlayerId,
             [player, npc, additionalNpc]
         );

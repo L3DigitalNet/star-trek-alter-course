@@ -727,8 +727,14 @@ public sealed class GameSimulation
                 observerDefinition.PassiveSensorRange.Value
                 * observer.Engineering.SensorCapability(observerDefinition.Engineering);
             var observableTargets = new HashSet<ShipInstanceId>();
+            // The observer's own location is the reference frame every observation recorded in this
+            // pass is qualified by. It stays coupled to observableTargets: a traveling observer
+            // resolves no location and therefore observes nothing, so a non-empty target set always
+            // implies a known frame.
+            LocationId? observerLocationId = null;
             if (observer.StrategicState is AtLocationState observerLocation)
             {
+                observerLocationId = observerLocation.LocationId;
                 IEnumerable<ShipState> targets =
                     observer.SensorKnowledge.Contacts.Length == SensorKnowledge.MaximumContactsPerObserver
                         ? observer.SensorKnowledge.Contacts.Select(contact =>
@@ -753,7 +759,14 @@ public sealed class GameSimulation
                 }
             }
 
-            (current, observer) = ReconcileObserverContacts(current, observer, truth, observableTargets, playerEvents);
+            (current, observer) = ReconcileObserverContacts(
+                current,
+                observer,
+                truth,
+                observableTargets,
+                observerLocationId,
+                playerEvents
+            );
             bool decisionRequired = HasMeaningfulContactTransition(
                 truthObserver.SensorKnowledge,
                 observer.SensorKnowledge
@@ -795,6 +808,7 @@ public sealed class GameSimulation
         ShipState observer,
         IReadOnlyList<ShipState> truth,
         HashSet<ShipInstanceId> observableTargets,
+        LocationId? observerLocationId,
         List<PlayerAdvanceEvent> playerEvents
     )
     {
@@ -805,6 +819,7 @@ public sealed class GameSimulation
             observer,
             truth,
             observableTargets,
+            observerLocationId,
             playerEvents
         );
 
@@ -812,6 +827,7 @@ public sealed class GameSimulation
             observer,
             truth,
             observableTargets,
+            observerLocationId,
             contacts,
             knowledge.NextContactId,
             current.Time,
@@ -836,6 +852,7 @@ public sealed class GameSimulation
         ShipState observer,
         IReadOnlyList<ShipState> truth,
         HashSet<ShipInstanceId> observableTargets,
+        LocationId? observerLocationId,
         List<PlayerAdvanceEvent> playerEvents
     )
     {
@@ -848,13 +865,14 @@ public sealed class GameSimulation
         )
         {
             ShipState target = truth[FindShipIndex(truth, contact.TargetShipId)];
-            if (observableTargets.Contains(contact.TargetShipId))
+            if (observableTargets.Contains(contact.TargetShipId) && observerLocationId is { } observedAtLocationId)
             {
                 (current, SensorContactTrack refreshed) = RefreshObservedContact(
                     current,
                     observer.InstanceId,
                     target,
                     contact,
+                    observedAtLocationId,
                     playerEvents
                 );
                 contacts.Add(refreshed);
@@ -884,6 +902,7 @@ public sealed class GameSimulation
         ShipInstanceId observerId,
         ShipState target,
         SensorContactTrack contact,
+        LocationId observedAtLocationId,
         List<PlayerAdvanceEvent> playerEvents
     )
     {
@@ -911,6 +930,7 @@ public sealed class GameSimulation
             {
                 LastObservedPosition = target.TacticalPosition,
                 LastObservedAt = state.Time,
+                ObservedAtLocationId = observedAtLocationId,
                 Status = SensorContactStatus.Current,
                 LossWorkId = null,
                 LossDueTime = null,
@@ -955,6 +975,7 @@ public sealed class GameSimulation
         ShipState observer,
         IReadOnlyList<ShipState> truth,
         HashSet<ShipInstanceId> observableTargets,
+        LocationId? observerLocationId,
         List<SensorContactTrack> contacts,
         long nextContactId,
         SimulationTime observationTime,
@@ -962,6 +983,13 @@ public sealed class GameSimulation
         List<PlayerAdvanceEvent> playerEvents
     )
     {
+        if (observerLocationId is not { } observedAtLocationId)
+        {
+            // A traveling observer resolves no reference frame, and therefore has no observable
+            // targets to admit. Returning here keeps the frame non-nullable at the construction site.
+            return nextContactId;
+        }
+
         HashSet<ShipInstanceId> retainedTargets = [.. contacts.Select(contact => contact.TargetShipId)];
         foreach (
             ShipState target in truth
@@ -984,6 +1012,7 @@ public sealed class GameSimulation
                     target.InstanceId,
                     target.TacticalPosition,
                     observationTime,
+                    observedAtLocationId,
                     SensorContactStatus.Current,
                     SensorContactIdentification.Detected
                 )
@@ -1663,9 +1692,36 @@ public sealed class GameSimulation
             new ReadOnlyValueList<StrategicLocationProjection>(locations),
             new ReadOnlyValueList<StrategicRouteProjection>(routes),
             currentLocation,
-            travel
+            travel,
+            ProjectKnownContactReports(playerShip)
         );
     }
+
+    /// <remarks>
+    /// Built from the player's own retained knowledge alone. It must never consult the live target
+    /// ship or the target's current location: a report's whole purpose is to stay fixed while hidden
+    /// world truth moves on. Contacts with no recorded frame are legacy observations restored from a
+    /// save that never stored one; omitting them keeps the actor-safe report type total instead of
+    /// presenting a location the observer never recorded. Contact order is the canonical ascending
+    /// identity order the knowledge itself maintains.
+    /// </remarks>
+    private static ReadOnlyValueList<StrategicContactReportProjection> ProjectKnownContactReports(
+        ShipState playerShip
+    ) =>
+        new(
+            playerShip
+                .SensorKnowledge.Contacts.Where(contact => contact.ObservedAtLocationId is not null)
+                .Select(contact => new StrategicContactReportProjection(
+                    contact.Id,
+                    contact.ObservedAtLocationId!.Value,
+                    contact.LastObservedPosition,
+                    contact.LastObservedAt,
+                    contact.Status,
+                    contact.Identification,
+                    contact.KnownVesselDisplayName,
+                    contact.KnownDesignDisplayName
+                ))
+        );
 
     private static PlayerShipProjection ProjectShip(
         SimulationState state,

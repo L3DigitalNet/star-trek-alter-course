@@ -2150,6 +2150,9 @@ public static class GamePersistence
                     contact.LastObservedPosition.YKilometers
                 ),
                 new SimulationTime(contact.LastObservedAtMilliseconds),
+                // The V4 contact shape records no strategic location, and it cannot be derived: the
+                // observer's present location is not where a stale or lost contact was observed.
+                null,
                 ParseContactStatus(contact.Status),
                 ParseContactIdentification(contact.Identification),
                 contact.KnownVesselDisplayName,
