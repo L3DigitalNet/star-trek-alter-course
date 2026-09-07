@@ -25,17 +25,32 @@ public sealed class ObservationRuntimeTests
         SimulationState published = game.CaptureState();
         FactionObservationState observation = published.Factions[0].Observation!;
 
+        Assert.Equal(FactionTestWorld.FactionA, published.Factions[0].Id);
         Assert.Equal(2, observation.InFlightReports.Length);
         Assert.All(
             observation.InFlightReports,
             item =>
             {
+                SensorContactTrack source = published
+                    .GetRequiredShip(item.Report.ObserverShipId)
+                    .SensorKnowledge.Contacts.Single(contact => contact.Id == item.Report.ObserverContactId);
                 Assert.Equal(new SimulationTime(0), item.Report.ObservedAt);
                 Assert.Equal(new SimulationTime(2000), item.DueTime);
+                Assert.Equal(FactionTestWorld.Alpha, item.Report.ObservedAtLocationId);
+                Assert.Equal(source.LastObservedPosition, item.Report.ObservedPosition);
+                Assert.Equal(source.LastObservedAt, item.Report.ObservedAt);
                 Assert.Equal(SensorContactIdentification.Detected, item.Report.Identification);
                 Assert.Null(item.Report.KnownVesselDisplayName);
                 Assert.Null(item.Report.KnownDesignDisplayName);
             }
+        );
+        Assert.Equal(
+            [new ShipInstanceId(2), new ShipInstanceId(3)],
+            observation.InFlightReports.Select(item => item.Report.ObserverShipId).OrderBy(id => id.Value)
+        );
+        Assert.All(
+            observation.InFlightReports,
+            item => Assert.Equal(new SensorContactId(1), item.Report.ObserverContactId)
         );
 
         SimulationState refreshed = GameSimulation
@@ -48,6 +63,66 @@ public sealed class ObservationRuntimeTests
             .State;
         Assert.Equal(2, refreshed.Factions[0].Observation!.InFlightReports.Length);
         Assert.Equal(3, refreshed.ObservationReportIdAllocator.NextId);
+    }
+
+    /// <summary>Confirms queued historical facts ignore later hidden target truth.</summary>
+    [Fact]
+    public void QueuedReportDoesNotChangeAfterHiddenTargetMovementOrControllerChange()
+    {
+        GameSimulation game = CreateTransitionGame();
+        game.BootstrapHiddenCautiousContactObservation(new ShipInstanceId(2));
+        SimulationState published = game.CaptureState();
+        ObservationReportSnapshot queued = Assert.Single(published.Factions[0].Observation!.InFlightReports).Report;
+        ShipState hiddenTarget = published.GetRequiredShip(new ShipInstanceId(3));
+        SimulationState changedTruth = published.ReplaceShip(
+            hiddenTarget.InstanceId,
+            hiddenTarget with
+            {
+                TacticalPosition = new TacticalPosition(9, -4),
+                DirectControllerFactionId = FactionTestWorld.FactionA,
+            }
+        );
+
+        SimulationState refreshed = GameSimulation
+            .AdvanceTo(
+                changedTruth,
+                new SimulationTime(100),
+                FactionTestWorld.ShipCatalog,
+                FactionTestWorld.FactionCatalog
+            )
+            .State;
+
+        Assert.Equal(
+            queued,
+            refreshed
+                .Factions[0]
+                .Observation!.InFlightReports.Single(item => item.Report.ReportId == queued.ReportId)
+                .Report
+        );
+    }
+
+    /// <summary>Confirms player observations never publish and faction control is rejected.</summary>
+    [Fact]
+    public void PlayerObservationAndScanCompletionNeverPublishFactionReports()
+    {
+        AssertPlayerControllerCannotEnterFactionPublicationPath();
+        GameSimulation game = CreatePlayerControlledObservationGame();
+        game.AdvanceFixedSteps(1);
+        SensorContactId contactId = Assert.Single(game.GetPlayerProjection().Ship.Sensors.Contacts).Id;
+        Assert.Empty(game.CaptureState().Factions[0].Observation!.InFlightReports);
+        long reportCounter = game.CaptureState().ObservationReportIdAllocator.NextId;
+
+        Assert.Equal(ActiveSensorScanOutcome.Accepted, game.RequestActiveSensorScan(contactId).Outcome);
+        AdvanceUntilResult completed = game.AdvanceUntilNextPlayerRelevantEvent();
+
+        Assert.Equal(AdvanceUntilOutcome.PlayerEventResolved, completed.Outcome);
+        Assert.Empty(game.CaptureState().Factions[0].Observation!.InFlightReports);
+        SimulationState final = game.CaptureState();
+        Assert.Equal(reportCounter, final.ObservationReportIdAllocator.NextId);
+        Assert.Equal(
+            SensorContactIdentification.Identified,
+            Assert.Single(final.GetRequiredShip(final.PlayerShipId).SensorKnowledge.Contacts).Identification
+        );
     }
 
     /// <summary>Confirms disabled typed posture prevents otherwise legitimate publication.</summary>
@@ -91,6 +166,12 @@ public sealed class ObservationRuntimeTests
         Assert.All(observation.ReceivedReports, item => Assert.Equal(new SimulationTime(2000), item.ReceivedAt));
         Assert.Equal(new SimulationTime(2000), Assert.Single(observation.CompletionWatermarks).ObservedThrough);
         Assert.Equal(2, delivered.Traces.Count(trace => trace.WorkKind == ScheduledWorkKind.ObservationReportDelivery));
+        Assert.Single(delivered.Traces, trace => trace.FactionInvestigationDecision is not null);
+        Assert.DoesNotContain(delivered.Traces, trace => trace.WorkKind == ScheduledWorkKind.TravelArrival);
+        Assert.DoesNotContain(
+            delivered.State.Scheduler.OutstandingWork,
+            work => work.DueTime.Milliseconds <= delivered.State.Time.Milliseconds
+        );
     }
 
     /// <summary>Confirms a duplicate delivery without extant authority is an idempotent no-op.</summary>
@@ -758,6 +839,42 @@ public sealed class ObservationRuntimeTests
         );
     }
 
+    /// <summary>Confirms equal observation times retain lower report IDs and discarded deliveries cannot resurrect.</summary>
+    [Fact]
+    public void ReceiptRetentionBreaksEqualObservationTimesByReportIdWithoutResurrection()
+    {
+        SimulationState state = CreateEqualObservationRetentionState();
+        SimulationState delivered = GameSimulation
+            .AdvanceTo(state, state.Time, FactionTestWorld.ShipCatalog, FactionTestWorld.FactionCatalog)
+            .State;
+
+        Assert.Equal(
+            Enumerable.Range(1, 16).Select(id => new ObservationReportId(id)),
+            delivered.Factions[0].Observation!.ReceivedReports.Select(report => report.Report.ReportId)
+        );
+        (SimulationScheduler scheduler, _) = delivered.Scheduler.Schedule(
+            delivered.Time,
+            ScheduledWorkTarget.ForFaction(delivered.Factions[0].Id),
+            ScheduledWorkKind.ObservationReportDelivery
+        );
+        SimulationState replayed = GameSimulation
+            .AdvanceTo(
+                delivered with
+                {
+                    Scheduler = scheduler,
+                },
+                delivered.Time,
+                FactionTestWorld.ShipCatalog,
+                FactionTestWorld.FactionCatalog
+            )
+            .State;
+
+        Assert.DoesNotContain(
+            replayed.Factions[0].Observation!.ReceivedReports,
+            report => report.Report.ReportId == new ObservationReportId(17)
+        );
+    }
+
     /// <summary>Confirms stale controller, order, origin, and route proposals reject atomically.</summary>
     [Fact]
     public void InvestigationApplicationRejectsChangedControllerOrderOriginAndRouteAtomically()
@@ -814,6 +931,71 @@ public sealed class ObservationRuntimeTests
         );
     }
 
+    /// <summary>Confirms every stale authority branch rejects without changing its candidate aggregate.</summary>
+    [Fact]
+    public void InvestigationApplicationRejectsCompleteAuthorityMatrixAtomically()
+    {
+        SimulationState state = CreateSingleReceivedState(FactionTestWorld.Beta);
+        FactionState faction = state.Factions[0];
+        FactionInvestigationProposal proposal = GameSimulation.DecideFactionInvestigation(state, faction).Proposal!;
+        AssertFactionAuthorityRejections(state, faction, proposal);
+        AssertSourceAuthorityRejections(state, proposal);
+        AssertResponderAuthorityRejections(state, proposal);
+    }
+
+    private static void AssertFactionAuthorityRejections(
+        SimulationState state,
+        FactionState faction,
+        FactionInvestigationProposal proposal
+    )
+    {
+        AssertRejected(
+            state,
+            CopyProposal(proposal, factionId: new FactionId(99)),
+            FactionInvestigationApplicationOutcome.FactionMissing
+        );
+        SimulationState disabled = state.ReplaceFaction(
+            faction.Id,
+            faction with
+            {
+                Observation = new FactionObservationState(ObservationResponsePosture.Disabled),
+            }
+        );
+        AssertRejected(disabled, proposal, FactionInvestigationApplicationOutcome.PostureDisabled);
+        AssertRejected(
+            CreateStateWithActiveInvestigation(state, proposal),
+            proposal,
+            FactionInvestigationApplicationOutcome.ActiveInvestigationExists
+        );
+    }
+
+    private static void AssertSourceAuthorityRejections(SimulationState state, FactionInvestigationProposal proposal)
+    {
+        AssertRejected(
+            state,
+            CopyProposal(proposal, sourceReport: CopyReport(proposal.SourceReport, new TacticalPosition(99, 99))),
+            FactionInvestigationApplicationOutcome.SourceReportUnavailable
+        );
+        AssertRejected(
+            state,
+            CopyProposal(proposal, receivedAt: new SimulationTime(2100), decisionTime: new SimulationTime(2100)),
+            FactionInvestigationApplicationOutcome.SourceReportUnavailable
+        );
+        AssertRejected(
+            state with
+            {
+                Time = new SimulationTime(60_000),
+            },
+            proposal,
+            FactionInvestigationApplicationOutcome.SourceReportIneligible
+        );
+        AssertRejected(
+            state,
+            CopyProposal(proposal, decisionTime: new SimulationTime(2001)),
+            FactionInvestigationApplicationOutcome.DecisionStale
+        );
+    }
+
     /// <summary>Confirms fixed active work survives expiry and suppresses arrival feedback.</summary>
     [Fact]
     public void ActiveInvestigationSurvivesSourceExpiryAndSuppressesArrivalFeedback()
@@ -851,6 +1033,7 @@ public sealed class ObservationRuntimeTests
                 && report.Handling == ObservationReportHandling.Unhandled
         );
         Assert.Equal(new SimulationTime(72_000), Assert.Single(observation.CompletionWatermarks).ObservedThrough);
+        Assert.NotEmpty(observation.InFlightReports);
         Assert.All(
             observation.InFlightReports,
             inFlight =>
@@ -859,6 +1042,108 @@ public sealed class ObservationRuntimeTests
                         <= observation.CompletionWatermarks[0].ObservedThrough.Milliseconds
                 )
         );
+
+        AssertArrivalReportsRetainedWithoutResponse(arrived);
+    }
+
+    private static void AssertArrivalReportsRetainedWithoutResponse(SimulationState arrived)
+    {
+        SimulationState retained = GameSimulation
+            .AdvanceTo(
+                arrived,
+                new SimulationTime(74_000),
+                FactionTestWorld.ShipCatalog,
+                FactionTestWorld.FactionCatalog
+            )
+            .State;
+        Assert.Null(retained.Factions[0].Observation!.ActiveInvestigation);
+        Assert.Contains(
+            retained.Factions[0].Observation!.ReceivedReports,
+            report =>
+                report.Report.ObservedAt == new SimulationTime(72_000)
+                && report.Handling == ObservationReportHandling.Unhandled
+        );
+        Assert.Null(retained.Factions[0].PendingDecisionWake);
+    }
+
+    /// <summary>Confirms a genuine post-watermark Lost-to-Current episode can drive a later response.</summary>
+    [Fact]
+    public void LaterLostToCurrentEpisodeAfterWatermarkCanRespond()
+    {
+        SimulationState state = CreateArrivalReportsRetainedState();
+        long reportCounter = state.ObservationReportIdAllocator.NextId;
+        ShipInstanceId observerId = new(2);
+        ShipTravelApplicationResult outbound = GameSimulation.ApplyShipTravel(
+            state,
+            new ShipTravelCommand(observerId, FactionTestWorld.Alpha)
+        );
+        Assert.Equal(TravelOutcome.Accepted, outbound.Outcome);
+        SimulationState away = GameSimulation
+            .AdvanceTo(
+                outbound.CandidateState,
+                new SimulationTime(144_000),
+                FactionTestWorld.ShipCatalog,
+                FactionTestWorld.FactionCatalog
+            )
+            .State;
+        ShipTravelApplicationResult returning = GameSimulation.ApplyShipTravel(
+            away,
+            new ShipTravelCommand(observerId, FactionTestWorld.Beta)
+        );
+        Assert.Equal(TravelOutcome.Accepted, returning.Outcome);
+        SimulationState reacquired = GameSimulation
+            .AdvanceTo(
+                returning.CandidateState,
+                new SimulationTime(214_000),
+                FactionTestWorld.ShipCatalog,
+                FactionTestWorld.FactionCatalog
+            )
+            .State;
+        Assert.True(reacquired.ObservationReportIdAllocator.NextId > reportCounter);
+
+        SimulationState responded = GameSimulation
+            .AdvanceTo(
+                reacquired,
+                new SimulationTime(216_000),
+                FactionTestWorld.ShipCatalog,
+                FactionTestWorld.FactionCatalog
+            )
+            .State;
+        Assert.Contains(
+            responded.Factions[0].Observation!.ReceivedReports,
+            report =>
+                report.Report.ObservedAt == new SimulationTime(214_000)
+                && report.Handling == ObservationReportHandling.Handled
+        );
+    }
+
+    private static SimulationState CreateArrivalReportsRetainedState()
+    {
+        SimulationState active = CreateLongActiveInvestigation();
+        SimulationState expired = GameSimulation
+            .AdvanceTo(
+                active,
+                new SimulationTime(62_000),
+                FactionTestWorld.ShipCatalog,
+                FactionTestWorld.FactionCatalog
+            )
+            .State;
+        SimulationState arrived = GameSimulation
+            .AdvanceTo(
+                ReplaceEvictedSourceWithNewerReport(expired),
+                new SimulationTime(72_000),
+                FactionTestWorld.ShipCatalog,
+                FactionTestWorld.FactionCatalog
+            )
+            .State;
+        return GameSimulation
+            .AdvanceTo(
+                arrived,
+                new SimulationTime(74_000),
+                FactionTestWorld.ShipCatalog,
+                FactionTestWorld.FactionCatalog
+            )
+            .State;
     }
 
     /// <summary>Confirms completion can replace an unwitnessed watermark without a transient twenty-fifth entry.</summary>
@@ -1231,6 +1516,52 @@ public sealed class ObservationRuntimeTests
         ).CreateSimulation(FactionTestWorld.ShipCatalog, FactionTestWorld.FactionCatalog);
     }
 
+    private static GameSimulation CreatePlayerControlledObservationGame()
+    {
+        ShipStart[] ships =
+        [
+            FactionTestWorld.CreateShip(1, FactionTestWorld.Alpha, null),
+            FactionTestWorld.CreateShip(2, FactionTestWorld.Alpha, null),
+        ];
+        return new GameBootstrap(
+            new SimulationTime(0),
+            FactionTestWorld.CreateMap(),
+            ships[0].InstanceId,
+            ships,
+            [
+                new FactionStart(
+                    FactionTestWorld.FactionA,
+                    FactionTestWorld.DefinitionA,
+                    ObservationResponsePosture: ObservationResponsePosture.Enabled
+                ),
+            ]
+        ).CreateSimulation(FactionTestWorld.ShipCatalog, FactionTestWorld.FactionCatalog);
+    }
+
+    private static void AssertPlayerControllerCannotEnterFactionPublicationPath()
+    {
+        ShipStart[] ships =
+        [
+            FactionTestWorld.CreateShip(1, FactionTestWorld.Alpha, FactionTestWorld.FactionA),
+            FactionTestWorld.CreateShip(2, FactionTestWorld.Alpha, null),
+        ];
+        Assert.Throws<ArgumentException>(() =>
+            new GameBootstrap(
+                new SimulationTime(0),
+                FactionTestWorld.CreateMap(),
+                ships[0].InstanceId,
+                ships,
+                [
+                    new FactionStart(
+                        FactionTestWorld.FactionA,
+                        FactionTestWorld.DefinitionA,
+                        ObservationResponsePosture: ObservationResponsePosture.Enabled
+                    ),
+                ]
+            )
+        );
+    }
+
     private static SimulationState CreateTwoLocationResponseState()
     {
         ShipStart[] ships =
@@ -1377,6 +1708,49 @@ public sealed class ObservationRuntimeTests
             .State;
     }
 
+    private static SimulationState CreateEqualObservationRetentionState()
+    {
+        SimulationState state = EnsureObserverAllocator(
+            CreateTransitionGame().CaptureState() with
+            {
+                Time = new SimulationTime(10_000),
+            },
+            2,
+            18
+        );
+        FactionState faction = state.Factions[0];
+        ReceivedObservationReport[] retained =
+        [
+            .. Enumerable
+                .Range(1, 16)
+                .Select(id => new ReceivedObservationReport(
+                    CreateReport(id, 2, FactionTestWorld.Gamma, new SimulationTime(0)),
+                    new SimulationTime(2000)
+                )),
+        ];
+        ObservationReportSnapshot incoming = CreateReport(17, 2, FactionTestWorld.Gamma, new SimulationTime(0));
+        (SimulationScheduler scheduler, ScheduledWork delivery) = state.Scheduler.Schedule(
+            new SimulationTime(2000),
+            ScheduledWorkTarget.ForFaction(faction.Id),
+            ScheduledWorkKind.ObservationReportDelivery
+        );
+        return state.ReplaceFaction(
+            faction.Id,
+            faction with
+            {
+                Observation = new FactionObservationState(
+                    ObservationResponsePosture.Enabled,
+                    [new ObservationReportInFlight(incoming, delivery.Id, delivery.DueTime)],
+                    retained
+                ),
+            }
+        ) with
+        {
+            Scheduler = scheduler,
+            ObservationReportIdAllocator = ObservationReportIdAllocator.Restore(18),
+        };
+    }
+
     private static SensorContactTrack ContactFor(SimulationState state, long observerId, long targetId) =>
         state
             .GetRequiredShip(new ShipInstanceId(observerId))
@@ -1411,7 +1785,98 @@ public sealed class ObservationRuntimeTests
         );
         Assert.Equal(expected, result.Outcome);
         Assert.Same(state, result.CandidateState);
+        Assert.Equal(state.OrderIdAllocator, result.CandidateState.OrderIdAllocator);
+        Assert.Equal(state.ObservationReportIdAllocator, result.CandidateState.ObservationReportIdAllocator);
+        Assert.Same(state.Scheduler, result.CandidateState.Scheduler);
     }
+
+    private static void AssertResponderAuthorityRejections(SimulationState state, FactionInvestigationProposal proposal)
+    {
+        AssertRejected(
+            state,
+            CopyProposal(proposal, responderShipId: new ShipInstanceId(99)),
+            FactionInvestigationApplicationOutcome.ShipMissing
+        );
+        AssertRejected(
+            state,
+            CopyProposal(proposal, responderShipId: state.PlayerShipId, originLocationId: FactionTestWorld.Gamma),
+            FactionInvestigationApplicationOutcome.PlayerShipRejected
+        );
+        AssertRejected(
+            state,
+            CopyProposal(proposal, responderShipId: new ShipInstanceId(4), originLocationId: FactionTestWorld.Beta),
+            FactionInvestigationApplicationOutcome.ControllerMismatch
+        );
+        ShipTravelApplicationResult travel = GameSimulation.ApplyShipTravel(
+            state,
+            new ShipTravelCommand(proposal.ResponderShipId, proposal.DestinationLocationId)
+        );
+        Assert.Equal(TravelOutcome.Accepted, travel.Outcome);
+        AssertRejected(travel.CandidateState, proposal, FactionInvestigationApplicationOutcome.ShipTraveling);
+    }
+
+    private static SimulationState CreateStateWithActiveInvestigation(
+        SimulationState state,
+        FactionInvestigationProposal proposal
+    )
+    {
+        FactionState faction = state.GetRequiredFaction(proposal.FactionId);
+        var active = new ActiveFactionInvestigation(
+            proposal.SourceReport,
+            proposal.ResponderShipId,
+            proposal.OriginLocationId,
+            proposal.DestinationLocationId,
+            proposal.ReceivedAt,
+            proposal.DecisionTime,
+            new ShipOrderId(1)
+        );
+        return state.ReplaceFaction(
+            faction.Id,
+            faction with
+            {
+                Observation = new FactionObservationState(
+                    ObservationResponsePosture.Enabled,
+                    receivedReports: faction.Observation!.ReceivedReports,
+                    activeInvestigation: active
+                ),
+            }
+        );
+    }
+
+    private static FactionInvestigationProposal CopyProposal(
+        FactionInvestigationProposal source,
+        FactionId? factionId = null,
+        ObservationReportSnapshot? sourceReport = null,
+        SimulationTime? receivedAt = null,
+        ShipInstanceId? responderShipId = null,
+        LocationId? originLocationId = null,
+        SimulationTime? decisionTime = null
+    ) =>
+        new(
+            factionId ?? source.FactionId,
+            sourceReport ?? source.SourceReport,
+            receivedAt ?? source.ReceivedAt,
+            responderShipId ?? source.ResponderShipId,
+            originLocationId ?? source.OriginLocationId,
+            source.DestinationLocationId,
+            decisionTime ?? source.DecisionTime
+        );
+
+    private static ObservationReportSnapshot CopyReport(
+        ObservationReportSnapshot source,
+        TacticalPosition observedPosition
+    ) =>
+        new(
+            source.ReportId,
+            source.ObserverShipId,
+            source.ObserverContactId,
+            source.ObservedAtLocationId,
+            observedPosition,
+            source.ObservedAt,
+            source.Identification,
+            source.KnownVesselDisplayName,
+            source.KnownDesignDisplayName
+        );
 
     private static SimulationState CreateSingleReceivedState(LocationId reportedLocation)
     {
