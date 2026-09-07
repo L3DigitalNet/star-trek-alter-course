@@ -36,7 +36,7 @@ Targeted review, 2026-09-07:
 - **Source:** `685a605`; merged Feature #86 / Final PR #87 commit `0217296`.
 - **Scope:** faction landing claims and summaries in the root [README](../../README.md), [roadmap](../../ROADMAP.md), and this wiki's implementation, architecture, faction, knowledge, navigation, persistence, decision, and campaign pages.
 - **Evidence:** static inspection of the [faction policy](../../src/AlterCourse.Core/AI/FactionAssignmentPolicy.cs), [runtime wakes](../../src/AlterCourse.Core/Gameplay/GameSimulation.Factions.cs), [V7 persistence](../../src/AlterCourse.Core/Persistence/GamePersistence.cs), and [targeted tests](../../tests/AlterCourse.Core.Tests/Gameplay/FactionAssignmentScenarioTests.cs). The audit used inherited PR #87 test evidence; this PR's verification records any reruns.
-- **Findings and disposition:** corrected stale pending-landing/review-branch claims and README V6/current-rules claims. Current `dev` is V7 under `faction-intent-autonomous-assignment-v1`; v0.5.0 remains the V6 release. M3 and M5 remain incomplete.
+- **Findings and disposition:** corrected stale pending-landing/review-branch claims, four-ship production summaries, and README V6/current-rules claims. Current `dev` is V7 under `faction-intent-autonomous-assignment-v1`; v0.5.0 remains the V6 release. M3 and M5 remain incomplete.
 - **Full-review cadence:** the initial 2026-09-06 full-corpus review remains the [Wiki home](README.md) provenance; the next full review is due 2026-09-13. This targeted review does not reset that date; follow the [recurring design-reconciliation procedure](development-and-governance.md#recurring-design-reconciliation).
 
 ## All active ADRs

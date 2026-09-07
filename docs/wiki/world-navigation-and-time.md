@@ -24,7 +24,7 @@ related:
 
 ## Definition, instance, and starting state
 
-A ship definition describes reusable design capability. A ship instance has stable identity, a name, runtime condition, location, motion, orders, and knowledge. Bootstrap declares initial circumstances, including activity already underway. These are separate responsibilities even where the current proof reuses one Pathfinder definition for all four vessels.
+A ship definition describes reusable design capability. A ship instance has stable identity, a name, runtime condition, location, motion, orders, and knowledge. Bootstrap declares initial circumstances, including activity already underway. These are separate responsibilities even where the production proof reuses one Pathfinder definition for all six vessels. The ship-catalog-only bootstrap overload retains the earlier four-ship, zero-faction proof.
 
 `PlayerShipId` selects an ordinary ship. It does not make NPCs encounter props or place player-only state at the root of the world model. The current 256-ship bound protects prototype input and work budgets; it is not a final galaxy population target.
 

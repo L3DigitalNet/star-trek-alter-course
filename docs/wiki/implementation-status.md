@@ -29,7 +29,7 @@ v0.5.0 is the immutable source-only release and uses V6 saves. Feature #86 / Fin
 
 ## Implemented gameplay
 
-Core owns multiple ordinary persistent ships and an explicit `PlayerShipId`; the default world contains four ships across three strategic locations. The player ship is not a separate world-root entity type. Typed bootstrap distinguishes reusable design definitions from vessel names and starting condition.
+Core owns multiple ordinary persistent ships and an explicit `PlayerShipId`; the production default world contains six ships across three strategic locations. The ship-catalog-only bootstrap overload retains the earlier four-ship, zero-faction proof. The player ship is not a separate world-root entity type. Typed bootstrap distinguishes reusable design definitions from vessel names and starting condition.
 
 Strategic travel has scheduled arrival. Durable `TravelTo`, `PatrolRoute`, and `HoldUntil` orders exist, with offscreen progression and long-horizon tests. Not every ship in the default contact proof has an active order; order machinery and the currently authored proof scenario are different things.
 
