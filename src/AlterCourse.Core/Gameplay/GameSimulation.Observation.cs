@@ -331,7 +331,8 @@ public sealed partial class GameSimulation
         SimulationState state,
         FactionInvestigationProposal proposal,
         ShipDefinitionCatalog shipCatalog,
-        ObservationPublicationCollector? boundaryCollector = null
+        ObservationPublicationCollector? boundaryCollector = null,
+        List<PlayerAdvanceEvent>? boundaryPlayerEvents = null
     )
     {
         ArgumentNullException.ThrowIfNull(proposal);
@@ -357,7 +358,8 @@ public sealed partial class GameSimulation
                 source!,
                 ship!,
                 atLocation!,
-                boundaryCollector
+                boundaryCollector,
+                boundaryPlayerEvents
             );
     }
 
@@ -447,7 +449,8 @@ public sealed partial class GameSimulation
         ReceivedObservationReport source,
         ShipState ship,
         AtLocationState atLocation,
-        ObservationPublicationCollector? boundaryCollector
+        ObservationPublicationCollector? boundaryCollector,
+        List<PlayerAdvanceEvent>? boundaryPlayerEvents
     )
     {
         (ShipOrderIdAllocator allocator, ShipOrderId orderId) = state.OrderIdAllocator.Allocate();
@@ -489,9 +492,11 @@ public sealed partial class GameSimulation
             observation,
             active,
             ship,
+            shipCatalog,
             allocator,
             orderId,
-            boundaryCollector
+            boundaryCollector,
+            boundaryPlayerEvents
         );
     }
 
@@ -502,9 +507,11 @@ public sealed partial class GameSimulation
         FactionObservationState observation,
         ActiveFactionInvestigation active,
         ShipState ship,
+        ShipDefinitionCatalog shipCatalog,
         ShipOrderIdAllocator allocator,
         ShipOrderId orderId,
-        ObservationPublicationCollector? boundaryCollector
+        ObservationPublicationCollector? boundaryCollector,
+        List<PlayerAdvanceEvent>? boundaryPlayerEvents
     )
     {
         ShipTravelApplicationResult travel = ApplyShipTravel(
@@ -533,6 +540,7 @@ public sealed partial class GameSimulation
         {
             OrderIdAllocator = allocator,
         };
+        candidate = ObserveAllShips(candidate, shipCatalog, boundaryPlayerEvents ?? [], boundaryCollector);
         candidate = NormalizeFactionDecisionWake(candidate, faction.Id, boundaryCollector);
         return new FactionInvestigationApplicationResult(
             FactionInvestigationApplicationOutcome.Accepted,

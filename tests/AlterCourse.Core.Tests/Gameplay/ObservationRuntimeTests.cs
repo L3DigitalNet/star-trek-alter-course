@@ -226,9 +226,32 @@ public sealed class ObservationRuntimeTests
     public void AcceptedInvestigationUsesOrdinaryTravelAndExactSharedWake()
     {
         SimulationState state = CreateSingleReceivedState(FactionTestWorld.Beta);
+        ShipState responder = state.GetRequiredShip(new ShipInstanceId(3));
+        ShipState observedTarget = state.GetRequiredShip(new ShipInstanceId(2));
+        var current = new SensorContactTrack(
+            new SensorContactId(1),
+            observedTarget.InstanceId,
+            observedTarget.TacticalPosition,
+            state.Time,
+            FactionTestWorld.Alpha,
+            SensorContactStatus.Current,
+            SensorContactIdentification.Detected
+        );
+        state = state.ReplaceShip(
+            responder.InstanceId,
+            responder with
+            {
+                SensorKnowledge = new SensorKnowledge(2, [current]),
+            }
+        );
         FactionInvestigationProposal proposal = GameSimulation
             .DecideFactionInvestigation(state, state.Factions[0])
             .Proposal!;
+        ShipState responderBefore = state.GetRequiredShip(proposal.ResponderShipId);
+        SensorContactTrack currentContact = Assert.Single(
+            responderBefore.SensorKnowledge.Contacts,
+            contact => contact.Status == SensorContactStatus.Current
+        );
 
         FactionInvestigationApplicationResult result = GameSimulation.ApplyFactionInvestigation(
             state,
@@ -241,6 +264,10 @@ public sealed class ObservationRuntimeTests
         Assert.Equal(proposal.SourceReport, active.SourceReport);
         Assert.Equal(proposal.ResponderShipId, active.ResponderShipId);
         Assert.Equal(new SimulationTime(3000), result.CandidateState.Factions[0].PendingDecisionWake!.DueTime);
+        Assert.Contains(
+            result.CandidateState.GetRequiredShip(proposal.ResponderShipId).SensorKnowledge.Contacts,
+            contact => contact.Id == currentContact.Id && contact.Status == SensorContactStatus.Stale
+        );
         result.CandidateState.Validate(FactionTestWorld.ShipCatalog, FactionTestWorld.FactionCatalog);
     }
 

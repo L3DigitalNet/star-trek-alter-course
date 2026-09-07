@@ -93,7 +93,8 @@ public sealed partial class GameSimulation
                 current,
                 proposal,
                 shipCatalog,
-                publicationCollector
+                publicationCollector,
+                playerEvents
             );
             current = application.CandidateState;
         }
