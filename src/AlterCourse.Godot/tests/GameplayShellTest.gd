@@ -1072,7 +1072,7 @@ func test_normal_shell_never_projects_hidden_vessel_or_scheduler_truth() -> void
 	assert_str(presented).not_contains("FactionDecisionWake")
 
 
-func test_default_quick_save_writes_production_v7_without_touching_legacy_slot() -> void:
+func test_default_quick_save_writes_production_v8_without_touching_legacy_slot() -> void:
 	_write_text(LEGACY_DEFAULT_QUICK_SAVE_PATH, "legacy-slot-sentinel")
 	var screen := _create_default_screen()
 
@@ -1083,9 +1083,9 @@ func test_default_quick_save_writes_production_v7_without_touching_legacy_slot()
 	var save_json: Dictionary = JSON.parse_string(
 		FileAccess.get_file_as_string(DEFAULT_QUICK_SAVE_PATH)
 	)
-	assert_int(int(save_json.get("schemaVersion", -1))).is_equal(7)
+	assert_int(int(save_json.get("schemaVersion", -1))).is_equal(8)
 	assert_str(save_json.get("simulationRulesVersion", "")).is_equal(
-		"faction-intent-autonomous-assignment-v1"
+		"observation-driven-faction-response-v1"
 	)
 	var simulation: Dictionary = save_json.get("simulation", {})
 	assert_int((simulation.get("factions", []) as Array).size()).is_equal(2)
@@ -1099,7 +1099,7 @@ func test_default_quick_save_writes_production_v7_without_touching_legacy_slot()
 	)
 
 
-func test_default_quick_load_discovers_legacy_slot_path_then_saves_generic_v7() -> void:
+func test_default_quick_load_discovers_legacy_slot_path_then_saves_generic_v8() -> void:
 	var snapshot_screen := _create_screen()
 	snapshot_screen.call("ProcessSyntheticDelta", 0.6)
 	snapshot_screen.call("QuickSave")
@@ -1118,9 +1118,9 @@ func test_default_quick_load_discovers_legacy_slot_path_then_saves_generic_v7() 
 	var save_json: Dictionary = JSON.parse_string(
 		FileAccess.get_file_as_string(DEFAULT_QUICK_SAVE_PATH)
 	)
-	assert_int(int(save_json.get("schemaVersion", -1))).is_equal(7)
+	assert_int(int(save_json.get("schemaVersion", -1))).is_equal(8)
 	assert_str(save_json.get("simulationRulesVersion", "")).is_equal(
-		"faction-intent-autonomous-assignment-v1"
+		"observation-driven-faction-response-v1"
 	)
 	assert_str(FileAccess.get_file_as_string(LEGACY_DEFAULT_QUICK_SAVE_PATH)).is_equal(
 		legacy_contents
@@ -1302,7 +1302,7 @@ func test_quick_save_load_retains_faction_travel_and_continues_to_satisfied_pres
 	)
 
 
-func test_malformed_v7_controller_and_scheduler_targets_leave_live_simulation_usable() -> void:
+func test_malformed_v8_controller_and_scheduler_targets_leave_live_simulation_usable() -> void:
 	var screen := _create_screen()
 	screen.call("QuickSave")
 	var valid_save := FileAccess.get_file_as_string(TEST_QUICK_SAVE_PATH)

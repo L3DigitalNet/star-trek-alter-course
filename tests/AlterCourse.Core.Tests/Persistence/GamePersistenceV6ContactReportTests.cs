@@ -41,9 +41,9 @@ public sealed class GamePersistenceV6ContactReportTests
 
         byte[] saved = GamePersistence.Serialize(game, Milestone3ProofFixture.Metadata);
         JsonObject contact = FirstPlayerContact(Parse(saved));
-        LoadedGameSave loaded = GamePersistence.Deserialize(saved, _fixture.Catalog, "native-v7.json");
+        LoadedGameSave loaded = GamePersistence.Deserialize(saved, _fixture.Catalog, "native-v8.json");
 
-        Assert.Equal(7, Parse(saved)["schemaVersion"]!.GetValue<int>());
+        Assert.Equal(8, Parse(saved)["schemaVersion"]!.GetValue<int>());
         Assert.Equal("dawn-anchor", contact["observedAtLocationId"]!.GetValue<string>());
         Assert.Equal(Dawn, Assert.Single(Player(loaded.Simulation).SensorKnowledge.Contacts).ObservedAtLocationId);
         Assert.Equal(before, Reports(loaded.Simulation));
@@ -71,7 +71,7 @@ public sealed class GamePersistenceV6ContactReportTests
         Assert.Null(migrated.ObservedAtLocationId);
         Assert.Equal(original with { ObservedAtLocationId = null }, migrated);
         Assert.Equal(
-            7,
+            8,
             Parse(GamePersistence.Serialize(loaded.Simulation, loaded.Metadata))["schemaVersion"]!.GetValue<int>()
         );
         Assert.Null(
@@ -121,7 +121,7 @@ public sealed class GamePersistenceV6ContactReportTests
             .Deserialize(
                 GamePersistence.Serialize(CreateObservedWorld(StepsToAcquisition), Milestone3ProofFixture.Metadata),
                 _fixture.Catalog,
-                "mid-scenario-v7.json"
+                "mid-scenario-v8.json"
             )
             .Simulation;
 
@@ -212,7 +212,7 @@ public sealed class GamePersistenceV6ContactReportTests
             "legacy-v5.json"
         );
 
-    /// <summary>Rewrites a live V7 document into the V5 document the same world would have produced.</summary>
+    /// <summary>Rewrites a live V8 document into the V5 document the same world would have produced.</summary>
     private static byte[] ToLegacyV5Document(byte[] current) =>
         Mutate(
             current,
@@ -220,7 +220,9 @@ public sealed class GamePersistenceV6ContactReportTests
             {
                 root["schemaVersion"] = 5;
                 root["simulationRulesVersion"] = "engineering-backbone-v1";
-                root["simulation"]!.AsObject().Remove("factions");
+                JsonObject simulation = root["simulation"]!.AsObject();
+                simulation.Remove("observationReportAllocatorNextId");
+                simulation.Remove("factions");
                 foreach (JsonNode? ship in root["simulation"]!["ships"]!.AsArray())
                 {
                     ship!.AsObject().Remove("directControllerFactionId");

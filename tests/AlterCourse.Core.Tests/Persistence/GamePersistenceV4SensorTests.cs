@@ -35,8 +35,8 @@ public sealed class GamePersistenceV4SensorTests
         JsonArray ships = root["simulation"]!["ships"]!.AsArray();
 
         Assert.Equal(first, second);
-        Assert.Equal(7, root["schemaVersion"]!.GetValue<int>());
-        Assert.Equal("faction-intent-autonomous-assignment-v1", root["simulationRulesVersion"]!.GetValue<string>());
+        Assert.Equal(8, root["schemaVersion"]!.GetValue<int>());
+        Assert.Equal("observation-driven-faction-response-v1", root["simulationRulesVersion"]!.GetValue<string>());
         Assert.Equal(
             "identified",
             ships[0]!["sensorKnowledge"]!["contacts"]![0]!["identification"]!.GetValue<string>()
@@ -60,7 +60,7 @@ public sealed class GamePersistenceV4SensorTests
         JsonNode simulation = current["simulation"]!;
         JsonNode npc = simulation["ships"]![1]!;
 
-        Assert.Equal(7, current["schemaVersion"]!.GetValue<int>());
+        Assert.Equal(8, current["schemaVersion"]!.GetValue<int>());
         Assert.Equal("holdUntil", npc["activeOrder"]!["kind"]!.GetValue<string>());
         Assert.Equal("orderWake", simulation["scheduler"]!["outstandingWork"]![0]!["kind"]!.GetValue<string>());
         Assert.Equal(1, npc["sensorKnowledge"]!["nextContactId"]!.GetValue<long>());
@@ -140,7 +140,7 @@ public sealed class GamePersistenceV4SensorTests
     private static void AssertCurrentOrdering(byte[] migratedCurrent)
     {
         JsonObject current = Parse(migratedCurrent);
-        Assert.Equal(7, current["schemaVersion"]!.GetValue<int>());
+        Assert.Equal(8, current["schemaVersion"]!.GetValue<int>());
         Assert.Equal(
             [1L, 2L, 3L],
             current["simulation"]!["ships"]!.AsArray().Select(ship => ship!["instanceId"]!.GetValue<long>())
@@ -251,7 +251,7 @@ public sealed class GamePersistenceV4SensorTests
         Assert.Equal(SimulationScheduler.MaximumOutstandingWork, conservativeMaximum + factionWorkMaximum);
     }
 
-    /// <summary>Confirms the greatest simultaneous V7 faction world has a bounded, stable representation.</summary>
+    /// <summary>Confirms the V8 empty-observation maximum faction baseline remains within the envelope.</summary>
     /// <remarks>
     /// Every ship carries the full directed contact graph, an active scan and repair; every eligible
     /// non-player ship also carries an order, autonomous wake, and controller. The player cannot hold
@@ -269,11 +269,11 @@ public sealed class GamePersistenceV4SensorTests
             saved,
             catalog,
             factionCatalog,
-            "maximum-faction-world-v7.json"
+            "maximum-faction-world-v8.json"
         );
 
         Assert.InRange(saved.Length, 1, 128 * 1024 * 1024);
-        Assert.Equal(111_544_212, saved.Length);
+        Assert.Equal(111_598_270, saved.Length);
         Assert.Equal(256, loaded.Simulation.CaptureState().Ships.Length);
         Assert.Equal(256, loaded.Simulation.CaptureState().Factions.Length);
         Assert.Equal(66_302, loaded.Simulation.CaptureState().Scheduler.OutstandingWork.Length);

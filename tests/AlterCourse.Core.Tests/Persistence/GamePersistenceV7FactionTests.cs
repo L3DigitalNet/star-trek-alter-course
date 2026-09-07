@@ -8,7 +8,7 @@ using FactionTestWorld = AlterCourse.Core.Tests.Gameplay.FactionBootstrapTests.F
 
 namespace AlterCourse.Core.Tests.Persistence;
 
-/// <summary>Verifies the closed V7 faction, controller, objective, and typed-work persistence contract.</summary>
+/// <summary>Verifies current faction, controller, objective, and typed-work persistence.</summary>
 public sealed class GamePersistenceV7FactionTests
 {
     /// <summary>Exact wire correlation cannot postpone an initial decision to an arbitrary future time.</summary>
@@ -112,11 +112,11 @@ public sealed class GamePersistenceV7FactionTests
             saved,
             FactionTestWorld.ShipCatalog,
             FactionTestWorld.FactionCatalog,
-            "assigned-v7.json"
+            "assigned-v8.json"
         );
 
-        Assert.Equal(7, root["schemaVersion"]!.GetValue<int>());
-        Assert.Equal("faction-intent-autonomous-assignment-v1", root["simulationRulesVersion"]!.GetValue<string>());
+        Assert.Equal(8, root["schemaVersion"]!.GetValue<int>());
+        Assert.Equal("observation-driven-faction-response-v1", root["simulationRulesVersion"]!.GetValue<string>());
         Assert.Equal(2, root["simulation"]!["factions"]!.AsArray().Count);
         Assert.Contains(
             root["simulation"]!["scheduler"]!["outstandingWork"]!.AsArray(),
@@ -379,6 +379,7 @@ public sealed class GamePersistenceV7FactionTests
                 root["schemaVersion"] = 6;
                 root["simulationRulesVersion"] = "strategic-contact-reporting-v1";
                 JsonObject simulation = root["simulation"]!.AsObject();
+                simulation.Remove("observationReportAllocatorNextId");
                 simulation.Remove("factions");
                 foreach (JsonNode? ship in simulation["ships"]!.AsArray())
                 {
