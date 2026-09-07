@@ -12,12 +12,15 @@ tags:
 aliases: []
 related:
   - 'docs/wiki/README.md'
+  - 'docs/wiki/faction-intent-and-autonomous-assignment.md'
   - 'ROADMAP.md'
 ---
 
 # Project documentation
 
 Start with the [project design wiki](wiki/README.md). It is the single source of truth for the game's design: vision, implemented and planned systems, architecture, approved decisions such as the political model, and remaining questions.
+
+The next owner-approved design is [Faction Intent and Autonomous Assignment](wiki/faction-intent-and-autonomous-assignment.md). Its proof, six decisions, non-goals, and acceptance contract are recorded before implementation. Runtime remains v0.5.0 with save V6 and content V4; planned V7 and faction behavior are not implemented by this documentation.
 
 The wiki is stored in this repository so changes use the same review and version history as the game. It is not a second GitHub Wiki repository or a separately deployed documentation service.
 
