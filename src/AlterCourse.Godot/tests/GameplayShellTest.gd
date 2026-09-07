@@ -1063,11 +1063,16 @@ func test_normal_shell_never_projects_hidden_vessel_or_scheduler_truth() -> void
 
 	assert_str(presented).not_contains("USS Wayfarer")
 	assert_str(presented).not_contains("USS Horizon")
+	assert_str(presented).not_contains("Expedition Vessel Aurora")
+	assert_str(presented).not_contains("Expedition Vessel Resolute")
+	assert_str(presented).not_contains("Faction A")
+	assert_str(presented).not_contains("Faction B")
 	assert_str(presented).not_contains("OrderWake")
 	assert_str(presented).not_contains("ScheduledWork")
+	assert_str(presented).not_contains("FactionDecisionWake")
 
 
-func test_default_quick_save_writes_schema_v6_without_touching_legacy_slot() -> void:
+func test_default_quick_save_writes_production_v7_without_touching_legacy_slot() -> void:
 	_write_text(LEGACY_DEFAULT_QUICK_SAVE_PATH, "legacy-slot-sentinel")
 	var screen := _create_default_screen()
 
@@ -1078,16 +1083,23 @@ func test_default_quick_save_writes_schema_v6_without_touching_legacy_slot() -> 
 	var save_json: Dictionary = JSON.parse_string(
 		FileAccess.get_file_as_string(DEFAULT_QUICK_SAVE_PATH)
 	)
-	assert_int(int(save_json.get("schemaVersion", -1))).is_equal(6)
+	assert_int(int(save_json.get("schemaVersion", -1))).is_equal(7)
 	assert_str(save_json.get("simulationRulesVersion", "")).is_equal(
-		"strategic-contact-reporting-v1"
+		"faction-intent-autonomous-assignment-v1"
 	)
+	var simulation: Dictionary = save_json.get("simulation", {})
+	assert_int((simulation.get("factions", []) as Array).size()).is_equal(2)
+	var ships: Array = simulation.get("ships", [])
+	assert_bool(_find_saved_ship(ships, 1).get("directControllerFactionId", 0) == null).is_true()
+	assert_int(int(_find_saved_ship(ships, 2).get("directControllerFactionId", 0))).is_equal(2)
+	assert_int(int(_find_saved_ship(ships, 5).get("directControllerFactionId", 0))).is_equal(1)
+	assert_int(int(_find_saved_ship(ships, 6).get("directControllerFactionId", 0))).is_equal(1)
 	assert_str(FileAccess.get_file_as_string(LEGACY_DEFAULT_QUICK_SAVE_PATH)).is_equal(
 		"legacy-slot-sentinel"
 	)
 
 
-func test_default_quick_load_discovers_legacy_slot_path_then_saves_generic_v6() -> void:
+func test_default_quick_load_discovers_legacy_slot_path_then_saves_generic_v7() -> void:
 	var snapshot_screen := _create_screen()
 	snapshot_screen.call("ProcessSyntheticDelta", 0.6)
 	snapshot_screen.call("QuickSave")
@@ -1106,9 +1118,9 @@ func test_default_quick_load_discovers_legacy_slot_path_then_saves_generic_v6() 
 	var save_json: Dictionary = JSON.parse_string(
 		FileAccess.get_file_as_string(DEFAULT_QUICK_SAVE_PATH)
 	)
-	assert_int(int(save_json.get("schemaVersion", -1))).is_equal(6)
+	assert_int(int(save_json.get("schemaVersion", -1))).is_equal(7)
 	assert_str(save_json.get("simulationRulesVersion", "")).is_equal(
-		"strategic-contact-reporting-v1"
+		"faction-intent-autonomous-assignment-v1"
 	)
 	assert_str(FileAccess.get_file_as_string(LEGACY_DEFAULT_QUICK_SAVE_PATH)).is_equal(
 		legacy_contents
@@ -1238,6 +1250,79 @@ func test_quick_save_load_restores_active_operations_and_continues_advancement()
 	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(12000)
 	assert_str(screen.get_meta("last_advance_event", "")).contains("arrival complete")
 	assert_bool(screen.get_meta("travel_active", true)).is_false()
+
+
+func test_quick_save_load_retains_faction_travel_and_continues_to_satisfied_presence() -> void:
+	var screen := _create_screen()
+	assert_int(screen.call("ProcessSyntheticDelta", 0.1)).is_equal(1)
+	screen.call("QuickSave")
+
+	var assigned_save: Dictionary = JSON.parse_string(
+		FileAccess.get_file_as_string(TEST_QUICK_SAVE_PATH)
+	)
+	var assigned_simulation: Dictionary = assigned_save.get("simulation", {})
+	var assigned_ship := _find_saved_ship(assigned_simulation.get("ships", []), 5)
+	var assigned_faction := _find_saved_faction(assigned_simulation.get("factions", []), 1)
+	assert_str(assigned_ship.get("strategicState", {}).get("kind", "")).is_equal("traveling")
+	assert_str(assigned_ship.get("activeOrder", {}).get("kind", "")).is_equal("travelTo")
+	assert_str(assigned_ship.get("activeOrder", {}).get("destination", "")).is_equal(
+		"vesper-reach"
+	)
+	assert_int(int(assigned_ship.get("directControllerFactionId", 0))).is_equal(1)
+	assert_str(assigned_faction.get("presenceObjective", {}).get("status", "")).is_equal(
+		"assigned"
+	)
+	assert_int(
+		int(assigned_faction.get("presenceObjective", {}).get("assignedShipId", 0))
+	).is_equal(5)
+
+	for _step in range(5):
+		screen.call("ProcessSyntheticDelta", 0.6)
+	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(3100)
+	screen.call("QuickLoad")
+	assert_str(screen.get_meta("quick_save_status", "")).is_equal("loaded")
+	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(100)
+
+	for _step in range(24):
+		screen.call("ProcessSyntheticDelta", 0.6)
+	screen.call("QuickSave")
+	var continued_save: Dictionary = JSON.parse_string(
+		FileAccess.get_file_as_string(TEST_QUICK_SAVE_PATH)
+	)
+	var continued_simulation: Dictionary = continued_save.get("simulation", {})
+	var arrived_ship := _find_saved_ship(continued_simulation.get("ships", []), 5)
+	var satisfied_faction := _find_saved_faction(continued_simulation.get("factions", []), 1)
+	assert_str(arrived_ship.get("strategicState", {}).get("kind", "")).is_equal("atLocation")
+	assert_str(arrived_ship.get("strategicState", {}).get("locationId", "")).is_equal(
+		"vesper-reach"
+	)
+	assert_bool(arrived_ship.get("activeOrder", null) == null).is_true()
+	assert_str(satisfied_faction.get("presenceObjective", {}).get("status", "")).is_equal(
+		"satisfied"
+	)
+
+
+func test_malformed_v7_controller_and_scheduler_targets_leave_live_simulation_usable() -> void:
+	var screen := _create_screen()
+	screen.call("QuickSave")
+	var valid_save := FileAccess.get_file_as_string(TEST_QUICK_SAVE_PATH)
+	var retained_identity: int = screen.get_meta("simulation_identity", 0)
+
+	var invalid_saves := [
+		_replace_once(valid_save, '"directControllerFactionId": 2', '"directControllerFactionId": 99'),
+		_replace_once(valid_save, '"targetFactionId": 1', '"targetFactionId": 99'),
+	]
+	for invalid_save in invalid_saves:
+		_write_text(TEST_QUICK_SAVE_PATH, invalid_save)
+		screen.call("QuickLoad")
+		assert_str(screen.get_meta("quick_save_status", "")).is_equal("load_failed")
+		assert_int(screen.get_meta("simulation_identity", 0)).is_equal(retained_identity)
+		assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(0)
+
+	screen.call("SelectDestination", "vesper-reach")
+	assert_bool((screen.get_node("%TravelButton") as Button).disabled).is_false()
+	screen.call("RequestSelectedTravel")
+	assert_bool(screen.get_meta("travel_active", false)).is_true()
 
 
 func test_failed_quick_load_retains_current_projection() -> void:
@@ -1564,6 +1649,27 @@ func _write_text(user_path: String, contents: String) -> void:
 	assert_object(file).is_not_null()
 	file.store_string(contents)
 	file.close()
+
+
+func _find_saved_ship(ships: Array, instance_id: int) -> Dictionary:
+	for ship in ships:
+		if int(ship.get("instanceId", 0)) == instance_id:
+			return ship
+	return {}
+
+
+func _find_saved_faction(factions: Array, faction_id: int) -> Dictionary:
+	for faction in factions:
+		if int(faction.get("id", 0)) == faction_id:
+			return faction
+	return {}
+
+
+func _replace_once(source: String, old_value: String, new_value: String) -> String:
+	var match_index := source.find(old_value)
+	assert_int(match_index).is_greater_equal(0)
+	assert_int(source.find(old_value, match_index + old_value.length())).is_equal(-1)
+	return source.left(match_index) + new_value + source.substr(match_index + old_value.length())
 
 
 func _rewrite_v5_for_damaged_impulse(save_text: String) -> String:
