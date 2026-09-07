@@ -2,10 +2,10 @@
 
 ## Current focus
 
-- v0.5.0 Strategic Contact Reporting is released: Final PR #82 merged `0547d06` to `main`, tag/Release immutable, sync PR #83 on `dev`.
-- Next development slice not yet selected; picking the next slice is an owner decision, not an agent default.
-- [Open questions](../wiki/open-questions.md) Q-02 through Q-05 remain open; Milestone 3 is not complete, Milestone 5 not started.
-- Resume from the wiki, ROADMAP, STATUS, and active ADRs; remaining design questions are recorded, not silently decided.
+- v0.5.0 is released and synchronized; runtime remains content V4/save V6.
+- [Faction assignment](../wiki/faction-intent-and-autonomous-assignment.md) is the approved next design; implementation has not started.
+- Next session: admit the governed implementation feature from that contract, without reopening its six approved decisions.
+- Q-05 is scoped/resolved; Q-04/Q-14 are partial. M3 and M5 remain incomplete; intelligence sharing and campaign era stay deferred.
 
 ## Active incidents
 
