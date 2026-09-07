@@ -48,9 +48,11 @@ Release promotion uses a governed merge commit, a corresponding tag and immutabl
 
 ## Documentation and agent ownership
 
-This wiki is the single source of truth for design. ADRs record architectural decisions; the documents under `docs/design/` and `docs/specs/` supply supporting detail for wiki pages and may not contradict them. The [source catalog](sources.md) is the coverage index, the [decision register](decision-register.md) distinguishes decisions from implementation, and [open questions](open-questions.md) prevents proposals from becoming accidental commitments.
+This wiki is the single source of truth for design, including detailed game contracts and [milestone proofs](milestone-proofs.md). ADRs retain their separate architectural decision role. The [source catalog](sources.md) is the coverage index, the [decision register](decision-register.md) distinguishes decisions from implementation, and [open questions](open-questions.md) prevents proposals from becoming accidental commitments. Do not create a parallel design/specification tree outside the wiki.
 
 Operational facts still belong in STATUS, TODO, and the appropriate handoff files. Keep eager state small. Preserve owner-authored tasks and historical records. Do not edit standard-owned skills, hooks, or lock inventories merely to make documentation checks pass.
+
+The [documentation authority map](../README.md) classifies the remaining external files: ADRs, operational runbooks, package-admission evidence, licensing, onboarding, and work state. They can be authoritative within those roles without becoming game-design specifications. The removed branch-governance discovery selected development/release separation, inexpensive narrow direct handoff, purpose-specific merge history, and tag-led immutable releases; ADR 0013 preserves those decisions, their alternatives and residual bypass risk. Its original discovery evidence is linked in [historical provenance](sources.md#historical-provenance).
 
 Managed Markdown uses the existing frontmatter schema, stable IDs, canonical quoted fields, Prettier, and markdownlint. A page being active does not mean its planned system is implemented. A design change lands on its wiki page in the same governed work that implements it, together with implementation evidence and any supporting document that restates the detail.
 
@@ -92,4 +94,4 @@ Follow [LICENSE](../../LICENSE.md), [LEGAL](../../LEGAL.md), contribution requir
 
 ## Sources
 
-[Development quality](../development-quality.md), [agent skills](../development-agent-skills.md), [quality-gate ADR](../adr/0002-use-one-canonical-quality-gate.md), [branch/release ADR](../adr/0013-use-dev-for-development-and-main-for-releases.md), and [branch governance discovery](../design/branch-release-governance.md).
+[Development quality](../development-quality.md), [agent skills](../development-agent-skills.md), [quality-gate ADR](../adr/0002-use-one-canonical-quality-gate.md), [branch/release ADR](../adr/0013-use-dev-for-development-and-main-for-releases.md), and [historical provenance](sources.md#historical-provenance).

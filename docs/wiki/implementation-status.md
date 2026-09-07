@@ -41,7 +41,7 @@ The current `dev` implementation also has root faction definitions and mutable p
 
 The Godot shell privately loads both strict catalogs and adapts V7 saves without adding faction UI. Its focused 65-test compatibility suite verifies a production ship reaches Vesper after a midflight quick-load, root controllers retain a null player controller, malformed faction/controller data leaves the live shell usable, and ordinary UI hides faction names, vessels, and work.
 
-Implementation evidence: [FirstGameSetup](../../src/AlterCourse.Core/Gameplay/FirstGameSetup.cs), [ShipState](../../src/AlterCourse.Core/Ships/ShipState.cs), [SimulationState](../../src/AlterCourse.Core/Gameplay/SimulationState.cs), [GameSimulation](../../src/AlterCourse.Core/Gameplay/GameSimulation.cs), [Core gameplay tests](../../tests/AlterCourse.Core.Tests/Gameplay/), and the [Engineering design](../design/engineering-backbone.md).
+Implementation evidence: [FirstGameSetup](../../src/AlterCourse.Core/Gameplay/FirstGameSetup.cs), [ShipState](../../src/AlterCourse.Core/Ships/ShipState.cs), [SimulationState](../../src/AlterCourse.Core/Gameplay/SimulationState.cs), [GameSimulation](../../src/AlterCourse.Core/Gameplay/GameSimulation.cs), [Core gameplay tests](../../tests/AlterCourse.Core.Tests/Gameplay/), and the [Engineering contract](engineering-and-combat.md).
 
 ## Milestones and release boundaries
 

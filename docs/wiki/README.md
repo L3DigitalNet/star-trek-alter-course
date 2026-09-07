@@ -24,7 +24,7 @@ related:
 
 ## Purpose and baseline
 
-This wiki is the single source of truth for the design of the game: what it is intended to become, what the code actually does, which decisions are settled, and which questions remain open. Every other design document in the repository is either supporting detail linked from a wiki page or historical evidence; none of them may contradict the wiki.
+This wiki is the single source of truth for the design of the game: what it is intended to become, what the code actually does, which decisions are settled, and which questions remain open. Detailed game rules and milestone acceptance contracts live here. [Documents outside the wiki](../README.md) have distinct architectural, operational, onboarding, or legal roles; they do not introduce additional gameplay rules.
 
 The initial implementation review is against `dev` commit `42481ca7fbc6c5c9da96985e02565f78a236cab7`, reviewed September 6, 2026. The current released gameplay baseline is source-only v0.5.0, Strategic Contact Reporting, which succeeds v0.4.0, First Contact & Engineering Backbone. Strategic Contact Reporting is delivered by Feature #77, Final PR #78, merged into `dev` as `80c3084`, and released in v0.5.0; it does not complete Milestone 3 and does not itself begin Milestone 5.
 
@@ -32,23 +32,37 @@ The initial implementation review is against `dev` commit `42481ca7fbc6c5c9da969
 
 The [recurring design-reconciliation procedure](development-and-governance.md#recurring-design-reconciliation) governs review of these claims. The [source catalog review record](sources.md#review-record) identifies the latest full and targeted reviews.
 
-## Read by topic
+## Start here
 
 - [Vision and scope](vision-and-scope.md): captain-level play, persistent consequences, simulation priorities, and non-goals.
 - [Implementation status](implementation-status.md): implemented, preview-only, and absent systems; milestone and release boundaries.
-- [Architecture](architecture.md): authority, project boundaries, dependencies, testing, and the ADR map.
+- [Milestone proofs](milestone-proofs.md): detailed acceptance criteria for completed and future milestones; [the roadmap](../../ROADMAP.md) owns sequence.
+
+## Implemented systems and their contracts
+
 - [World, navigation, and time](world-navigation-and-time.md): ship identity, bootstrap, strategic orders, tactical space, and scheduling.
 - [Sensors, knowledge, and AI](sensors-knowledge-and-ai.md): actor-local observations, scan/hail, explainable decisions, and current versus approved information boundaries.
 - [Strategic Contact Reporting](strategic-contact-reporting.md): implemented durable, reference-frame-qualified actor-safe last-known contact information.
 - [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md): implemented bounded M5 contribution: direct NPC assignment, own-asset knowledge, typed scheduling, V7 migration, and no RNG.
 - [Engineering and combat](engineering-and-combat.md): the implemented power/condition/repair model and the planned combat integration.
-- [Factions and organizations](factions-and-organizations.md): owner-approved political framework; its root-faction/direct-control subset is implemented while broader political runtime remains future work.
-- [Diplomacy, economy, and campaigns](diplomacy-economy-and-campaigns.md): political consequences, history, trade, canon, and later campaign work.
 - [Interface and player commands](interface-and-player-commands.md): Command Deck, Engineering, presentation authority, controls, and preview boundaries.
 - [Content, assets, and persistence](content-assets-and-persistence.md): JSON definitions, current V7 snapshots, V6→V7 migration, and the independent AssetCtl pipeline.
-- [Development and governance](development-and-governance.md): toolchain, quality gate, branch/release workflow, agent guidance, and legal references.
 
-For decisions rather than systems, use the [decision register](decision-register.md). For unfinished design, use [open questions](open-questions.md). The [source catalog](sources.md) indexes the original documents and implementation evidence.
+## Future design and decisions
+
+- [Factions and organizations](factions-and-organizations.md): owner-approved political framework; the root-faction/direct-control subset is implemented while broader political runtime remains future work.
+- [Diplomacy, economy, and campaigns](diplomacy-economy-and-campaigns.md): political consequences, history, trade, canon, and later campaign work.
+- [Decision register](decision-register.md): settled decisions and their owning pages.
+- [Open questions](open-questions.md): unresolved choices and the consumers that would justify resolving them.
+
+## Architecture, development, and evidence
+
+- [Architecture](architecture.md): authority, project boundaries, dependencies, testing, and the ADR map.
+- [Development and governance](development-and-governance.md): toolchain, quality gate, branch/release workflow, agent guidance, and legal references.
+- [Asset pipeline tool](asset-pipeline-tool.md): the full development-tool contract, separately labeled from gameplay and implementation status.
+- [Source catalog](sources.md): implementation evidence, consolidation map, historical provenance, and dated review coverage.
+
+Read the system page first and follow its specialized contract links when needed. Strategic Contact Reporting owns last-known-report rules; Faction Intent and Autonomous Assignment owns first-slice assignment rules. Their summary links elsewhere do not redefine those contracts.
 
 ## Status vocabulary
 
@@ -60,6 +74,8 @@ A document frontmatter value of `status: active` describes the document, not fea
 
 This wiki governs design. When a wiki page and any other design document, roadmap passage, archived conversation, or agent instruction disagree about design, the wiki is correct and the other document is a defect to fix. Active ADRs remain the record of architectural decisions: an architectural boundary changes only through a new or amended ADR, and the wiki then reflects that decision. Implementation claims are checked against source and tests. The roadmap describes sequence and scope, not design, and defers to this wiki wherever it describes a system.
 
-The released contact-reporting decision is owned by [Strategic Contact Reporting](strategic-contact-reporting.md). The next bounded slice is owned by [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md). The broader political principles remain owned by [Factions and organizations](factions-and-organizations.md). Other pages summarize or link these records rather than redefining them. Assistant recommendations that the owner did not approve remain in the open-question register.
+The released contact-reporting decision is owned by [Strategic Contact Reporting](strategic-contact-reporting.md). The implemented first M5 slice is owned by [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md). The broader political principles remain owned by [Factions and organizations](factions-and-organizations.md). Other pages summarize or link these records rather than redefining them. Assistant recommendations that the owner did not approve remain in the open-question register.
 
-Record a design change on its wiki page in the same governed work that implements it. Then update any supporting document the page links so its detail matches, and update [implementation status](implementation-status.md). Change a decision explicitly rather than silently overwriting its meaning. Keep operational handoff state in its existing files and keep the wiki focused on durable knowledge. Use repository-relative links. Supporting documents under `docs/design/` and `docs/specs/` hold detailed rules, formulas, and contracts that a wiki page would only restate; they do not introduce design the wiki does not record.
+Record a design change on its wiki page in the same governed work that implements it. Keep detailed rules, formulas, state transitions, edge cases, and acceptance contracts inside the wiki, and update [implementation status](implementation-status.md) when behavior lands. Change a decision explicitly rather than silently overwriting its meaning. Keep operational handoff state in its existing files. Do not recreate a parallel design/specification tree; implementation plans and issues link the owning wiki contracts.
+
+A useful system page explains purpose and current scope, state and invariants, legal actions and rejection behavior, time/order semantics, actor-knowledge and presentation boundaries, persistence implications, proof values where material, and source/test evidence. Cover only the headings that the system needs. Future sections explicitly distinguish approved intent from unanswered choices; they do not need invented implementation detail. Split a long specialized contract into another linked wiki page when it has a distinct consumer, preserving existing topic URLs where possible.

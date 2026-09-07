@@ -89,7 +89,7 @@ Canon should establish the chosen campaign's required historical and political s
 | 2 | **Active World and Persistent Orders** | **Implemented** | Ships can own durable intent, progress offscreen, and retain that intent across save/load. |
 | 3 | **Sensor Knowledge and First Contact** | **Partial — M3A and Strategic Contact Reporting implemented; M3 not complete** | M3A proves observer-local knowledge and information-limited ship behavior; Strategic Contact Reporting carries legitimate last-known contact information into strategic context without defining the final intelligence model. |
 | 4 | **Engineering Backbone and Degraded Operations** | **Implemented** | Power, condition, capability, and repair interact with existing sensing and maneuvering rather than living in a parallel subsystem. |
-| 5 | **Living Sector and Faction Autonomy** | **First bounded slice approved; runtime not started** | Faction intent can cause explainable autonomous assignments, offscreen activity, and durable world change using actor-appropriate information; the selected first assignment slice does not complete this entire milestone. |
+| 5 | **Living Sector and Faction Autonomy** | **Partial — faction assignment implemented on dev; unreleased** | Faction intent causes explainable autonomous assignments, offscreen activity, and durable actor-local knowledge using actor-appropriate information; this first assignment slice does not complete the entire milestone. |
 | 6 | **Tactical Combat Foundation** | **Future** | Combat composes motion, observation, Engineering, AI, persistence, and withdrawal instead of becoming a separate hit-point game. |
 | 7 | **Diplomacy, Incidents, and Durable Consequences** | **Future** | The world distinguishes events, knowledge/attribution, legal status, attitudes, and remembered consequences that affect later decisions. |
 | 8 | **Canon-Anchored Campaign Bootstrap and Divergent History** | **Future** | A campaign begins from reproducible canon-consistent boundary conditions plus already-active noncanonical local activity. |
@@ -185,7 +185,7 @@ The implementation has closed Ship/Faction scheduled targets and typed bootstrap
 
 This slice is a contribution toward the broader goals below, not a claim that all M5 requirements are satisfied. Existing Core and Godot compatibility evidence cover policy, scheduler, runtime, content, persistence, private catalog loading, player-safe projection, and targeted production and long-horizon scenarios.
 
-### Goal
+### M5 goal
 
 Prove the causal chain:
 
@@ -193,7 +193,7 @@ Prove the causal chain:
 
 The smallest useful scenario for the complete M5 milestone should contain multiple locations, multiple ships, and enough political context for at least two autonomous factions or political actors to make a consequential choice. At least one NPC-NPC interaction should matter even if the player never witnesses it.
 
-### Required architectural proof
+### M5 required architectural proof
 
 - Faction decisions live in pure Core and obey ADR 0010's information, determinism, command, budget, and explanation boundaries.
 - Strategic decisions consume actor-appropriate knowledge rather than unrestricted world truth.
@@ -225,11 +225,11 @@ Do not create three faction classes for Polity/Constituent/Internal, infer power
 
 ## Milestone 6 — Tactical Combat Foundation
 
-### Goal
+### M6 goal
 
 Add the smallest combat model that proves existing systems compose under pressure.
 
-### Required architectural proof
+### M6 required architectural proof
 
 - Weapons, shields, targeting, maneuver, sensing, Engineering capability, system condition, AI, and persistence use one authoritative simulation rather than a parallel combat-state graph.
 - Targeting and tactical decisions are constrained by what the acting ship knows.
@@ -244,11 +244,11 @@ Before admission, resolve **Q-10 — Tactical scope**. Do not define a broad wea
 
 ## Milestone 7 — Diplomacy, Incidents, and Durable Consequences
 
-### Goal
+### M7 goal
 
 Make prior behavior alter later political decisions without collapsing diplomacy into one global reputation score.
 
-### Required architectural proof
+### M7 required architectural proof
 
 The simulation must distinguish at least:
 
@@ -269,11 +269,11 @@ Before admission, resolve **Q-11 — Political memory** and only the minimum Q-0
 
 ## Milestone 8 — Canon-Anchored Campaign Bootstrap and Divergent History
 
-### Goal
+### M8 goal
 
 Start a campaign inside a canon-consistent but already active world, then allow simulation results to produce durable divergence.
 
-### Required architectural proof
+### M8 required architectural proof
 
 - Required canonical facts and starting political conditions are explicit inputs rather than hidden corrections.
 - Noncanonical local activity can be generated reproducibly from declared inputs, generation/rules versions, and a versioned random source once randomness has a real consumer.
@@ -288,7 +288,7 @@ Before admission, resolve **Q-12 — Canon divergence and initialization** and t
 
 ## Milestone 9 — Persistent Regional Campaign Integration
 
-### Goal
+### M9 goal
 
 Prove that the earlier systems form one durable game loop before broadening scope further.
 
@@ -296,7 +296,7 @@ Prove that the earlier systems form one durable game loop before broadening scop
 
 The player should be able to operate across a bounded region through strategic travel, local observation, Engineering tradeoffs, autonomous faction activity, contact/communication, combat or avoidance, and durable political consequences while the world continues to change offscreen.
 
-### Required architectural proof
+### M9 required architectural proof
 
 - Long-running deterministic/scenario tests remain stable over extended simulated time.
 - Save/load preserves the meaningful world, knowledge, orders, political state, Engineering state, and scheduled consequences without dangling identity.

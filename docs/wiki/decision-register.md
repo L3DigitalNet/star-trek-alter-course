@@ -39,9 +39,9 @@ The governing themes are pure Core authority; one canonical gate; native-first, 
 
 **D-04 — Concrete Engineering, not a universal component framework.** M4 owns power, condition, sensor/impulse capability, and one repair. See [Engineering](engineering-and-combat.md).
 
-**D-05 — Persistent native Command Deck and Engineering workspace.** Godot adapts Core projections; the runtime Theme owns visual styling; preview fixtures never become production truth. See [Interface](interface-and-player-commands.md) and the [owning UI decision](../design/command-deck-ui.md).
+**D-05 — Persistent native Command Deck and Engineering workspace.** Godot adapts Core projections; the runtime Theme owns visual styling; preview fixtures never become production truth. [Interface](interface-and-player-commands.md) owns the consolidated UI decision, references, and interaction contract.
 
-**D-06 — Independent asset tooling.** AssetCtl is a separate .NET tool with configuration-driven providers, validated assets, provenance, local fallback, and owner-controlled approval. See [Content, assets, and persistence](content-assets-and-persistence.md) and the [full specification](../specs/asset-pipeline-tool.md).
+**D-06 — Independent asset tooling.** AssetCtl is a separate .NET tool with configuration-driven providers, validated assets, provenance, local fallback, and owner-controlled approval. See [Content, assets, and persistence](content-assets-and-persistence.md) and the [full tool contract](asset-pipeline-tool.md).
 
 ## Completed sequencing decision — September 6, 2026
 
@@ -69,7 +69,7 @@ The slice adds no faction/affiliation UI, political hierarchy runtime, organizat
 
 ## Political decisions approved September 6, 2026
 
-The following identifiers provide stable references to the decisions approved during the owner discussion. All are **approved design, not implemented**. [Factions and organizations](factions-and-organizations.md) owns their full meaning; these summaries do not introduce additional mechanics.
+The following identifiers provide stable references to the approved political design. The broader model remains future work; the bounded root-faction and direct-control subset is implemented through D-08–D-13. [Factions and organizations](factions-and-organizations.md) owns their full meaning and implementation limits; these summaries do not introduce additional mechanics.
 
 - **P-01 — Autonomous actors at every depth.** Subordinate factions possess independent political will, not just modifiers on a parent.
 - **P-02 — Hierarchy does not grant every action.** Legitimate/practical interactions depend on authority and capabilities, not depth alone.

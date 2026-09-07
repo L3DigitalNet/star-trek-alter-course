@@ -44,6 +44,8 @@ M3A made actor-local tactical contacts, identification, and hail live. M4 made g
 
 The live Engineering hierarchy is Overview, Power, Sensors, Propulsion, and Repairs. It presents Core values and Core-supplied action availability/reasons; it does not simulate allocation preview or optimistically mutate a ship. The strategic map selects connected destinations and engages scheduled travel. Tactical view shows the local frame, actor-known contact markers, selected-contact facts, scan, and hail. The demonstration course is 045 degrees at 2 km/s, subject to effective impulse limit; it is not a complete navigation console.
 
+Live Engineering actions are **Balance power allocation**, **Prioritize sensors**, **Prioritize propulsion**, **Begin sensor repair**, **Begin impulse repair**, and **Return to Command Deck**. They use stable presentation identities and Core-supplied legality; a display label is not an authoritative system or command identity.
+
 The inspector's own `KnownContactReports` section lists retained reports: learned vessel or tactical label, last-seen location/time, Current/Stale/Lost status, and learned design name. It is capped/summarized when necessary, not a strategic-map marker or intelligence dashboard.
 
 Shortcuts are 1 strategic, 2 tactical, Space pause/resume, R cycle rate, U advance to player-relevant event, Ctrl+S/Ctrl+L quick save/load, E engage selected travel, and C submit the demonstration course. Running rates are 0.5x, 1x, 2x, and 4x; pause is separate. The quick-save slot and its failure-preservation boundary are owned by [content, assets, and persistence](content-assets-and-persistence.md).
@@ -58,4 +60,4 @@ Future station workspaces need a concrete domain consumer and later decision; th
 
 ## Sources and evidence
 
-See [GameScreen](../../src/AlterCourse.Godot/src/Gameplay/GameScreen.cs), [EngineeringWorkspace](../../src/AlterCourse.Godot/src/Gameplay/EngineeringWorkspace.cs), [shell scene](../../src/AlterCourse.Godot/Main.tscn), [current controls](../../README.md), and [Godot shell tests](../../src/AlterCourse.Godot/tests/GameplayShellTest.gd).
+See [GameScreen](../../src/AlterCourse.Godot/src/Gameplay/GameScreen.cs), [EngineeringWorkspace](../../src/AlterCourse.Godot/src/Gameplay/EngineeringWorkspace.cs), [shell scene](../../src/AlterCourse.Godot/Main.tscn), and [Godot shell tests](../../src/AlterCourse.Godot/tests/GameplayShellTest.gd). The [root README](../../README.md) owns setup and launch instructions; this page owns player controls.

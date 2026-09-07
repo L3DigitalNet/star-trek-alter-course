@@ -48,6 +48,6 @@ Contact-sensitive local work uses the fixed 100 ms grid only when motion or chan
 
 ## Deferrals and evidence
 
-There is no confidence/error model, estimated stale position, strategic contact, cloaking, emissions, electronic warfare, false contact, NPC scan, additional doctrine, dialogue tree, or Science/Communications workspace. Combat, shields, weapons, damage, and advanced Engineering remain outside this slice.
+There is no confidence/error model, estimated stale position, long-range strategic sensor simulation, cloaking, emissions, electronic warfare, false contact, NPC scan, additional doctrine, dialogue tree, or Science/Communications workspace. Durable last-known strategic reports are implemented and owned by [Strategic Contact Reporting](strategic-contact-reporting.md). Combat, shields, weapons, damage, and advanced Engineering remain outside this slice.
 
 See [sensor knowledge](../../src/AlterCourse.Core/Sensors/SensorKnowledge.cs), [cautious policy](../../src/AlterCourse.Core/AI/CautiousContactDecisionPolicy.cs), [contact scenario tests](../../tests/AlterCourse.Core.Tests/Gameplay/Milestone3ProofScenarioTests.cs), [hail tests](../../tests/AlterCourse.Core.Tests/Gameplay/HailAndContactDecisionTests.cs), and [policy tests](../../tests/AlterCourse.Core.Tests/AI/CautiousContactDecisionPolicyTests.cs).

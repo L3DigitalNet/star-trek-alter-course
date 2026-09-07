@@ -6,7 +6,7 @@ description: 'Records ADR 0003 evidence for AssetCtl schema, YAML, logging, rast
 doc_type: 'reference'
 status: 'active'
 created: '2026-09-01'
-updated: '2026-09-01'
+updated: '2026-09-07'
 reviewed: '2026-09-01'
 owner: 'project-maintainers'
 consumer: 'agent'
@@ -16,7 +16,7 @@ tags:
 aliases: []
 related:
   - 'docs/adr/0003-prefer-native-capabilities-and-demand-driven-dependencies.md'
-  - 'docs/specs/asset-pipeline-tool.md'
+  - 'docs/wiki/asset-pipeline-tool.md'
 confidence: 'high'
 visibility: 'public'
 license: null
