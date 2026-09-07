@@ -9,10 +9,10 @@
 - GdUnit4 tests under `src/AlterCourse.Godot/tests/` exercise the managed node and scene boundary through the actual Godot runtime.
 - `GameSimulation` owns immutable definitions and active Core state. It advances explicit simulation time in deterministic 100 ms tactical quanta.
 - World state holds ships in `ShipInstanceId` order, an explicit `PlayerShipId`, and per-ship strategic, tactical, sensor, and repair state.
-- Scheduled work, travel, and repairs target ships explicitly. Public player commands resolve `PlayerShipId`; arbitrary-ship control is not exposed.
+- Current scheduled work, travel, and repairs target ships explicitly. Public player commands resolve `PlayerShipId`; arbitrary-ship control is not exposed.
 - Ship iteration is stable. Each advancement is capped at 1,000,000 moving-ship steps and 10,000 scheduled consequences.
 - Finite-long numeric exhaustion fails atomically; it is an explicit limitation rather than an indefinite-successor promise.
-- V6 persistence bounds world state, definitions, scheduler data, active orders, Engineering state, repairs, the order allocator, and known-contact reports.
+- V6 persists bounded world state, definition references, Engineering, orders, sensor knowledge, scheduler work, and allocators; contact reports are derived.
 - Loading resolves references through the supplied immutable catalog. The adjacent chain migrates V1 through V6 before candidate validation.
 - Definitions are not serialized. V1 migration creates one ship, targets old work to the player, and uses its design label for the missing vessel name.
 - World construction and persistence admit at most 256 ships to bound untrusted input and fixed-step work; this is not a final capacity target.
@@ -33,6 +33,16 @@
 - Command-interface fixtures are deterministic presentation data only. They cannot submit commands, persist state, or invent Core truth.
 - `scripts/launch-game.sh` is the safe direct-launch boundary: it restores and builds the Godot project before starting the editor.
 
+## Approved next-slice boundary, not implemented
+
+- [Faction assignment](../wiki/faction-intent-and-autonomous-assignment.md) owns the next approved design and its acceptance contract.
+- Asset-side optional `FactionId` is the single control authority; rosters are derived. Only idle controlled NPCs may be assigned, without preempting orders or travel.
+- Faction input grants own objective/topology and controlled-asset administrative facts only; sensor knowledge and external reports are not shared.
+- Extend the existing scheduler to closed Ship/Faction targets; use typed bootstrap, bounded wakes, stable ordering, and ordinary order commands.
+- Planned V7 migration invents no factions or control and preserves ship work. Zero-faction worlds stay valid; current runtime remains V6/content V4.
+- No RNG, organization/controller framework, hierarchy runtime, political UI, or intelligence network is included in the first slice.
+
 ## Standing backlog
 
+- Implement the approved bounded faction slice through a subsequent governed feature; do not treat design approval as runtime completion.
 - Add simulation behavior to `AlterCourse.Core` and its test project as gameplay systems are introduced; preserve the boundary defined by ADR 0001.
