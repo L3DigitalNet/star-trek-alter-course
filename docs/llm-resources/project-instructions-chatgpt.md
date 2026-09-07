@@ -11,6 +11,8 @@ tags: []
 aliases: []
 related:
   - 'docs/wiki/README.md'
+  - 'docs/wiki/faction-intent-and-autonomous-assignment.md'
+  - 'docs/wiki/open-questions.md'
 ---
 
 # Star Trek: Alter Course — Project Instructions
@@ -21,7 +23,13 @@ related:
 
 **Design wiki:** The [design wiki](https://github.com/L3DigitalNet/star-trek-alter-course/tree/dev/docs/wiki) is the single source of truth for the game's design. Read the relevant page before brainstorming or proposing a change; the guidance below is a summary that defers to it.
 
-**Review:** Always review the [ADRs](https://github.com/L3DigitalNet/star-trek-alter-course/tree/main/docs/adr) when starting a new chat, brainstorming, performing development work, etc.
+**Review:** Review the active [ADRs](https://github.com/L3DigitalNet/star-trek-alter-course/tree/dev/docs/adr) for the work being considered. `dev` is the development authority; `main` records releases.
+
+## Approved Next Design
+
+[Faction Intent and Autonomous Assignment](../wiki/faction-intent-and-autonomous-assignment.md) is the owner-approved next bounded M5 design after v0.5.0. Its proof and six decisions are settled; runtime implementation has not started. Content V4/save V6 remain current; V7 is planned. Do not present approved design as implemented behavior or declare M3/M5 complete.
+
+The contract permits idle directly controlled NPC assignment without preemption, narrow own-asset administrative information rather than sensor intelligence sharing, closed Ship/Faction scheduler targets, typed bootstrap, migration that invents no political state, and no randomness or faction/affiliation UI. Read that page for acceptance and non-goals instead of rebuilding the design from this summary. The [question register](../wiki/open-questions.md) distinguishes scoped answers from broader deferred decisions.
 
 ## Identity and Vision
 
@@ -80,7 +88,7 @@ Avoid a universe that freezes until the player arrives.
 
 AI is a core simulation system. Actors should make decisions from available information, objectives, doctrine, relationships, resources, and uncertainty rather than mainly from scripts.
 
-Favor deterministic or explainable game AI where effective. Do not use an LLM merely because a feature is called AI, and do not make core gameplay depend on an external hosted AI service.
+Consequential AI is deterministic, explainable, information-limited Core logic under ADR 0010, using validated typed commands and bounded work. Core gameplay must function offline and does not use a hosted or local LLM as authoritative strategic, tactical, or rules logic. The first faction slice consumes no randomness; any later stochastic consumer must satisfy ADR 0007's versioned continuation contract.
 
 ## Tactical and Engineering Depth
 
@@ -125,4 +133,4 @@ When implementing changes:
 - do not reduce simulation depth for convenience;
 - do not add complexity solely for hypothetical scale.
 
-When requirements are ambiguous, favor the interpretation most consistent with **a persistent, systems-driven Star Trek command simulation**, not a conventional RPG, arcade shooter, or scripted mission game.
+Interpret implementation details within the owning approved wiki contract and the persistent, systems-driven command-simulation vision. This does not authorize resolving open product questions or crossing an explicit non-goal silently. When a required consumer exceeds approved scope, return to governed design refinement rather than inventing permission from broad vision statements.
