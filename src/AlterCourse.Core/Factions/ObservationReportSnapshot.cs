@@ -55,10 +55,11 @@ public sealed record ObservationReportSnapshot
         bool validIdentification = identification switch
         {
             SensorContactIdentification.Detected => knownVesselDisplayName is null && knownDesignDisplayName is null,
-            SensorContactIdentification.Identified => !string.IsNullOrWhiteSpace(knownVesselDisplayName)
-                && !string.IsNullOrWhiteSpace(knownDesignDisplayName)
-                && knownVesselDisplayName.Length <= ShipState.MaximumVesselDisplayNameLength
-                && knownDesignDisplayName.Length <= ShipDefinition.MaximumDesignDisplayNameLength,
+            SensorContactIdentification.Identified => knownVesselDisplayName
+                is { Length: <= ShipState.MaximumVesselDisplayNameLength }
+                && knownDesignDisplayName is { Length: <= ShipDefinition.MaximumDesignDisplayNameLength }
+                && !string.IsNullOrWhiteSpace(knownVesselDisplayName)
+                && !string.IsNullOrWhiteSpace(knownDesignDisplayName),
             _ => false,
         };
         if (!validIdentification)
