@@ -6,61 +6,56 @@ description: 'Command Deck design, live Engineering, actor-safe presentation, an
 doc_type: 'reference'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-06'
+updated: '2026-09-07'
 tags:
   - 'godot'
   - 'ui'
 aliases: []
 related:
-  - 'docs/design/command-deck-ui.md'
-  - 'docs/design/engineering-backbone.md'
   - 'README.md'
+  - 'docs/wiki/engineering-and-combat.md'
   - 'docs/wiki/strategic-contact-reporting.md'
   - 'docs/wiki/faction-intent-and-autonomous-assignment.md'
 ---
 
 # Interface and player commands
 
-[Wiki home](README.md) · [Implementation status](implementation-status.md) · [Source catalog](sources.md)
+[Wiki home](README.md) · [Implementation status](implementation-status.md) · [Engineering and combat](engineering-and-combat.md) · [Source catalog](sources.md)
 
 ## Approved presentation framework
 
-Use one persistent map-dominant Command Deck and a screen-dominant Engineering workspace. The compact Systems Spine communicates state/alerts; a contextual inspector follows selection and exposes actions. Engineering uses a wider hierarchy and technical workspace with a clear return to Command.
+Use one persistent map-dominant Command Deck and a screen-dominant Engineering workspace. The compact Systems Spine communicates state/alerts; a contextual inspector follows selection and exposes actions. The strategic/tactical map remains Command Deck's primary workspace. Engineering uses a wider hierarchy, technical workspace, inspector, and clear return to Command.
 
-`GameScreen` retains the session simulation, player projection, selection, workspace switching, rate continuity, and save/load. Switching screens does not recreate the universe. Native Godot Controls, Containers, focus, input, scenes, drawing, and a project-owned Theme are the presentation framework.
+`GameScreen` owns session-lifetime simulation, player projection, selection, workspace switching, save/load, and rate continuity. Switching workspaces must not recreate or replace simulation. Native Godot Controls, Containers, input, focus, drawing, scenes, and the project-owned [runtime theme](../../src/AlterCourse.Godot/assets/ui/command_theme.tres) are the presentation framework. Do not introduce a UI framework, global manager, service locator, generalized event bus, or generalized MVVM infrastructure that would become a second command authority.
 
-The [runtime theme](../../src/AlterCourse.Godot/assets/ui/command_theme.tres) owns styling. The approved design uses command cyan, engineering amber, nominal green, and tactical/critical red; Rajdhani headings, IBM Plex Sans labels, and IBM Plex Mono telemetry; mostly square, fine structural rules. These are presentation choices, not domain rules. Existing Figma and PNG references are reference artifacts, not runtime authority or proof that shown systems exist.
+The Theme owns runtime styling: command cyan for command/navigation, engineering amber, nominal green, and tactical/critical red; Rajdhani SemiBold/Bold headings, IBM Plex Sans labels, and IBM Plex Mono telemetry. The dark canvas and panel surfaces use the Theme's subtle/strong border and text roles. Structural rules are square and 1 px; active rails, selection indicators, and alert bands may use 2–3 px emphasis.
 
-## Live versus preview
+## Authority, references, and layout
 
-Resolve display and actions from the current player-known Core projection. Selection supplies context, not permission. Deterministic preview fixtures are allowed only in explicit development/test preview mode. If no implemented production projection exists, show Unavailable rather than fabricated values.
+Core is authoritative for simulation/spatial truth. Godot adapts player-known Core projections into controls and typed commands; it must neither fabricate domain state nor expose hidden NPC truth. Selection supplies context, never legality. A deterministic preview fixture is illustrative only in explicit development/test preview mode. When no real projection exists, production labels a value/action **Unavailable** rather than substituting preview data. Preview never enters simulation, persistence, or production truth.
 
-M3A made local contacts, identification, and hail live. M4 made power, sensors, impulse, and the single active repair live in Engineering. Strategic Contact Reporting made a minimal "LAST KNOWN CONTACTS" telemetry section live on the strategic Command Deck inspector. Combat fire solutions, shields/weapons, advanced engineering topology, and repair-team queues remain preview-only or absent. An earlier screenshot showing such a system is not an implementation commitment.
+The approved visual reference is [the Figma file](https://www.figma.com/design/9lH6uDhXSqhELwg05j8wEC), inspected at Travel `16:5`, Combat `16:152`, and Engineering `16:312`; stable comparison images are [Travel](../ui/reference/command-deck-travel.png), [Combat](../ui/reference/command-deck-combat.png), and [Engineering](../ui/reference/engineering-workspace.png). These are presentation references, not runtime authority or proof that depicted systems exist.
 
-The live Engineering hierarchy is Overview, Power, Sensors, Propulsion, and Repairs. Allocation/repair controls carry Core-supplied availability and reasons. UI code does not locally simulate an allocation preview or optimistically mutate the ship.
+The 1920×1080 reference composition uses a 122 px Systems Spine, expanding map, and 356 px Command Deck inspector; Engineering uses a 250 px hierarchy, expanding workspace, and 430 px inspector. These are composition guidance, not fixed pixels. Containers preserve hierarchy/readable minima at 1600×900 and 2560×1440; the current shell is tested at 1024×640 and 1440×900, with 1024×640 the practical minimum.
 
-## Current interaction surface
+## Live surface and commands
 
-The strategic map selects connected destinations and engages scheduled travel. Tactical view shows the local frame, actor-known contact markers, selected-contact facts, scan, and hail. The current demonstration course is 045 degrees at 2 km/s and remains constrained by effective impulse capability; it is not a complete navigation command console.
+M3A made actor-local tactical contacts, identification, and hail live. M4 made generation, allocation, sensor/impulse condition/capability, and one sensor or impulse repair live. Strategic Contact Reporting added a minimal **LAST KNOWN CONTACTS** section to the strategic inspector. Combat fire solutions, shields/weapons, detailed EPS topology, unsupported component telemetry, and repair-team queues remain preview-only, unavailable, or absent; reference imagery is not an implementation commitment.
 
-The strategic inspector also lists the player's own `KnownContactReports`: one row per retained report, naming the learned vessel or the tactical contact label, the last-seen location and time, the retained Current/Stale/Lost status, and the learned design name, capped and summarized when it would overflow. This presentation deliberately stays minimal; it is not a strategic-map marker or intelligence dashboard.
+The live Engineering hierarchy is Overview, Power, Sensors, Propulsion, and Repairs. It presents Core values and Core-supplied action availability/reasons; it does not simulate allocation preview or optimistically mutate a ship. The strategic map selects connected destinations and engages scheduled travel. Tactical view shows the local frame, actor-known contact markers, selected-contact facts, scan, and hail. The demonstration course is 045 degrees at 2 km/s, subject to effective impulse limit; it is not a complete navigation console.
 
-Current shortcuts are 1 for strategic view, 2 for tactical view, Space for pause/resume, R to cycle rate, U to advance to a player-relevant event, Ctrl+S/Ctrl+L for quick save/load, E to engage selected travel, and C for the demonstration tactical course. Presentation rates are 0.5x, 1x, 2x, and 4x, with pause separate.
+The inspector's own `KnownContactReports` section lists retained reports: learned vessel or tactical label, last-seen location/time, Current/Stale/Lost status, and learned design name. It is capped/summarized when necessary, not a strategic-map marker or intelligence dashboard.
 
-Mouse and keyboard follow the same typed intent path. Controls reconcile by stable presentation identity, retain focus through refresh, and resolve the current payload at activation. Disabled/hidden controls do not remain actionable. Space pause must not also activate a focused command button. Known bugs and their fixes are indexed in [handoff bug records](../handoff/bugs/INDEX.md).
+Shortcuts are 1 strategic, 2 tactical, Space pause/resume, R cycle rate, U advance to player-relevant event, Ctrl+S/Ctrl+L quick save/load, E engage selected travel, and C submit the demonstration course. Running rates are 0.5x, 1x, 2x, and 4x; pause is separate. The quick-save slot and its failure-preservation boundary are owned by [content, assets, and persistence](content-assets-and-persistence.md).
 
-## Approved next-slice presentation boundary
+## Interaction and precision
 
-[Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) is approved design, not implemented, and adds no faction, affiliation, political hierarchy, or intelligence UI. The player ship is outside faction autonomous control in its proof. Neither true direct control nor faction decision explanations become ordinary player-facing data.
+Mouse and keyboard route through the same selection and typed-intent path. Disabled actions remain visible with explanatory tooltips and never submit invalid requests. Selected, disabled, hover, and keyboard-focus states are visible. Focus traversal refreshes with active workspace/actionable controls and excludes hidden/disabled controls. Reconciliation uses stable presentation IDs: live refresh preserves valid focus and resolves current payload at activation, while removed actions become non-activatable. Space pause is handled before focused controls can activate it.
 
-The later implementation must preserve current controls and actor-safe projections, including save/load and player-relevant event filtering. Offscreen faction work or NPC-NPC contact is not automatically a player notification or stop condition. Godot may adapt to the implemented save-format change without acquiring political simulation authority or a hidden-state diagnostic view.
+Coordinates, times, and quantities are formatted only at the adapter boundary. Tactical north and Godot screen Y are explicitly converted. The interface must not display precision unsupported by rule or player knowledge.
 
-## Layout and precision
+Future station workspaces need a concrete domain consumer and later decision; this page does not commit Tactical, Navigation, Science, Communications, or Operations as implementation work.
 
-The original design reference is 1920×1080, with composition guidance for other desktop sizes. The current shell documentation records tested layouts at 1024×640 and 1440×900, with 1024×640 the practical minimum. Reference panel widths are not fixed simulation or display requirements.
+## Sources and evidence
 
-Coordinates, time, and quantities are formatted only at the adapter boundary. Tactical north and Godot screen Y are explicitly converted. The UI should not display precision unsupported by the actual rule or actor knowledge.
-
-## Sources
-
-[Command Deck decision](../design/command-deck-ui.md), [Engineering design](../design/engineering-backbone.md), [current controls](../../README.md), and [visual reference directory](../ui/reference/). Future stations require concrete domain consumers rather than automatically becoming implementation tasks because a station name appears in a design.
+See [GameScreen](../../src/AlterCourse.Godot/src/Gameplay/GameScreen.cs), [EngineeringWorkspace](../../src/AlterCourse.Godot/src/Gameplay/EngineeringWorkspace.cs), [shell scene](../../src/AlterCourse.Godot/Main.tscn), [current controls](../../README.md), and [Godot shell tests](../../src/AlterCourse.Godot/tests/GameplayShellTest.gd).
