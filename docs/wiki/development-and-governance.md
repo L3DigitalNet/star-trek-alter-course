@@ -6,7 +6,7 @@ description: 'Repository toolchain, validation, contribution workflow, and durab
 doc_type: 'reference'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-06'
+updated: '2026-09-07'
 tags:
   - 'development'
   - 'validation'
