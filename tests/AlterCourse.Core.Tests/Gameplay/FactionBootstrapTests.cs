@@ -44,12 +44,20 @@ public sealed class FactionBootstrapTests
             production.GetRequiredShip(new ShipInstanceId(2)).DirectControllerFactionId
         );
         Assert.Equal(
+            FactionTestWorld.FactionB,
+            production.GetRequiredShip(new ShipInstanceId(3)).DirectControllerFactionId
+        );
+        Assert.Equal(
             FactionTestWorld.FactionA,
             production.GetRequiredShip(new ShipInstanceId(5)).DirectControllerFactionId
         );
         Assert.Equal(
             FactionTestWorld.FactionA,
             production.GetRequiredShip(new ShipInstanceId(6)).DirectControllerFactionId
+        );
+        Assert.All(
+            production.Factions,
+            faction => Assert.Equal(ObservationResponsePosture.Enabled, faction.Observation!.Posture)
         );
     }
 
