@@ -204,14 +204,6 @@ public sealed partial class GameSimulation
         ObservationPublicationCollector? boundaryCollector = null
     )
     {
-        if (
-            DecideFactionInvestigation(state, faction, boundaryCollector).Outcome
-            == FactionInvestigationDecisionOutcome.InvestigationProposed
-        )
-        {
-            return null;
-        }
-
         SimulationTime? boundary = FindNextFactionOpportunity(state, faction);
         if (boundary is not { } candidate)
         {

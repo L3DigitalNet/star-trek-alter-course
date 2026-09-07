@@ -3,6 +3,7 @@ using AlterCourse.Core.Factions;
 using AlterCourse.Core.Gameplay;
 using AlterCourse.Core.Identity;
 using AlterCourse.Core.Orders;
+using AlterCourse.Core.Persistence;
 using AlterCourse.Core.Sensors;
 using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
@@ -239,9 +240,9 @@ public sealed class ObservationRuntimeTests
         );
     }
 
-    /// <summary>Confirms one completion does not leave a retry wake when another report is actionable now.</summary>
+    /// <summary>Confirms one completion reserves a finite retry for another actionable report.</summary>
     [Fact]
-    public void AlreadyThereCompletionLeavesDifferentActionableReportDormantUntilAnotherBoundary()
+    public void AlreadyThereCompletionSchedulesDifferentActionableReportAtNextRelease()
     {
         SimulationState state = CreateTwoLocationResponseState();
 
@@ -250,7 +251,7 @@ public sealed class ObservationRuntimeTests
             .State;
 
         FactionObservationState observation = resolved.Factions[0].Observation!;
-        Assert.Null(resolved.Factions[0].PendingDecisionWake);
+        Assert.Equal(new SimulationTime(5000), resolved.Factions[0].PendingDecisionWake!.DueTime);
         Assert.Null(observation.ActiveInvestigation);
         Assert.Single(
             observation.ReceivedReports,
@@ -264,7 +265,70 @@ public sealed class ObservationRuntimeTests
                 report.Report.ReportId == new ObservationReportId(2)
                 && report.Handling == ObservationReportHandling.Unhandled
         );
+
+        AssertPendingResponseContinuesAcrossSaveLoad(resolved);
     }
+
+    private static void AssertPendingResponseContinuesAcrossSaveLoad(SimulationState state)
+    {
+        var uninterrupted = GameSimulation.RestoreState(
+            state,
+            FactionTestWorld.ShipCatalog,
+            FactionTestWorld.FactionCatalog
+        );
+        GameSimulation resumed = GamePersistence
+            .Deserialize(
+                GamePersistence.Serialize(uninterrupted, ObservationResponseProofFixture.Metadata),
+                FactionTestWorld.ShipCatalog,
+                FactionTestWorld.FactionCatalog,
+                "already-there-response-v8.json"
+            )
+            .Simulation;
+        Assert.Equal(new SimulationTime(5000), resumed.CaptureState().Factions[0].PendingDecisionWake!.DueTime);
+
+        SimulationState uninterruptedResponse = GameSimulation
+            .AdvanceTo(
+                uninterrupted.CaptureState(),
+                new SimulationTime(5000),
+                FactionTestWorld.ShipCatalog,
+                FactionTestWorld.FactionCatalog
+            )
+            .State;
+        SimulationState resumedResponse = GameSimulation
+            .AdvanceTo(
+                resumed.CaptureState(),
+                new SimulationTime(5000),
+                FactionTestWorld.ShipCatalog,
+                FactionTestWorld.FactionCatalog
+            )
+            .State;
+
+        Assert.Single(
+            uninterruptedResponse.Factions[0].Observation!.ReceivedReports,
+            report =>
+                report.Report.ReportId == new ObservationReportId(2)
+                && report.Handling == ObservationReportHandling.Handled
+        );
+        SimulationState uninterruptedContinuation = ContinueTo(uninterruptedResponse, 65_000);
+        SimulationState resumedContinuation = ContinueTo(resumedResponse, 65_000);
+        Assert.Equal(Serialize(uninterruptedContinuation), Serialize(resumedContinuation));
+    }
+
+    private static SimulationState ContinueTo(SimulationState state, long milliseconds) =>
+        GameSimulation
+            .AdvanceTo(
+                state,
+                new SimulationTime(milliseconds),
+                FactionTestWorld.ShipCatalog,
+                FactionTestWorld.FactionCatalog
+            )
+            .State;
+
+    private static byte[] Serialize(SimulationState state) =>
+        GamePersistence.Serialize(
+            GameSimulation.RestoreState(state, FactionTestWorld.ShipCatalog, FactionTestWorld.FactionCatalog),
+            ObservationResponseProofFixture.Metadata
+        );
 
     /// <summary>Confirms changed report handling rejects application without mutation.</summary>
     [Fact]
@@ -1577,7 +1641,7 @@ public sealed class ObservationRuntimeTests
             ),
             FactionTestWorld.CreateShip(5, FactionTestWorld.Alpha, FactionTestWorld.FactionA),
         ];
-        SimulationState state = CreateResponseBootstrap(ships);
+        SimulationState state = DisableFactionSensors(CreateResponseBootstrap(ships));
         FactionState faction = state.Factions[0];
         (SimulationScheduler scheduler, ScheduledWork wake) = state.Scheduler.Schedule(
             state.Time,
@@ -1610,6 +1674,25 @@ public sealed class ObservationRuntimeTests
             Scheduler = scheduler,
             ObservationReportIdAllocator = ObservationReportIdAllocator.Restore(3),
         };
+    }
+
+    private static SimulationState DisableFactionSensors(SimulationState state)
+    {
+        // Historical reports remain valid after capability loss; blind responders keep this fixture focused on
+        // the finite retry boundary without publishing newer episodes that would replace the source reports.
+        foreach (
+            ShipState ship in state.Ships.Where(ship => ship.DirectControllerFactionId == FactionTestWorld.FactionA)
+        )
+        {
+            state = state.ReplaceShip(
+                ship.InstanceId,
+                ship with
+                {
+                    Engineering = ship.Engineering with { SensorCondition = new SystemCondition(0) },
+                }
+            );
+        }
+        return state;
     }
 
     private static SimulationState CreateResponseBootstrap(ShipStart[] ships) =>
