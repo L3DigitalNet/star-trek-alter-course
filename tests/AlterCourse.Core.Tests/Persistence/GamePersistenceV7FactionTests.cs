@@ -11,6 +11,45 @@ namespace AlterCourse.Core.Tests.Persistence;
 /// <summary>Verifies the closed V7 faction, controller, objective, and typed-work persistence contract.</summary>
 public sealed class GamePersistenceV7FactionTests
 {
+    /// <summary>Removing both sides of a pending wake correlation must not silently disable an actionable objective.</summary>
+    [Fact]
+    public void MissingPendingDecisionContinuationFailsWithoutReplacingLiveState()
+    {
+        GameSimulation live = FactionTestWorld
+            .CreateBootstrap(
+                [new FactionStart(FactionTestWorld.FactionA, FactionTestWorld.DefinitionA, FactionTestWorld.Beta)],
+                controlledShips: true
+            )
+            .CreateSimulation(FactionTestWorld.ShipCatalog, FactionTestWorld.FactionCatalog);
+        byte[] before = GamePersistence.Serialize(live, Milestone3ProofFixture.Metadata);
+        byte[] corrupted = Mutate(
+            before,
+            root =>
+            {
+                JsonNode simulation = root["simulation"]!;
+                simulation["factions"]![0]!["pendingDecisionWake"] = null;
+                JsonArray work = simulation["scheduler"]!["outstandingWork"]!.AsArray();
+                JsonNode? wake = Assert.Single(
+                    work,
+                    item => string.Equals(item!["targetKind"]!.GetValue<string>(), "faction", StringComparison.Ordinal)
+                );
+                Assert.True(work.Remove(wake));
+            }
+        );
+
+        GamePersistenceException failure = Assert.Throws<GamePersistenceException>(() =>
+            GamePersistence.Deserialize(
+                corrupted,
+                FactionTestWorld.ShipCatalog,
+                FactionTestWorld.FactionCatalog,
+                "missing-pending-continuation.json"
+            )
+        );
+
+        Assert.Equal(GamePersistenceFailure.InvalidData, failure.Failure);
+        Assert.Equal(before, GamePersistence.Serialize(live, Milestone3ProofFixture.Metadata));
+    }
+
     /// <summary>Confirms a midflight faction commitment round trips and continues byte-identically.</summary>
     [Fact]
     public void AssignedFactionRoundTripsAndContinuesDeterministically()
