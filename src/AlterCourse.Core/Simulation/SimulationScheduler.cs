@@ -8,12 +8,14 @@ namespace AlterCourse.Core.Simulation;
 internal sealed class SimulationScheduler
 {
     // Each ship can correlate travel, repair, order, scan, and decision work independently of one loss item per
-    // possible contact. Keep this list aligned with SimulationState.ValidateScheduledWork.
+    // possible contact. Each faction can independently retain one decision wake. Keep these allowances aligned with
+    // aggregate scheduled-work validation.
     private const int IndependentlyCorrelatedWorkKindsPerShip = 5;
 
     /// <summary>Gets the maximum number of outstanding consequences retained by one scheduler.</summary>
     public const int MaximumOutstandingWork =
-        SimulationState.MaximumShips * ((SimulationState.MaximumShips - 1) + IndependentlyCorrelatedWorkKindsPerShip);
+        SimulationState.MaximumShips * ((SimulationState.MaximumShips - 1) + IndependentlyCorrelatedWorkKindsPerShip)
+        + SimulationState.MaximumFactions;
 
     private SimulationScheduler(long nextWorkId, long nextSequence, ImmutableArray<ScheduledWork> outstandingWork)
     {
@@ -95,20 +97,23 @@ internal sealed class SimulationScheduler
 
     /// <summary>Schedules a known consequence and returns the following scheduler state.</summary>
     /// <param name="dueTime">The simulation time at which the work becomes due.</param>
-    /// <param name="targetShipId">The ship instance that owns the scheduled consequence.</param>
+    /// <param name="target">The ship or faction that owns the scheduled consequence.</param>
     /// <param name="kind">The known consequence kind.</param>
     /// <returns>The following scheduler state and scheduled work item.</returns>
-    /// <exception cref="ArgumentException"><paramref name="targetShipId"/> is uninitialized.</exception>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="target"/> is invalid or its domain does not support <paramref name="kind"/>.
+    /// </exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="kind"/> is unknown.</exception>
     /// <exception cref="OverflowException">A following identity or sequence cannot be represented.</exception>
     public (SimulationScheduler Scheduler, ScheduledWork Work) Schedule(
         SimulationTime dueTime,
-        ShipInstanceId targetShipId,
+        ScheduledWorkTarget target,
         ScheduledWorkKind kind
     )
     {
-        ScheduledWork.ValidateTarget(targetShipId);
+        ScheduledWorkTarget.Validate(target);
         ScheduledWork.ValidateKind(kind);
+        ScheduledWork.ValidateTargetKind(target, kind);
         if (OutstandingWork.Length >= MaximumOutstandingWork)
         {
             throw new InvalidOperationException(
@@ -123,11 +128,22 @@ internal sealed class SimulationScheduler
             throw new OverflowException("Scheduling would produce counters outside the persisted range.");
         }
 
-        ScheduledWork scheduled = new(new ScheduledWorkId(NextWorkId), dueTime, NextSequence, targetShipId, kind);
+        ScheduledWork scheduled = new(new ScheduledWorkId(NextWorkId), dueTime, NextSequence, target, kind);
 
         ImmutableArray<ScheduledWork> outstanding = OutstandingWork.Add(scheduled).Sort(CompareWork);
         return (new SimulationScheduler(followingWorkId, followingSequence, outstanding), scheduled);
     }
+
+    /// <summary>Schedules ship-targeted work for existing callers.</summary>
+    /// <param name="dueTime">The simulation time at which the work becomes due.</param>
+    /// <param name="targetShipId">The ship instance that owns the scheduled consequence.</param>
+    /// <param name="kind">The known ship consequence kind.</param>
+    /// <returns>The following scheduler state and scheduled work item.</returns>
+    public (SimulationScheduler Scheduler, ScheduledWork Work) Schedule(
+        SimulationTime dueTime,
+        ShipInstanceId targetShipId,
+        ScheduledWorkKind kind
+    ) => Schedule(dueTime, ScheduledWorkTarget.ForShip(targetShipId), kind);
 
     /// <summary>Cancels the outstanding work with an exact stable identity.</summary>
     /// <param name="id">The initialized identity of the work to cancel.</param>
@@ -185,14 +201,21 @@ internal sealed class SimulationScheduler
 
     internal bool ContainsExact(
         ScheduledWorkId id,
-        ShipInstanceId targetShipId,
+        ScheduledWorkTarget target,
         SimulationTime dueTime,
         ScheduledWorkKind kind
     ) =>
         WorkById.TryGetValue(id, out ScheduledWork work)
-        && work.TargetShipId == targetShipId
+        && work.Target == target
         && work.DueTime == dueTime
         && work.Kind == kind;
+
+    internal bool ContainsExact(
+        ScheduledWorkId id,
+        ShipInstanceId targetShipId,
+        SimulationTime dueTime,
+        ScheduledWorkKind kind
+    ) => ContainsExact(id, ScheduledWorkTarget.ForShip(targetShipId), dueTime, kind);
 
     private static void ValidateRestoredItem(
         ScheduledWork item,
@@ -213,19 +236,16 @@ internal sealed class SimulationScheduler
             throw InvalidOutstandingWork("Outstanding work contains a negative sequence.");
         }
 
-        if (item.TargetShipId.Value <= 0)
-        {
-            throw InvalidOutstandingWork("Outstanding work contains an uninitialized target ship identity.");
-        }
-
         try
         {
+            ScheduledWorkTarget.Validate(item.Target);
             ScheduledWork.ValidateKind(item.Kind);
+            ScheduledWork.ValidateTargetKind(item.Target, item.Kind);
         }
-        catch (ArgumentOutOfRangeException exception)
+        catch (ArgumentException exception)
         {
             throw new ArgumentException(
-                "Outstanding work contains an unknown kind.",
+                "Outstanding work contains an invalid target or kind.",
                 outstandingWorkParameterName,
                 exception
             );

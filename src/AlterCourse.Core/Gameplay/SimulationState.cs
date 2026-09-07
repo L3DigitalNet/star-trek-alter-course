@@ -13,6 +13,7 @@ namespace AlterCourse.Core.Gameplay;
 internal sealed record SimulationState
 {
     internal const int MaximumShips = 256;
+    internal const int MaximumFactions = 256;
 
     internal SimulationState(
         SimulationTime time,
