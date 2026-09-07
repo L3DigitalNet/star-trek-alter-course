@@ -16,6 +16,7 @@ related:
   - 'docs/design/engineering-backbone.md'
   - 'README.md'
   - 'docs/wiki/strategic-contact-reporting.md'
+  - 'docs/wiki/faction-intent-and-autonomous-assignment.md'
 ---
 
 # Interface and player commands
@@ -48,6 +49,14 @@ Current shortcuts are 1 for strategic view, 2 for tactical view, Space for pause
 
 Mouse and keyboard follow the same typed intent path. Controls reconcile by stable presentation identity, retain focus through refresh, and resolve the current payload at activation. Disabled/hidden controls do not remain actionable. Space pause must not also activate a focused command button. Known bugs and their fixes are indexed in [handoff bug records](../handoff/bugs/INDEX.md).
 
+## Approved faction slice: no new political UI
+
+[Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) is approved design only and introduces no faction-management screen, affiliation labels/colors, player assignment controls, or faction-wide intelligence display. Headless proof is sufficient for the new political decision path.
+
+The player may encounter ordinary consequences through existing legitimate observations, but a true controller link or faction diagnostic explanation is not player knowledge. Do not expose hidden objectives, controlled-asset administrative views, NPC-NPC events, or other faction state merely to make the new behavior visible. The player ship remains outside autonomous faction assignment in the proof.
+
+Existing Command Deck, Engineering, tactical contacts, and last-known reports retain their present information boundaries. Faction/affiliation presentation requires a later explicit knowledge and UI consumer; approval of faction state is not that consumer.
+
 ## Layout and precision
 
 The original design reference is 1920×1080, with composition guidance for other desktop sizes. The current shell documentation records tested layouts at 1024×640 and 1440×900, with 1024×640 the practical minimum. Reference panel widths are not fixed simulation or display requirements.
@@ -56,4 +65,4 @@ Coordinates, time, and quantities are formatted only at the adapter boundary. Ta
 
 ## Sources
 
-[Command Deck decision](../design/command-deck-ui.md), [Engineering design](../design/engineering-backbone.md), [current controls](../../README.md), and [visual reference directory](../ui/reference/). Future stations require concrete domain consumers rather than automatically becoming implementation tasks because a station name appears in a design.
+[Command Deck decision](../design/command-deck-ui.md), [Engineering design](../design/engineering-backbone.md), [faction assignment decision](faction-intent-and-autonomous-assignment.md), [current controls](../../README.md), and [visual reference directory](../ui/reference/). Future stations require concrete domain consumers rather than automatically becoming implementation tasks because a station name appears in a design.
