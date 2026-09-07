@@ -28,7 +28,7 @@ A ship definition describes reusable design capability. A ship instance has stab
 
 `PlayerShipId` selects an ordinary ship. It does not make NPCs encounter props or place player-only state at the root of the world model. The current 256-ship bound protects prototype input and work budgets; it is not a final galaxy population target.
 
-The default map has Dawn Anchor, Vesper Reach, and Meridian Drift. Pathfinder starts at Dawn Anchor with constrained generation and a sensor repair. Wayfarer is at Vesper Reach, Horizon is traveling toward Meridian Drift, and Kestrel is at Dawn Anchor with cautious contact behavior. Proof route durations are short authored values, not a final warp-distance model.
+The default map has Dawn Anchor, Vesper Reach, and Meridian Drift. Pathfinder starts at Dawn Anchor with constrained generation and a sensor repair. Wayfarer is at Vesper Reach, Horizon is traveling toward Meridian Drift, and Kestrel is at Dawn Anchor with cautious contact behavior. The production faction proof adds Aurora and Resolute at Meridian Drift under Faction A's direct control, with Wayfarer controlled by Faction B. Proof route durations are short authored values, not a final warp-distance model.
 
 ## Strategic and tactical space
 
