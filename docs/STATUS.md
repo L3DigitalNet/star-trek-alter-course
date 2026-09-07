@@ -19,4 +19,4 @@
 - Design phase Final PR #92 merged as `ad73862`; Task #91 is Done and invalid staging PR #90 was closed unmerged; its branch was deleted.
 - PR #92 passed all five final-head checks, Branch policy, and post-merge Verify; design docs and ROADMAP changed without runtime code.
 - Feature #93 passed Ready admission and is In progress for the approved observation-driven faction response; draft Final PR #94 tracks implementation.
-- Save V7 remains unchanged while Feature #93 is unimplemented. M6 follows response work and Q-10 admission; M3 and M5 remain incomplete.
+- Feature #93 has V8 format/migration; runtime and populated maximum-shape proofs remain pending. M6/Q-10 follows; M3/M5 remain incomplete.
