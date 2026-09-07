@@ -15,7 +15,7 @@ The current operational state is tracked in [STATUS](docs/STATUS.md), while [Imp
 - **Milestone 3A — First Observed Contact** is implemented, but **Milestone 3 as a whole is not complete**.
 - **Milestone 4 — Engineering Backbone and Degraded Operations** is implemented.
 - Released v0.5.0 uses content schema **V4** and save schema **V6**; the `dev` runtime adds strict faction content V1 and save V7 through Feature #86 / Final PR #87, merged as `0217296`.
-- The approved [factions and organizations](docs/wiki/factions-and-organizations.md) political model is **design only**. No faction hierarchy, organization runtime, government model, treaty system, layered jurisdiction runtime, or strategic affiliation-knowledge system exists yet.
+- The broader approved [factions and organizations](docs/wiki/factions-and-organizations.md) political model remains **design only** beyond the implemented root-faction/direct-control subset. No faction hierarchy, organization runtime, government model, treaty system, layered jurisdiction runtime, or strategic affiliation-knowledge system exists yet.
 - [Strategic Contact Reporting](docs/wiki/strategic-contact-reporting.md) is **implemented** (Feature #77, Final PR #78), resolving Q-01. It is not canonically named `M3B`, does not complete Milestone 3, and did not itself begin M5.
 - [Faction Intent and Autonomous Assignment](docs/wiki/faction-intent-and-autonomous-assignment.md) is the implemented first M5 slice, resolving Q-05. Current `dev` uses V7; released v0.5.0 remains V6.
 

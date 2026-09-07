@@ -120,7 +120,7 @@ Q-14 is therefore scoped in two ways: the next save migration is selected, and t
 
 ## Presentation and non-goals
 
-No faction, affiliation, political hierarchy, or intelligence UI is added. Existing player-safe maps, contacts, Engineering controls, save/load, and event advancement remain available. Godot may adapt to the new save format when implemented, but it receives no faction diagnostic view or hidden NPC decision stream. A new offscreen consequence is not automatically a player-relevant event.
+No faction, affiliation, political hierarchy, or intelligence UI is added. Existing player-safe maps, contacts, Engineering controls, save/load, and event advancement remain available. Godot loads V7 and both content catalogs, but it receives no faction diagnostic view or hidden NPC decision stream. A new offscreen consequence is not automatically a player-relevant event.
 
 Do not implement global known-vessel identity, cross-observer correlation, report sharing, affiliation/intent learning, political attitudes, treaties, combat, diplomacy, organizations, governments, parent/child factions, layered jurisdiction, territory ownership, political resources/economy, canonical campaign generation, RNG, or a generic actor/rules framework. Do not select a complete organization taxonomy or complete M3 merely to label this slice finished.
 
