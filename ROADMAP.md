@@ -16,7 +16,8 @@ The current operational state is tracked in [STATUS](docs/STATUS.md), while [Imp
 - **Milestone 4 — Engineering Backbone and Degraded Operations** is implemented.
 - Content schema **V4** and save schema **V6** are current.
 - The approved [factions and organizations](docs/wiki/factions-and-organizations.md) political model is **design only**. No faction hierarchy, organization runtime, government model, treaty system, layered jurisdiction runtime, or strategic affiliation-knowledge system exists yet.
-- [Strategic Contact Reporting](docs/wiki/strategic-contact-reporting.md) is **implemented** (Feature #77, Final PR #78), resolving Q-01. It is not canonically named `M3B`, does not complete Milestone 3, and does not itself begin M5.
+- [Strategic Contact Reporting](docs/wiki/strategic-contact-reporting.md) is **implemented** (Feature #77, Final PR #78), resolving Q-01. It is not canonically named `M3B`, does not complete Milestone 3, and did not itself begin M5.
+- [Faction Intent and Autonomous Assignment](docs/wiki/faction-intent-and-autonomous-assignment.md) is the **next owner-approved design**, resolving Q-05 for the first bounded M5 slice. Gameplay implementation has not started; planned V7 is not the current save format.
 
 ## Execution model
 
@@ -73,7 +74,7 @@ Canon should establish the chosen campaign's required historical and political s
 | 2 | **Active World and Persistent Orders** | **Implemented** | Ships can own durable intent, progress offscreen, and retain that intent across save/load. |
 | 3 | **Sensor Knowledge and First Contact** | **Partial — M3A and Strategic Contact Reporting implemented; M3 not complete** | M3A proves observer-local knowledge and information-limited ship behavior; Strategic Contact Reporting carries legitimate last-known contact information into strategic context without defining the final intelligence model. |
 | 4 | **Engineering Backbone and Degraded Operations** | **Implemented** | Power, condition, capability, and repair interact with existing sensing and maneuvering rather than living in a parallel subsystem. |
-| 5 | **Living Sector and Faction Autonomy** | **Future** | Faction intent can cause explainable autonomous assignments, offscreen activity, and durable world change using actor-appropriate information. |
+| 5 | **Living Sector and Faction Autonomy** | **First bounded slice approved; runtime not started** | Faction intent can cause explainable autonomous assignments, offscreen activity, and durable world change using actor-appropriate information; the selected first assignment slice does not complete this entire milestone. |
 | 6 | **Tactical Combat Foundation** | **Future** | Combat composes motion, observation, Engineering, AI, persistence, and withdrawal instead of becoming a separate hit-point game. |
 | 7 | **Diplomacy, Incidents, and Durable Consequences** | **Future** | The world distinguishes events, knowledge/attribution, legal status, attitudes, and remembered consequences that affect later decisions. |
 | 8 | **Canon-Anchored Campaign Bootstrap and Divergent History** | **Future** | A campaign begins from reproducible canon-consistent boundary conditions plus already-active noncanonical local activity. |
@@ -141,21 +142,33 @@ The slice did **not** approve or introduce:
 - combat; or
 - a generic actor/entity/rules framework.
 
-Q-02 through Q-05 remain open. It does not complete Milestone 3 and does not begin Milestone 5.
+It left Q-02 through Q-05 unresolved at completion and did not itself complete M3 or begin M5. The later approved assignment design resolves Q-05 and scopes other questions without changing this historical contact-reporting boundary.
 
 ---
 
-## Milestone 3 completion remains open beyond the implemented slice
+## Milestone 3 completion remains open beyond the implemented slices
 
-M3A proved the core local-contact architecture. Strategic Contact Reporting is now implemented as the next information slice, but its completion does **not** automatically close Milestone 3.
+M3A and Strategic Contact Reporting are implemented, but their completion does **not** automatically close Milestone 3.
 
-The original Milestone 3 horizon also discussed affiliation/intent knowledge, strategic contacts, broader reporting, and identity questions. Strategic Contact Reporting resolves only the smallest behavior needed now: carrying legitimate local observations into actor-safe strategic last-known information.
+The original Milestone 3 horizon also discussed affiliation/intent knowledge, strategic contacts, broader reporting, and identity questions. Strategic Contact Reporting resolves the smaller behavior of carrying legitimate local observations into actor-safe strategic last-known information.
 
-After that implementation lands, evaluate remaining M3 scope against actual consumers. Q-02 through Q-04 remain the design register for durable known-vessel identity, affiliation knowledge, and faction knowledge sharing. Do not declare a final intelligence schema or M3 completion contract in advance of evidence.
+Evaluate remaining M3 scope against actual consumers. Q-02 and Q-03 remain open; Q-04's sensor/intelligence-sharing portion remains open even though the first faction assignment now has an approved own-asset administrative view. Do not delay that bounded assignment slice to invent a final intelligence schema or M3 completion contract.
 
 ---
 
 ## Milestone 5 — Living Sector and Faction Autonomy
+
+### Approved first bounded slice — Faction Intent and Autonomous Assignment
+
+**Owner-approved design, not implemented; documentation PR #84.** The [canonical wiki decision](docs/wiki/faction-intent-and-autonomous-assignment.md) records the selected era-neutral two-root-faction proof and six decisions D-08 through D-13. Q-05 is resolved for this first consumer; runtime implementation has not begun.
+
+Faction A selects an idle directly controlled NPC ship to establish presence at Vesper Reach, where B has a ship. Making A's preferred candidate already committed must change the selected valid assignment. The existing order, travel, and sensor paths produce an offscreen NPC-NPC consequence without player interaction. Presence does not imply political territory or a treaty effect.
+
+The policy uses only its objective, explicitly known proof-map topology, and own-asset identities/strategic states/order status. It does not consume external sensor reports. New control lives on the asset side with a derived roster; existing orders are not preempted and the player ship is excluded from faction autonomous assignment in the proof.
+
+The implementation will add closed Ship/Faction scheduled targets and typed bootstrap, and introduce V7 with a V6→V7 migration that creates zero factions, null ship controller links, and no faction work while preserving existing ship state and scheduling. Zero-faction worlds remain valid. No RNG, hierarchy runtime, organizations, political UI, intelligence network, or general actor framework is admitted.
+
+This slice is a contribution toward the broader goals below, not a claim that all M5 requirements are satisfied. Later governed consumers must resolve remaining intelligence/political choices when necessary. Implementation proceeds through its own feature and acceptance evidence after this documentation work.
 
 ### Goal
 
@@ -163,7 +176,7 @@ Prove the causal chain:
 
 > **faction intent → explainable decision → ship assignment/order → offscreen activity → durable world change**
 
-The smallest useful scenario should contain multiple locations, multiple ships, and enough political context for at least two autonomous factions or political actors to make a consequential choice. At least one NPC-NPC interaction should matter even if the player never witnesses it.
+The smallest useful scenario for the complete M5 milestone should contain multiple locations, multiple ships, and enough political context for at least two autonomous factions or political actors to make a consequential choice. At least one NPC-NPC interaction should matter even if the player never witnesses it.
 
 ### Required architectural proof
 
@@ -178,11 +191,11 @@ The smallest useful scenario should contain multiple locations, multiple ships, 
 
 The approved [factions and organizations](docs/wiki/factions-and-organizations.md) model governs this work, but Milestone 5 does **not** require implementing its entire possible surface.
 
-The first consumer should preserve the approved principles it touches: stable faction identity, autonomous political will, actor knowledge, at most one structural parent, separation of structural hierarchy from other relationships, independent attitudes, and one direct controller for an asset if asset control is introduced. It need not immediately implement all three supported depths, organizations, governments, covert operations, layered jurisdiction, treaty inheritance, or political transitions.
+The first consumer preserves the approved principles it touches: stable faction identity, autonomous political will, actor knowledge, and one direct controller per participating asset. Root factions are sufficient for the selected assignment proof; recursive parentage, role/depth separation, independent attitudes, organizations, governments, covert operations, layered jurisdiction, treaty inheritance, and political transitions remain approved broader principles or deferred runtime rather than first-slice requirements.
 
 Do not create three faction classes for Polity/Constituent/Internal, infer powers from depth labels, or add a generic actor/rules framework solely because the future political model is rich.
 
-### Deliberately deferred unless the slice proves need
+### Deliberately deferred unless a later slice proves need
 
 - complete authority/permission matrices;
 - treaty engine and precedence rules;
@@ -297,6 +310,7 @@ Milestone 9 is the point to judge whether the established joints are strong enou
 - [Implementation Status](docs/wiki/implementation-status.md)
 - [Design Decision Register](docs/wiki/decision-register.md)
 - [Strategic Contact Reporting](docs/wiki/strategic-contact-reporting.md)
+- [Faction Intent and Autonomous Assignment](docs/wiki/faction-intent-and-autonomous-assignment.md)
 - [Open Design Questions](docs/wiki/open-questions.md)
 - [Architecture](docs/wiki/architecture.md)
 - [Factions and Organizations](docs/wiki/factions-and-organizations.md)

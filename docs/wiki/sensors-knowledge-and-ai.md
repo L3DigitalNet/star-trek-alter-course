@@ -2,7 +2,7 @@
 schema_version: '1.1'
 id: 'concept-s51phf-sensors-knowledge-and-ai'
 title: 'Sensors Knowledge and AI'
-description: 'Implemented local contact rules, actor-safe decisions, and Strategic Contact Reporting.'
+description: 'Implemented local contact rules, actor-safe decisions, Strategic Contact Reporting, and the approved assignment information boundary.'
 doc_type: 'concept'
 status: 'active'
 created: '2026-09-06'
@@ -14,6 +14,7 @@ tags:
 aliases: []
 related:
   - 'docs/wiki/strategic-contact-reporting.md'
+  - 'docs/wiki/faction-intent-and-autonomous-assignment.md'
   - 'docs/design/first-observed-contact.md'
   - 'docs/design/engineering-backbone.md'
   - 'docs/adr/0010-use-explainable-domain-ai-and-demand-driven-state-machines.md'
@@ -49,7 +50,7 @@ The `CautiousContact` policy receives own-ship facts and actor-safe contacts. It
 
 An explanation is diagnostic/test data, not automatically player-visible or durable political history. Changing hidden truth while holding actor knowledge and legitimate own capability constant must not change a pure policy's choice. Command resolution can still reject a stale proposal when real prerequisites no longer hold.
 
-ADR 0010 generalizes the decision discipline, not a mandatory algorithm: actor snapshot, goals/constraints, candidates, rejection, evaluation, deterministic selection, typed command or no-action, and explanation. Faction strategic AI is still future work; no behavior-tree framework or external LLM is gameplay authority.
+ADR 0010 generalizes the decision discipline, not a mandatory algorithm: actor snapshot, goals/constraints, candidates, rejection, evaluation, deterministic selection, typed command or no-action, and explanation. Faction strategic AI is not implemented; the first bounded assignment policy is now approved below. No behavior-tree framework or external LLM is gameplay authority.
 
 ## Strategic Contact Reporting
 
@@ -57,16 +58,24 @@ ADR 0010 generalizes the decision discipline, not a mandatory algorithm: actor s
 
 The slice extends the existing information boundary rather than replacing it. Its purpose is to carry a legitimate local observation into durable, reference-frame-qualified last-known strategic information. A retained report continues to describe where and when the observer actually saw a contact even after the observer or target moves elsewhere, and later hidden target truth does not backfill the report.
 
-The implementation reuses observer-local `SensorContactId` as far as it remains sufficient. It does not add `KnownShipId`, global vessel correlation, affiliation/intent learning, faction knowledge sharing, faction AI, faction scheduler targets, or a general intelligence network. Q-02 through Q-05 remain open for later consumers.
+The implementation reuses observer-local `SensorContactId` as far as it remains sufficient. It did not add `KnownShipId`, global vessel correlation, affiliation/intent learning, faction knowledge sharing, faction AI, faction scheduler targets, or a general intelligence network. It left Q-02 through Q-05 open at completion; the later assignment approval resolves Q-05 and only a scoped administrative part of Q-04.
 
 Each retained tactical position is qualified by the strategic location it was observed in: `SensorContactTrack` carries `ObservedAtLocationId`, and `StrategicProjection.KnownContactReports` exposes the resulting `StrategicContactReportProjection` list. See Strategic Contact Reporting's Implementation outcome for the full shape.
 
-## Strategic knowledge still deferred beyond this slice
+## Approved faction-assignment information boundary
 
-Strategic Contact Reporting does not answer how two observers correlate reports, how a report about a never-locally-observed vessel is represented, how affiliation is learned, or how ship knowledge reaches a faction. Those questions remain in [Open questions](open-questions.md).
+[Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) is approved design, not implemented. The policy receives its objective, explicitly known proof-map topology, and the identities, current strategic states, and assignment/order status of directly controlled assets. This narrow own-asset administrative view is the only approved faction knowledge addition in the slice.
 
-Do not convert the approved report seam into a second world-truth store. It must remain actor-safe, bounded, and causally tied to legitimate observation. If implementation proves that a deferred identity or sharing concept is actually required to satisfy the approved exit condition, return to governed design refinement rather than introducing it silently.
+It receives no unrestricted `SimulationState` or `ShipState`, controlled-ship sensor contacts/scans, external reports, foreign hidden state, affiliation/intent facts, or another faction's knowledge. A faction's own ship identity does not expose hidden target identity to outside observers. Actual command resolution still enforces existing prerequisites without granting the policy extra knowledge.
+
+The policy is deterministic and consumes no RNG. Its chosen existing ship order must change when a preferred candidate is already committed. Subsequent offscreen NPC-NPC contact is resolved by ordinary sensors and remains ship-local unless a later approved information rule shares it. No automatic faction ingestion or player disclosure follows from that contact.
+
+## Strategic knowledge still deferred beyond these slices
+
+Q-02 and Q-03 remain open. The remaining Q-04 questions include cross-observer report correlation, reports about never-locally-observed vessels, sensor-report transport/delay, hierarchy propagation, and player access. Neither Strategic Contact Reporting nor the first assignment policy approves those systems.
+
+Do not convert the report seam or the narrow administrative view into a second world-truth store. Knowledge must remain actor-safe, bounded, and causally tied to an explicitly allowed source. If implementation needs a deferred identity or sharing rule, return to governed design refinement rather than introducing it silently.
 
 ## Sources
 
-[Strategic Contact Reporting](strategic-contact-reporting.md) owns the next approved slice. [First observed contact](../design/first-observed-contact.md) defines M3A; [Engineering Backbone](../design/engineering-backbone.md) supersedes its sensor-only condition and repair descriptions. See [AI ADR](../adr/0010-use-explainable-domain-ai-and-demand-driven-state-machines.md), [Core AI](../../src/AlterCourse.Core/AI/), [Core sensors](../../src/AlterCourse.Core/Sensors/), and [gameplay tests](../../tests/AlterCourse.Core.Tests/Gameplay/).
+[Strategic Contact Reporting](strategic-contact-reporting.md) owns the released contact-reporting slice; [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) owns the next approved slice. [First observed contact](../design/first-observed-contact.md) defines M3A; [Engineering Backbone](../design/engineering-backbone.md) supersedes its sensor-only condition and repair descriptions. See [AI ADR](../adr/0010-use-explainable-domain-ai-and-demand-driven-state-machines.md), [Core AI](../../src/AlterCourse.Core/AI/), [Core sensors](../../src/AlterCourse.Core/Sensors/), and [gameplay tests](../../tests/AlterCourse.Core.Tests/Gameplay/).

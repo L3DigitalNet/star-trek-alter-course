@@ -11,6 +11,7 @@ tags: []
 aliases: []
 related:
   - 'docs/wiki/README.md'
+  - 'docs/wiki/faction-intent-and-autonomous-assignment.md'
 ---
 
 # Star Trek: Alter Course — Project Instructions
@@ -21,7 +22,9 @@ related:
 
 **Design wiki:** The [design wiki](https://github.com/L3DigitalNet/star-trek-alter-course/tree/dev/docs/wiki) is the single source of truth for the game's design. Read the relevant page before brainstorming or proposing a change; the guidance below is a summary that defers to it.
 
-**Review:** Always review the [ADRs](https://github.com/L3DigitalNet/star-trek-alter-course/tree/main/docs/adr) when starting a new chat, brainstorming, performing development work, etc.
+**Review:** Always review the [ADRs on the development branch](https://github.com/L3DigitalNet/star-trek-alter-course/tree/dev/docs/adr) when starting a new chat, brainstorming, or performing development work. `main` is release-only; current development decisions are on `dev`.
+
+**Next selected design:** [Faction Intent and Autonomous Assignment](../wiki/faction-intent-and-autonomous-assignment.md) records the owner-approved first bounded M5 slice and six decisions D-08 through D-13. Consult [current status](../STATUS.md) for implementation progress. Approval alone does not create faction runtime or save V7, complete M3/M5, or authorize deferred intelligence, hierarchy, organizations, RNG, or political UI. Keep scoped and unresolved decisions distinct using [Open questions](../wiki/open-questions.md).
 
 ## Identity and Vision
 
@@ -125,4 +128,4 @@ When implementing changes:
 - do not reduce simulation depth for convenience;
 - do not add complexity solely for hypothetical scale.
 
-When requirements are ambiguous, favor the interpretation most consistent with **a persistent, systems-driven Star Trek command simulation**, not a conventional RPG, arcade shooter, or scripted mission game.
+When requirements are ambiguous, favor the interpretation most consistent with **a persistent, systems-driven Star Trek command simulation**, not a conventional RPG, arcade shooter, or scripted mission game. This does not authorize silently resolving an open product question or expanding an approved slice; return such decisions to governed design refinement.

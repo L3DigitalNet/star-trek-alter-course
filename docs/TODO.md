@@ -6,6 +6,7 @@
 
 ## Agent tasks
 
-- v0.5.0 is released and synchronized; next-slice selection awaits the owner, no further gameplay scope is admitted.
+- Implement the [approved faction slice](wiki/faction-intent-and-autonomous-assignment.md) through a governed feature after documentation closeout.
+- Preserve its six selected boundaries; do not reopen Q-05 or silently expand into deferred intelligence, organizations, hierarchy, RNG, or political UI.
+- Keep V6 current until runtime implementation adds the approved V7 migration; do not infer faction state when loading historical saves.
 - If the hosted Godot teardown segfault ([bug 007](handoff/bugs/007-hosted-gdunit-teardown-segfault.md)) recurs, isolate it rather than rerunning.
-- No Milestone 5 work is admitted; restart from `docs/STATUS.md`, `docs/handoff/state.md`, and the design wiki.

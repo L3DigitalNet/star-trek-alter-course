@@ -16,6 +16,7 @@ related:
   - 'docs/adr/0006-use-versioned-json-snapshot-saves.md'
   - 'docs/specs/asset-pipeline-tool.md'
   - 'docs/wiki/strategic-contact-reporting.md'
+  - 'docs/wiki/faction-intent-and-autonomous-assignment.md'
 ---
 
 # Content, assets, and persistence
@@ -32,7 +33,7 @@ A ship class definition can be shared by many vessels; their names, conditions, 
 
 ADR 0005 makes strict UTF-8 JSON the canonical ordinary Core content format. System.Text.Json parsing, structural JSON Schema validation, explicit input models, stable IDs, reference resolution, and semantic validation admit immutable definitions. Reject malformed content, unknown members where not explicitly allowed, duplicate IDs, invalid bounds, unsupported versions, and broken references.
 
-The current runtime catalog loads [Pathfinder content](../../src/AlterCourse.Godot/content/ships/pathfinder.json) through [ship-definition schema V4](../../src/AlterCourse.Godot/content/schemas/ship-definition-v4.schema.json). There are not yet production faction, weapon, or campaign content families merely because the ADR anticipates them.
+The current runtime catalog loads [Pathfinder content](../../src/AlterCourse.Godot/content/ships/pathfinder.json) through [ship-definition schema V4](../../src/AlterCourse.Godot/content/schemas/ship-definition-v4.schema.json). There are not yet production faction, weapon, or campaign content families. The approved first faction slice will use the same strict JSON admission discipline for reusable faction definitions, without storing mutable direct ship control in a reusable ship-class definition.
 
 Stable definition IDs are not display names or file paths. Content migration and save migration are separate responsibilities. A future specialized narrative source language requires the explicit ADR 0012 admission path; it does not authorize YAML as an alternate ordinary ship/faction definition format.
 
@@ -40,13 +41,21 @@ Stable definition IDs are not display names or file paths. Content migration and
 
 ADR 0006 selects explicit versioned JSON snapshots, not serialization of live C# graphs, Godot scenes, an event store, or a database. Persist consequential state, stable references, ordering, and allocator continuation. Do not persist derived UI values, caches, logger objects, callbacks, or package-specific runtime identities.
 
-Current save V6 uses rules identity `strategic-contact-reporting-v1` and includes every ship, player identity, strategic/tactical state, Engineering condition/allocation/repair, active orders, actor-local contacts, scans, contact posture, the observation-location frame on each contact, the `KnownContactReports` projection-backing state, correlated scheduled work, and counters. The active save schema is not advanced by documenting future factions.
+Current save V6 uses rules identity `strategic-contact-reporting-v1` and includes every ship, player identity, strategic/tactical state, Engineering condition/allocation/repair, active orders, actor-local contacts, scans, contact posture, the observation-location frame on each contact, correlated scheduled work, and counters. `KnownContactReports` is derived from that retained knowledge, not a separately serialized UI authority. The active save schema is not advanced by documenting future factions.
 
 Supported adjacent migrations are V1→V2→V3→V4→V5→V6. V1 reconstructs the representable single ship in a plural world; V3 adds orders without inventing historical intentions; V4 adds empty knowledge/no autonomous posture to older saves; V5 maps sensor integrity/repair into Engineering while preserving compatible historical capability and exact completion identity; V6 sets a null observation-location frame on every legacy contact and derives nothing, so a migrated contact stays on the tactical surface without appearing in strategic reports until a new qualifying observation is recorded. The detailed migration contract remains in [Engineering Backbone](../design/engineering-backbone.md), [Strategic Contact Reporting](strategic-contact-reporting.md), and [GamePersistence](../../src/AlterCourse.Core/Persistence/GamePersistence.cs).
 
 Loading validates an entire candidate before replacing the live simulation. The current bounded envelope is 128 MiB; V6 records a 106,775,347-byte maximum-shape serialization test (previously 95,677,740 bytes under V5), not a normal four-ship save size. These are present admission bounds, not a rationale to redesign storage without measurement.
 
 The shell uses `user://quick-save.json`. The legacy default `quick-save-v1.json` fallback is consulted only if the generic slot is absent; custom paths do not use it. Broader compatibility promises, autosave policies, and eventual distribution remain separate decisions. Pre-1.0 does not promise perpetual migration support.
+
+## Approved V7 plan, not implemented
+
+[Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md), D-12, approves V7 for the later implementation and retains the complete adjacent V1→V7 chain. V6→V7 must introduce an empty faction collection, null historical ship controller links, and no faction decision state or faction wakes. Existing work becomes explicitly ship-targeted while preserving identities, times, total ordering, correlation, and continuation counters. Existing world/ship/knowledge state is preserved; political history is not inferred from vessel names or current new-game content.
+
+Zero-faction worlds must remain valid. New-game typed bootstrap may create the proof's factions; loading a migrated save must not rerun that initialization. Persist consequential faction state, direct control, and exact typed Ship/Faction work; derive rosters and projections rather than duplicating authority. No faction/organization placeholder or RNG state is required.
+
+The implementation must validate new bounds/references/correlations, test the adjacent migration and deterministic continuation, and remeasure maximum-shape save/work limits. This documentation neither creates V7 models nor changes the current ship-definition V4 schema or 128 MiB save envelope.
 
 ## AssetCtl pipeline
 

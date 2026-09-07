@@ -4,7 +4,8 @@
 
 - [Project design wiki](../wiki/README.md) is the single source of truth for design; `docs/design/` and `docs/specs/` are supporting detail it links.
 - [Political model](../wiki/factions-and-organizations.md) records approved conceptual decisions; no political runtime is implemented.
-- [Open questions](../wiki/open-questions.md) retains unapproved proposals and deferred refinements; it does not admit gameplay work.
+- [Open questions](../wiki/open-questions.md) separates resolved Q-05 and scoped decisions from the remaining unapproved topics.
+- [Faction assignment](../wiki/faction-intent-and-autonomous-assignment.md) owns the next approved slice and six boundaries; implementation is separate work.
 
 ## Tracked artifacts
 
@@ -28,3 +29,4 @@
 | Task #70 | Merged / Done | Design wiki declared the single source of truth for design; Final PR #71 merged as `1b8eec4` into `dev`. |
 | Feature #77 | Merged / Done | Strategic Contact Reporting merged through Final PR #78 as squash `80c3084` into `dev`; released in v0.5.0. |
 | Task #80 | Merged / Done | v0.5.0 Final PR #82 released as `0547d06`; sync PR #83 put the release ancestry on `dev` at `e761249`. |
+| PR #84 design | Owner approved / Not implemented | First bounded M5 assignment proof and six pre-implementation decisions; no runtime or release change. |

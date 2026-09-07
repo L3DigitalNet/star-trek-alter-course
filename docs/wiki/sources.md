@@ -15,6 +15,7 @@ related:
   - 'docs/wiki/README.md'
   - 'docs/wiki/decision-register.md'
   - 'docs/wiki/strategic-contact-reporting.md'
+  - 'docs/wiki/faction-intent-and-autonomous-assignment.md'
   - 'docs/wiki/implementation-status.md'
 ---
 
@@ -46,14 +47,15 @@ The wiki is the single source of truth for design; this catalog lists the docume
 
 ## Canonical wiki decisions and future design
 
-- [Strategic Contact Reporting](strategic-contact-reporting.md): implemented as the next development slice after v0.4.0 (Feature #77, Final PR #78); defines durable reference-frame-qualified actor-safe last-known contact reporting and explicit non-goals.
-- [Factions and organizations](factions-and-organizations.md): owner-approved conceptual political framework, explicitly unimplemented.
-- [Open questions](open-questions.md): Q-01 is resolved by Strategic Contact Reporting; Q-02 onward preserve deferred identity, affiliation, sharing, political, combat, campaign, and compatibility questions.
+- [Strategic Contact Reporting](strategic-contact-reporting.md): implemented after v0.4.0 and released in v0.5.0 (Feature #77, Final PR #78); durable reference-frame-qualified actor-safe last-known contact reporting with its original non-goals preserved.
+- [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md): next owner-approved bounded M5 slice, not implemented; D-08 through D-13 cover its proof, control, knowledge, scheduler/bootstrap, planned V7 migration, and no-RNG decisions.
+- [Factions and organizations](factions-and-organizations.md): owner-approved conceptual political framework, explicitly unimplemented; the first assignment consumer uses only the selected root-faction/direct-control subset.
+- [Open questions](open-questions.md): Q-01 and first-slice Q-05 resolved; Q-04/Q-06/Q-08/Q-14 scoped in part; Q-02/Q-03 and remaining intelligence, political, combat, campaign, and compatibility questions deferred.
 
 ## Supporting design and specification documents
 
-- [Root overview and controls](../../README.md): present gameplay and source launch instructions.
-- [Development roadmap](../../ROADMAP.md): strategic direction, completed M1-M4 and Strategic Contact Reporting outcomes, and M5-M9 scope/refinement boundaries.
+- [Root overview and controls](../../README.md): present gameplay and source launch instructions, with the next design clearly separated.
+- [Development roadmap](../../ROADMAP.md): implemented M1/M2/M4, partial M3/contact-reporting outcomes, the selected first M5 slice, and remaining M5-M9 boundaries.
 - [Command Deck UI](../design/command-deck-ui.md): approved shell, Engineering workspace, visual language, runtime Theme, and preview policy.
 - [First observed contact](../design/first-observed-contact.md): detailed M3A knowledge, scan/hail, cautious behavior, and V4-era contract; M4 supersedes its sensor-only Engineering description.
 - [Engineering Backbone](../design/engineering-backbone.md): current M4 rules, proof values, content V4, save V5 (superseded by V6), repair/scan correlations, and live UI.
@@ -80,6 +82,10 @@ The wiki is the single source of truth for design; this catalog lists the docume
 - [v0.4.0 release](https://github.com/L3DigitalNet/star-trek-alter-course/releases/tag/v0.4.0), [M3A feature #58](https://github.com/L3DigitalNet/star-trek-alter-course/issues/58), and [M4 feature #62](https://github.com/L3DigitalNet/star-trek-alter-course/issues/62).
 - [M3A PR #61](https://github.com/L3DigitalNet/star-trek-alter-course/pull/61) and [M4 PR #63](https://github.com/L3DigitalNet/star-trek-alter-course/pull/63): admission/test/manual evidence, not a fresh rerun in this wiki review.
 - [Strategic Contact Reporting documentation task #74](https://github.com/L3DigitalNet/star-trek-alter-course/issues/74): approval/provenance for the slice. [Strategic Contact Reporting feature #77](https://github.com/L3DigitalNet/star-trek-alter-course/issues/77) and [Final PR #78](https://github.com/L3DigitalNet/star-trek-alter-course/pull/78): implementation evidence.
+
+## Latest design-approval evidence
+
+[Documentation PR #84](https://github.com/L3DigitalNet/star-trek-alter-course/pull/84) records the owner's September 6 approval of the first faction slice and all six pre-implementation recommendations, along with documentation consistency and hosted-check evidence. It is not a gameplay implementation PR, a new release, a V7 runtime change, or proof of M5 completion.
 
 ## Visual references
 
