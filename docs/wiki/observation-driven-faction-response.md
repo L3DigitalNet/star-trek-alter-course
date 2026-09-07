@@ -39,15 +39,15 @@ This work resolves only the direct ship-to-direct-faction reporting portion of Q
 
 ## Approved decision mapping
 
-The [decision register](decision-register.md) is the stable SSOT for D-14 through D-18; this map points each approved decision to its governing contract here.
+The [decision register](decision-register.md) is the stable SSOT for D-14 through D-18; this map links each approved decision to its governing contract.
 
-| Decision | Owning contract in this page |
+| Decision | Owning contract |
 | --- | --- |
-| **D-14** | Observation drives a complete information-to-action proof before combat. |
-| **D-15** | Direct historical reports preserve local provenance without shared live sensors or hidden truth. |
-| **D-16** | Each faction performs one bounded deterministic investigation response at a time. |
-| **D-17** | Adjacent non-inventive persistence preserves exact report and response continuation. |
-| **D-18** | M6 Tactical Combat Foundation follows this slice, with Engineering depth added through combat consumers. |
+| **D-14** | [Information-to-action proof](#player-visible-and-npc-only-proofs) before combat. |
+| **D-15** | [Direct historical reporting](#authority-and-information-boundary) and [publication](#publication-episodes-and-delivery) preserve local provenance. |
+| **D-16** | [Bounded deterministic investigation policy](#investigation-policy) and [lifecycle](#investigation-lifecycle-and-feedback-suppression). |
+| **D-17** | [Adjacent non-inventive persistence](#persistence-and-migration) preserves consequential continuation. |
+| **D-18** | [Engineering/combat sequencing](engineering-and-combat.md) and [milestone proofs](milestone-proofs.md) own M6 sequencing after this slice. |
 
 ## Authority and information boundary
 
@@ -84,9 +84,9 @@ Report payload lives in bounded authoritative Core state. Scheduled delivery use
 
 Core uses one shared, objective-independent faction evaluation pass. It is valid when the faction has no presence objective, a satisfied presence objective, or an outstanding pending faction wake. The existing single pending faction-wake slot coordinates the earliest justified future continuation across presence, investigation, and finite own-asset release; cancellation or rescheduling updates the faction correlation and scheduler work atomically.
 
-Delivery is a meaningful faction-decision boundary. Valid report receipts due for one faction at the same simulation instant are delivered in the scheduler's existing due-time then insertion-sequence order and coalesced into one evaluation request. A faction wake due at that instant is coalesced with the same request. Core drains the due work without adding a work-kind priority, then runs one shared pass for that faction at that instant: presence reconciliation and assignment first, investigation response second. This preserves scheduler ordering while preventing same-time insertion order from changing which concern evaluates first, and it creates no additional zero-time polling loop.
+Delivery is a meaningful faction-decision boundary. Valid report receipts due for one faction at the same simulation instant are delivered in the scheduler's existing due-time then insertion-sequence order and coalesced into one evaluation request. A faction wake due at that instant is coalesced with the same request. Core drains all work due at that instant, including same-instant work created during observation, without adding a work-kind priority. It then runs the coalesced faction passes in ascending `FactionId` order, once per faction at that instant: presence reconciliation and assignment first, investigation response second. This preserves scheduler ordering while preventing same-time insertion order from changing which concern evaluates first, and it creates no additional zero-time polling loop.
 
-If more than eight reports for one recipient faction are simultaneously in flight, no ninth in-flight report is admitted. When more than eight publications become eligible for that faction at the same occurrence time, deterministic admission is by lowest `(ObserverShipId, SensorContactId)`; declaration/insertion order must not change which eight are retained. A suppressed publication from that observation episode is not retried merely because capacity later becomes available.
+If more than eight reports for one recipient faction are simultaneously in flight, no ninth in-flight report is admitted. Whenever eligible publications at one occurrence time exceed the remaining in-flight capacity, deterministic admission is by lowest `(ObserverShipId, SensorContactId)`; declaration/insertion order must not change which reports fill the available slots. A suppressed publication from that observation episode is not retried merely because capacity later becomes available.
 
 ## Recipient knowledge, freshness, and bounds
 
@@ -99,7 +99,7 @@ Each faction may retain at most:
 
 A received report is actionable while **`0 <= currentTime - ObservedAt < 60,000 ms`**; at exactly `ObservedAt + 60,000 ms` it is expired. Future observation times are invalid. Expiry is evaluated on receipt and other meaningful faction decision boundaries; it does not require polling. Exact duplicate delivery of the same report identity is idempotent and never creates a second response.
 
-When received retention would exceed 16 after expired/handled entries are removed, retain the 16 newest observations by `ObservedAt`, breaking ties by stable report identity. A report that loses that deterministic retention contest is discarded and cannot later reappear as fresh information. Implementation must preserve enough bounded causal bookkeeping that save/load, cache eviction, or a cooldown boundary cannot turn already-handled information into a new trigger.
+When received retention would exceed 16 after expired/handled entries are removed, retain the 16 newest observations by `ObservedAt`, breaking ties by lowest stable report identity. A report that loses that deterministic retention contest is discarded and cannot later reappear as fresh information. Implementation must preserve enough bounded causal bookkeeping that save/load, cache eviction, or a cooldown boundary cannot turn already-handled information into a new trigger.
 
 The implementation must derive scheduler capacity conservatively from the maximum allowed work shape, including all per-faction report-delivery slots. It must derive both the total consequence-execution budget and the same-boundary execution budget from the maximum reachable work and bounded consequences that can execute in one advancement or become due together. All three limits retain explicit finite-cycle guards; they must not be weakened merely to make a maximum-shape test pass. The maximum-shape proof must combine same-time report deliveries with the existing scheduled-work maximum and must obey real source-authority, player-exclusion, ship, and faction limits rather than constructing an unreachable fixture.
 
@@ -133,6 +133,8 @@ If application revalidation rejects the proposal, the application is atomic: fac
 `EstablishPresence` keeps its existing one-shot meaning. A satisfied presence objective never becomes a maintenance objective merely because reporting exists.
 
 At a shared faction decision boundary, existing presence-objective reconciliation/assignment is processed before investigation response, whether the presence objective is absent, satisfied, pending, or newly actionable. Report response then sees the resulting current own-asset commitments, so the same ship cannot receive both assignments. This may allow two different idle ships to receive distinct valid work at one decision boundary; it never preempts an existing order, voyage, hold, patrol, repair, or player command.
+
+Ship-level cautious-contact posture and autonomous tactical motion do not constitute an active strategic order and do not exclude an otherwise eligible responder. Due contact wakes are drained before faction evaluation; ordinary travel clears tactical motion, and any later contact wake retains its existing location/authority checks and cannot override the committed strategic order.
 
 If no report responder is currently available, the faction remains dormant until a meaningful existing boundary such as a finite own-asset release, a new report receipt, or another already-valid faction wake. No periodic faction polling is introduced.
 
