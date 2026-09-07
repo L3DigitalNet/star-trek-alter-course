@@ -6,7 +6,7 @@ description: 'Implementation specification for a configuration-driven AI-assiste
 doc_type: 'spec'
 status: 'active'
 created: '2026-09-01'
-updated: '2026-09-06'
+updated: '2026-09-07'
 reviewed: '2026-09-01'
 owner: 'project-maintainers'
 consumer: 'agent'
@@ -35,7 +35,7 @@ license: 'MIT'
 
 # Asset pipeline tool specification
 
-> **Supporting detail.** The [design wiki](../wiki/README.md) is the single source of truth for design; [Content, assets, and persistence](../wiki/content-assets-and-persistence.md) owns this topic. This specification supplies the detailed implementation contract for the tool within that scope. If this document disagrees with the wiki, the wiki governs and this document is corrected.
+> **Tool reference and requirements.** This is the detailed contract for the repository development tool, not game-mechanics design or proof that every planned phase or provider is implemented. The [design wiki](README.md) owns game design; [Content, assets, and persistence](content-assets-and-persistence.md) owns the gameplay-facing asset policy. Runtime and current-state evidence belongs in its owning content and status pages. If this document disagrees with the wiki, the wiki governs and this document is corrected.
 
 Date: 2026-09-01
 

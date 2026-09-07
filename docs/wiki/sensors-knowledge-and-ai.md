@@ -1,81 +1,53 @@
 ---
 schema_version: '1.1'
-id: 'concept-s51phf-sensors-knowledge-and-ai'
-title: 'Sensors Knowledge and AI'
-description: 'Implemented local contact rules, actor-safe decisions, Strategic Contact Reporting, and the approved assignment information boundary.'
+id: 'concept-ln1g3b-sensors-knowledge-and-ai'
+title: 'Sensors, Knowledge, and AI'
+description: 'Actor-local sensor knowledge, contact operations, and the deterministic cautious-contact policy.'
 doc_type: 'concept'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-06'
+updated: '2026-09-07'
 tags:
-  - 'simulation'
-  - 'sensors'
   - 'ai'
+  - 'sensors'
+  - 'simulation'
 aliases: []
 related:
-  - 'docs/wiki/strategic-contact-reporting.md'
-  - 'docs/wiki/faction-intent-and-autonomous-assignment.md'
-  - 'docs/design/first-observed-contact.md'
-  - 'docs/design/engineering-backbone.md'
+  - 'docs/wiki/engineering-and-combat.md'
+  - 'docs/wiki/content-assets-and-persistence.md'
   - 'docs/adr/0010-use-explainable-domain-ai-and-demand-driven-state-machines.md'
 ---
 
 # Sensors, knowledge, and AI
 
-[Wiki home](README.md) · [Strategic Contact Reporting](strategic-contact-reporting.md) · [Engineering](engineering-and-combat.md) · [Open questions](open-questions.md)
+[Wiki home](README.md) · [Engineering and combat](engineering-and-combat.md) · [Strategic Contact Reporting](strategic-contact-reporting.md) · [Faction assignment](faction-intent-and-autonomous-assignment.md)
 
-## The information boundary
+## Authority and observation
 
-World truth, actor knowledge, and durable historical meaning are distinct. Fog of war is a simulation rule, not just a rendering mask. Core may resolve a command against hidden truth, but player projections and autonomous decision inputs receive only authorized knowledge and own-actor capability facts.
+World truth, actor knowledge, and durable historical meaning are distinct. Each ship owns actor-local sensor knowledge. Core retains target correlation only for rules; it never appears in player projection, Godot, player-safe events, or AI input. A contact holds observer-local ID, last observed tactical position/time, Current/Stale/Lost lifecycle, Detected/Identified state, and vessel/design names only after identification. [Strategic Contact Reporting](strategic-contact-reporting.md) owns the implemented durable last-known-report seam; [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) owns the separate bounded faction assignment knowledge boundary.
 
-The implemented knowledge model is ship-local and tactical. A passive observation requires distinct ships at the same strategic location and within the observer's effective range. Traveling ships neither observe nor appear as local contacts. Under M4, effective range is authored range multiplied by sensor condition and power satisfaction, not sensor integrity alone.
+Only ships at the same strategic location observe each other. Passive observation compares Euclidean tactical distance in kilometres with authored passive range multiplied by the observer's effective sensor capability. It uses no randomness. An observer supports at most 255 retained contacts in the current 256-ship world. Its ID allocates monotonically, is not a ship ID, and survives stale, lost, and reacquired states.
 
-## Current contact lifecycle
+New detection is Current and Detected; continued detection refreshes facts. Loss makes a contact Stale, keeps its last observation, and schedules one exact loss work item five seconds later. That work rechecks detectability before Lost. Reacquisition cancels its exact work, restores Current, and preserves local ID/identification. Lost contacts remain bounded correlation memory but leave live tactical projection.
 
-`SensorContactId` is observer-local and is not the true `ShipInstanceId`. Core retains hidden target correlation for rule resolution; neither public player projections nor AI inputs expose it. Each observer retains bounded knowledge, with a maximum of 255 possible other-ship tracks in the present 256-ship world.
+## Scan, hail, and cautious response
 
-Detection creates a Current, Detected contact. Continued observation refreshes last observed position/time. Loss of detectability makes it Stale and schedules one exactly correlated loss consequence five seconds later. If it remains undetectable, it becomes Lost. Reacquisition preserves its local ID and learned identity while canceling the old loss work. Lost tracks remain bounded internal correlation memory but are absent from live tactical presentation.
+One observer can own one active scan, targeting a current detected local contact. Completion revalidates Current status, then identifies it and records vessel/design names. Staleness/loss or zero effective sensor capability cancels exact completion work, clears the operation, and returns a player-safe interruption. Restoring a contact or power never revives it.
 
-A last observation is not the target's current hidden position. The current implementation does not provide inferred trajectories, affiliation/intent assessment, confidence/error fields, or a faction-wide intelligence view.
+Hail is an immediate typed Core request for an identified current player contact. A target without CautiousContact posture or a valid reciprocal current contact gives no response. The proof vessel accepts valid hail, updates actor-local knowledge, and changes course through the ordinary tactical boundary. Hail has no dialogue/narrative runtime.
 
-## Scan and hail
+Only the proof vessel has persisted `CautiousContact`; migration does not add it to prior ships. The pure policy sees own facts, actor-safe contacts, and own effective maximum speed, never aggregate state, target runtime/definition, hidden identity/position, target Engineering, or Godot state. It selects valid incoming identified hail first, otherwise nearest Current contact with local-ID tie break. It evaluates Hold, Approach, and Withdraw with explicit constraints, scores, and stable Hold/Approach/Withdraw tie order.
 
-One active scan per observer targets a current detected contact. Successful completion learns vessel and design display names; it does not identify a faction. Duration remains the authored fixed interval. Stale/lost targets interrupt the scan, as does zero sensor capability under M4; restoring power does not resurrect canceled work.
+An unidentified Current contact selects Withdraw at 0.5 km/s, clamped by effective maximum. Valid identified hail holds; an identified contact otherwise prefers Hold; no Current contact holds. Movement requires at-location, Current primary contact, nonzero observed displacement, and legal nonzero capped speed. Zero displacement or zero speed causes constraint rejection and Hold. Each evaluation returns typed facts, candidates, rejected constraints, selected course, tie rule, and `RandomnessUsed = false`; it is diagnostic/testable, not durable history.
 
-Hail is a typed immediate interaction with an identified current player contact. The cautious proof vessel can acknowledge when reciprocal contact conditions permit. This is a noncombat command seam, not branching dialogue, a treaty, or a full communications simulation.
+## Deterministic timing and boundaries
 
-## Explainable autonomous decisions
+Contact-sensitive local work uses the fixed 100 ms grid only when motion or changing sensor condition can alter observation. At a boundary Core snapshots world truth, evaluates observer/target pairs in observer-ID then target-ID order, applies contact changes in that order, and schedules same-time decision wakes in observer order. Contact loss, scan completion, repair, and decisions use exact correlations and revalidate prerequisites. Inactive strategic work remains event-to-event: no global polling sweep or future range-crossing solver.
 
-The `CautiousContact` policy receives own-ship facts and actor-safe contacts. It evaluates Hold, Approach, and Withdraw with explicit constraints, deterministic scoring/tie-breaking, and typed explanations. In the proof, an unidentified current contact leads to bounded withdrawal; a valid identified hail leads to Hold. M4 supplies the acting ship's effective impulse limit, and resulting motion passes through the same validated tactical-course boundary as player intent.
+`AdvanceUntilNextPlayerRelevantEvent` processes hidden NPC observation/decision work without reporting it. It can stop at player-safe lifecycle or scan events. Events carry exact simulation occurrence time and optional local contact ID, preserving chronology without reconstruction from final projection. The V7 persistence model belongs to [content, assets, and persistence](content-assets-and-persistence.md); former V4 sensor schema/migration are historical evidence.
 
-An explanation is diagnostic/test data, not automatically player-visible or durable political history. Changing hidden truth while holding actor knowledge and legitimate own capability constant must not change a pure policy's choice. Command resolution can still reject a stale proposal when real prerequisites no longer hold.
+## Deferrals and evidence
 
-ADR 0010 generalizes the decision discipline, not a mandatory algorithm: actor snapshot, goals/constraints, candidates, rejection, evaluation, deterministic selection, typed command or no-action, and explanation. Feature #86 implements the bounded assignment policy under review: it chooses shortest direct route duration then lowest ship ID, consumes no RNG, and returns typed explanations. No behavior-tree framework or external LLM is gameplay authority.
+There is no confidence/error model, estimated stale position, long-range strategic sensor simulation, cloaking, emissions, electronic warfare, false contact, NPC scan, additional doctrine, dialogue tree, or Science/Communications workspace. Durable last-known strategic reports are implemented and owned by [Strategic Contact Reporting](strategic-contact-reporting.md). Combat, shields, weapons, damage, and advanced Engineering remain outside this slice.
 
-## Strategic Contact Reporting
-
-[Strategic Contact Reporting](strategic-contact-reporting.md) is implemented (Feature #77, Final PR #78).
-
-The slice extends the existing information boundary rather than replacing it. Its purpose is to carry a legitimate local observation into durable, reference-frame-qualified last-known strategic information. A retained report continues to describe where and when the observer actually saw a contact even after the observer or target moves elsewhere, and later hidden target truth does not backfill the report.
-
-The implementation reuses observer-local `SensorContactId` as far as it remains sufficient. It did not add `KnownShipId`, global vessel correlation, affiliation/intent learning, faction knowledge sharing, faction AI, faction scheduler targets, or a general intelligence network. It left Q-02 through Q-05 open at completion; the later assignment approval resolves Q-05 and only a scoped administrative part of Q-04.
-
-Each retained tactical position is qualified by the strategic location it was observed in: `SensorContactTrack` carries `ObservedAtLocationId`, and `StrategicProjection.KnownContactReports` exposes the resulting `StrategicContactReportProjection` list. See Strategic Contact Reporting's Implementation outcome for the full shape.
-
-## Implemented faction-assignment information boundary
-
-[Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) is implemented in Feature #86 / Final PR #87, pending landing. The policy receives its objective, explicitly known proof-map topology, and the identities, current strategic states, and assignment/order status of directly controlled assets. This narrow own-asset administrative view is the only faction knowledge addition in the slice.
-
-It receives no unrestricted `SimulationState` or `ShipState`, controlled-ship sensor contacts/scans, external reports, foreign hidden state, affiliation/intent facts, or another faction's knowledge. A faction's own ship identity does not expose hidden target identity to outside observers. Actual command resolution still enforces existing prerequisites without granting the policy extra knowledge.
-
-The policy is deterministic and consumes no RNG. Its chosen existing ship order must change when a preferred candidate is already committed. Subsequent offscreen NPC-NPC contact is resolved by ordinary sensors and remains ship-local unless a later approved information rule shares it. No automatic faction ingestion or player disclosure follows from that contact.
-
-## Strategic knowledge still deferred beyond these slices
-
-Q-02 and Q-03 remain open. The remaining Q-04 questions include cross-observer report correlation, reports about never-locally-observed vessels, sensor-report transport/delay, hierarchy propagation, and player access. Neither Strategic Contact Reporting nor the first assignment policy approves those systems.
-
-Do not convert the report seam or the narrow administrative view into a second world-truth store. Knowledge must remain actor-safe, bounded, and causally tied to an explicitly allowed source. If implementation needs a deferred identity or sharing rule, return to governed design refinement rather than introducing it silently.
-
-## Sources
-
-[Strategic Contact Reporting](strategic-contact-reporting.md) owns the released contact-reporting slice; [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) owns the next approved slice. [First observed contact](../design/first-observed-contact.md) defines M3A; [Engineering Backbone](../design/engineering-backbone.md) supersedes its sensor-only condition and repair descriptions. See [AI ADR](../adr/0010-use-explainable-domain-ai-and-demand-driven-state-machines.md), [Core AI](../../src/AlterCourse.Core/AI/), [Core sensors](../../src/AlterCourse.Core/Sensors/), and [gameplay tests](../../tests/AlterCourse.Core.Tests/Gameplay/).
+See [sensor knowledge](../../src/AlterCourse.Core/Sensors/SensorKnowledge.cs), [cautious policy](../../src/AlterCourse.Core/AI/CautiousContactDecisionPolicy.cs), [contact scenario tests](../../tests/AlterCourse.Core.Tests/Gameplay/Milestone3ProofScenarioTests.cs), [hail tests](../../tests/AlterCourse.Core.Tests/Gameplay/HailAndContactDecisionTests.cs), and [policy tests](../../tests/AlterCourse.Core.Tests/AI/CautiousContactDecisionPolicyTests.cs).

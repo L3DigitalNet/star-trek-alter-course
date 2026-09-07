@@ -6,7 +6,7 @@ description: 'Owner-approved first bounded M5 slice: direct NPC assignment, own-
 doc_type: 'decision'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-06'
+updated: '2026-09-07'
 tags:
   - 'design'
   - 'simulation'
@@ -21,7 +21,7 @@ related:
   - 'docs/adr/0006-use-versioned-json-snapshot-saves.md'
   - 'docs/adr/0007-use-deterministic-simulation-time-scheduling-and-randomness.md'
   - 'docs/adr/0010-use-explainable-domain-ai-and-demand-driven-state-machines.md'
-  - 'ROADMAP.md'
+  - 'docs/wiki/milestone-proofs.md'
 ---
 
 # Faction Intent and Autonomous Assignment
@@ -30,9 +30,9 @@ related:
 
 ## Status, authority, and provenance
 
-**Implemented in Feature #86 / Final PR #87, pending landing.** The checked-out implementation uses save V7; the released v0.5.0 line remains V6. This page records both the September 6 approval and the source-level implementation truth under review. It does not claim that the feature has merged into `dev` or that a V7 release exists.
+**Implemented in Feature #86 / Final PR #87, merged into `dev` as `0217296`.** The current `dev` implementation uses save V7; the released v0.5.0 line remains V6. This page records both the September 6 approval and the merged source-level implementation truth. It does not claim that a V7 release exists.
 
-This is the first implemented contribution toward **Milestone 5 — Living Sector and Faction Autonomy** after Strategic Contact Reporting. It is not all of M5, does not complete M3, and does not rename the earlier contact-reporting slice to M3B. Ship-definition content remains V4. The branch implementation is V7 while the current v0.5.0 release remains V6.
+This is the first implemented contribution toward **Milestone 5 — Living Sector and Faction Autonomy** after Strategic Contact Reporting. It is not all of M5, does not complete M3, and does not rename the earlier contact-reporting slice to M3B. Ship-definition content remains V4. The `dev` implementation is V7 while the current v0.5.0 release remains V6.
 
 The implementation adds no faction, affiliation, political hierarchy, or intelligence UI; it does not publish a release. Organizations, hierarchy traversal, information sharing, RNG, and a generic actor framework remain outside this slice.
 
@@ -92,11 +92,13 @@ Persist target kind with its correctly typed identity. Validate that each target
 
 Reuse the existing simulation clock, stable work identities, persisted same-time sequence, cancellation/correlation rules, serialized mutation, and bounded advancement. Same-time ordering must not come from target-kind enum order or collection iteration. Faction decisions wake at meaningful strategic boundaries, not in a separate loop polling every faction at tactical frequency. Define bounded reevaluation/no-action behavior without zero-time loops or assignment churn.
 
-Faction starts, direct controller links, consequential initial faction state, and decision wakes belong in typed bootstrap and complete candidate validation. Do not add post-construction proof-only `BootstrapHiddenFaction...` mutations or serialize executable callbacks. No generalized bootstrap/scenario language is admitted.
+Faction starts, direct controller links, consequential initial faction state, and decision wakes belong in typed bootstrap and complete candidate validation. Bootstrap schedules pre-existing ship work before faction work, so an initial faction wake sees the complete strategic state it is meant to evaluate. Do not add post-construction proof-only `BootstrapHiddenFaction...` mutations or serialize executable callbacks. No generalized bootstrap/scenario language is admitted.
 
 This implements ADR 0007's existing typed-target requirements; it does not supersede that ADR. Root factions are sufficient for the proof. The approved eventual recursive parentage model remains unchanged, but parent/child runtime and hierarchy traversal are not required here.
 
 ## D-12 — Content, durable state, and the planned V7 migration
+
+This preserved historical heading now describes the implemented V7 migration in `dev`.
 
 Reusable production faction definitions use strict JSON, schema validation, stable content identity, reference resolution, and semantic validation under ADR 0005. Keep immutable authored definition data separate from mutable faction state, objectives/commitments that affect continuation, direct ship control, and scheduler correlations. Do not put changing direct control into a reusable ship-class definition.
 
@@ -106,7 +108,7 @@ The V6 → V7 migration must produce an empty faction collection, null direct-co
 
 A valid world must support **zero factions**. New-game/bootstrap content may introduce the proof's factions; loading a migrated campaign does not rerun new-game initialization. Null historical controller references express absence of modeled control, not newly learned political information.
 
-Load a complete validated candidate before replacing live state; failure leaves the running simulation unchanged. Validate bounds, missing/wrong-domain references, duplicate identities, work ownership, counters, and compatible definitions. Recheck maximum-shape save/work bounds when adding faction data; do not assume the existing 128 MiB envelope has unlimited room or silently increase it.
+Load a complete validated candidate before replacing live state; failure leaves the running simulation unchanged. Validate bounds, schema/rules identity, missing or wrong-domain references, duplicate identities, work ownership, counters, and compatible definitions. Recheck maximum-shape save/work bounds when adding faction data; do not assume the existing 128 MiB envelope has unlimited room or silently increase it.
 
 This approval preserves development-save compatibility through the new adjacent migration. It does not promise indefinite support for all later pre-1.0 formats or prescribe speculative faction, organization, or intelligence schemas.
 
@@ -118,7 +120,7 @@ Q-14 is therefore scoped in two ways: the next save migration is selected, and t
 
 ## Presentation and non-goals
 
-No faction, affiliation, political hierarchy, or intelligence UI is added. Existing player-safe maps, contacts, Engineering controls, save/load, and event advancement remain available. Godot may adapt to the new save format when implemented, but it receives no faction diagnostic view or hidden NPC decision stream. A new offscreen consequence is not automatically a player-relevant event.
+No faction, affiliation, political hierarchy, or intelligence UI is added. Existing player-safe maps, contacts, Engineering controls, save/load, and event advancement remain available. Godot loads V7 and both content catalogs, but it receives no faction diagnostic view or hidden NPC decision stream. A new offscreen consequence is not automatically a player-relevant event.
 
 Do not implement global known-vessel identity, cross-observer correlation, report sharing, affiliation/intent learning, political attitudes, treaties, combat, diplomacy, organizations, governments, parent/child factions, layered jurisdiction, territory ownership, political resources/economy, canonical campaign generation, RNG, or a generic actor/rules framework. Do not select a complete organization taxonomy or complete M3 merely to label this slice finished.
 

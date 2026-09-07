@@ -6,14 +6,14 @@ description: 'Game identity, command responsibilities, progression, and scope bo
 doc_type: 'concept'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-06'
+updated: '2026-09-07'
 tags:
   - 'design'
 aliases: []
 related:
   - 'README.md'
   - 'ROADMAP.md'
-  - 'docs/design/initial-brainstorm-session.md'
+  - 'docs/wiki/sources.md'
 ---
 
 # Vision and scope
@@ -30,7 +30,7 @@ The core play is making command decisions inside an autonomous persistent world,
 
 There is no conventional captain experience-level or skill-tree progression. Progress is expressed through relationships, reputation, discoveries, political circumstances, territory, wars, treaties, resources, ship condition, and the world changed by player and NPC action.
 
-The original owner brief also requested officers in command positions with traits and experience, crew condition and morale, and canon-bounded ship upgrades. These remain unimplemented design intent requiring their own specifications; they do not authorize a captain-leveling system. See the [historical brainstorm](../design/initial-brainstorm-session.md) and the current [roadmap](../../ROADMAP.md), rather than treating every early numerical suggestion as settled.
+The original owner brief also requested officers in command positions with traits and experience, crew condition and morale, and canon-bounded ship upgrades. These remain unimplemented design intent requiring their own specifications; they do not authorize a captain-leveling system. See the [historical provenance](sources.md#historical-provenance) and the current [roadmap](../../ROADMAP.md), rather than treating every early numerical suggestion as settled.
 
 ## A world that continues without the player
 
@@ -52,4 +52,4 @@ Development priorities are simulation correctness, maintainability, automated te
 
 ## Sources
 
-The [root overview](../../README.md), [roadmap](../../ROADMAP.md), [project instruction reference](../llm-resources/), and [archived initial conversation](../design/initial-brainstorm-session.md) establish the vision. [Implementation status](implementation-status.md) distinguishes this vision from playable features.
+The [root overview](../../README.md), [roadmap](../../ROADMAP.md), and [historical provenance](sources.md#historical-provenance) establish the vision. [Implementation status](implementation-status.md) distinguishes this vision from playable features.

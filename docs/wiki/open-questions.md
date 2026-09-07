@@ -6,7 +6,7 @@ description: 'Resolved and scoped decisions for the approved faction-assignment 
 doc_type: 'plan'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-06'
+updated: '2026-09-07'
 tags:
   - 'design'
 aliases: []
@@ -26,7 +26,7 @@ related:
 
 Resolve only what blocks the next governed vertical slice. These questions are not a request to answer everything, a speculative implementation backlog, or permission for an agent to choose silently. The political principles in [Factions and organizations](factions-and-organizations.md) are settled and should not be repeatedly re-asked.
 
-The owner approved [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) as the next bounded slice. Feature #86 / Final PR #87 implements it pending landing. Its six decisions resolve Q-05 and only the expressly scoped portions of Q-04, Q-06, Q-08, and Q-14. Q-02 and Q-03 remain open; this does not complete M3 or M5.
+The owner approved [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) as the next bounded slice. Feature #86 / Final PR #87 implements it and merged into `dev` as `0217296`. Its six decisions resolve Q-05 and only the expressly scoped portions of Q-04, Q-06, Q-08, and Q-14. Q-02 and Q-03 remain open; this does not complete M3 or M5.
 
 ## Resolved sequencing and first-consumer decisions
 
@@ -72,7 +72,7 @@ Sanctioned versus unsanctioned political actions, inherited obligations, discove
 
 **Q-14 — Compatibility and stochastic behavior — PARTIALLY RESOLVED for the next slice.** The implementation is approved to introduce V7 and preserve the adjacent V1→V2→V3→V4→V5→V6→V7 migration chain. V6→V7 creates no factions, controller assignments, faction decision state, or faction wakes; it preserves historical ship/world state and scheduler semantics under explicit ship targets. Zero-faction worlds remain valid. New-game initialization must not inject politics into a migrated save.
 
-The first faction policy is fully deterministic and consumes no randomness. The eventual fixed/versioned RNG algorithm, supported random consumers, and later development-save compatibility promises remain open. Current runtime saves are still V6 until implementation lands. The preceding V5→V6 migration's refusal to invent observation history remains the precedent, not permission to invent political facts.
+The first faction policy is fully deterministic and consumes no randomness. The eventual fixed/versioned RNG algorithm, supported random consumers, and later development-save compatibility promises remain open. Current `dev` saves are V7; v0.5.0 remains V6. The preceding V5→V6 migration's refusal to invent observation history remains the precedent, not permission to invent political facts.
 
 ## Implementation choices versus approvals
 

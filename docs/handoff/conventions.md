@@ -12,6 +12,7 @@
 | C-006 | Keep Godot project metadata editor-discoverable.      |
 | C-007 | Keep Godot UI styling in the project-owned Theme.     |
 | C-008 | Record design in the wiki before anywhere else.       |
+| C-009 | Reconcile design evidence throughout active work.     |
 
 ## C-001: Canonical quality gate
 
@@ -43,4 +44,11 @@ Use the project-owned Godot Theme for semantic colors, typography, control state
 
 ## C-008: Design wiki is the single source of truth
 
-Record a design change on its `docs/wiki/` page in the same PR that implements it. `docs/design/` and `docs/specs/` hold supporting detail and must match the wiki; `ROADMAP.md` is sequence, not design. Architectural boundaries still change only through an ADR, and `docs/wiki/` is a protected T0 surface.
+Record detailed game contracts on their owning `docs/wiki/` page in the same PR that implements them. External documents are limited to operations, ADRs, and legal records; `ROADMAP.md` is sequence, not design. Architectural boundaries still change only through an ADR, and `docs/wiki/` is a protected T0 surface.
+
+## C-009: Recurring design reconciliation
+
+- Follow `docs/wiki/development-and-governance.md#recurring-design-reconciliation` at task start or resume and each behavior or bug checkpoint.
+- Apply it before Ready and at merge or release closeout.
+- During active work, complete a full sweep every seven calendar days and catch up an overdue sweep on resume.
+- Record named wiki pages plus source and test evidence; no automatic semantic detector exists.

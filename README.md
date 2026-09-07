@@ -8,25 +8,9 @@ The [project design wiki](docs/wiki/README.md) is the single source of truth for
 
 ## Project status
 
-The current immutable source-only release is v0.5.0 — Strategic Contact Reporting. It includes Milestone 3A first observed contact, the Milestone 4 Engineering Backbone, and reference-frame-qualified last-known contact reporting; no packaged game artifact is published.
+The current source-only release is v0.5.0 — Strategic Contact Reporting. Current `dev` also contains the first bounded faction-assignment slice. M3 and M5 remain incomplete; no packaged game artifact is published. See [implementation status](docs/wiki/implementation-status.md) for the reviewed behavior and save-version boundaries, and the [roadmap](ROADMAP.md) for development sequence.
 
-Feature #86 / Final PR #87 implements [Faction Intent and Autonomous Assignment](docs/wiki/faction-intent-and-autonomous-assignment.md), a bounded first contribution toward Milestone 5, on its review branch. It provides root factions, narrow direct NPC control and own-asset knowledge, typed Ship/Faction scheduling, strict faction content V1, V7 migration, and no randomness or political UI. Released v0.5.0 saves remain V6, ship-definition content remains V4, and neither M3 nor M5 is declared complete.
-
-The Godot shell privately loads the faction catalog and V7 saves while keeping hidden controller, faction, objective, and scheduled-work state out of the normal player interface. Ordinary observed NPC vessels can still appear through existing player-safe contact rules.
-
-The command screen proves a small, persistent, deterministic slice of play: a captain selects a connected destination on an open strategic map, begins travel, allocates constrained power between sensors and impulse propulsion, and sees a damaged system repair as simulation time passes. Arrival is scheduled rather than immediate. A separate local tactical view displays continuous position and accepts a demonstration course command; neither map is governed by square or hex movement.
-
-Core owns four persistent ship instances, identifies one as the player ship, and advances each ship's strategic, tactical, repair, scheduled, order, and sensor-knowledge state independently. Authoritative NPC ships can carry durable `TravelTo`, `PatrolRoute`, and `HoldUntil` orders; the first-observed-contact proof vessel also has the bounded `CautiousContact` posture. The Godot shell remains deliberately player-oriented: live tactical contacts come from the player's projection, not unrestricted NPC or world truth.
-
-The design centers on a persistent simulation in which the player commands one starship inside a changing political and strategic world. Planned areas include:
-
-- map-focused strategic and tactical play;
-- detailed ship systems, damage, repairs, resources, officers, and crew;
-- diplomacy, conflict, trade, treaties, missions, and faction autonomy;
-- progression through lasting consequences rather than captain levels;
-- a deterministic simulation core that can be tested without Godot.
-
-These are design goals, not claims about currently playable features; the [design wiki](docs/wiki/README.md) records each in detail and distinguishes implemented from planned. The architecture decisions under [`docs/adr/`](docs/adr/) record the approved technical direction. The near- and mid-term sequence of major development slices is tracked in [`ROADMAP.md`](ROADMAP.md).
+This README is an onboarding guide. The wiki owns game rules, controls, persistence contracts, and future design; [ADRs](docs/adr/) record architectural decisions.
 
 ## Technology
 
@@ -60,25 +44,7 @@ After setup, launch the gameplay slice from the repository root:
 
 The launcher resolves the pinned .NET SDK, performs a locked restore, builds the Debug Godot assembly with warnings treated as errors, then resolves Godot and launches only if every preceding step succeeds. Pass Godot arguments after the command when needed.
 
-The map-first command screen starts at the `Dawn Anchor` strategic location. Select a connected destination from the map or the destination buttons in the contextual command panel, then choose **ENGAGE TRAVEL**. Travel remains active until its scheduled arrival, while the visible system repair progresses on the same simulation timeline.
-
-Use the **Pause**, **0.5x**, **1x**, **2x**, and **4x** controls to choose how quickly presentation elapsed time requests deterministic 100 ms Core steps. Pause leaves rendering active but submits no Core advancement. **ADVANCE TO EVENT** follows the same scheduler path and stops at the next player-relevant repair, travel, or sensor-contact event, not an arbitrary scheduler event.
-
-The command shell keeps its header, status panel, workspace, bottom controls, and feedback message in a stable layout. The layout is tested at 1024×640 and 1440×900; 1024×640 is the practical minimum. Shortcuts are **1** strategic view, **2** tactical view, **Space** pause/resume, **R** cycle time rate, **U** advance to a player-relevant event, **Ctrl+S** quick-save, **Ctrl+L** quick-load, **E** engage selected travel, and **C** set the demonstration tactical course.
-
-Switch to **ENGINEERING** in the station bar for the live player-ship projection. Its **OVERVIEW**, **POWER**, **SENSORS**, **PROPULSION**, and **REPAIRS** sections show available power, reserve, condition, allocation, derived capability, effective range/speed, and active repair progress. **Balance power allocation**, **Prioritize sensors**, and **Prioritize propulsion** submit Core-generated presets; **Begin sensor repair** and **Begin impulse repair** submit typed repair requests. An unavailable action remains disabled with its Core-supplied reason. The display refreshes from immutable Core projections, so it does not expose NPC Engineering state or simulate a local preview.
-
-Switch to **TACTICAL** to view the local continuous reference frame. **SET COURSE 045° / 2 km/s** submits the first tactical movement intent. Current and stale sensor contacts appear only when the player knows them; select a marker to inspect its observed facts. An unidentified current contact can receive **ACTIVE SCAN**. After identification, **HAIL** may receive a typed acknowledgement. Core tactical coordinates use kilometers with positive Y toward tactical north; the Godot map adapter performs the presentation Y-axis conversion. A tactical course must not exceed the current Engineering-derived impulse limit, and power reallocation that would leave the ship above its resulting limit is rejected until the ship slows. The strategic workspace also lists a "LAST KNOWN CONTACTS" section of retained last-known reports, including Lost contacts the tactical surface no longer shows.
-
-**SAVE** and **LOAD** use one V6 quick-save slot at `user://quick-save.json`. The default load path discovers the legacy `user://quick-save-v1.json` slot only when the generic slot does not exist; custom paths never use that fallback. A V6 save identifies the `strategic-contact-reporting-v1` simulation rules and includes every ship, player identity, per-ship strategic and tactical state, Engineering conditions/allocation/repair, durable active orders, sensor knowledge, the observation-location frame on each contact, active scans, contact posture, targeted scheduled work, allocators, and deterministic scheduler order. Known-contact reports are projected from that retained knowledge rather than serialized as a second authority. Loading validates a complete candidate simulation before replacing the running one, so a failed load leaves the active game unchanged.
-
-The loader accepts V1 saves through deterministic V1→V2→V3→V4→V5→V6 migration. V1 becomes a one-ship V2 world, retaining the player identity and state, moving strategic state to that ship, and targeting legacy scheduled work to it. Because V1 had no vessel name, the migration uses the referenced definition's design label once; V2 then persists that name. The adjacent V2→V3 migration retains the world and targeted scheduled work, initializes the order allocator, and leaves `ActiveOrder` absent for every historical ship. V3→V4 preserves that world while assigning empty sensor knowledge, allocator value 1, no active scan, and no contact posture or decision wake. V4→V5 maps sensor integrity and any sensor repair into Engineering state, initializes nominal generation and impulse condition, preserves the exact repair correlation, and assigns full allocations where V4 authored generation can meet both demands. V5→V6 sets a null observation-location frame on every legacy contact and derives nothing, so a migrated contact stays on the tactical surface without appearing in strategic reports until a fresh observation qualifies it. This narrow migration is not a promise to retain every pre-1.0 save format indefinitely.
-
-The runtime loads the validated ship-definition catalog from [`src/AlterCourse.Godot/content/ships/pathfinder.json`](src/AlterCourse.Godot/content/ships/pathfinder.json), using the V4 schema at [`src/AlterCourse.Godot/content/schemas/ship-definition-v4.schema.json`](src/AlterCourse.Godot/content/schemas/ship-definition-v4.schema.json). The Pathfinder definition supplies a 30 km passive sensor range, a 2,000 ms active-scan duration, 120 nominal generation units, 70 sensor-demand units, and 50 impulse-demand units. The first proof world reuses that one immutable design definition for four separately named vessels; definition identity is stored in saves, while authored definition content remains external. This is game-domain content, separate from the AssetCtl visual-asset catalog.
-
-## Architecture at a glance
-
-`AlterCourse.Core` owns explicit simulation time, an immutable ship-definition catalog, plural `ShipState`, per-ship strategic and tactical state, targeted scheduled work, Engineering state/repair, durable orders, and sensor knowledge. V6 snapshot mapping supports V1→V2→V3→V4→V5→V6 migration and persists the `strategic-contact-reporting-v1` rules identity. `PlayerShipId` selects the ordinary ship controlled by player-facing commands and immutable projections; it does not make that ship a separate kind of world object. `AlterCourse.Godot` owns scenes, input, rendering, presentation-time accumulation, selection, and coordinate projection into Godot screen space; it does not become simulation authority or receive unrestricted plural-world truth.
+For play instructions, use [Interface and player commands](docs/wiki/interface-and-player-commands.md). [World, navigation, and time](docs/wiki/world-navigation-and-time.md) explains the proof world and orders; [Engineering](docs/wiki/engineering-and-combat.md), [Sensors and knowledge](docs/wiki/sensors-knowledge-and-ai.md), and [Persistence](docs/wiki/content-assets-and-persistence.md) own their rules. These contracts are maintained in the wiki rather than repeated here.
 
 ## Asset pipeline
 

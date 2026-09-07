@@ -6,7 +6,7 @@ description: 'Owner-approved conceptual political model with implementation and 
 doc_type: 'decision'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-06'
+updated: '2026-09-07'
 tags:
   - 'design'
   - 'simulation'
@@ -28,9 +28,9 @@ source:
 
 ## Status and provenance
 
-**Approved conceptual design with one implemented bounded consumer under review.** This page records the owner's explicit decisions in the September 6, 2026 design discussion consolidated under issue #68. Feature #86 / Final PR #87 implements only root factions, direct ship control, and establish-presence assignment; this page is not a complete political simulation specification.
+**Approved conceptual design with one implemented bounded consumer.** This page records the owner's explicit decisions in the September 6, 2026 design discussion consolidated under issue #68. Feature #86 / Final PR #87, merged into `dev` as `0217296`, implements only root factions, direct ship control, and establish-presence assignment; this page is not a complete political simulation specification.
 
-The owner subsequently approved [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) as the first bounded M5 consumer. Its implementation is pending landing and does not replace this broader framework or introduce hierarchy, government, organization, or relationship runtime.
+The owner subsequently approved [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) as the first bounded M5 consumer. Its implementation does not replace this broader framework or introduce hierarchy, government, organization, or relationship runtime.
 
 Detailed authority matrices, constitutional procedures, general political scoring, action catalogs, and succession remain deferred. The current v0.5.0 implementation contains no faction hierarchy, organization runtime, diplomatic relationship state, government control, or layered jurisdiction model.
 
@@ -102,11 +102,11 @@ Territory and jurisdiction can be layered. A location can be governed by a const
 
 Ships, installations, fleets, and other assets should have one direct controlling faction or organization. Broader affiliation and applicable authority are derived through that controller's political relationships. Conceptually, a ship can be directly controlled by Starfleet and associated with the Federation, or controlled by a Great House within the Klingon Empire.
 
-Direct control, layered jurisdiction, and observer-known affiliation remain different facts. Deriving an asset's true political context does not authorize revealing that entire chain to sensors, UI, or AI. No asset-controller or faction-affiliation fields exist in the current v0.5.0 `ShipState`; these are future-domain requirements, not changes to the implemented V6 save contract.
+Direct control, layered jurisdiction, and observer-known affiliation remain different facts. Deriving an asset's true political context does not authorize revealing that entire chain to sensors, UI, or AI. The current `dev` `ShipState` has the bounded optional direct-controller field; faction-affiliation and the broader political model remain future-domain requirements. Released v0.5.0 V6 saves predate that field.
 
 For the approved first assignment slice, D-09 selects one optional direct controlling `FactionId` stored on the ship/asset side, with a derived roster and no second mutable membership authority. Only idle, directly controlled NPC ships may receive an assignment; no preemption or player-command override is granted. Organization controllers, hierarchy, jurisdiction, and transfers remain deferred. A null controller denotes no modeled direct faction control, not an assertion of political neutrality.
 
-D-10 separately permits a narrow own-asset administrative snapshot for assignment. It does not share the controlled ships' sensors, reveal foreign affiliation, or make faction diagnostics player-visible. The [canonical slice](faction-intent-and-autonomous-assignment.md) owns these exact limits and the planned non-inventive V7 migration.
+D-10 separately permits a narrow own-asset administrative snapshot for assignment. It does not share the controlled ships' sensors, reveal foreign affiliation, or make faction diagnostics player-visible. The [canonical slice](faction-intent-and-autonomous-assignment.md) owns these exact limits and the implemented non-inventive V7 migration.
 
 ## Government is not the enduring polity
 
@@ -120,6 +120,6 @@ Structural parentage, governing control, coalition membership, and direct asset 
 
 Build only the smallest political slice that proves a real causal chain. Preserve actor-specific knowledge, deterministic scheduling, typed commands, explicit persistence, and meaningful offscreen activity. Existing ADRs still govern those boundaries.
 
-The first selected slice is [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md), implemented in Feature #86 / Final PR #87 pending landing. It uses root factions, existing orders and sensors, closed Ship/Faction scheduled targets, V7 migration that invents no political state, and no randomness or political UI. It does not complete M5.
+The first selected slice is [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md), implemented in Feature #86 / Final PR #87 and merged into `dev` as `0217296`. It uses root factions, existing orders and sensors, closed Ship/Faction scheduled targets, V7 migration that invents no political state, and no randomness or political UI. It does not complete M5.
 
 [Open questions](open-questions.md) distinguishes resolved Q-05 from scoped administrative/control/compatibility decisions and still-open intelligence, identity, campaign, organization, and political mechanics. Do not repeatedly reopen the six approved decisions or silently implement this framework's entire future surface.

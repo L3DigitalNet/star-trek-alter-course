@@ -182,7 +182,7 @@ The presentation can be deliberately small. The architectural proof is the durab
 
 Follow ADR 0006. Persist authoritative meaning, not presentation caches or duplicated truth.
 
-At this slice's admission, V5 was the input save schema. Because the observation frame could not be reconstructed safely, implementation used a V5→V6 adjacent migration under rules identity `strategic-contact-reporting-v1`: a migrated legacy contact carries no reference frame and is omitted from strategic reports until a new qualifying observation is recorded. V6 remains current; the later assignment slice's approved V7 migration is not implemented here.
+At this slice's admission, V5 was the input save schema. Because the observation frame could not be reconstructed safely, implementation used a V5→V6 adjacent migration under rules identity `strategic-contact-reporting-v1`: a migrated legacy contact carries no reference frame and is omitted from strategic reports until a new qualifying observation is recorded. V6 is the format shipped in v0.5.0. The later faction-assignment slice separately implemented V7 on `dev`; [content, assets, and persistence](content-assets-and-persistence.md) owns the current format and complete migration chain.
 
 Any migration must create only facts legitimately derivable from the older snapshot. It must not invent:
 
