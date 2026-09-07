@@ -14,6 +14,7 @@ aliases: []
 related:
   - 'docs/adr/0004-own-semantic-spatial-model-and-adapt-godot-rendering.md'
   - 'docs/adr/0007-use-deterministic-simulation-time-scheduling-and-randomness.md'
+  - 'docs/wiki/faction-intent-and-autonomous-assignment.md'
   - 'ROADMAP.md'
 ---
 
@@ -43,6 +44,8 @@ Tactical space uses continuous 2D position and motion. Domain coordinates are ki
 
 Canceling an order does not teleport or silently abort a physical voyage already underway. Cancellation removes only the correlated work it actually owns. Existing tests cover offscreen progression, cancellation, save/load, and insertion-order independence, including a 72-hour M2 scenario.
 
+The approved [faction-assignment slice](faction-intent-and-autonomous-assignment.md) will reuse these commands and execution paths. A faction may assign only an eligible idle NPC it directly controls; it cannot preempt an order, interrupt existing physical travel, or autonomously assign the player ship. Existing cancellation support does not authorize faction order preemption in this slice.
+
 ## One timeline, several update rates
 
 Core time advances only through explicit operations. A pause submits no advancement; wall-clock time, rendering delays, and time spent with the process closed do not move the universe. Tactical/contact-sensitive work uses deterministic 100 ms boundaries. Strategic-only intervals can advance event-to-event, and repair state is analytically materialized at relevant boundaries.
@@ -51,12 +54,20 @@ The scheduler has finite known work kinds, stable work IDs, persisted same-time 
 
 `AdvanceUntilNextPlayerRelevantEvent` processes hidden NPC work but does not report it merely because it occurred. Player-safe events include their actual simulation occurrence times rather than inheriting the final time of a batch.
 
+## Approved faction scheduling and bootstrap extension
+
+The first faction-assignment consumer approves a closed typed `Ship | Faction` scheduled-work target under ADR 0007. The target representation must distinguish the identity domains even when underlying numeric IDs match, preserve existing work order/correlation, and reject wrong-kind or dangling targets. It does not require an Actor/Entity abstraction or another scheduler.
+
+Faction decisions wake at meaningful bounded simulation boundaries, not every tactical tick. The implementation must define initial and follow-on wakes, no-action behavior, deduplication, and bounded reassessment so it cannot loop at the same time or repeatedly replace commitments. Exact cadence and budgets remain implementation choices within the owning decision's tests.
+
+New faction starts, asset control links, and initial wakes enter through typed bootstrap and complete aggregate validation, not postconstruction political mutations. A zero-faction world stays valid, including migrated V6 saves. These are approved next-slice requirements only; current bootstrap and save V6 remain unchanged by documentation.
+
 ## Randomness and future scale
 
-The present contact/order proofs do not need random decisions. ADR 0007 requires a versioned, restorable, injected random source and stable stream ownership when a real consumer appears; a seed alone is not a continuation contract. It does not select a final algorithm in this wiki.
+The present contact/order proofs do not need random decisions. The approved first faction policy also consumes no randomness. ADR 0007 requires a versioned, restorable, injected random source and stable stream ownership when a real consumer appears; a seed alone is not a continuation contract. This slice does not select an algorithm or add random streams to saves.
 
 Do not solve scale by simulating every offscreen actor at tactical frequency, inventing distributed services, or relaxing determinism. First identify the required behavior, choose the coarsest faithful update resolution, and measure representative scenarios.
 
 ## Sources
 
-[Spatial ADR](../adr/0004-own-semantic-spatial-model-and-adapt-godot-rendering.md), [time ADR](../adr/0007-use-deterministic-simulation-time-scheduling-and-randomness.md), [roadmap M1/M2](../../ROADMAP.md), [bootstrap](../../src/AlterCourse.Core/Gameplay/FirstGameSetup.cs), [scheduled work](../../src/AlterCourse.Core/Simulation/ScheduledWork.cs), and [work kinds](../../src/AlterCourse.Core/Simulation/ScheduledWorkKind.cs).
+[Spatial ADR](../adr/0004-own-semantic-spatial-model-and-adapt-godot-rendering.md), [time ADR](../adr/0007-use-deterministic-simulation-time-scheduling-and-randomness.md), [faction assignment decision](faction-intent-and-autonomous-assignment.md), [roadmap M1/M2](../../ROADMAP.md), [bootstrap](../../src/AlterCourse.Core/Gameplay/FirstGameSetup.cs), [scheduled work](../../src/AlterCourse.Core/Simulation/ScheduledWork.cs), and [work kinds](../../src/AlterCourse.Core/Simulation/ScheduledWorkKind.cs).
