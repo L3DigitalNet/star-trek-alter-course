@@ -2,7 +2,7 @@
 schema_version: '1.1'
 id: 'reference-g40auc-implementation-status'
 title: 'Implementation Status'
-description: 'Reviewed gameplay baseline and explicit boundaries between runtime, previews, and future work.'
+description: 'Reviewed gameplay baseline and explicit boundaries between runtime, approved future work, previews, and absent systems.'
 doc_type: 'reference'
 status: 'active'
 created: '2026-09-06'
@@ -17,6 +17,7 @@ related:
   - 'ROADMAP.md'
   - 'docs/wiki/strategic-contact-reporting.md'
   - 'docs/wiki/faction-intent-and-autonomous-assignment.md'
+  - 'docs/wiki/observation-driven-faction-response.md'
 ---
 
 # Implementation status
@@ -26,6 +27,8 @@ related:
 ## Reviewed baseline
 
 v0.5.0 is the immutable source-only release and uses V6 saves. Feature #86 / Final PR #87 merged the bounded faction slice into `dev` as `0217296`, where it uses V7; no V7 release is claimed. For the operational snapshot, consult [STATUS](../STATUS.md).
+
+[Observation-Driven Faction Response](observation-driven-faction-response.md) is owner-approved design for the next bounded slice and is **not implemented** in this reviewed baseline. Its proposed V8/report-delivery/investigation state must not be described as current runtime until implementation evidence lands.
 
 ## Implemented gameplay
 
@@ -47,7 +50,7 @@ Implementation evidence: [FirstGameSetup](../../src/AlterCourse.Core/Gameplay/Fi
 
 Milestone 1 world/bootstrap and Milestone 2 active-world orders are implemented. Milestone 3A first observed contact and [Strategic Contact Reporting](strategic-contact-reporting.md) are implemented, but the roadmap explicitly does not declare all of Milestone 3 complete. Milestone 4 Engineering Backbone is implemented. M3A and M4 are included in v0.4.0; Strategic Contact Reporting was delivered in Feature #77 / Final PR #78, merged into `dev` as `80c3084`, and included in v0.5.0.
 
-Feature #86 is the first implemented M5 contribution, not evidence that M5 or M3 is complete. The broader living-sector milestone and M6-M9 tactical combat, diplomacy/incidents, canon-anchored bootstrap, and regional campaign integration remain future work. No canonical M3B milestone is admitted.
+Feature #86 is the first implemented M5 contribution, not evidence that M5 or M3 is complete. Observation-Driven Faction Response is the approved next bounded M5 contribution but remains design-only. After that slice is implemented and reconciled, M6 Tactical Combat Foundation becomes the next major development family; M3 and M5 do not need to be declared complete first. M6-M9 runtime remains future work. No canonical M3B milestone is admitted.
 
 ## Implemented bounded faction slice
 
@@ -55,16 +58,24 @@ Feature #86 is the first implemented M5 contribution, not evidence that M5 or M3
 
 Q-05 is resolved for that slice. Q-04, Q-06, Q-08, and Q-14 have only the documented scoped decisions; Q-02, Q-03, and broader intelligence/political questions remain open. Production and long-horizon scenarios cover the bounded slice; the Final PR records inherited verification evidence. The `dev` implementation is not a V7 release claim.
 
+## Approved next slice, not implemented
+
+[Observation-Driven Faction Response](observation-driven-faction-response.md) approves one direct NPC ship-to-direct-faction report channel and one bounded investigation response. It selects a 2,000 ms deterministic report delay, observer-local historical provenance, eight in-flight and sixteen retained reports per faction, one active investigation, a 60,000 ms freshness window, no RNG, no preemption, and non-inventive adjacent persistence.
+
+None of the following are current implementation claims until the feature PR lands: faction received-report state, report-delivery scheduler work, observation-response posture, investigation commitments, V8 saves, both-factions report/response scenarios, or the associated Godot/player-safe proof. Historical current contacts remain ship-local in V7.
+
 ## Preview-only or absent
 
 Combat mockups do not establish authoritative shields, weapons, fire-control solutions, or damage resolution. Detailed EPS networks, batteries, warp Engineering, life support, transporters, repair teams/queues, crew systems, fuel, inventory, and economy are absent. The actual repair model has one active repair, not the multi-team queue illustrated by earlier UI references.
 
-Strategic long-range sensor simulation, affiliation/intent knowledge, organizations, governments, political hierarchies, treaties, espionage, and layered jurisdiction are not implemented; durable last-known strategic contact reporting is (see [Strategic Contact Reporting](strategic-contact-reporting.md)). The bounded faction runtime does not change these future boundaries.
+Strategic long-range sensor simulation, affiliation/intent knowledge, organizations, governments, political hierarchies, treaties, espionage, layered jurisdiction, and general faction intelligence sharing are not implemented. Durable last-known strategic contact reporting is implemented ship/player-side; the approved direct ship-to-faction response extension is not yet runtime.
 
-`KnownShipId`, organization controllers, narrative runtime, a database, ECS, and a public mod API remain absent and are not admitted by the slice.
+`KnownShipId`, cross-observer vessel correlation, organization controllers, narrative runtime, a database, ECS, and a public mod API remain absent and are not admitted by the approved next slice.
 
 ## Verification evidence, not a fresh execution claim
 
 The v0.5.0 release candidate gate reports 406 Core tests, 324 AssetCtl tests, 63 gameplay/UI tests, one Godot integration test, and two generated-asset import tests, with warning-free builds; the v0.4.0 release and M4 admission record reported 376, 324, 60, one, and two. These are baseline release results, not tests rerun merely by writing this page. Documentation PR #84 records its own actual checks separately and supplies no runtime faction-acceptance evidence.
+
+The wiki-consolidation PR later verified the then-current `dev` state with 505 Core tests, 324 AssetCtl tests, 65 gameplay/UI tests, one Godot integration test, and two generated-asset import tests. That is inherited evidence for the implemented baseline, not execution evidence for Observation-Driven Faction Response.
 
 [v0.5.0 release](https://github.com/L3DigitalNet/star-trek-alter-course/releases/tag/v0.5.0) · [v0.4.0 release](https://github.com/L3DigitalNet/star-trek-alter-course/releases/tag/v0.4.0) · [M4 PR #63](https://github.com/L3DigitalNet/star-trek-alter-course/pull/63) · [Roadmap outcomes](../../ROADMAP.md)
