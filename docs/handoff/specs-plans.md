@@ -2,10 +2,10 @@
 
 ## Design entry points
 
-- [Project design wiki](../wiki/README.md) is the single source of truth for design; `docs/design/` and `docs/specs/` are supporting detail it links.
-- [Political model](../wiki/factions-and-organizations.md) records approved conceptual decisions; no political runtime is implemented.
+- [Project design wiki](../wiki/README.md) is the single source of truth for detailed game design contracts; external documents cover operations, ADRs, and legal records.
+- [Political model](../wiki/factions-and-organizations.md) records approved conceptual decisions; the bounded direct-faction assignment is implemented, while organization and hierarchy runtime remain future work.
 - [Open questions](../wiki/open-questions.md) separates resolved Q-05 and scoped decisions from the remaining unapproved topics.
-- [Faction assignment](../wiki/faction-intent-and-autonomous-assignment.md) owns the next approved slice and six boundaries; implementation is separate work.
+- [Faction assignment](../wiki/faction-intent-and-autonomous-assignment.md) owns the implemented bounded M5 slice and its six boundaries; broader political work remains future work.
 
 ## Tracked artifacts
 

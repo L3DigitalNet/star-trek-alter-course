@@ -44,7 +44,7 @@ Use the project-owned Godot Theme for semantic colors, typography, control state
 
 ## C-008: Design wiki is the single source of truth
 
-Record a design change on its `docs/wiki/` page in the same PR that implements it. `docs/design/` and `docs/specs/` hold supporting detail and must match the wiki; `ROADMAP.md` is sequence, not design. Architectural boundaries still change only through an ADR, and `docs/wiki/` is a protected T0 surface.
+Record detailed game contracts on their owning `docs/wiki/` page in the same PR that implements them. External documents are limited to operations, ADRs, and legal records; `ROADMAP.md` is sequence, not design. Architectural boundaries still change only through an ADR, and `docs/wiki/` is a protected T0 surface.
 
 ## C-009: Recurring design reconciliation
 

@@ -14,6 +14,6 @@
 - The shell retains strategic travel, tactical movement, Engineering power and repair, deterministic time controls, quick save/load, and last-known contact reporting.
 - Core owns plural ordinary `ShipState`; Godot projects player-visible state and does not own authoritative simulation state.
 - The tracked launch script restores and builds before Godot starts, preventing stale local Debug content after branch changes.
-- [Design wiki](wiki/README.md) is the single source of truth; broader [political design](wiki/factions-and-organizations.md) has no organization or hierarchy runtime.
-- M3 and M5 remain incomplete. The merged slice adds no dependencies, UI, or broader political runtime; no release followed and `main` is unchanged.
-- Task #88 / Final PR #89 adds recurring wiki reconciliation and corrects stale faction landing claims; no runtime change or release.
+- [Design wiki](wiki/README.md) is the single source of truth; the bounded direct-faction assignment is implemented while organization and hierarchy runtime remain future work.
+- M3 and M5 remain incomplete. The merged slice adds no dependencies or UI; broader political runtime is future work, no release followed, and `main` is unchanged.
+- Draft Task #88 / Final PR #89 consolidates detailed game contracts in the wiki, removes superseded design records, and adds recurring reconciliation; verification is pending.
