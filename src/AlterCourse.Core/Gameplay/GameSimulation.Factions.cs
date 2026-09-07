@@ -53,7 +53,7 @@ public sealed partial class GameSimulation
         );
     }
 
-    private static FactionAssignmentDecisionExplanation DecideFactionAssignment(
+    internal static FactionAssignmentDecisionExplanation DecideFactionAssignment(
         SimulationState state,
         FactionState faction,
         EstablishPresenceObjectiveState objective
@@ -230,12 +230,7 @@ public sealed partial class GameSimulation
 
     private static SimulationState ScheduleNextFactionOpportunity(SimulationState state, FactionState faction)
     {
-        SimulationTime? next = state
-            .Ships.Where(ship => ship.DirectControllerFactionId == faction.Id)
-            .Select(NextReleaseBoundary)
-            .Where(boundary => boundary is not null && boundary.Value.Milliseconds > state.Time.Milliseconds)
-            .OrderBy(boundary => boundary!.Value.Milliseconds)
-            .FirstOrDefault();
+        SimulationTime? next = FindNextFactionOpportunity(state, faction);
         if (next is null)
         {
             return state;
@@ -257,6 +252,14 @@ public sealed partial class GameSimulation
             Scheduler = scheduler,
         };
     }
+
+    internal static SimulationTime? FindNextFactionOpportunity(SimulationState state, FactionState faction) =>
+        state
+            .Ships.Where(ship => ship.DirectControllerFactionId == faction.Id)
+            .Select(NextReleaseBoundary)
+            .Where(boundary => boundary is not null && boundary.Value.Milliseconds > state.Time.Milliseconds)
+            .OrderBy(boundary => boundary!.Value.Milliseconds)
+            .FirstOrDefault();
 
     private static SimulationTime? NextReleaseBoundary(ShipState ship) =>
         ship.ActiveOrder switch

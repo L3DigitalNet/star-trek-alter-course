@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using AlterCourse.Core.AI;
 using AlterCourse.Core.Content;
 using AlterCourse.Core.Factions;
 using AlterCourse.Core.Identity;
@@ -125,7 +126,8 @@ internal sealed partial record SimulationState
 
         if (objective.Status == FactionObjectiveStatus.Pending && faction.PendingDecisionWake is null)
         {
-            return; // Dormant pending objectives are valid when no future candidate-release boundary exists.
+            ValidateFactionDormancy(faction, objective);
+            return;
         }
 
         if (objective.Status == FactionObjectiveStatus.Satisfied && faction.PendingDecisionWake is not null)
@@ -154,6 +156,24 @@ internal sealed partial record SimulationState
         )
         {
             throw new InvalidOperationException("A faction decision wake lacks its exact scheduled work.");
+        }
+    }
+
+    private void ValidateFactionDormancy(FactionState faction, EstablishPresenceObjectiveState objective)
+    {
+        // Losing a wake must not silently disable actionable intent. Reuse the runtime's own
+        // actor-safe decision and release rules instead of maintaining a second eligibility policy.
+        FactionAssignmentDecisionExplanation decision = GameSimulation.DecideFactionAssignment(
+            this,
+            faction,
+            objective
+        );
+        if (
+            decision.Outcome != FactionAssignmentDecisionOutcome.NoEligibleCandidate
+            || GameSimulation.FindNextFactionOpportunity(this, faction) is not null
+        )
+        {
+            throw new InvalidOperationException("An actionable pending faction objective requires a decision wake.");
         }
     }
 
