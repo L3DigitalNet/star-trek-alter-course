@@ -14,9 +14,10 @@ The current operational state is tracked in [STATUS](docs/STATUS.md), while [Imp
 - **Milestone 1** and **Milestone 2** are implemented.
 - **Milestone 3A — First Observed Contact** is implemented, but **Milestone 3 as a whole is not complete**.
 - **Milestone 4 — Engineering Backbone and Degraded Operations** is implemented.
-- Content schema **V4** and save schema **V6** are current.
+- Content schema **V4** and save schema **V6** are current; V7 is planned for the approved faction slice, not implemented.
 - The approved [factions and organizations](docs/wiki/factions-and-organizations.md) political model is **design only**. No faction hierarchy, organization runtime, government model, treaty system, layered jurisdiction runtime, or strategic affiliation-knowledge system exists yet.
-- [Strategic Contact Reporting](docs/wiki/strategic-contact-reporting.md) is **implemented** (Feature #77, Final PR #78), resolving Q-01. It is not canonically named `M3B`, does not complete Milestone 3, and does not itself begin M5.
+- [Strategic Contact Reporting](docs/wiki/strategic-contact-reporting.md) is **implemented** (Feature #77, Final PR #78), resolving Q-01. It is not canonically named `M3B`, does not complete Milestone 3, and did not itself begin M5.
+- [Faction Intent and Autonomous Assignment](docs/wiki/faction-intent-and-autonomous-assignment.md) is the **owner-approved next design**, resolving Q-05 for the first bounded M5 proof. Its runtime implementation has not started. Q-04/Q-14 have scoped answers; broader intelligence and campaign questions remain open.
 
 ## Execution model
 
@@ -61,7 +62,7 @@ Strategic activity should wake at meaningful boundaries rather than forcing ever
 
 ### Canon supplies boundary conditions; simulation supplies activity and divergence
 
-Canon should establish the chosen campaign's required historical and political starting conditions. The simulation should populate the enormous amount of local activity canon does not specify and then allow legitimate consequences to accumulate. Exact campaign era, treatment of later canonical events, initialization/warm-up, and random-version policy remain refinement questions for Milestone 8 rather than assumptions to encode now.
+Canon should establish the chosen campaign's required historical and political starting conditions. The simulation should populate the enormous amount of local activity canon does not specify and then allow legitimate consequences to accumulate. Exact campaign era, treatment of later canonical events, initialization/warm-up, and random-version policy remain refinement questions for Milestone 8 rather than assumptions to encode now. The first faction proof explicitly uses era-neutral development actors.
 
 ---
 
@@ -73,7 +74,7 @@ Canon should establish the chosen campaign's required historical and political s
 | 2 | **Active World and Persistent Orders** | **Implemented** | Ships can own durable intent, progress offscreen, and retain that intent across save/load. |
 | 3 | **Sensor Knowledge and First Contact** | **Partial — M3A and Strategic Contact Reporting implemented; M3 not complete** | M3A proves observer-local knowledge and information-limited ship behavior; Strategic Contact Reporting carries legitimate last-known contact information into strategic context without defining the final intelligence model. |
 | 4 | **Engineering Backbone and Degraded Operations** | **Implemented** | Power, condition, capability, and repair interact with existing sensing and maneuvering rather than living in a parallel subsystem. |
-| 5 | **Living Sector and Faction Autonomy** | **Future** | Faction intent can cause explainable autonomous assignments, offscreen activity, and durable world change using actor-appropriate information. |
+| 5 | **Living Sector and Faction Autonomy** | **Future runtime — first bounded assignment slice approved** | Faction intent can cause explainable autonomous assignments, offscreen activity, and durable world change using actor-appropriate information. |
 | 6 | **Tactical Combat Foundation** | **Future** | Combat composes motion, observation, Engineering, AI, persistence, and withdrawal instead of becoming a separate hit-point game. |
 | 7 | **Diplomacy, Incidents, and Durable Consequences** | **Future** | The world distinguishes events, knowledge/attribution, legal status, attitudes, and remembered consequences that affect later decisions. |
 | 8 | **Canon-Anchored Campaign Bootstrap and Divergent History** | **Future** | A campaign begins from reproducible canon-consistent boundary conditions plus already-active noncanonical local activity. |
@@ -141,17 +142,17 @@ The slice did **not** approve or introduce:
 - combat; or
 - a generic actor/entity/rules framework.
 
-Q-02 through Q-05 remain open. It does not complete Milestone 3 and does not begin Milestone 5.
+Q-02 through Q-05 were still open at its release. The later faction-assignment decision resolves Q-05 for its bounded proof and partially resolves Q-04/Q-14; it does not change this delivered slice's non-goals. Strategic Contact Reporting does not complete M3 and did not itself begin M5.
 
 ---
 
 ## Milestone 3 completion remains open beyond the implemented slice
 
-M3A proved the core local-contact architecture. Strategic Contact Reporting is now implemented as the next information slice, but its completion does **not** automatically close Milestone 3.
+M3A proved the core local-contact architecture. Strategic Contact Reporting is implemented, but its completion does **not** automatically close Milestone 3.
 
-The original Milestone 3 horizon also discussed affiliation/intent knowledge, strategic contacts, broader reporting, and identity questions. Strategic Contact Reporting resolves only the smallest behavior needed now: carrying legitimate local observations into actor-safe strategic last-known information.
+The original Milestone 3 horizon also discussed affiliation/intent knowledge, strategic contacts, broader reporting, and identity questions. Strategic Contact Reporting resolves only the smallest behavior needed at that stage: carrying legitimate local observations into actor-safe strategic last-known information.
 
-After that implementation lands, evaluate remaining M3 scope against actual consumers. Q-02 through Q-04 remain the design register for durable known-vessel identity, affiliation knowledge, and faction knowledge sharing. Do not declare a final intelligence schema or M3 completion contract in advance of evidence.
+The next approved work is the first faction-assignment slice, not an abstract exercise to finish M3. Q-02/Q-03 and the intelligence-sharing portion of Q-04 remain deferred to actual consumers; the narrowly approved own-asset administrative view does not finalize an intelligence schema or the M3 completion contract.
 
 ---
 
@@ -163,7 +164,22 @@ Prove the causal chain:
 
 > **faction intent → explainable decision → ship assignment/order → offscreen activity → durable world change**
 
-The smallest useful scenario should contain multiple locations, multiple ships, and enough political context for at least two autonomous factions or political actors to make a consequential choice. At least one NPC-NPC interaction should matter even if the player never witnesses it.
+The milestone-level scenario should contain multiple locations, multiple ships, and enough political context for at least two autonomous factions or political actors to make a consequential choice. At least one NPC-NPC interaction should matter even if the player never witnesses it.
+
+### First approved slice — Faction Intent and Autonomous Assignment
+
+**Approved design; runtime implementation not started.** [The owning wiki decision](docs/wiki/faction-intent-and-autonomous-assignment.md) resolves Q-05 for a first bounded proof after v0.5.0. Faction A chooses among at least two directly controlled NPC ships to establish presence at Vesper Reach, where Faction B has a ship. A committed-preferred-ship variant changes the selected ship; ordinary orders, offscreen travel, and sensing create a real NPC-NPC consequence. No eligible ship produces explained no-action.
+
+The approved implementation boundaries are:
+
+- one optional asset-side direct controlling `FactionId`, derived rosters, idle-NPC assignment only, no order/travel preemption, and no autonomous player assignment;
+- own objective and known topology plus narrowly permitted current administrative identity, strategic state, and order/assignment status of directly controlled assets; no external sensor-report ingestion;
+- a closed typed Ship/Faction target in the existing scheduler, stable ordering/correlation, bounded meaningful decision wakes, and ordinary ship-order application;
+- reusable faction definitions under ADR 0005 and political starts/control/wakes through typed bootstrap and complete candidate validation;
+- planned V7 and adjacent V1→V7 migration, adding no factions/control/history to V6 saves and preserving existing ship work; zero-faction worlds stay valid;
+- no randomness, new faction/affiliation UI, hierarchy runtime, organizations, treaties, economy, combat, or generic actor framework.
+
+This initial dispatch proof does not alone complete the larger M5 requirement for multiple autonomous political actors making consequential choices. Broader M5 slices remain future work. Q-04 is only partly answered for administrative own-asset state; Q-02/Q-03 and external intelligence sharing remain open. The proof is era-neutral without selecting campaign era, and V6/content V4 remain current until implementation.
 
 ### Required architectural proof
 
@@ -178,12 +194,13 @@ The smallest useful scenario should contain multiple locations, multiple ships, 
 
 The approved [factions and organizations](docs/wiki/factions-and-organizations.md) model governs this work, but Milestone 5 does **not** require implementing its entire possible surface.
 
-The first consumer should preserve the approved principles it touches: stable faction identity, autonomous political will, actor knowledge, at most one structural parent, separation of structural hierarchy from other relationships, independent attitudes, and one direct controller for an asset if asset control is introduced. It need not immediately implement all three supported depths, organizations, governments, covert operations, layered jurisdiction, treaty inheritance, or political transitions.
+The first consumer preserves the approved principles it touches: stable faction identity, autonomous political will, actor knowledge, and one direct controlling faction for a participating asset. It uses roots only; it does not require implementing all three design depths, organizations, governments, covert operations, layered jurisdiction, treaty inheritance, or political transitions. Later hierarchy work must preserve at most one structural parent, separation of parentage from other relationships, and independent attitudes.
 
 Do not create three faction classes for Polity/Constituent/Internal, infer powers from depth labels, or add a generic actor/rules framework solely because the future political model is rich.
 
-### Deliberately deferred unless the slice proves need
+### Deliberately deferred unless a later slice proves need
 
+- faction sensor-report distribution and broader intelligence;
 - complete authority/permission matrices;
 - treaty engine and precedence rules;
 - espionage probability/resource systems;
@@ -254,7 +271,7 @@ Start a campaign inside a canon-consistent but already active world, then allow 
 - Saving an evolved campaign stores the evolved authoritative snapshot; loading does not regenerate from seed and discard history.
 - Later canonical events do not silently overwrite legitimate simulation consequences without an explicit design rule.
 
-Before admission, resolve **Q-12 — Canon divergence and initialization** and the relevant portions of **Q-14 — Compatibility and stochastic behavior**. Choose a campaign era/region only when content work requires it; earlier assistant-proposed dates are not approvals.
+Before admission, resolve **Q-12 — Canon divergence and initialization** and the relevant portions of **Q-14 — Compatibility and stochastic behavior**. Choose a campaign era/region only when content work requires it; earlier assistant-proposed dates are not approvals. The first faction slice's era-neutral proof and nonrandom policy do not resolve these campaign questions.
 
 ---
 
@@ -287,7 +304,7 @@ Milestone 9 is the point to judge whether the established joints are strong enou
 - Record **architecture changes** through the ADR process when an active decision must change.
 - Record **implementation truth** in code/tests and reconcile [Implementation Status](docs/wiki/implementation-status.md) when a milestone lands.
 - Record **operational/release truth** in [STATUS](docs/STATUS.md), release records, and ADR 0013's branch/release workflow.
-- Keep unresolved choices in [Open Design Questions](docs/wiki/open-questions.md) until a concrete consumer requires them.
+- Keep unresolved choices in [Open Design Questions](docs/wiki/open-questions.md) until a concrete consumer requires them; distinguish scoped partial answers from global resolution.
 - Do not silently convert a recommendation, example, mockup, or future milestone description into owner-approved behavior.
 - Split, reorder, or rename future slices only through governed refinement that explains the dependency/risk evidence.
 
@@ -297,6 +314,7 @@ Milestone 9 is the point to judge whether the established joints are strong enou
 - [Implementation Status](docs/wiki/implementation-status.md)
 - [Design Decision Register](docs/wiki/decision-register.md)
 - [Strategic Contact Reporting](docs/wiki/strategic-contact-reporting.md)
+- [Faction Intent and Autonomous Assignment](docs/wiki/faction-intent-and-autonomous-assignment.md)
 - [Open Design Questions](docs/wiki/open-questions.md)
 - [Architecture](docs/wiki/architecture.md)
 - [Factions and Organizations](docs/wiki/factions-and-organizations.md)
