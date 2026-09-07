@@ -9,7 +9,7 @@ namespace AlterCourse.Core.Gameplay;
 
 internal sealed record ScheduledConsequenceTrace(
     ScheduledWorkId WorkId,
-    ShipInstanceId TargetShipId,
+    ScheduledWorkTarget Target,
     ScheduledWorkKind WorkKind,
     SimulationTime ResolutionTime,
     ShipOrderId? OrderId,
@@ -20,5 +20,10 @@ internal sealed record ScheduledConsequenceTrace(
     bool RandomnessUsed,
     SensorContactId? ContactId = null,
     ShipSystemId? SystemId = null,
-    ShipContactDecisionExplanation? ContactDecision = null
-);
+    ShipContactDecisionExplanation? ContactDecision = null,
+    FactionAssignmentDecisionExplanation? FactionDecision = null
+)
+{
+    internal ShipInstanceId TargetShipId =>
+        Target.ShipId ?? throw new InvalidOperationException("Faction-targeted trace has no target ship.");
+}

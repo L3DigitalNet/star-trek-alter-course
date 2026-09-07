@@ -26,7 +26,7 @@ related:
 
 Resolve only what blocks the next governed vertical slice. These questions are not a request to answer everything, a speculative implementation backlog, or permission for an agent to choose silently. The political principles in [Factions and organizations](factions-and-organizations.md) are settled and should not be repeatedly re-asked.
 
-The owner has now approved [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) as the next bounded slice. Its six decisions resolve Q-05 and only the expressly scoped portions of Q-04, Q-06, Q-08, and Q-14. Q-02 and Q-03 remain open. Approval is design state, not runtime implementation or a claim that M3/M5 is complete.
+The owner approved [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) as the next bounded slice. Feature #86 / Final PR #87 implements it pending landing. Its six decisions resolve Q-05 and only the expressly scoped portions of Q-04, Q-06, Q-08, and Q-14. Q-02 and Q-03 remain open; this does not complete M3 or M5.
 
 ## Resolved sequencing and first-consumer decisions
 

@@ -6,7 +6,7 @@
 
 ## Agent tasks
 
-- Implement the [approved faction slice](wiki/faction-intent-and-autonomous-assignment.md) through a governed feature after documentation closeout.
-- Preserve its six selected boundaries; do not reopen Q-05 or silently expand into deferred intelligence, organizations, hierarchy, RNG, or political UI.
-- Keep V6 current until runtime implementation adds the approved V7 migration; do not infer faction state when loading historical saves.
+- Obtain owner review for [Final PR #87](https://github.com/L3DigitalNet/star-trek-alter-course/pull/87) before any merge or release action.
+- Preserve the bounded faction slice; do not expand into deferred intelligence, organizations, hierarchy, RNG, or political UI.
+- Treat Q-02/Q-03 and the unresolved portion of Q-04 as future design work. Keep V7 historical-save migration noninventive.
 - If the hosted Godot teardown segfault ([bug 007](handoff/bugs/007-hosted-gdunit-teardown-segfault.md)) recurs, isolate it rather than rerunning.

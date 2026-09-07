@@ -48,8 +48,8 @@ The wiki is the single source of truth for design; this catalog lists the docume
 ## Canonical wiki decisions and future design
 
 - [Strategic Contact Reporting](strategic-contact-reporting.md): implemented after v0.4.0 and released in v0.5.0 (Feature #77, Final PR #78); durable reference-frame-qualified actor-safe last-known contact reporting with its original non-goals preserved.
-- [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md): next owner-approved bounded M5 slice, not implemented; D-08 through D-13 cover its proof, control, knowledge, scheduler/bootstrap, planned V7 migration, and no-RNG decisions.
-- [Factions and organizations](factions-and-organizations.md): owner-approved conceptual political framework, explicitly unimplemented; the first assignment consumer uses only the selected root-faction/direct-control subset.
+- [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md): Feature #86 / Final PR #87 review-branch implementation of the bounded M5 slice; D-08 through D-13 cover its proof, control, knowledge, scheduler/bootstrap, V7 migration, and no-RNG decisions.
+- [Factions and organizations](factions-and-organizations.md): owner-approved conceptual political framework; its hierarchy, organization, government, and relationship runtime remains future work, while the first assignment consumer implements only the root-faction/direct-control subset.
 - [Open questions](open-questions.md): Q-01 and first-slice Q-05 resolved; Q-04/Q-06/Q-08/Q-14 scoped in part; Q-02/Q-03 and remaining intelligence, political, combat, campaign, and compatibility questions deferred.
 
 ## Supporting design and specification documents
@@ -82,6 +82,10 @@ The wiki is the single source of truth for design; this catalog lists the docume
 - [v0.4.0 release](https://github.com/L3DigitalNet/star-trek-alter-course/releases/tag/v0.4.0), [M3A feature #58](https://github.com/L3DigitalNet/star-trek-alter-course/issues/58), and [M4 feature #62](https://github.com/L3DigitalNet/star-trek-alter-course/issues/62).
 - [M3A PR #61](https://github.com/L3DigitalNet/star-trek-alter-course/pull/61) and [M4 PR #63](https://github.com/L3DigitalNet/star-trek-alter-course/pull/63): admission/test/manual evidence, not a fresh rerun in this wiki review.
 - [Strategic Contact Reporting documentation task #74](https://github.com/L3DigitalNet/star-trek-alter-course/issues/74): approval/provenance for the slice. [Strategic Contact Reporting feature #77](https://github.com/L3DigitalNet/star-trek-alter-course/issues/77) and [Final PR #78](https://github.com/L3DigitalNet/star-trek-alter-course/pull/78): implementation evidence.
+- [Faction policy](../../src/AlterCourse.Core/AI/FactionAssignmentPolicy.cs), [runtime wakes](../../src/AlterCourse.Core/Gameplay/GameSimulation.Factions.cs), [strict faction content](../../src/AlterCourse.Core/Content/FactionDefinitionCatalogLoader.cs), and [V7 persistence](../../src/AlterCourse.Core/Persistence/GamePersistence.cs): Feature #86 / Final PR #87 source evidence, pending landing.
+- [Faction policy tests](../../tests/AlterCourse.Core.Tests/AI/FactionAssignmentPolicyTests.cs), [scheduler target tests](../../tests/AlterCourse.Core.Tests/Simulation/FactionSchedulerTargetTests.cs), [runtime tests](../../tests/AlterCourse.Core.Tests/Gameplay/FactionRuntimeWakeTests.cs), and [V7 persistence tests](../../tests/AlterCourse.Core.Tests/Persistence/GamePersistenceV7FactionTests.cs): executed Core evidence.
+- [Assignment scenarios](../../tests/AlterCourse.Core.Tests/Gameplay/FactionAssignmentScenarioTests.cs), [knowledge boundary](../../tests/AlterCourse.Core.Tests/Gameplay/FactionKnowledgeBoundaryTests.cs), and [long horizon](../../tests/AlterCourse.Core.Tests/Gameplay/FactionLongHorizonTests.cs): targeted production, continuation, forbidden-knowledge, dormancy, and finite-hold evidence at `407393d`.
+- Godot compatibility at `eeec0ce`: focused `GameplayShellTests` 65/65, warning-free build, private catalog loading, V7 quick-load continuation, malformed faction-data rejection, and player-safe faction hiding.
 
 ## Latest design-approval evidence
 

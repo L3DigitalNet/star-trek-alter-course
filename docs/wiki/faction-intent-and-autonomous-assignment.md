@@ -30,11 +30,11 @@ related:
 
 ## Status, authority, and provenance
 
-**Owner-approved design; not implemented.** On September 6, 2026, after the v0.5.0 repository review and pre-implementation decision discussion, the owner explicitly approved all six recommendations and requested documentation reconciliation through a merged pull request before implementation. This page records that approval; examples and implementation names below do not authorize additional scope.
+**Implemented in Feature #86 / Final PR #87, pending landing.** The checked-out implementation uses save V7; the released v0.5.0 line remains V6. This page records both the September 6 approval and the source-level implementation truth under review. It does not claim that the feature has merged into `dev` or that a V7 release exists.
 
-This is the next bounded development slice after Strategic Contact Reporting and the first selected contribution toward **Milestone 5 — Living Sector and Faction Autonomy**. It is not all of M5, does not complete M3, and does not rename the earlier contact-reporting slice to M3B. Design selection does not mean M5 runtime implementation has started. The current release remains v0.5.0, ship-definition content remains V4, and the implemented save schema remains V6.
+This is the first implemented contribution toward **Milestone 5 — Living Sector and Faction Autonomy** after Strategic Contact Reporting. It is not all of M5, does not complete M3, and does not rename the earlier contact-reporting slice to M3B. Ship-definition content remains V4. The branch implementation is V7 while the current v0.5.0 release remains V6.
 
-The documentation work does not implement a faction, controller, scheduler target, content family, save schema, or UI; does not publish a release; and does not start the later gameplay implementation. The subsequent implementation must use its own governed feature and acceptance evidence.
+The implementation adds no faction, affiliation, political hierarchy, or intelligence UI; it does not publish a release. Organizations, hierarchy traversal, information sharing, RNG, and a generic actor framework remain outside this slice.
 
 This page owns the bounded slice. The broader political framework remains authoritative for the principles it touches; the roadmap owns sequence, not additional design. Decisions D-08 through D-13 index the six approvals in the decision register. Existing ADRs already permit these choices; no new or amended ADR is required because no architectural boundary changes.
 
@@ -100,7 +100,7 @@ This implements ADR 0007's existing typed-target requirements; it does not super
 
 Reusable production faction definitions use strict JSON, schema validation, stable content identity, reference resolution, and semantic validation under ADR 0005. Keep immutable authored definition data separate from mutable faction state, objectives/commitments that affect continuation, direct ship control, and scheduler correlations. Do not put changing direct control into a reusable ship-class definition.
 
-The implementation is approved to introduce **save V7**, retaining the adjacent V1 → V2 → V3 → V4 → V5 → V6 → V7 chain. V7 is planned, not the current runtime format. Persist the consequential faction state, direct controller relationships, and exact typed scheduled work needed for deterministic continuation; derive rosters, projections, and caches rather than making them parallel durable authorities.
+The implementation introduces **save V7**, retaining the adjacent V1 → V2 → V3 → V4 → V5 → V6 → V7 chain. Released v0.5.0 remains V6. Persist the consequential faction state, direct controller relationships, and exact typed scheduled work needed for deterministic continuation; derive rosters, projections, and caches rather than making them parallel durable authorities.
 
 The V6 → V7 migration must produce an empty faction collection, null direct-controller references for all historical ships, and no faction decision state or faction-targeted work. Existing scheduled work becomes explicitly ship-targeted while retaining its identities, due times, sequence, correlations, and allocator continuation. Preserve all existing ship/world/knowledge state. Do not assign historical vessels to new-game factions or invent political history, objectives, reports, or affiliations.
 
@@ -122,9 +122,9 @@ No faction, affiliation, political hierarchy, or intelligence UI is added. Exist
 
 Do not implement global known-vessel identity, cross-observer correlation, report sharing, affiliation/intent learning, political attitudes, treaties, combat, diplomacy, organizations, governments, parent/child factions, layered jurisdiction, territory ownership, political resources/economy, canonical campaign generation, RNG, or a generic actor/rules framework. Do not select a complete organization taxonomy or complete M3 merely to label this slice finished.
 
-## Required implementation acceptance evidence
+## Implementation evidence and remaining acceptance evidence
 
-These are requirements for the later gameplay feature, not tests executed by this documentation change.
+Core policy, scheduler, bootstrap, runtime, content, and persistence tests exercise the implemented contracts below. Headless scenarios cover production baseline and committed alternate, forbidden-knowledge invariance, midflight V7 continuation, 30-day satisfied dormancy, two-patrol dormancy across 345,600 ordinary arrivals, and a finite-hold strategic wake. Godot compatibility tests cover private catalog loading, quick-load continuation, and malformed candidate rejection. The Final PR records exact verification commands and results.
 
 | Proof | Required evidence |
 | --- | --- |
@@ -134,11 +134,11 @@ These are requirements for the later gameplay feature, not tests executed by thi
 | Knowledge boundary | Vary hidden foreign truth and ship-local contact knowledge while keeping permitted faction facts fixed; the pure decision and explanation remain unchanged. |
 | Typed scheduler | Mixed Ship/Faction work preserves stable same-time ordering, exact correlation, and cancellation; wrong-domain, missing, and mismatched targets fail closed. |
 | Persistence | V7 round-trip and interrupted/continued scenario equivalence; V6 migration adds no political state, preserves ship work, and remains valid with zero factions; the supported adjacent chain passes. |
-| Bounded behavior | Deterministic long-horizon coverage for zero-time loops, starvation, oscillation, reassignment churn, dangling references, work growth, and maximum input/save shape. |
+| Bounded behavior | Tests cover dormancy, exact wake correlation, maximum input/save shape, the 111,544,212-byte maximum save (22,673,516 bytes below 128 MiB), and targeted 30-day/two-patrol long-horizon scenarios. |
 | Existing boundaries | Core remains independent of Godot; insertion/construction order cannot change semantic outcomes; no RNG or forbidden framework/dependency appears. |
 | Player regression | Existing production projection, input, save/load, and player-event behavior remain safe; no hidden faction information or preview truth enters the UI. |
 
-Run the canonical gate and appropriate focused negative, persistence, scenario, architecture, and Godot regression checks on the actual implementation. Update implementation status only after that work lands. Documentation approval alone satisfies none of the runtime evidence above.
+The implemented policy selects shortest direct route duration, then lowest ship identity; application revalidates an idle, directly controlled non-player ship before issuing ordinary `TravelTo`. Arrival wakes the faction after the ship arrival, and an objective becomes permanently `Satisfied` when presence exists. A pending objective is dormant only when it has no eligible candidate and no future hold or travel release boundary. A retained pending wake must be due now or at the next such release, with no assignment currently available; matching persisted correlation fields cannot authorize an arbitrary delay.
 
 ## Sources
 

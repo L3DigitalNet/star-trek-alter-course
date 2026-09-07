@@ -29,4 +29,4 @@
 | Task #70 | Merged / Done | Design wiki declared the single source of truth for design; Final PR #71 merged as `1b8eec4` into `dev`. |
 | Feature #77 | Merged / Done | Strategic Contact Reporting merged through Final PR #78 as squash `80c3084` into `dev`; released in v0.5.0. |
 | Task #80 | Merged / Done | v0.5.0 Final PR #82 released as `0547d06`; sync PR #83 put the release ancestry on `dev` at `e761249`. |
-| PR #84 design | Owner approved / Not implemented | First bounded M5 assignment proof and six pre-implementation decisions; no runtime or release change. |
+| Feature #86 / Final PR #87 | Implemented / Owner review pending | Bounded M5 faction assignment candidate targets `dev`; it is unmerged and unreleased. |

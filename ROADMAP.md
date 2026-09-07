@@ -14,10 +14,10 @@ The current operational state is tracked in [STATUS](docs/STATUS.md), while [Imp
 - **Milestone 1** and **Milestone 2** are implemented.
 - **Milestone 3A — First Observed Contact** is implemented, but **Milestone 3 as a whole is not complete**.
 - **Milestone 4 — Engineering Backbone and Degraded Operations** is implemented.
-- Content schema **V4** and save schema **V6** are current.
+- Released v0.5.0 uses content schema **V4** and save schema **V6**; the checked-out faction implementation uses strict faction content V1 and save V7 pending landing.
 - The approved [factions and organizations](docs/wiki/factions-and-organizations.md) political model is **design only**. No faction hierarchy, organization runtime, government model, treaty system, layered jurisdiction runtime, or strategic affiliation-knowledge system exists yet.
 - [Strategic Contact Reporting](docs/wiki/strategic-contact-reporting.md) is **implemented** (Feature #77, Final PR #78), resolving Q-01. It is not canonically named `M3B`, does not complete Milestone 3, and did not itself begin M5.
-- [Faction Intent and Autonomous Assignment](docs/wiki/faction-intent-and-autonomous-assignment.md) is the **next owner-approved design**, resolving Q-05 for the first bounded M5 slice. Gameplay implementation has not started; planned V7 is not the current save format.
+- [Faction Intent and Autonomous Assignment](docs/wiki/faction-intent-and-autonomous-assignment.md) is the implemented review-branch first M5 slice, resolving Q-05. It uses V7 pending landing; released v0.5.0 remains V6.
 
 ## Execution model
 
@@ -114,7 +114,7 @@ This is a **partial Milestone 3 outcome**. Strategic contacts, affiliation/inten
 
 **Implemented by Feature #62 / Final PR #63; included in v0.4.0.**
 
-Core owns bounded generation, power allocation, concrete sensor/impulse condition, derived capability, and deterministic system repair. Those values affect real sensor reach, tactical speed, scan continuity, AI inputs, persistence, and the live Engineering workspace. Content V4 is current. Save V5 is the schema introduced by this milestone; save V6, added later by Strategic Contact Reporting, is current.
+Core owns bounded generation, power allocation, concrete sensor/impulse condition, derived capability, and deterministic system repair. Those values affect real sensor reach, tactical speed, scan continuity, AI inputs, persistence, and the live Engineering workspace. Ship-definition content V4 is current. Save V5 was introduced by this milestone; Strategic Contact Reporting added released V6, and the faction implementation adds V7.
 
 The milestone intentionally stops short of a universal component system, arbitrary combat damage, detailed EPS topology, batteries, warp power, fuel, heat/coolant, repair teams/queues, shields, weapons, or crew simulation.
 
@@ -160,15 +160,15 @@ Evaluate remaining M3 scope against actual consumers. Q-02 and Q-03 remain open;
 
 ### Approved first bounded slice — Faction Intent and Autonomous Assignment
 
-**Owner-approved design, not implemented; documentation PR #84.** The [canonical wiki decision](docs/wiki/faction-intent-and-autonomous-assignment.md) records the selected era-neutral two-root-faction proof and six decisions D-08 through D-13. Q-05 is resolved for this first consumer; runtime implementation has not begun.
+**Implemented in Feature #86 / Final PR #87, pending landing.** The [canonical wiki decision](docs/wiki/faction-intent-and-autonomous-assignment.md) records the selected era-neutral root-faction proof and six decisions D-08 through D-13. Q-05 is resolved for this first consumer; neither M3 nor M5 is complete.
 
 Faction A selects an idle directly controlled NPC ship to establish presence at Vesper Reach, where B has a ship. Making A's preferred candidate already committed must change the selected valid assignment. The existing order, travel, and sensor paths produce an offscreen NPC-NPC consequence without player interaction. Presence does not imply political territory or a treaty effect.
 
 The policy uses only its objective, explicitly known proof-map topology, and own-asset identities/strategic states/order status. It does not consume external sensor reports. New control lives on the asset side with a derived roster; existing orders are not preempted and the player ship is excluded from faction autonomous assignment in the proof.
 
-The implementation will add closed Ship/Faction scheduled targets and typed bootstrap, and introduce V7 with a V6→V7 migration that creates zero factions, null ship controller links, and no faction work while preserving existing ship state and scheduling. Zero-faction worlds remain valid. No RNG, hierarchy runtime, organizations, political UI, intelligence network, or general actor framework is admitted.
+The implementation has closed Ship/Faction scheduled targets and typed bootstrap, and introduces V7 with a V6→V7 migration that creates zero factions, null ship controller links, and no faction work while preserving existing ship state and scheduling. Zero-faction worlds remain valid. No RNG, hierarchy runtime, organizations, political UI, intelligence network, or general actor framework is admitted.
 
-This slice is a contribution toward the broader goals below, not a claim that all M5 requirements are satisfied. Later governed consumers must resolve remaining intelligence/political choices when necessary. Implementation proceeds through its own feature and acceptance evidence after this documentation work.
+This slice is a contribution toward the broader goals below, not a claim that all M5 requirements are satisfied. Existing Core and Godot compatibility evidence cover policy, scheduler, runtime, content, persistence, private catalog loading, player-safe projection, and targeted production and long-horizon scenarios.
 
 ### Goal
 

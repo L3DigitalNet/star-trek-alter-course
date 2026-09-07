@@ -35,13 +35,15 @@ Model responsibilities according to systems, not UI screens. Existing `ShipState
 
 Avoid parallel mechanisms. New strategic decisions should consume established information projections and issue established domain commands where those fit. The political design does not authorize an entity framework, a universal faction/organization base class, or a generalized rules engine.
 
-## Approved next slice, not current runtime
+## Implemented faction slice under review
 
-[Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) is the selected first bounded M5 contribution. It will add stable faction identity and bounded consequential faction state in Core, one optional asset-side direct faction controller with a derived roster, and a pure policy issuing existing ship-order commands only to idle controlled NPC ships. The player ship is excluded from faction autonomous control in the proof.
+[Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) is implemented in Feature #86 / Final PR #87, pending landing. Core has stable root faction identity and bounded consequential state, one optional asset-side direct faction controller with a derived roster, and a pure policy that issues existing ship-order commands only to idle controlled NPC ships. The player ship is excluded from faction autonomous control in the proof.
 
-The policy input is a narrow own-asset administrative projection, not unrestricted world/ship state or a faction sensor network. The existing scheduler will gain closed Ship/Faction targets with exact typed validation and preserved ordering. Faction state, controller links, and initial work belong in typed bootstrap and complete candidate validation, not post-construction proof mutations.
+The policy input is a narrow own-asset administrative projection, not unrestricted world/ship state or a faction sensor network. The scheduler has closed Ship/Faction targets with exact typed validation and preserved ordering. Faction state, controller links, and initial work belong in typed bootstrap and complete candidate validation, not post-construction proof mutations.
 
-The implementation is approved to introduce V7 with a non-inventive V6→V7 migration and zero-faction validity. Current runtime remains V6 with ship-targeted scheduled work. No organization/controller abstraction, hierarchy runtime, random policy, new dependency/framework, or political UI is part of the slice. These choices implement existing ADRs 0005-0007 and 0010; no ADR is changed by this documentation approval.
+The implementation introduces V7 with a non-inventive V6→V7 migration and zero-faction validity. The released v0.5.0 runtime remains V6. No organization/controller abstraction, hierarchy runtime, random policy, new dependency/framework, or political UI is part of the slice. These choices implement existing ADRs 0005-0007 and 0010; no ADR changes.
+
+The Godot adapter loads faction content only to build a valid Core aggregate and preserve V7 save compatibility. It does not project hidden controller, faction, objective, or scheduled-work state; ordinary observed vessels remain available through existing player-safe contact projections. Malformed faction data fails without corrupting the live shell.
 
 ## Dependency choices
 

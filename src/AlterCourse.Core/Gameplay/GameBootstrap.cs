@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using AlterCourse.Core.Content;
+using AlterCourse.Core.Factions;
 using AlterCourse.Core.Identity;
 using AlterCourse.Core.Orders;
 using AlterCourse.Core.Ships;
@@ -12,25 +13,30 @@ namespace AlterCourse.Core.Gameplay;
 public sealed class GameBootstrap
 {
     private readonly ReadOnlyCollection<ShipStart> _shipStarts;
+    private readonly ReadOnlyCollection<FactionStart> _factionStarts;
 
     /// <summary>Initializes an immutable bootstrap declaration in canonical ship-identity order.</summary>
     public GameBootstrap(
         SimulationTime initialTime,
         StrategicMap strategicMap,
         ShipInstanceId playerShipId,
-        IEnumerable<ShipStart> shipStarts
+        IEnumerable<ShipStart> shipStarts,
+        IEnumerable<FactionStart>? factionStarts = null
     )
     {
         ArgumentNullException.ThrowIfNull(strategicMap);
         ArgumentNullException.ThrowIfNull(shipStarts);
         ShipStart[] materialized = shipStarts.Take(SimulationState.MaximumShips + 1).ToArray();
+        FactionStart[] materializedFactions = (factionStarts ?? []).Take(SimulationState.MaximumFactions + 1).ToArray();
         ValidateStarts(materialized, playerShipId);
+        ValidateFactionStarts(materializedFactions, materialized, playerShipId, strategicMap);
         ValidateInitialTime(initialTime);
 
         InitialTime = initialTime;
         StrategicMap = strategicMap;
         PlayerShipId = playerShipId;
         _shipStarts = Array.AsReadOnly(materialized.OrderBy(start => start.InstanceId.Value).ToArray());
+        _factionStarts = Array.AsReadOnly(materializedFactions.OrderBy(start => start.Id.Value).ToArray());
     }
 
     /// <summary>Gets the initial authoritative simulation time.</summary>
@@ -44,6 +50,58 @@ public sealed class GameBootstrap
 
     /// <summary>Gets ship declarations in ascending instance-identity order.</summary>
     public IReadOnlyList<ShipStart> ShipStarts => _shipStarts;
+
+    /// <summary>Gets faction declarations in ascending runtime-identity order.</summary>
+    public IReadOnlyList<FactionStart> FactionStarts => _factionStarts;
+
+    private static void ValidateFactionStarts(
+        FactionStart[] factions,
+        ShipStart[] ships,
+        ShipInstanceId playerShipId,
+        StrategicMap map
+    )
+    {
+        if (factions.Length > SimulationState.MaximumFactions || factions.Any(faction => faction is null))
+        {
+            throw new ArgumentException(
+                $"A bootstrap supports at most {SimulationState.MaximumFactions} nonnull faction starts.",
+                nameof(factions)
+            );
+        }
+
+        if (
+            factions.Any(faction => faction.Id.Value <= 0)
+            || factions.Select(faction => faction.Id).Distinct().Count() != factions.Length
+        )
+        {
+            throw new ArgumentException(
+                "Bootstrap faction starts require unique initialized identities.",
+                nameof(factions)
+            );
+        }
+
+        HashSet<FactionId> factionIds = [.. factions.Select(faction => faction.Id)];
+        if (ships.Any(ship => ship.DirectControllerFactionId is { } controller && !factionIds.Contains(controller)))
+        {
+            throw new ArgumentException("Every ship controller must resolve to a declared faction.", nameof(ships));
+        }
+
+        if (ships.Single(ship => ship.InstanceId == playerShipId).DirectControllerFactionId is not null)
+        {
+            throw new ArgumentException(
+                "The player ship cannot declare an autonomous faction controller.",
+                nameof(ships)
+            );
+        }
+
+        foreach (FactionStart faction in factions)
+        {
+            if (faction.PresenceTargetLocationId is { } target)
+            {
+                map.GetLocation(target);
+            }
+        }
+    }
 
     private static void ValidateStarts(ShipStart[] shipStarts, ShipInstanceId playerShipId)
     {
@@ -115,9 +173,14 @@ public sealed class GameBootstrap
     }
 
     /// <summary>Validates catalog-dependent declarations and creates a new live simulation.</summary>
-    public GameSimulation CreateSimulation(ShipDefinitionCatalog catalog)
+    public GameSimulation CreateSimulation(ShipDefinitionCatalog catalog) =>
+        CreateSimulation(catalog, FactionDefinitionCatalog.Empty);
+
+    /// <summary>Validates both definition catalogs and creates a faction-aware live simulation.</summary>
+    public GameSimulation CreateSimulation(ShipDefinitionCatalog catalog, FactionDefinitionCatalog factionCatalog)
     {
         ArgumentNullException.ThrowIfNull(catalog);
+        ArgumentNullException.ThrowIfNull(factionCatalog);
         var scheduler = SimulationScheduler.Create();
         var orderIdAllocator = ShipOrderIdAllocator.Create();
         List<ShipState> ships = [];
@@ -126,45 +189,11 @@ public sealed class GameBootstrap
         // sequences without exposing either scheduler concern to authored declarations.
         foreach (ShipStart start in _shipStarts)
         {
-            ShipDefinition definition = catalog.GetRequired(start.DefinitionId);
-            SystemRepairState? repair = CreateRepair(start, definition, ref scheduler);
-            var engineering = new ShipEngineeringState(
-                start.GenerationCondition,
-                start.SensorCondition,
-                start.ImpulseCondition,
-                start.Allocation,
-                repair
-            );
-            engineering.Validate(definition.Engineering);
-            double effectiveMaximumSpeed =
-                definition.MaximumTacticalSpeed.Value * engineering.ImpulseCapability(definition.Engineering);
-            if (start.TacticalMotion.Speed.Value > effectiveMaximumSpeed)
-            {
-                throw new ArgumentException("Tactical speed exceeds current effective propulsion.", nameof(catalog));
-            }
-
-            ShipStrategicState strategicState = start.Strategic switch
-            {
-                AtLocationStart atLocation => CreateAtLocation(atLocation),
-                TravelingStart traveling => CreateTraveling(start, traveling, ref scheduler),
-                _ => throw new ArgumentException("Ship strategic start kind is unsupported.", nameof(catalog)),
-            };
-            ShipOrder? activeOrder = CreateOrder(start, strategicState, ref scheduler, ref orderIdAllocator);
-            ships.Add(
-                new ShipState(
-                    start.InstanceId,
-                    start.DefinitionId,
-                    start.VesselDisplayName,
-                    start.TacticalPosition,
-                    start.TacticalMotion,
-                    engineering,
-                    strategicState,
-                    activeOrder
-                )
-            );
+            ships.Add(CreateShip(start, catalog, ref scheduler, ref orderIdAllocator));
         }
 
         long nextShipId = checked(_shipStarts[^1].InstanceId.Value + 1);
+        FactionState[] factions = CreateFactions(factionCatalog, ref scheduler);
         var candidate = new SimulationState(
             InitialTime,
             scheduler,
@@ -172,9 +201,79 @@ public sealed class GameBootstrap
             StrategicMap,
             PlayerShipId,
             ships,
-            orderIdAllocator
+            orderIdAllocator,
+            factions
         );
-        return GameSimulation.RestoreState(candidate, catalog);
+        return GameSimulation.RestoreState(candidate, catalog, factionCatalog);
+    }
+
+    private ShipState CreateShip(
+        ShipStart start,
+        ShipDefinitionCatalog catalog,
+        ref SimulationScheduler scheduler,
+        ref ShipOrderIdAllocator orderIdAllocator
+    )
+    {
+        ShipDefinition definition = catalog.GetRequired(start.DefinitionId);
+        SystemRepairState? repair = CreateRepair(start, definition, ref scheduler);
+        var engineering = new ShipEngineeringState(
+            start.GenerationCondition,
+            start.SensorCondition,
+            start.ImpulseCondition,
+            start.Allocation,
+            repair
+        );
+        engineering.Validate(definition.Engineering);
+        double maximumSpeed =
+            definition.MaximumTacticalSpeed.Value * engineering.ImpulseCapability(definition.Engineering);
+        if (start.TacticalMotion.Speed.Value > maximumSpeed)
+        {
+            throw new ArgumentException("Tactical speed exceeds current effective propulsion.", nameof(catalog));
+        }
+
+        ShipStrategicState strategic = start.Strategic switch
+        {
+            AtLocationStart atLocation => CreateAtLocation(atLocation),
+            TravelingStart traveling => CreateTraveling(start, traveling, ref scheduler),
+            _ => throw new ArgumentException("Ship strategic start kind is unsupported.", nameof(catalog)),
+        };
+        ShipOrder? order = CreateOrder(start, strategic, ref scheduler, ref orderIdAllocator);
+        return new ShipState(
+            start.InstanceId,
+            start.DefinitionId,
+            start.VesselDisplayName,
+            start.TacticalPosition,
+            start.TacticalMotion,
+            engineering,
+            strategic,
+            order,
+            directControllerFactionId: start.DirectControllerFactionId
+        );
+    }
+
+    private FactionState[] CreateFactions(FactionDefinitionCatalog catalog, ref SimulationScheduler scheduler)
+    {
+        List<FactionState> factions = [];
+        foreach (FactionStart start in _factionStarts)
+        {
+            catalog.GetRequired(start.DefinitionId);
+            EstablishPresenceObjectiveState? objective = start.PresenceTargetLocationId is { } target
+                ? new EstablishPresenceObjectiveState(target, FactionObjectiveStatus.Pending)
+                : null;
+            PendingFactionDecisionWake? pendingWake = null;
+            if (objective is not null)
+            {
+                (scheduler, ScheduledWork work) = scheduler.Schedule(
+                    InitialTime,
+                    ScheduledWorkTarget.ForFaction(start.Id),
+                    ScheduledWorkKind.FactionDecisionWake
+                );
+                pendingWake = new PendingFactionDecisionWake(work.Id, work.DueTime);
+            }
+            factions.Add(new FactionState(start.Id, start.DefinitionId, objective, pendingWake));
+        }
+
+        return [.. factions];
     }
 
     private SystemRepairState? CreateRepair(

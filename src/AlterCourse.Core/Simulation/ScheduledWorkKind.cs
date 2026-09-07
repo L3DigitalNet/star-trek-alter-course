@@ -20,4 +20,7 @@ internal enum ScheduledWorkKind
 
     /// <summary>Wakes one ship for an autonomous contact decision.</summary>
     ShipContactDecisionWake = 6,
+
+    /// <summary>Wakes one faction for an autonomous strategic decision.</summary>
+    FactionDecisionWake = 7,
 }
