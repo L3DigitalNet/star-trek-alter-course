@@ -15,6 +15,7 @@ related:
   - 'docs/wiki/README.md'
   - 'docs/wiki/decision-register.md'
   - 'docs/wiki/strategic-contact-reporting.md'
+  - 'docs/wiki/faction-intent-and-autonomous-assignment.md'
   - 'docs/wiki/implementation-status.md'
 ---
 
@@ -46,14 +47,15 @@ The wiki is the single source of truth for design; this catalog lists the docume
 
 ## Canonical wiki decisions and future design
 
-- [Strategic Contact Reporting](strategic-contact-reporting.md): implemented as the next development slice after v0.4.0 (Feature #77, Final PR #78); defines durable reference-frame-qualified actor-safe last-known contact reporting and explicit non-goals.
-- [Factions and organizations](factions-and-organizations.md): owner-approved conceptual political framework, explicitly unimplemented.
-- [Open questions](open-questions.md): Q-01 is resolved by Strategic Contact Reporting; Q-02 onward preserve deferred identity, affiliation, sharing, political, combat, campaign, and compatibility questions.
+- [Strategic Contact Reporting](strategic-contact-reporting.md): delivered in v0.5.0 (Feature #77, Final PR #78); durable reference-frame-qualified actor-safe last-known reporting, with its original non-goals preserved.
+- [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md): owner-approved next bounded M5 design, six preimplementation decisions, scenario, and acceptance contract; no runtime implementation yet.
+- [Factions and organizations](factions-and-organizations.md): owner-approved broad political framework, explicitly unimplemented; the first selected consumer uses roots only.
+- [Open questions](open-questions.md): Q-01 and the bounded Q-05 proof are resolved; Q-04/Q-14 have scoped answers, Q-06 uses an era-neutral fixture without selecting a campaign era, and wider questions remain deferred.
 
 ## Supporting design and specification documents
 
-- [Root overview and controls](../../README.md): present gameplay and source launch instructions.
-- [Development roadmap](../../ROADMAP.md): strategic direction, completed M1-M4 and Strategic Contact Reporting outcomes, and M5-M9 scope/refinement boundaries.
+- [Root overview and controls](../../README.md): present gameplay and source launch instructions, with the next approved design distinguished from runtime.
+- [Development roadmap](../../ROADMAP.md): delivered M1, M2, M3A, M4, and Strategic Contact Reporting; partial M3, the first approved M5 design, and M5-M9 scope/refinement boundaries.
 - [Command Deck UI](../design/command-deck-ui.md): approved shell, Engineering workspace, visual language, runtime Theme, and preview policy.
 - [First observed contact](../design/first-observed-contact.md): detailed M3A knowledge, scan/hail, cautious behavior, and V4-era contract; M4 supersedes its sensor-only Engineering description.
 - [Engineering Backbone](../design/engineering-backbone.md): current M4 rules, proof values, content V4, save V5 (superseded by V6), repair/scan correlations, and live UI.
@@ -80,6 +82,8 @@ The wiki is the single source of truth for design; this catalog lists the docume
 - [v0.4.0 release](https://github.com/L3DigitalNet/star-trek-alter-course/releases/tag/v0.4.0), [M3A feature #58](https://github.com/L3DigitalNet/star-trek-alter-course/issues/58), and [M4 feature #62](https://github.com/L3DigitalNet/star-trek-alter-course/issues/62).
 - [M3A PR #61](https://github.com/L3DigitalNet/star-trek-alter-course/pull/61) and [M4 PR #63](https://github.com/L3DigitalNet/star-trek-alter-course/pull/63): admission/test/manual evidence, not a fresh rerun in this wiki review.
 - [Strategic Contact Reporting documentation task #74](https://github.com/L3DigitalNet/star-trek-alter-course/issues/74): approval/provenance for the slice. [Strategic Contact Reporting feature #77](https://github.com/L3DigitalNet/star-trek-alter-course/issues/77) and [Final PR #78](https://github.com/L3DigitalNet/star-trek-alter-course/pull/78): implementation evidence.
+
+The [first faction-assignment decision](faction-intent-and-autonomous-assignment.md) records the owner's later September 6, 2026 approval. It is design provenance, not implementation evidence or a claim of a new release. Its planned V7 contract does not replace the current V6 runtime until a subsequent implementation lands.
 
 ## Visual references
 
