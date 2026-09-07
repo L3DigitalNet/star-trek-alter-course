@@ -37,6 +37,18 @@ A report must actually change a faction decision. A fixed dispatch timer, omnisc
 
 This work resolves only the direct ship-to-direct-faction reporting portion of Q-04 and the provenance needed to carry an observer-local contact reference. It does not create durable known-vessel identity, cross-observer correlation, affiliation/intent knowledge, hierarchy propagation, organizations, allies, or player intelligence feeds.
 
+## Approved decision mapping
+
+The [decision register](decision-register.md) is the stable SSOT for D-14 through D-18; this map points each approved decision to its governing contract here.
+
+| Decision | Owning contract in this page |
+| --- | --- |
+| **D-14** | Observation drives a complete information-to-action proof before combat. |
+| **D-15** | Direct historical reports preserve local provenance without shared live sensors or hidden truth. |
+| **D-16** | Each faction performs one bounded deterministic investigation response at a time. |
+| **D-17** | Adjacent non-inventive persistence preserves exact report and response continuation. |
+| **D-18** | M6 Tactical Combat Foundation follows this slice, with Engineering depth added through combat consumers. |
+
 ## Authority and information boundary
 
 Only an NPC ship with a direct controlling `FactionId` may publish through this first channel, and only to that direct controlling faction. The faction must have the observation-response posture enabled by typed new-game bootstrap. The player ship cannot publish through this channel, receive autonomous faction orders, or become a faction intelligence feed.
@@ -55,6 +67,8 @@ It must not contain or expose the hidden target `ShipInstanceId`, true controlle
 
 The recipient faction reads explicit received report snapshots plus its already-approved own-asset administrative facts and known proof-map routes. It does not receive a live union of controlled ships' sensor stores, unrestricted `SimulationState`, foreign `ShipState`, or hidden controller data.
 
+Every otherwise legitimate local contact is eligible for publication, including a contact whose target is in fact controlled by the observer's faction. Publication and receipt must never inspect the hidden target controller or infer affiliation to filter such a contact. The report remains about observed activity at a location, and the recipient still receives no target identity or controller.
+
 ## Publication episodes and delivery
 
 An eligible contact publication occurs only when the observer legitimately begins a new local observation episode:
@@ -62,11 +76,15 @@ An eligible contact publication occurs only when the observer legitimately begin
 1. the contact first becomes `Current`; or
 2. a previously `Lost` contact is legitimately reacquired and becomes `Current` again.
 
-Ordinary `Current` position refreshes, `Current→Stale`, `Stale→Lost`, scan completion, screen changes, save/load, and faction decision wakes do not create another report by themselves. Initial new-game sensor reconciliation may publish newly created Current contacts. V7→V8 migration must never mine existing contacts for reports that were never sent.
+Ordinary `Current` position refreshes, `Current→Stale`, `Stale→Current`, `Stale→Lost`, scan completion, screen changes, save/load, and faction decision wakes do not create another report by themselves. A `Stale→Current` transition continues the same observation episode; only a completed `Lost` transition followed by reacquisition begins a new episode. Initial new-game sensor reconciliation may publish newly created Current contacts. V7→V8 migration must never mine existing contacts for reports that were never sent.
 
 Delivery uses a deterministic **2,000 ms simulation-time delay**. `ObservedAt` remains the source observation time; receipt time is distinct. No wall-clock behavior, random delay, relay topology, range model, jamming, bandwidth economy, or communications-system simulation is introduced.
 
-Report payload lives in bounded authoritative Core state. Scheduled delivery uses the existing closed scheduler with a finite report-delivery work kind targeted to the recipient faction and exact report correlation. Delivery itself is a meaningful faction-decision boundary: after a valid receipt, Core evaluates faction decisions at that same simulation instant through the existing faction decision coordination path rather than creating an additional zero-time polling loop.
+Report payload lives in bounded authoritative Core state. Scheduled delivery uses the existing closed scheduler with a finite report-delivery work kind targeted to the recipient faction and exact report correlation. The exact in-flight report/work correlation is the sole delivery authority: once that correlation is removed, discarded delivery work cannot recreate the report.
+
+Core uses one shared, objective-independent faction evaluation pass. It is valid when the faction has no presence objective, a satisfied presence objective, or an outstanding pending faction wake. The existing single pending faction-wake slot coordinates the earliest justified future continuation across presence, investigation, and finite own-asset release; cancellation or rescheduling updates the faction correlation and scheduler work atomically.
+
+Delivery is a meaningful faction-decision boundary. Valid report receipts due for one faction at the same simulation instant are delivered in the scheduler's existing due-time then insertion-sequence order and coalesced into one evaluation request. A faction wake due at that instant is coalesced with the same request. Core drains the due work without adding a work-kind priority, then runs one shared pass for that faction at that instant: presence reconciliation and assignment first, investigation response second. This preserves scheduler ordering while preventing same-time insertion order from changing which concern evaluates first, and it creates no additional zero-time polling loop.
 
 If more than eight reports for one recipient faction are simultaneously in flight, no ninth in-flight report is admitted. When more than eight publications become eligible for that faction at the same occurrence time, deterministic admission is by lowest `(ObserverShipId, SensorContactId)`; declaration/insertion order must not change which eight are retained. A suppressed publication from that observation episode is not retried merely because capacity later becomes available.
 
@@ -77,13 +95,15 @@ Each faction may retain at most:
 - **8 in-flight reports**;
 - **16 received report snapshots**;
 - **1 active investigation**; and
-- the bounded location-response suppression state required by those retained reports.
+- **24 sparse location-completion watermarks**, bounded by the at most 8 in-flight plus 16 received witness locations.
 
 A received report is actionable while **`0 <= currentTime - ObservedAt < 60,000 ms`**; at exactly `ObservedAt + 60,000 ms` it is expired. Future observation times are invalid. Expiry is evaluated on receipt and other meaningful faction decision boundaries; it does not require polling. Exact duplicate delivery of the same report identity is idempotent and never creates a second response.
 
 When received retention would exceed 16 after expired/handled entries are removed, retain the 16 newest observations by `ObservedAt`, breaking ties by stable report identity. A report that loses that deterministic retention contest is discarded and cannot later reappear as fresh information. Implementation must preserve enough bounded causal bookkeeping that save/load, cache eviction, or a cooldown boundary cannot turn already-handled information into a new trigger.
 
-The implementation must measure the resulting V8 worst-case scheduler/save shape and keep it within the existing 128 MiB save envelope. It may refine internal constants downward if the proof demonstrates that these approved maxima cannot fit, but it must not silently enlarge the envelope or introduce a database/event log to avoid the bound.
+The implementation must derive scheduler capacity conservatively from the maximum allowed work shape, including all per-faction report-delivery slots. It must derive both the total consequence-execution budget and the same-boundary execution budget from the maximum reachable work and bounded consequences that can execute in one advancement or become due together. All three limits retain explicit finite-cycle guards; they must not be weakened merely to make a maximum-shape test pass. The maximum-shape proof must combine same-time report deliveries with the existing scheduled-work maximum and must obey real source-authority, player-exclusion, ship, and faction limits rather than constructing an unreachable fixture.
+
+The resulting V8 worst-case scheduler/save shape must remain within the existing 128 MiB save envelope. It may refine internal report constants downward if proof demonstrates that the approved maxima cannot fit, but it must not silently enlarge the envelope or introduce a database/event log to avoid the bound.
 
 ## Investigation policy
 
@@ -106,11 +126,13 @@ The result is a typed proposal or an explicit no-action explanation containing c
 
 Application revalidates recipient faction, report freshness/handling state, direct controller, non-player authority, idle order state, current strategic location, route legality, and absence of another active investigation. It issues the ordinary ship order/travel mechanism; it does not manufacture a presence objective or widen the existing presence-assignment policy input.
 
+If application revalidation rejects the proposal, the application is atomic: faction state, ship state, scheduler work, and report handling remain identical to their pre-application state, so the report remains unhandled. Core does not try another candidate or report, or reevaluate the rejected proposal, in the same pass. A retry may occur only at a later meaningful existing boundary, including a finite own-asset release, a new valid receipt, or an already-valid faction wake; expiry may instead make the report ineligible.
+
 ## Coexistence with existing faction intent
 
 `EstablishPresence` keeps its existing one-shot meaning. A satisfied presence objective never becomes a maintenance objective merely because reporting exists.
 
-At a shared faction decision boundary, existing presence-objective reconciliation/assignment is processed before investigation response. Report response then sees the resulting current own-asset commitments, so the same ship cannot receive both assignments. This may allow two different idle ships to receive distinct valid work at one decision boundary; it never preempts an existing order, voyage, hold, patrol, repair, or player command.
+At a shared faction decision boundary, existing presence-objective reconciliation/assignment is processed before investigation response, whether the presence objective is absent, satisfied, pending, or newly actionable. Report response then sees the resulting current own-asset commitments, so the same ship cannot receive both assignments. This may allow two different idle ships to receive distinct valid work at one decision boundary; it never preempts an existing order, voyage, hold, patrol, repair, or player command.
 
 If no report responder is currently available, the faction remains dormant until a meaningful existing boundary such as a finite own-asset release, a new report receipt, or another already-valid faction wake. No periodic faction polling is introduced.
 
@@ -122,7 +144,9 @@ On arrival, Core performs the ordinary local observation reconciliation at the r
 
 Completion marks the source report handled and records the faction's latest completed investigation time for that location. A report is response-eligible only when its `ObservedAt` is later than that location watermark. This means an observation produced by the arriving investigator during the same completion instant may be retained as knowledge but cannot immediately dispatch another ship. A later genuinely new observation episode after that watermark may justify a future response. Continuous unchanged contact does not create repeated demand.
 
-If the selected responder was already at the destination, Core performs the same ordinary observation/completion semantics atomically at the decision boundary without constructing a zero-distance `TravelTo` or a zero-time scheduler loop.
+A sparse location watermark remains authoritative while any in-flight or received report at that location has `ObservedAt` less than or equal to the watermark, even when the source report expires or is evicted. Completion records the watermark before admitting observation publications generated by the same-instant arrival. Watermark pruning occurs only after same-instant publication admission and received retention have settled, and only when no such witness report remains. Exact in-flight delivery authority prevents discarded work from replaying a removed witness.
+
+If the selected responder was already at the destination, Core performs the same ordinary observation/completion semantics atomically at the decision boundary without constructing a zero-distance `TravelTo` or a zero-time scheduler loop. This is legitimate even when the triggering report describes contact with another ship controlled by that same faction; it remains a location investigation based on actor-local sensing, without revealing or inferring the target's controller.
 
 ## Persistence and migration
 
@@ -144,17 +168,19 @@ Candidate/load validation is atomic and rejects duplicate report identities, mis
 
 ## Player-visible and NPC-only proofs
 
-The era-neutral production/proof scenario must make **both factions capable of acting as reporter and responder**. Each participating faction needs at least one directly controlled observer and another potentially eligible responder; add only the minimum content/starting state needed beyond the existing locations and ships.
+The era-neutral production/proof scenario must make **both factions independently capable of acting as reporter and responder**. For each faction, typed proof state identifies a directly controlled observer, a different potentially eligible responder, and a legal direct route from that responder to a location legitimately reported by that faction's observer. Multi-hop routing is outside this slice. Reuse existing locations, routes, and ships wherever they satisfy the proof, and add only the minimum content or starting-state changes needed; this contract does not approve particular new ships.
 
 Required paired proof:
 
 - without delivery, no information-driven faction assignment occurs;
 - after legitimate delayed delivery, the faction selects an eligible responder;
+- each faction independently completes the observer-to-faction-to-responder decision path under its own authority;
 - committing the preferred responder changes the selected eligible ship or produces an explicit no-action result;
 - the selected ship travels through ordinary strategic travel;
 - hidden movement of the originally observed target never changes the queued report or committed destination;
-- on arrival, only ordinary local sensing establishes what the responder knows; and
-- at least one complete reporter→faction→responder chain occurs between NPCs without player involvement.
+- on arrival, only ordinary local sensing establishes what the responder knows;
+- at least one complete reporter→faction→responder travel chain occurs between NPCs without player involvement; and
+- same-location completion, including completion following an own-asset contact report, is proved separately and cannot substitute for that complete travel chain or its without-delivery counterfactual.
 
 The player proof uses normal actor-safe consequences. A responder becomes visible only if the player's own sensors legitimately detect it. No faction debug panel, hidden report feed, target true ID, or autonomous-decision overlay is added to ordinary gameplay.
 
