@@ -421,13 +421,18 @@ public sealed class OrderExecutionTests
             routeDuration: new SimulationDuration(100)
         );
         var game = GameSimulation.RestoreState(state, catalog);
+        long failingAttempt = GameSimulation.TotalConsequenceExecutionBudget + 1L;
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            GameSimulation.AdvanceTo(state, new SimulationTime(1_000_100), catalog)
+            GameSimulation.AdvanceTo(state, new SimulationTime(failingAttempt * 100), catalog)
         );
 
-        Assert.Contains("10000 total consequence execution budget", exception.Message, StringComparison.Ordinal);
-        Assert.Contains("attempt 10001", exception.Message, StringComparison.Ordinal);
+        Assert.Contains(
+            $"{GameSimulation.TotalConsequenceExecutionBudget} total consequence execution budget",
+            exception.Message,
+            StringComparison.Ordinal
+        );
+        Assert.Contains($"attempt {failingAttempt}", exception.Message, StringComparison.Ordinal);
         Assert.Equal(state, game.CaptureState());
     }
 

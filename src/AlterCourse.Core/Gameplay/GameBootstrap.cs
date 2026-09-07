@@ -96,6 +96,14 @@ public sealed class GameBootstrap
 
         foreach (FactionStart faction in factions)
         {
+            if (!Enum.IsDefined(faction.ObservationResponsePosture))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(factions),
+                    "A faction start has an unsupported observation-response posture."
+                );
+            }
+
             if (faction.PresenceTargetLocationId is { } target)
             {
                 map.GetLocation(target);
@@ -270,7 +278,15 @@ public sealed class GameBootstrap
                 );
                 pendingWake = new PendingFactionDecisionWake(work.Id, work.DueTime);
             }
-            factions.Add(new FactionState(start.Id, start.DefinitionId, objective, pendingWake));
+            factions.Add(
+                new FactionState(
+                    start.Id,
+                    start.DefinitionId,
+                    objective,
+                    pendingWake,
+                    new FactionObservationState(start.ObservationResponsePosture)
+                )
+            );
         }
 
         return [.. factions];

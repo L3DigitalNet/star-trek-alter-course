@@ -10,6 +10,7 @@ internal sealed record FactionObservationState
     internal const int MaximumActiveInvestigations = 1;
     internal const int MaximumCompletionWatermarks = MaximumInFlightReports + MaximumReceivedReports;
     internal const long ReportFreshnessMilliseconds = 60_000;
+    internal const long ReportDeliveryDelayMilliseconds = 2_000;
 
     internal FactionObservationState(
         ObservationResponsePosture posture = ObservationResponsePosture.Disabled,

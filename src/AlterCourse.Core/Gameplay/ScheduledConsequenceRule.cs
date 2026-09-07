@@ -11,4 +11,5 @@ internal enum ScheduledConsequenceRule
     ActiveSensorScanCompletion = 7,
     ShipContactDecisionWake = 8,
     FactionDecisionWake = 9,
+    ObservationReportDelivery = 10,
 }
