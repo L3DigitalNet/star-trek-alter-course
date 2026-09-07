@@ -1865,11 +1865,30 @@ func _replace_saved_object_field(
 	identity_name: String,
 	identity_value: int,
 	field_name: String,
-	old_value: int,
-	new_value: int
+	old_value,
+	new_value
 ) -> String:
 	# Preserve every other raw JSON token while bounding the edit to one parsed object's stable identity.
 	# Re-serializing through Variant can normalize strict integer tokens and make the fixture fail for the wrong reason.
+	var field_match := _find_saved_object_field(
+		source, collection_name, identity_name, identity_value, field_name
+	)
+	var value_pattern := RegEx.new()
+	assert_int(
+		value_pattern.compile('\\s*%s(?=\\s*[,}])' % str(old_value))
+	).is_equal(OK)
+	var value_match := value_pattern.search(source, field_match.get_end())
+	assert_object(value_match).is_not_null()
+	return source.left(value_match.get_start()) + str(new_value) + source.substr(value_match.get_end())
+
+
+func _find_saved_object_field(
+	source: String,
+	collection_name: String,
+	identity_name: String,
+	identity_value: int,
+	field_name: String
+) -> RegExMatch:
 	var collection_index := source.find('"%s"' % collection_name)
 	assert_int(collection_index).is_greater_equal(0)
 	var identity_pattern := RegEx.new()
@@ -1879,18 +1898,14 @@ func _replace_saved_object_field(
 	var identity_match := identity_pattern.search(source, collection_index)
 	assert_object(identity_match).is_not_null()
 	var field_pattern := RegEx.new()
-	assert_int(
-		field_pattern.compile('"%s"\\s*:\\s*%d' % [field_name, old_value])
-	).is_equal(OK)
+	assert_int(field_pattern.compile('"%s"\\s*:' % field_name)).is_equal(OK)
 	var field_match := field_pattern.search(source, identity_match.get_end())
 	assert_object(field_match).is_not_null()
 	var next_identity_pattern := RegEx.new()
 	assert_int(next_identity_pattern.compile('"%s"\\s*:' % identity_name)).is_equal(OK)
 	var next_identity := next_identity_pattern.search(source, identity_match.get_end())
 	assert_bool(next_identity == null or field_match.get_start() < next_identity.get_start()).is_true()
-	return source.left(field_match.get_start()) + '"%s":%d' % [field_name, new_value] + source.substr(
-		field_match.get_end()
-	)
+	return field_match
 
 
 func _replace_once(source: String, old_value: String, new_value: String) -> String:
@@ -1903,39 +1918,51 @@ func _replace_once(source: String, old_value: String, new_value: String) -> Stri
 func _rewrite_v5_for_damaged_impulse(save_text: String) -> String:
 	# Godot's JSON parser normalizes integer tokens through Variant; targeted structural edits keep the strict
 	# persistence contract intact while constructing one otherwise unreachable damaged-impulse test fixture.
-	var engineering_start := save_text.find('"engineering":')
-	var impulse_member := save_text.find('"impulseCondition": 1', engineering_start)
-	assert_int(engineering_start).is_greater_equal(0)
-	assert_int(impulse_member).is_greater(engineering_start)
-	var impulse_value := impulse_member + '"impulseCondition": '.length()
-	save_text = save_text.left(impulse_value) + "0.5" + save_text.substr(impulse_value + 1)
-
-	var repair_member := save_text.find('"activeRepair": {', engineering_start)
-	var repair_value_start := save_text.find("{", repair_member)
-	var repair_value_end := save_text.find("}", repair_value_start)
-	assert_int(repair_member).is_greater(engineering_start)
-	assert_int(repair_value_start).is_greater(repair_member)
-	assert_int(repair_value_end).is_greater(repair_value_start)
-	var repair: Dictionary = JSON.parse_string(
-		save_text.substr(repair_value_start, repair_value_end - repair_value_start + 1)
+	var parsed: Dictionary = JSON.parse_string(save_text)
+	var simulation: Dictionary = parsed.get("simulation", {})
+	var player_ship_id := int(simulation.get("playerShipId", 0))
+	var player_ship := _find_saved_ship(simulation.get("ships", []), player_ship_id)
+	var repair: Dictionary = player_ship.get("engineering", {}).get("activeRepair", {})
+	var repair_work_id := int(repair.get("scheduledCompletionId", 0))
+	assert_int(player_ship_id).is_greater(0)
+	assert_bool(repair.is_empty()).is_false()
+	assert_int(repair_work_id).is_greater(0)
+	save_text = _replace_saved_object_field(
+		save_text, "ships", "instanceId", player_ship_id, "impulseCondition", 1, 0.5
 	)
-	var repair_work_id := int(repair["scheduledCompletionId"])
+
+	var repair_member := _find_saved_object_field(
+		save_text, "ships", "instanceId", player_ship_id, "activeRepair"
+	)
+	var repair_value_start := save_text.find("{", repair_member.get_end())
+	var repair_value_end := save_text.find("}", repair_value_start)
+	assert_int(repair_value_start).is_greater_equal(repair_member.get_end())
+	assert_int(repair_value_end).is_greater(repair_value_start)
 	save_text = save_text.left(repair_value_start) + "null" + save_text.substr(repair_value_end + 1)
 
-	var work_kind := save_text.find('"kind": "systemRepairCompletion"')
-	var work_start := save_text.rfind("{", work_kind)
-	var work_end := save_text.find("}", work_kind)
-	assert_int(work_kind).is_greater_equal(0)
+	var work_id_match := _find_saved_object_field(
+		save_text, "outstandingWork", "id", repair_work_id, "kind"
+	)
+	var work_start := save_text.rfind("{", work_id_match.get_start())
+	var work_end := save_text.find("}", work_id_match.get_end())
 	assert_int(work_start).is_greater_equal(0)
-	assert_int(work_end).is_greater(work_kind)
+	assert_int(work_end).is_greater(work_id_match.get_end())
 	var work: Dictionary = JSON.parse_string(save_text.substr(work_start, work_end - work_start + 1))
-	assert_int(int(work["id"])).is_equal(repair_work_id)
+	assert_str(work.get("kind", "")).is_equal("systemRepairCompletion")
+	assert_int(int(work.get("targetShipId", 0))).is_equal(player_ship_id)
+	var removal_start := work_start
 	var removal_end := work_end + 1
 	while removal_end < save_text.length() and save_text[removal_end] in [" ", "\n", "\r", "\t"]:
 		removal_end += 1
 	if removal_end < save_text.length() and save_text[removal_end] == ",":
 		removal_end += 1
-	return save_text.left(work_start) + save_text.substr(removal_end)
+	else:
+		var preceding := work_start - 1
+		while preceding >= 0 and save_text[preceding] in [" ", "\n", "\r", "\t"]:
+			preceding -= 1
+		assert_bool(preceding >= 0 and save_text[preceding] == ",").is_true()
+		removal_start = preceding
+	return save_text.left(removal_start) + save_text.substr(removal_end)
 
 
 func _remove_quick_save_files() -> void:
