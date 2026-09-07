@@ -245,7 +245,7 @@ public sealed class GamePersistenceV4SensorTests
         Assert.Equal(255, SensorKnowledge.MaximumContactsPerObserver);
         Assert.Equal(65_280, contactLossMaximum);
         Assert.Equal(66_560, conservativeMaximum);
-        Assert.Equal(SimulationScheduler.MaximumOutstandingWork, conservativeMaximum);
+        Assert.Equal(SimulationScheduler.MaximumOutstandingWork, conservativeMaximum + SimulationState.MaximumFactions);
     }
 
     /// <summary>Confirms the maximum retained-contact graph has a bounded, stable V6 representation.</summary>
