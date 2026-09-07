@@ -14,6 +14,7 @@ aliases: []
 related:
   - 'docs/wiki/decision-register.md'
   - 'docs/wiki/open-questions.md'
+  - 'docs/wiki/faction-intent-and-autonomous-assignment.md'
   - 'docs/adr/0010-use-explainable-domain-ai-and-demand-driven-state-machines.md'
   - 'ROADMAP.md'
 source:
@@ -26,11 +27,21 @@ source:
 
 ## Status and provenance
 
-**Approved conceptual design; not implemented.** This page records the owner's explicit decisions in the September 6, 2026 design discussion consolidated under issue #68. It is the canonical record of those decisions, not a schema, a complete political simulation specification, or authorization to implement every example now.
+**Approved conceptual design; not implemented.** This page records the owner's explicit decisions in the September 6, 2026 design discussion consolidated under issue #68. It is the canonical record of the broad political framework, not a schema, a complete political simulation specification, or authorization to implement every example now.
 
-The owner repeatedly asked to remain at high level and stopped refinement here. Detailed authority matrices, constitutional procedures, scoring formulas, political action catalogs, and succession mechanics remain deferred. The current v0.4.0 implementation contains no faction hierarchy, organization runtime, diplomatic relationship state, government control, or layered jurisdiction model.
+The owner initially stopped refinement to avoid premature detail, then approved [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) as the first bounded consumer after v0.5.0. That page owns the six preimplementation decisions and proof scenario. Detailed constitutional procedures, political action catalogs, succession, and the broader intelligence model remain deferred. The current v0.5.0 runtime contains no faction hierarchy, organization runtime, diplomatic relationship state, government control, or layered jurisdiction model.
 
 Examples illustrate desired game behavior. They are not claims about exact Star Trek constitutional law, a selected campaign epoch, or an exhaustive canonical taxonomy.
+
+## First approved implementation slice
+
+[Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) is approved design only: two era-neutral root factions, a constrained choice among directly controlled idle NPC ships, ordinary offscreen travel, and an NPC-NPC sensor/contact consequence. The full M5 autonomous-world proof remains larger than this initial assignment slice.
+
+The first representation permits zero or one asset-side direct controlling `FactionId`, with a derived roster and no order preemption or autonomous control of the player ship. Organizations and hierarchy runtime are not required. This does not make the eventual controller model permanently faction-only or revoke organization-controlled assets below.
+
+A faction receives only the own-asset administrative identity, strategic state, and order/assignment status required for assignment, plus its own objective and known topology. It does not inherit its ships' sensor knowledge or reveal true controllers to observers. Q-04 is only partially resolved; external intelligence sharing and Q-02/Q-03 remain open.
+
+The approved first slice also selects a closed Ship/Faction scheduler target, typed political bootstrap, planned save V7 with migration that invents no factions/control, and no randomness or new faction/affiliation UI. These are applications of the existing ADRs, not approval to implement the entire political surface below.
 
 ## Autonomous factions at several political scales
 
@@ -42,7 +53,7 @@ Species and culture are separate from political faction identity. The Vulcan mem
 
 ## Structural hierarchy, political role, and labels
 
-There are three supported faction depths for the first implementation: root, child, and grandchild, conventionally depth 0, 1, and 2. Use one recursive parentage model with an initial three-level limit, not three different faction classes or three permanently nested schema shapes. Extending depth later should not require replacing faction identity or rewriting every consumer.
+The approved hierarchy design supports root, child, and grandchild factions, conventionally depth 0, 1, and 2. When hierarchy is implemented, use one recursive parentage model with an initial three-level limit, not three different faction classes or three permanently nested schema shapes. Extending depth later should not require replacing faction identity or rewriting every consumer. The first approved faction-assignment slice uses roots only and does not require implementing hierarchy now.
 
 The approved human-readable labels are **Polity / Constituent / Internal**. These are organizational/navigation shorthand, not types that determine legal powers. A separate political role describes the actual actor: federation, empire, member polity, Great House, lesser house, political movement, or another justified role.
 
@@ -98,7 +109,7 @@ Territory and jurisdiction can be layered. A location can be governed by a const
 
 Ships, installations, fleets, and other assets should have one direct controlling faction or organization. Broader affiliation and applicable authority are derived through that controller's political relationships. Conceptually, a ship can be directly controlled by Starfleet and associated with the Federation, or controlled by a Great House within the Klingon Empire.
 
-Direct control, layered jurisdiction, and observer-known affiliation remain different facts. Deriving an asset's true political context does not authorize revealing that entire chain to sensors, UI, or AI. No asset-controller or faction-affiliation fields exist in current `ShipState`; these are future-domain requirements, not changes to the v0.4.0 save contract.
+Direct control, layered jurisdiction, and observer-known affiliation remain different facts. Deriving an asset's true political context does not authorize revealing that entire chain to sensors, UI, or AI. No asset-controller or faction-affiliation fields exist in the v0.5.0 `ShipState`; the first faction slice approves a narrow future controller link, not a change to current runtime or save V6 merely through documentation.
 
 ## Government is not the enduring polity
 
@@ -112,4 +123,4 @@ Structural parentage, governing control, coalition membership, and direct asset 
 
 Build only the smallest political slice that proves a real causal chain. Preserve actor-specific knowledge, deterministic scheduling, typed commands, explicit persistence, and meaningful offscreen activity. Existing ADRs still govern those boundaries.
 
-Before implementation, refine only questions required by that slice. [Open questions](open-questions.md) records the remaining high-level choices, including initial scope, intelligence sharing, identity, campaign era, and the presentation of atypical hierarchy branches. It does not reopen the approved principles above.
+The first slice's required decisions are recorded in [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md). [Open questions](open-questions.md) records scoped resolutions and the remaining intelligence, identity, campaign, political, and presentation choices. Do not reopen settled principles or broaden this bounded approval to cover the full political model.
