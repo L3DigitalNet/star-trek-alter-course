@@ -14,7 +14,7 @@ aliases: []
 related:
   - 'docs/adr/0005-use-json-and-schema-validation-for-domain-content.md'
   - 'docs/adr/0006-use-versioned-json-snapshot-saves.md'
-  - 'docs/specs/asset-pipeline-tool.md'
+  - 'docs/wiki/asset-pipeline-tool.md'
   - 'docs/wiki/strategic-contact-reporting.md'
   - 'docs/wiki/faction-intent-and-autonomous-assignment.md'
 ---
@@ -43,7 +43,9 @@ ADR 0006 selects explicit versioned JSON snapshots, not serialization of live C#
 
 Released save V6 uses rules identity `strategic-contact-reporting-v1` and includes every ship, player identity, strategic/tactical state, Engineering condition/allocation/repair, active orders, actor-local contacts, scans, contact posture, the observation-location frame on each contact, correlated scheduled work, and counters. `KnownContactReports` is derived from that retained knowledge, not a separately serialized UI authority.
 
-The released V6 line supports adjacent migrations V1→V2→V3→V4→V5→V6; current `dev` extends this through V7 as described below. V1 reconstructs the representable single ship in a plural world; V3 adds orders without inventing historical intentions; V4 adds empty knowledge/no autonomous posture to older saves; V5 maps sensor integrity/repair into Engineering while preserving compatible historical capability and exact completion identity; V6 sets a null observation-location frame on every legacy contact and derives nothing, so a migrated contact stays on the tactical surface without appearing in strategic reports until a new qualifying observation is recorded. The detailed migration contract remains in [Engineering Backbone](../design/engineering-backbone.md), [Strategic Contact Reporting](strategic-contact-reporting.md), and [GamePersistence](../../src/AlterCourse.Core/Persistence/GamePersistence.cs).
+The released V6 line supports adjacent migrations V1→V2→V3→V4→V5→V6; current `dev` extends this through V7 as described below. V1 reconstructs the representable single ship in a plural world; V3 adds orders without inventing historical intentions; V4 adds empty knowledge/no autonomous posture to older saves; V5 maps sensor integrity/repair into Engineering while preserving compatible historical capability and exact completion identity; V6 sets a null observation-location frame on every legacy contact and derives nothing, so a migrated contact stays on the tactical surface without appearing in strategic reports until a new qualifying observation is recorded. [Engineering and combat](engineering-and-combat.md), [Strategic Contact Reporting](strategic-contact-reporting.md), and [GamePersistence](../../src/AlterCourse.Core/Persistence/GamePersistence.cs) carry the current detail.
+
+The adjacent migrations deliberately supply only values that the next schema requires to represent the old world. V1 uses the referenced definition's design label once because V1 had no vessel name; V2 persists that resolved name. V2→V3 initializes the order allocator and leaves every historical `ActiveOrder` absent. V3→V4 creates empty sensor knowledge, allocator value 1, no active scan, contact posture, or decision wake. V4→V5 maps sensor integrity and any sensor repair into Engineering, initializes nominal generation and impulse condition, retains the exact repair correlation, and uses full allocations only where the V4-authored generation can meet both demands. These are migration facts, not permission to infer later intent, knowledge, or political history.
 
 Loading validates an entire candidate before replacing the live simulation. The current bounded envelope is 128 MiB; V6 records a 106,775,347-byte maximum-shape serialization test (previously 95,677,740 bytes under V5), not a normal four-ship save size. These are present admission bounds, not a rationale to redesign storage without measurement.
 
@@ -57,13 +59,13 @@ V7 uses rules identity `faction-intent-autonomous-assignment-v1`; V6's `strategi
 
 Zero-faction worlds must remain valid. New-game typed bootstrap may create the proof's factions; loading a migrated save must not rerun that initialization. Persist consequential faction state, direct control, and exact typed Ship/Faction work; derive rosters and projections rather than duplicating authority. No faction/organization placeholder or RNG state is required.
 
-Candidate validation rejects missing or wrong-domain targets, bad correlations, and corrupted JSON before replacing live state. Maximum-shape coverage measures 111,544,212 bytes for 256 ships, 256 factions, full contacts, and 66,302 work items: 22,673,516 bytes below the unchanged 128 MiB envelope. The released v0.5.0 line remains V6.
+Candidate validation rejects missing or wrong-domain targets, bad correlations, and corrupted JSON before replacing live state. It validates the envelope's schema and rules identity, required members, metadata, every reference and counter, and then constructs a complete candidate before a load can replace live state. The 128 MiB UTF-8 envelope and depth-32 JSON input limits apply before the candidate becomes authoritative. Maximum-shape coverage measures 111,544,212 bytes for 256 ships, 256 factions, full contacts, and 66,302 simultaneously valid work items: 22,673,516 bytes below the unchanged 128 MiB envelope. The wider scheduler admission ceiling is 66,816; the lower test population reflects the incompatible per-ship commitments in that constructed world. The released v0.5.0 line remains V6.
 
 Godot compatibility evidence is complete: the shell loads both catalogs, accepts valid V7 quick-load continuation, and leaves its live state usable when faction/controller JSON is malformed. It exposes none of this data in the player UI. Targeted headless continuation and long-horizon scenarios also pass.
 
 ## AssetCtl pipeline
 
-AssetCtl is standalone .NET 10 development infrastructure, separate from both game assemblies. It searches the tracked catalog, plans routes, obtains candidates, mechanically validates untrusted bytes, selects/publishes assets with manifests, and retains provenance. The full [asset pipeline specification](../specs/asset-pipeline-tool.md) remains the detailed contract; this summary is not its replacement.
+AssetCtl is standalone .NET 10 development infrastructure, separate from both game assemblies. It searches the tracked catalog, plans routes, obtains candidates, mechanically validates untrusted bytes, selects/publishes assets with manifests, and retains provenance. The full [asset pipeline contract](asset-pipeline-tool.md) remains the detailed contract; this summary is not its replacement.
 
 Tracked YAML under [config/assets](../../config/assets/) describes provider instances, capabilities, routes, models, quality/style choices, and manifests. This is development/presentation metadata, not Core game content. Existing adapters and configured options do not imply an external provider is enabled or tested live in this review.
 
@@ -75,4 +77,4 @@ Store only credential environment-variable names in tracked asset configuration.
 
 ## Sources
 
-[Content ADR](../adr/0005-use-json-and-schema-validation-for-domain-content.md), [save ADR](../adr/0006-use-versioned-json-snapshot-saves.md), [asset specification](../specs/asset-pipeline-tool.md), [AssetCtl admission](../dependency-admission/assetctl.md), [JsonSchema.Net admission](../dependency-admission/jsonschema-net-core.md), and [asset development workflow](../development-quality.md).
+[Content ADR](../adr/0005-use-json-and-schema-validation-for-domain-content.md), [save ADR](../adr/0006-use-versioned-json-snapshot-saves.md), [asset pipeline contract](asset-pipeline-tool.md), [persistence implementation](../../src/AlterCourse.Core/Persistence/GamePersistence.cs), [V7 persistence tests](../../tests/AlterCourse.Core.Tests/Persistence/GamePersistenceV7FactionTests.cs), [AssetCtl admission](../dependency-admission/assetctl.md), [JsonSchema.Net admission](../dependency-admission/jsonschema-net-core.md), and [asset development workflow](../development-quality.md).

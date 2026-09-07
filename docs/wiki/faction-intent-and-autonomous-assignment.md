@@ -21,7 +21,7 @@ related:
   - 'docs/adr/0006-use-versioned-json-snapshot-saves.md'
   - 'docs/adr/0007-use-deterministic-simulation-time-scheduling-and-randomness.md'
   - 'docs/adr/0010-use-explainable-domain-ai-and-demand-driven-state-machines.md'
-  - 'ROADMAP.md'
+  - 'docs/wiki/milestone-proofs.md'
 ---
 
 # Faction Intent and Autonomous Assignment
@@ -92,7 +92,7 @@ Persist target kind with its correctly typed identity. Validate that each target
 
 Reuse the existing simulation clock, stable work identities, persisted same-time sequence, cancellation/correlation rules, serialized mutation, and bounded advancement. Same-time ordering must not come from target-kind enum order or collection iteration. Faction decisions wake at meaningful strategic boundaries, not in a separate loop polling every faction at tactical frequency. Define bounded reevaluation/no-action behavior without zero-time loops or assignment churn.
 
-Faction starts, direct controller links, consequential initial faction state, and decision wakes belong in typed bootstrap and complete candidate validation. Do not add post-construction proof-only `BootstrapHiddenFaction...` mutations or serialize executable callbacks. No generalized bootstrap/scenario language is admitted.
+Faction starts, direct controller links, consequential initial faction state, and decision wakes belong in typed bootstrap and complete candidate validation. Bootstrap schedules pre-existing ship work before faction work, so an initial faction wake sees the complete strategic state it is meant to evaluate. Do not add post-construction proof-only `BootstrapHiddenFaction...` mutations or serialize executable callbacks. No generalized bootstrap/scenario language is admitted.
 
 This implements ADR 0007's existing typed-target requirements; it does not supersede that ADR. Root factions are sufficient for the proof. The approved eventual recursive parentage model remains unchanged, but parent/child runtime and hierarchy traversal are not required here.
 
@@ -108,7 +108,7 @@ The V6 → V7 migration must produce an empty faction collection, null direct-co
 
 A valid world must support **zero factions**. New-game/bootstrap content may introduce the proof's factions; loading a migrated campaign does not rerun new-game initialization. Null historical controller references express absence of modeled control, not newly learned political information.
 
-Load a complete validated candidate before replacing live state; failure leaves the running simulation unchanged. Validate bounds, missing/wrong-domain references, duplicate identities, work ownership, counters, and compatible definitions. Recheck maximum-shape save/work bounds when adding faction data; do not assume the existing 128 MiB envelope has unlimited room or silently increase it.
+Load a complete validated candidate before replacing live state; failure leaves the running simulation unchanged. Validate bounds, schema/rules identity, missing or wrong-domain references, duplicate identities, work ownership, counters, and compatible definitions. Recheck maximum-shape save/work bounds when adding faction data; do not assume the existing 128 MiB envelope has unlimited room or silently increase it.
 
 This approval preserves development-save compatibility through the new adjacent migration. It does not promise indefinite support for all later pre-1.0 formats or prescribe speculative faction, organization, or intelligence schemas.
 
