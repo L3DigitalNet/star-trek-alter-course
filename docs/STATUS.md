@@ -16,5 +16,7 @@
 - The tracked launch script restores and builds before Godot starts, preventing stale local Debug content after branch changes.
 - [Design wiki](wiki/README.md) is the single source of truth; the bounded direct-faction assignment is implemented while organization and hierarchy runtime remain future work.
 - M3 and M5 remain incomplete. The merged slice adds no dependencies or UI; broader political runtime is future work, no release followed, and `main` is unchanged.
-- Task #88 / Final PR #89 merged as `aa3df33`; it consolidates game contracts in the wiki, removes superseded design records, and adds recurring reconciliation.
-- All five PR checks and post-merge CI passed. The merged tree matches tested `0eed9b4`; no release followed and `main` remains `0547d06`.
+- Design phase Final PR #92 merged as `ad73862`; Task #91 is Done and invalid staging PR #90 was closed unmerged; its branch was deleted.
+- PR #92 passed all five final-head checks, Branch policy, and post-merge Verify; design docs and ROADMAP changed without runtime code.
+- Feature #93 passed Ready admission and is In progress for the approved observation-driven faction response; no implementation PR exists yet.
+- Save V7 remains unchanged while Feature #93 is unimplemented. M6 follows response work and Q-10 admission; M3 and M5 remain incomplete.
