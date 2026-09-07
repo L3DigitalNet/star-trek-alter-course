@@ -16,13 +16,17 @@ Use the repo-local `agent-handoff` skill at session startup and closeout. Do not
 - Fix compiler, analyzer, formatting, and test failures at their cause. Never weaken central settings or add suppression merely to pass CI.
 - Keep pure simulation/domain code in `AlterCourse.Core` independent from Godot. Add behavioral and regression tests at the lowest applicable layer.
 
-## Design authority
+## Design authority and wiki workflow
 
-- `docs/wiki/` is the single source of truth for game design. Read the owning wiki page before work that adds or changes a system's behavior, and record the design change on that page in the same pull request.
-- Keep game-design detail, formulas, state transitions, and milestone acceptance contracts inside `docs/wiki/`; do not create parallel design/specification documents outside it. `ROADMAP.md` owns sequence, README owns onboarding, and operational records own work state. ADRs retain their architectural decision role.
-- Do not approve design in prose. Unapproved ideas go to `docs/wiki/open-questions.md`; architectural boundaries change only through an ADR.
-- Follow `docs/wiki/development-and-governance.md#recurring-design-reconciliation` at task start/resume, each behavior or bug-fix checkpoint, before Ready, and merge/release closeout. Check `docs/wiki/sources.md#review-record` at startup; complete overdue seven-day full sweeps before new behavior work.
-- Record named wiki pages and source/test evidence in PR Acceptance coverage. Correct related drift in the same work. Bugs restore approved design; unforeseen behavior changes require explicit design resolution and same-change wiki reconciliation, not silent approval through code.
+`docs/wiki/` is the game-design SSOT.
+
+1. Start at [wiki home](docs/wiki/README.md). Read the owning page and linked contracts/ADRs. Check implementation status, decisions and open questions; approved design is not necessarily implemented.
+2. Check `docs/wiki/sources.md#review-record` on startup/resume. Compare affected claims with source, schemas and tests. The wiki defines intended behavior; code shows actual behavior. Separate released and unreleased claims.
+3. Fix bugs toward approved design; cite an already-exact page and regression. Resolve open product choices with the owner before changing design. Unapproved ideas go to open questions; architecture changes require an ADR.
+4. Reconcile related pages in the same work at behavior/bug checkpoints, before Ready, after material revisions and at merge/release.
+5. Follow the [review procedure](docs/wiki/development-and-governance.md#recurring-design-reconciliation) for evidence, PR coverage and seven-day active-work/pre-release sweeps. Catch up overdue sweeps on resume. Targeted reviews do not reset their date; formatting is not semantic proof.
+
+Keep game contracts in the wiki, not parallel specs. Match this section in AGENTS.md and CLAUDE.md.
 
 ## Visual asset workflow
 
