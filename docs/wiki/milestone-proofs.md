@@ -14,6 +14,7 @@ aliases: []
 related:
   - 'ROADMAP.md'
   - 'docs/wiki/implementation-status.md'
+  - 'docs/wiki/observation-driven-faction-response.md'
   - 'docs/wiki/open-questions.md'
 ---
 
@@ -33,6 +34,7 @@ This page owns the milestone acceptance boundaries formerly carried by the root 
 - The broader approved [factions and organizations](factions-and-organizations.md) political model remains **design only** beyond the implemented root-faction/direct-control subset. No faction hierarchy, organization runtime, government model, treaty system, layered jurisdiction runtime, or strategic affiliation-knowledge system exists yet.
 - [Strategic Contact Reporting](strategic-contact-reporting.md) is **implemented** (Feature #77, Final PR #78), resolving Q-01. It is not canonically named `M3B`, does not complete Milestone 3, and did not itself begin M5.
 - [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) is the implemented first M5 slice, resolving Q-05. Current `dev` uses V7; released v0.5.0 remains V6.
+- [Observation-Driven Faction Response](observation-driven-faction-response.md) is **approved design, not implemented**. It is the next bounded M5 contribution. After it lands and is reconciled, M6 Tactical Combat Foundation becomes the next major development family without requiring M3 or M5 to be declared complete.
 
 ## Execution model
 
@@ -89,8 +91,8 @@ Canon should establish the chosen campaign's required historical and political s
 | 2 | **Active World and Persistent Orders** | **Implemented** | Ships can own durable intent, progress offscreen, and retain that intent across save/load. |
 | 3 | **Sensor Knowledge and First Contact** | **Partial — M3A and Strategic Contact Reporting implemented; M3 not complete** | M3A proves observer-local knowledge and information-limited ship behavior; Strategic Contact Reporting carries legitimate last-known contact information into strategic context without defining the final intelligence model. |
 | 4 | **Engineering Backbone and Degraded Operations** | **Implemented** | Power, condition, capability, and repair interact with existing sensing and maneuvering rather than living in a parallel subsystem. |
-| 5 | **Living Sector and Faction Autonomy** | **Partial — faction assignment implemented on dev; unreleased** | Faction intent causes explainable autonomous assignments, offscreen activity, and durable actor-local knowledge using actor-appropriate information; this first assignment slice does not complete the entire milestone. |
-| 6 | **Tactical Combat Foundation** | **Future** | Combat composes motion, observation, Engineering, AI, persistence, and withdrawal instead of becoming a separate hit-point game. |
+| 5 | **Living Sector and Faction Autonomy** | **Partial — faction assignment implemented; observation-driven response approved, not implemented** | Faction intent and legitimate received knowledge cause explainable assignments, offscreen activity, and durable actor-local consequences using actor-appropriate information. |
+| 6 | **Tactical Combat Foundation** | **Future — next major family after observation-driven response** | Combat composes motion, observation, Engineering, AI, persistence, and withdrawal instead of becoming a separate hit-point game. |
 | 7 | **Diplomacy, Incidents, and Durable Consequences** | **Future** | The world distinguishes events, knowledge/attribution, legal status, attitudes, and remembered consequences that affect later decisions. |
 | 8 | **Canon-Anchored Campaign Bootstrap and Divergent History** | **Future** | A campaign begins from reproducible canon-consistent boundary conditions plus already-active noncanonical local activity. |
 | 9 | **Persistent Regional Campaign Integration** | **Future** | The preceding systems form one durable regional gameplay loop that remains coherent over extended simulation time. |
@@ -157,7 +159,7 @@ The slice did **not** approve or introduce:
 - combat; or
 - a generic actor/entity/rules framework.
 
-It left Q-02 through Q-05 unresolved at completion and did not itself complete M3 or begin M5. The later approved assignment design resolves Q-05 and scopes other questions without changing this historical contact-reporting boundary.
+It left Q-02 through Q-05 unresolved at completion and did not itself complete M3 or begin M5. Later slices may consume its actor-safe observation model without rewriting that historical scope.
 
 ---
 
@@ -167,13 +169,13 @@ M3A and Strategic Contact Reporting are implemented, but their completion does *
 
 The original Milestone 3 horizon also discussed affiliation/intent knowledge, strategic contacts, broader reporting, and identity questions. Strategic Contact Reporting resolves the smaller behavior of carrying legitimate local observations into actor-safe strategic last-known information.
 
-Evaluate remaining M3 scope against actual consumers. Q-02 and Q-03 remain open; Q-04's sensor/intelligence-sharing portion remains open even though the first faction assignment now has an approved own-asset administrative view. Do not delay that bounded assignment slice to invent a final intelligence schema or M3 completion contract.
+Evaluate remaining M3 scope against actual consumers. Q-02 and Q-03 remain open. Q-04's own-asset administrative portion is implemented by the first faction slice, and one direct ship-to-direct-faction report channel is now approved by Observation-Driven Faction Response, but broader intelligence sharing remains open. Do not delay the approved M5 response slice or subsequent bounded M6 work to invent a final intelligence schema or force M3 to a nominal completion state.
 
 ---
 
 ## Milestone 5 — Living Sector and Faction Autonomy
 
-### Approved first bounded slice — Faction Intent and Autonomous Assignment
+### Implemented first bounded slice — Faction Intent and Autonomous Assignment
 
 **Implemented in Feature #86 / Final PR #87, merged into `dev` as `0217296`.** The [canonical wiki decision](faction-intent-and-autonomous-assignment.md) records the selected era-neutral root-faction proof and six decisions D-08 through D-13. Q-05 is resolved for this first consumer; neither M3 nor M5 is complete.
 
@@ -185,6 +187,20 @@ The implementation has closed Ship/Faction scheduled targets and typed bootstrap
 
 This slice is a contribution toward the broader goals below, not a claim that all M5 requirements are satisfied. Existing Core and Godot compatibility evidence cover policy, scheduler, runtime, content, persistence, private catalog loading, player-safe projection, and targeted production and long-horizon scenarios.
 
+### Approved next bounded slice — Observation-Driven Faction Response
+
+**Approved design, not implemented.** [Observation-Driven Faction Response](observation-driven-faction-response.md) owns D-14 through D-17 and the complete behavior/acceptance contract.
+
+The slice proves:
+
+> **legitimate NPC observation → delayed direct-faction report → received actor knowledge → explainable investigation assignment → ordinary offscreen travel → ordinary local observation**
+
+It gives both root factions a bounded way to react to legitimately reported activity without global vessel identity, affiliation inference, live shared sensors, hierarchy propagation, a communications network, preemption, combat, or political UI. Existing one-shot presence objectives retain their meaning. Received information must cause a counterfactual decision difference, and at least one full chain must operate NPC-to-NPC without player involvement.
+
+The approved design caps each participating faction at eight in-flight reports, sixteen retained received reports, one active investigation, a 2,000 ms deterministic delivery delay, and a 60,000 ms freshness window. It uses location investigation completion/suppression to avoid response feedback loops and preserves the report's historical observation even when hidden target truth changes later.
+
+If implementation begins from V7, persistence advances adjacently to V8 without inventing old reports or investigations; the migrated posture is disabled and new-game bootstrap opts the proof factions in explicitly. The implementation must re-measure save/scheduler maximum shape inside the existing 128 MiB envelope.
+
 ### M5 goal
 
 Prove the causal chain:
@@ -193,20 +209,22 @@ Prove the causal chain:
 
 The smallest useful scenario for the complete M5 milestone should contain multiple locations, multiple ships, and enough political context for at least two autonomous factions or political actors to make a consequential choice. At least one NPC-NPC interaction should matter even if the player never witnesses it.
 
+M5 does not need to be declared complete before M6 begins. The approved observation-response slice is the last currently selected bounded M5 contribution before the main development axis moves to tactical combat; later evidence may justify returning to remaining M5 scope.
+
 ### M5 required architectural proof
 
 - Faction decisions live in pure Core and obey ADR 0010's information, determinism, command, budget, and explanation boundaries.
 - Strategic decisions consume actor-appropriate knowledge rather than unrestricted world truth.
 - Existing ship orders and scheduler semantics are reused where they fit instead of creating a parallel faction simulation loop.
-- A faction's objective or constrained resource/capability changes which valid action it selects; the scenario is not a fixed patrol script with political labels.
+- A faction's objective, received legitimate knowledge, or constrained resource/capability changes which valid action it selects; the scenario is not a fixed patrol script with political labels.
 - Consequential faction state and decisions needed after load persist explicitly and validate atomically.
-- Long-horizon tests cover starvation, zero-time loops, oscillation, dangling references, unbounded growth, and save/load divergence.
+- Long-horizon tests cover starvation, zero-time loops, oscillation, dangling references, unbounded growth, feedback loops, and save/load divergence.
 
 ### Political design boundary
 
 The approved [factions and organizations](factions-and-organizations.md) model governs this work, but Milestone 5 does **not** require implementing its entire possible surface.
 
-The first consumer preserves the approved principles it touches: stable faction identity, autonomous political will, actor knowledge, and one direct controller per participating asset. Root factions are sufficient for the selected assignment proof; recursive parentage, role/depth separation, independent attitudes, organizations, governments, covert operations, layered jurisdiction, treaty inheritance, and political transitions remain approved broader principles or deferred runtime rather than first-slice requirements.
+The current consumers preserve the approved principles they touch: stable faction identity, autonomous political will, actor knowledge, and one direct controller per participating asset. Root factions are sufficient; recursive parentage, role/depth separation, independent attitudes, organizations, governments, covert operations, layered jurisdiction, treaty inheritance, and political transitions remain approved broader principles or deferred runtime rather than current-slice requirements.
 
 Do not create three faction classes for Polity/Constituent/Internal, infer powers from depth labels, or add a generic actor/rules framework solely because the future political model is rich.
 
@@ -225,6 +243,14 @@ Do not create three faction classes for Polity/Constituent/Internal, infer power
 
 ## Milestone 6 — Tactical Combat Foundation
 
+### Sequencing and first slice
+
+After Observation-Driven Faction Response is implemented and reconciled, **M6 first combat engagement is the next major development family**. Full completion of M3 or M5 is not a prerequisite. This is a sequencing decision, not permission to implement unresolved Q-10 mechanics without refinement.
+
+The first engagement should start narrow: one directed-energy weapon family, a bounded shield model, sensor-constrained targeting/fire control, meaningful power competition, tactical maneuver/range, damage to concrete systems, deterministic/explainable combat AI, persistence of consequences, and withdrawal/non-engagement. The purpose is to stress the existing joints between sensing, motion, Engineering, AI, and persistence rather than to build a broad weapon catalog.
+
+After that proof, deepen starship systems through **combat-driven Engineering depth**. Add a system when it creates or materially changes a command decision. Do not require detailed EPS topology, batteries, heat/coolant, advanced warp Engineering, life support, crew/repair teams, magazines, boarding, cloaking, or electronic warfare before the first engagement unless a concrete accepted rule truly needs one.
+
 ### M6 goal
 
 Add the smallest combat model that proves existing systems compose under pressure.
@@ -238,7 +264,7 @@ Add the smallest combat model that proves existing systems compose under pressur
 - Withdrawal, disengagement, and non-engagement remain valid outcomes.
 - Tactical AI issues validated Core commands and remains deterministic/explainable at the consequence boundary.
 
-Before admission, resolve **Q-10 — Tactical scope**. Do not define a broad weapon catalog, final damage topology, or advanced repair model until the first combat slice demonstrates the need.
+Before admission, resolve **Q-10 — Tactical scope**: shield geometry/facings, firing cadence and eligibility, targeting knowledge, damage allocation, disengagement, and any first RNG consumer. Also define involuntary degradation. Damage cannot simply fail because reduced generation or impulse capability makes a previously legal allocation, speed, active scan, or repair state invalid; forced reconciliation must have explicit deterministic semantics.
 
 ---
 
@@ -326,6 +352,7 @@ Milestone 9 is the point to judge whether the established joints are strong enou
 - [Design Decision Register](decision-register.md)
 - [Strategic Contact Reporting](strategic-contact-reporting.md)
 - [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md)
+- [Observation-Driven Faction Response](observation-driven-faction-response.md)
 - [Open Design Questions](open-questions.md)
 - [Architecture](architecture.md)
 - [Factions and Organizations](factions-and-organizations.md)

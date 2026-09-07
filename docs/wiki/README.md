@@ -17,6 +17,7 @@ related:
   - 'docs/wiki/decision-register.md'
   - 'docs/wiki/strategic-contact-reporting.md'
   - 'docs/wiki/faction-intent-and-autonomous-assignment.md'
+  - 'docs/wiki/observation-driven-faction-response.md'
   - 'docs/wiki/open-questions.md'
 ---
 
@@ -30,12 +31,14 @@ The initial implementation review is against `dev` commit `42481ca7fbc6c5c9da969
 
 [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) is the first implemented contribution toward M5, delivered by Feature #86 / Final PR #87 and merged into `dev` as `0217296`. Its era-neutral proof implements the six selected boundary decisions. Current `dev` uses V7 saves and faction content V1; v0.5.0 remains the V6 release and ship-definition content remains V4. This does not declare M3 or M5 complete.
 
+[Observation-Driven Faction Response](observation-driven-faction-response.md) is the owner-approved next bounded slice and is **not implemented**. It connects legitimate NPC sensor observations to delayed direct-faction reports and deterministic investigation assignments while preserving observer-local identity, information limits, existing orders, and bounded persistence. After that slice lands, M6 Tactical Combat Foundation becomes the next major development family; full M3 or M5 completion is not a prerequisite for beginning the first bounded combat engagement.
+
 The [recurring design-reconciliation procedure](development-and-governance.md#recurring-design-reconciliation) governs review of these claims. The [source catalog review record](sources.md#review-record) identifies the latest full and targeted reviews.
 
 ## Start here
 
 - [Vision and scope](vision-and-scope.md): captain-level play, persistent consequences, simulation priorities, and non-goals.
-- [Implementation status](implementation-status.md): implemented, preview-only, and absent systems; milestone and release boundaries.
+- [Implementation status](implementation-status.md): implemented, preview-only, approved-not-implemented, and absent systems; milestone and release boundaries.
 - [Milestone proofs](milestone-proofs.md): detailed acceptance criteria for completed and future milestones; [the roadmap](../../ROADMAP.md) owns sequence.
 
 ## Implemented systems and their contracts
@@ -48,8 +51,9 @@ The [recurring design-reconciliation procedure](development-and-governance.md#re
 - [Interface and player commands](interface-and-player-commands.md): Command Deck, Engineering, presentation authority, controls, and preview boundaries.
 - [Content, assets, and persistence](content-assets-and-persistence.md): JSON definitions, current V7 snapshots, V6→V7 migration, and the independent AssetCtl pipeline.
 
-## Future design and decisions
+## Approved next slice and future design
 
+- [Observation-Driven Faction Response](observation-driven-faction-response.md): approved next slice, not implemented; delayed direct ship-to-faction reporting and bounded investigation response.
 - [Factions and organizations](factions-and-organizations.md): owner-approved political framework; the root-faction/direct-control subset is implemented while broader political runtime remains future work.
 - [Diplomacy, economy, and campaigns](diplomacy-economy-and-campaigns.md): political consequences, history, trade, canon, and later campaign work.
 - [Decision register](decision-register.md): settled decisions and their owning pages.
@@ -62,7 +66,7 @@ The [recurring design-reconciliation procedure](development-and-governance.md#re
 - [Asset pipeline tool](asset-pipeline-tool.md): the full development-tool contract, separately labeled from gameplay and implementation status.
 - [Source catalog](sources.md): implementation evidence, consolidation map, historical provenance, and dated review coverage.
 
-Read the system page first and follow its specialized contract links when needed. Strategic Contact Reporting owns last-known-report rules; Faction Intent and Autonomous Assignment owns first-slice assignment rules. Their summary links elsewhere do not redefine those contracts.
+Read the system page first and follow its specialized contract links when needed. Strategic Contact Reporting owns last-known-report rules; Faction Intent and Autonomous Assignment owns first-slice assignment rules; Observation-Driven Faction Response owns the approved direct report-delivery/investigation extension. Their summary links elsewhere do not redefine those contracts.
 
 ## Status vocabulary
 
@@ -74,7 +78,7 @@ A document frontmatter value of `status: active` describes the document, not fea
 
 This wiki governs design. When a wiki page and any other design document, roadmap passage, archived conversation, or agent instruction disagree about design, the wiki is correct and the other document is a defect to fix. Active ADRs remain the record of architectural decisions: an architectural boundary changes only through a new or amended ADR, and the wiki then reflects that decision. Implementation claims are checked against source and tests. The roadmap describes sequence and scope, not design, and defers to this wiki wherever it describes a system.
 
-The released contact-reporting decision is owned by [Strategic Contact Reporting](strategic-contact-reporting.md). The implemented first M5 slice is owned by [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md). The broader political principles remain owned by [Factions and organizations](factions-and-organizations.md). Other pages summarize or link these records rather than redefining them. Assistant recommendations that the owner did not approve remain in the open-question register.
+The released contact-reporting decision is owned by [Strategic Contact Reporting](strategic-contact-reporting.md). The implemented first M5 slice is owned by [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md). The approved next information-to-action slice is owned by [Observation-Driven Faction Response](observation-driven-faction-response.md). The broader political principles remain owned by [Factions and organizations](factions-and-organizations.md). Other pages summarize or link these records rather than redefining them. Assistant recommendations that the owner did not approve remain in the open-question register.
 
 Record a design change on its wiki page in the same governed work that implements it. Keep detailed rules, formulas, state transitions, edge cases, and acceptance contracts inside the wiki, and update [implementation status](implementation-status.md) when behavior lands. Change a decision explicitly rather than silently overwriting its meaning. Keep operational handoff state in its existing files. Do not recreate a parallel design/specification tree; implementation plans and issues link the owning wiki contracts.
 

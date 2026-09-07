@@ -16,6 +16,7 @@ related:
   - 'docs/wiki/decision-register.md'
   - 'docs/wiki/strategic-contact-reporting.md'
   - 'docs/wiki/faction-intent-and-autonomous-assignment.md'
+  - 'docs/wiki/observation-driven-faction-response.md'
   - 'docs/wiki/implementation-status.md'
 ---
 
@@ -38,6 +39,14 @@ Targeted review, 2026-09-07:
 - **Evidence:** static inspection of the [faction policy](../../src/AlterCourse.Core/AI/FactionAssignmentPolicy.cs), [runtime wakes](../../src/AlterCourse.Core/Gameplay/GameSimulation.Factions.cs), [V7 persistence](../../src/AlterCourse.Core/Persistence/GamePersistence.cs), and [targeted tests](../../tests/AlterCourse.Core.Tests/Gameplay/FactionAssignmentScenarioTests.cs). [FirstGameSetup](../../src/AlterCourse.Core/Gameplay/FirstGameSetup.cs) and [bootstrap tests](../../tests/AlterCourse.Core.Tests/Gameplay/FactionBootstrapTests.cs) distinguish the six-ship production and four-ship legacy worlds. The audit used inherited PR #87 test evidence; [PR #89](https://github.com/L3DigitalNet/star-trek-alter-course/pull/89) records the verification reruns.
 - **Findings and disposition:** corrected stale pending-landing/review-branch claims, four-ship production summaries, and README V6/current-rules claims. Current `dev` is V7 under `faction-intent-autonomous-assignment-v1`; v0.5.0 remains the V6 release. M3 and M5 remain incomplete.
 - **Full-review cadence:** the initial 2026-09-06 full-corpus review remains the [Wiki home](README.md) provenance; the next full review is due 2026-09-13. This targeted review does not reset that date; follow the [recurring design-reconciliation procedure](development-and-governance.md#recurring-design-reconciliation).
+
+### Design-admission reconciliation — 2026-09-07
+
+The staging review compared the selected next-slice design against `dev` `89c6b498f08058b2ffdf971ecd3175a5220a00c2`, the active ADR set, and the September 7 source-backed wiki baseline above. That review was a **design reconciliation, not a new runtime audit**: no implementation source changed and it claimed no fresh runtime test execution.
+
+The owner approved [Observation-Driven Faction Response](observation-driven-faction-response.md) as the next bounded slice and M6 Tactical Combat Foundation as the next major development family after it. The reconciliation records D-14 through D-18, scopes only the required portions of Q-02/Q-04/Q-08/Q-10/Q-14, and leaves Q-03 plus exact Q-10 combat mechanics open. It explicitly distinguishes approved design from current V7 implementation and does not reset the full semantic-sweep deadline of 2026-09-13.
+
+[Task #91](https://github.com/L3DigitalNet/star-trek-alter-course/issues/91) and [Final PR #92](https://github.com/L3DigitalNet/star-trek-alter-course/pull/92) regularize the staging work. Fresh reconciliation against `89c6b49` reviewed all active ADRs, the nine changed pages, related knowledge/faction/navigation/persistence/interface contracts, and their source/tests. Native and adversarial review clarified freshness, Q-10 scope, shared faction coordination, suppression lifetime, rejection behavior, and proof bounds while preserving the information boundary. Fresh canonical verification at `e9fe5f0` passed 505 Core tests, 324 AssetCtl tests, and 68 Godot integration/import/gameplay cases; this verifies the unchanged runtime baseline, not the future response behavior. PR #92 owns subsequent review and final-head check evidence.
 
 ### Structure, depth, and consolidation review — 2026-09-07
 
@@ -78,8 +87,10 @@ The [consolidation map](#consolidation-map) records content destinations before 
 
 - [Strategic Contact Reporting](strategic-contact-reporting.md): implemented after v0.4.0 and released in v0.5.0 (Feature #77, Final PR #78); durable reference-frame-qualified actor-safe last-known contact reporting with its original non-goals preserved.
 - [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md): Feature #86 / Final PR #87 implementation of the bounded M5 slice, merged into `dev` as `0217296`; D-08 through D-13 cover its proof, control, knowledge, scheduler/bootstrap, V7 migration, and no-RNG decisions.
+- [Observation-Driven Faction Response](observation-driven-faction-response.md): owner-approved next bounded M5 slice, not implemented; D-14 through D-17 cover direct delayed reporting, bounded deterministic investigation, persistence, and information limits.
+- [Engineering and combat](engineering-and-combat.md) and [Milestone proofs](milestone-proofs.md): D-18 records M6 first combat engagement as the next major family after the response slice, with combat-driven Engineering depth and Q-10 still gating exact combat rules.
 - [Factions and organizations](factions-and-organizations.md): owner-approved conceptual political framework; its hierarchy, organization, government, and relationship runtime remains future work, while the first assignment consumer implements only the root-faction/direct-control subset.
-- [Open questions](open-questions.md): Q-01 and first-slice Q-05 resolved; Q-04/Q-06/Q-08/Q-14 scoped in part; Q-02/Q-03 and remaining intelligence, political, combat, campaign, and compatibility questions deferred.
+- [Open questions](open-questions.md): Q-01 and first-slice Q-05 resolved; Q-02/Q-04/Q-06/Q-08/Q-14 scoped in part; Q-03 and remaining intelligence, political, exact combat, campaign, and compatibility questions deferred.
 
 ## Consolidation map
 
@@ -125,6 +136,8 @@ This consolidation preserves substantive contracts rather than treating a shorte
 ## Latest design-approval evidence
 
 [Documentation PR #84](https://github.com/L3DigitalNet/star-trek-alter-course/pull/84) records the owner's September 6 approval of the first faction slice and all six pre-implementation recommendations, along with documentation consistency and hosted-check evidence. It is not a gameplay implementation PR, a new release, a V7 runtime change, or proof of M5 completion.
+
+[Documentation PR #92](https://github.com/L3DigitalNet/star-trek-alter-course/pull/92), governed by [Task #91](https://github.com/L3DigitalNet/star-trek-alter-course/issues/91), records the owner's September 7 approval of Observation-Driven Faction Response and the subsequent M6/combat-driven Engineering sequence. It supersedes [staging PR #90](https://github.com/L3DigitalNet/star-trek-alter-course/pull/90), which was closed unmerged without valid admission. This is documentation evidence only; it is not runtime implementation, V8 evidence, a combat feature, or a release.
 
 ## Visual references
 
