@@ -254,8 +254,8 @@ public sealed class GamePersistenceV4SensorTests
     /// <summary>Confirms the V8 empty-observation maximum faction baseline remains within the envelope.</summary>
     /// <remarks>
     /// Every ship carries the full directed contact graph, an active scan and repair; every eligible
-    /// non-player ship also carries an order, autonomous wake, and controller. The player cannot hold
-    /// either autonomous commitment, making 66,302 the greatest simultaneously valid work population.
+    /// non-player ship also carries an order, autonomous wake, and controller. This retains the
+    /// pre-observation 66,302-work baseline independently of the populated response alternative below.
     /// </remarks>
     [Fact]
     public void MaximumFactionWorldRoundTripsWithinSaveEnvelope()
@@ -284,12 +284,218 @@ public sealed class GamePersistenceV4SensorTests
         Assert.Equal(saved, GamePersistence.Serialize(loaded.Simulation, loaded.Metadata));
     }
 
+    /// <summary>Confirms every NPC faction can retain its full report history beside the strongest ship graph.</summary>
+    [Fact]
+    public void MaximumReportWorldRoundTripsWithinSaveEnvelope()
+    {
+        (GameSimulation baseline, ShipDefinitionCatalog catalog, FactionDefinitionCatalog factionCatalog) =
+            CreateMaximumFactionSimulation(new SimulationTime(6_000));
+        SimulationState populated = PopulateMaximumReports(baseline.CaptureState());
+        var simulation = GameSimulation.RestoreState(populated, catalog, factionCatalog);
+        var metadata = new GameSaveMetadata(new string('\u0080', 128), new string('\u0080', 128), Timestamp, Timestamp);
+
+        byte[] saved = GamePersistence.Serialize(simulation, metadata);
+        LoadedGameSave loaded = GamePersistence.Deserialize(
+            saved,
+            catalog,
+            factionCatalog,
+            "maximum-report-world-v8.json"
+        );
+        SimulationState restored = loaded.Simulation.CaptureState();
+
+        Assert.InRange(saved.Length, 1, 128 * 1024 * 1024);
+        Assert.Equal(
+            255 * FactionObservationState.MaximumInFlightReports,
+            restored.Factions.Sum(faction => faction.Observation!.InFlightReports.Length)
+        );
+        Assert.Equal(
+            255 * FactionObservationState.MaximumReceivedReports,
+            restored.Factions.Sum(faction => faction.Observation!.ReceivedReports.Length)
+        );
+        Assert.Equal(68_343, restored.Scheduler.OutstandingWork.Length);
+        Assert.Equal(6_121, restored.ObservationReportIdAllocator.NextId);
+        Assert.Equal(saved, GamePersistence.Serialize(loaded.Simulation, loaded.Metadata));
+    }
+
+    private static SimulationState PopulateMaximumReports(SimulationState state)
+    {
+        var work = state.Scheduler.OutstandingWork.ToList();
+        long nextWorkId = state.Scheduler.NextWorkId;
+        long nextReportId = 1;
+        FactionState[] factions = [.. state.Factions];
+        for (int index = 1; index < factions.Length; index++)
+        {
+            factions[index] = PopulateFactionReports(
+                factions[index],
+                new ShipInstanceId(index + 1L),
+                state,
+                work,
+                ref nextWorkId,
+                ref nextReportId
+            );
+        }
+
+        ShipState[] scanCompatibleShips = ReplaceActiveScansWithContactLoss(state, work, ref nextWorkId);
+        (StrategicMap map, ShipState[] ships) = AddOrderlessPlayerTravel(
+            state,
+            scanCompatibleShips,
+            work,
+            ref nextWorkId
+        );
+        return new SimulationState(
+            state.Time,
+            SimulationScheduler.Restore(nextWorkId, nextWorkId - 1, work),
+            state.ShipIdAllocator,
+            map,
+            state.PlayerShipId,
+            ships,
+            state.OrderIdAllocator,
+            factions,
+            ObservationReportIdAllocator.Restore(nextReportId)
+        );
+    }
+
+    private static FactionState PopulateFactionReports(
+        FactionState faction,
+        ShipInstanceId sourceId,
+        SimulationState state,
+        List<ScheduledWork> work,
+        ref long nextWorkId,
+        ref long nextReportId
+    )
+    {
+        List<ObservationReportInFlight> inFlight = new(FactionObservationState.MaximumInFlightReports);
+        List<ReceivedObservationReport> received = new(FactionObservationState.MaximumReceivedReports);
+        for (int index = 0; index < FactionObservationState.MaximumReceivedReports; index++)
+        {
+            received.Add(
+                new ReceivedObservationReport(
+                    CreateMaximumReport(
+                        nextReportId++,
+                        sourceId,
+                        index + 1L,
+                        state.StrategicMap.Locations[0].Id,
+                        new SimulationTime(index < 8 ? 0 : 2_000)
+                    ),
+                    new SimulationTime(index < 8 ? 2_000 : 4_000)
+                )
+            );
+        }
+        for (int index = 0; index < FactionObservationState.MaximumInFlightReports; index++)
+        {
+            ObservationReportSnapshot report = CreateMaximumReport(
+                nextReportId++,
+                sourceId,
+                FactionObservationState.MaximumReceivedReports + index + 1L,
+                state.StrategicMap.Locations[0].Id,
+                new SimulationTime(4_000)
+            );
+            ScheduledWorkId deliveryId = AddWork(
+                work,
+                ref nextWorkId,
+                state.Time,
+                ScheduledWorkTarget.ForFaction(faction.Id),
+                ScheduledWorkKind.ObservationReportDelivery
+            );
+            inFlight.Add(new ObservationReportInFlight(report, deliveryId, state.Time));
+        }
+        return faction with
+        {
+            Observation = new FactionObservationState(ObservationResponsePosture.Enabled, inFlight, received),
+        };
+    }
+
+    private static ShipState[] ReplaceActiveScansWithContactLoss(
+        SimulationState state,
+        List<ScheduledWork> work,
+        ref long nextWorkId
+    )
+    {
+        ShipState[] ships = state.Ships.ToArray();
+        SimulationTime lossDueTime = state.Time.AdvanceBy(new SimulationDuration(5_000));
+        for (int index = 0; index < ships.Length; index++)
+        {
+            ShipState ship = ships[index];
+            ScheduledWorkId scanWorkId = ship.SensorKnowledge.ActiveScan!.ScheduledCompletionId;
+            Assert.Equal(1, work.RemoveAll(item => item.Id == scanWorkId));
+            ScheduledWorkId lossWorkId = AddWork(
+                work,
+                ref nextWorkId,
+                lossDueTime,
+                ScheduledWorkTarget.ForShip(ship.InstanceId),
+                ScheduledWorkKind.SensorContactLoss
+            );
+            SensorContactTrack[] contacts = ship.SensorKnowledge.Contacts.ToArray();
+            contacts[0] = contacts[0] with
+            {
+                Status = SensorContactStatus.Stale,
+                LossWorkId = lossWorkId,
+                LossDueTime = lossDueTime,
+            };
+            ships[index] = ship with
+            {
+                SensorKnowledge = new SensorKnowledge(ship.SensorKnowledge.NextContactId, contacts),
+            };
+        }
+        return ships;
+    }
+
+    private static (StrategicMap Map, ShipState[] Ships) AddOrderlessPlayerTravel(
+        SimulationState state,
+        ShipState[] ships,
+        List<ScheduledWork> work,
+        ref long nextWorkId
+    )
+    {
+        ShipState player = ships[0];
+        LocationId destination = new("travel-destination");
+        SimulationTime arrivalAt = state.Time.AdvanceBy(new SimulationDuration(2_000));
+        ScheduledWorkId arrivalId = AddWork(
+            work,
+            ref nextWorkId,
+            arrivalAt,
+            ScheduledWorkTarget.ForShip(player.InstanceId),
+            ScheduledWorkKind.TravelArrival
+        );
+        StrategicMap map = new(
+            [.. state.StrategicMap.Locations, new StrategicLocation(destination, "Travel destination", default)],
+            [new StrategicRoute(state.StrategicMap.Locations[0].Id, destination, new SimulationDuration(2_000))]
+        );
+        ships[0] = player with
+        {
+            StrategicState = new TravelingState(
+                new TravelState(state.StrategicMap.Locations[0].Id, destination, state.Time, arrivalAt, arrivalId)
+            ),
+        };
+        return (map, ships);
+    }
+
+    private static ObservationReportSnapshot CreateMaximumReport(
+        long reportId,
+        ShipInstanceId sourceId,
+        long contactId,
+        LocationId locationId,
+        SimulationTime observedAt
+    ) =>
+        new(
+            new ObservationReportId(reportId),
+            sourceId,
+            new SensorContactId(contactId),
+            locationId,
+            new TacticalPosition(double.MaxValue, -double.MaxValue),
+            observedAt,
+            SensorContactIdentification.Identified,
+            new string('\u0080', ShipState.MaximumVesselDisplayNameLength),
+            new string('\u0080', ShipDefinition.MaximumDesignDisplayNameLength)
+        );
+
     private static (
         GameSimulation Simulation,
         ShipDefinitionCatalog Catalog,
         FactionDefinitionCatalog FactionCatalog
-    ) CreateMaximumFactionSimulation()
+    ) CreateMaximumFactionSimulation(SimulationTime? currentTime = null)
     {
+        SimulationTime stateTime = currentTime ?? new SimulationTime(0);
         string maximumIdentity = new string('d', ShipDefinitionId.MaximumLength);
         string maximumName = new('\u0080', ShipState.MaximumVesselDisplayNameLength);
         string maximumDesignName = new('\u0080', ShipDefinition.MaximumDesignDisplayNameLength);
@@ -308,7 +514,7 @@ public sealed class GamePersistenceV4SensorTests
                 ),
             }
         );
-        var contactLossDueTime = new SimulationTime(5_000);
+        SimulationTime contactLossDueTime = stateTime.AdvanceBy(new SimulationDuration(5_000));
         var work = new List<ScheduledWork>(SimulationScheduler.MaximumOutstandingWork);
         var ships = new ShipState[SimulationState.MaximumShips];
         long nextWorkId = 1;
@@ -320,6 +526,7 @@ public sealed class GamePersistenceV4SensorTests
                 locationId,
                 maximumName,
                 maximumDesignName,
+                stateTime,
                 contactLossDueTime,
                 work,
                 ref nextWorkId
@@ -328,14 +535,14 @@ public sealed class GamePersistenceV4SensorTests
 
         (FactionState[] factions, FactionDefinitionCatalog factionCatalog) = CreateMaximumFactions(
             locationId,
-            new SimulationTime(0),
+            stateTime,
             work,
             ref nextWorkId
         );
         var scheduler = SimulationScheduler.Restore(nextWorkId, nextWorkId - 1, work);
         var map = new StrategicMap([new StrategicLocation(locationId, new string('\u0080', 64), default)], []);
         var state = new SimulationState(
-            new SimulationTime(0),
+            stateTime,
             scheduler,
             ShipInstanceIdAllocator.Restore(SimulationState.MaximumShips + 1L),
             map,
@@ -353,6 +560,7 @@ public sealed class GamePersistenceV4SensorTests
         LocationId locationId,
         string maximumName,
         string maximumDesignName,
+        SimulationTime currentTime,
         SimulationTime dueTime,
         List<ScheduledWork> work,
         ref long nextWorkId
@@ -365,6 +573,7 @@ public sealed class GamePersistenceV4SensorTests
             locationId,
             maximumName,
             maximumDesignName,
+            currentTime,
             dueTime,
             work,
             ref nextWorkId
@@ -372,6 +581,7 @@ public sealed class GamePersistenceV4SensorTests
         (SystemRepairState repair, ShipOrder? order, ShipAutonomousState autonomous) = CreateMaximumCommitments(
             observerIndex,
             observerId,
+            currentTime,
             work,
             ref nextWorkId
         );
@@ -383,7 +593,7 @@ public sealed class GamePersistenceV4SensorTests
             default,
             new ShipEngineeringState(
                 new SystemCondition(1),
-                new SystemCondition(0.5),
+                repair.ConditionAt(currentTime),
                 new SystemCondition(1),
                 new PowerAllocation(new(70), new(50)),
                 repair
@@ -402,6 +612,7 @@ public sealed class GamePersistenceV4SensorTests
         LocationId locationId,
         string maximumName,
         string maximumDesignName,
+        SimulationTime currentTime,
         SimulationTime lossDueTime,
         List<ScheduledWork> work,
         ref long nextWorkId
@@ -422,7 +633,7 @@ public sealed class GamePersistenceV4SensorTests
                 new SensorContactId(contactIndex + 1L),
                 new ShipInstanceId(targetIndex + 1L),
                 new TacticalPosition(targetIndex, -targetIndex),
-                new SimulationTime(0),
+                currentTime,
                 locationId,
                 scannedContact ? SensorContactStatus.Current : SensorContactStatus.Stale,
                 scannedContact ? SensorContactIdentification.Detected : SensorContactIdentification.Identified,
@@ -444,7 +655,7 @@ public sealed class GamePersistenceV4SensorTests
             contactIndex++;
         }
 
-        var scanDueTime = new SimulationTime(2_000);
+        SimulationTime scanDueTime = currentTime.AdvanceBy(new SimulationDuration(2_000));
         ScheduledWorkId scanWorkId = AddWork(
             work,
             ref nextWorkId,
@@ -455,7 +666,7 @@ public sealed class GamePersistenceV4SensorTests
         return new SensorKnowledge(
             SensorKnowledge.MaximumContactsPerObserver + 1L,
             contacts,
-            new ActiveSensorScanState(new SensorContactId(1), new SimulationTime(0), scanDueTime, scanWorkId)
+            new ActiveSensorScanState(new SensorContactId(1), currentTime, scanDueTime, scanWorkId)
         );
     }
 
@@ -466,11 +677,12 @@ public sealed class GamePersistenceV4SensorTests
     ) CreateMaximumCommitments(
         int observerIndex,
         ShipInstanceId observerId,
+        SimulationTime currentTime,
         List<ScheduledWork> work,
         ref long nextWorkId
     )
     {
-        var repairDueTime = new SimulationTime(8_000);
+        SimulationTime repairDueTime = currentTime.AdvanceBy(new SimulationDuration(8_000));
         ScheduledWorkId repairWorkId = AddWork(
             work,
             ref nextWorkId,
@@ -483,7 +695,7 @@ public sealed class GamePersistenceV4SensorTests
         ShipAutonomousState autonomous = ShipAutonomousState.Empty;
         if (observerIndex > 0)
         {
-            var holdDueTime = new SimulationTime(6_000);
+            SimulationTime holdDueTime = currentTime.AdvanceBy(new SimulationDuration(6_000));
             ScheduledWorkId holdWorkId = AddWork(
                 work,
                 ref nextWorkId,
@@ -492,7 +704,7 @@ public sealed class GamePersistenceV4SensorTests
                 ScheduledWorkKind.OrderWake
             );
             order = new HoldUntilOrder(new ShipOrderId(observerIndex), holdDueTime, holdWorkId);
-            var decisionDueTime = new SimulationTime(7_000);
+            SimulationTime decisionDueTime = currentTime.AdvanceBy(new SimulationDuration(7_000));
             ScheduledWorkId decisionWorkId = AddWork(
                 work,
                 ref nextWorkId,
@@ -511,7 +723,7 @@ public sealed class GamePersistenceV4SensorTests
                 ShipSystemId.Sensors,
                 new SystemCondition(0.5),
                 new SystemCondition(1),
-                new SimulationTime(0),
+                currentTime,
                 repairDueTime,
                 repairWorkId
             ),

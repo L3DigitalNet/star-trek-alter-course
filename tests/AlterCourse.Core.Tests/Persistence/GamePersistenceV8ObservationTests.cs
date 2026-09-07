@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json.Nodes;
+using AlterCourse.Core.AI;
 using AlterCourse.Core.Factions;
 using AlterCourse.Core.Gameplay;
 using AlterCourse.Core.Identity;
@@ -7,6 +8,7 @@ using AlterCourse.Core.Persistence;
 using AlterCourse.Core.Sensors;
 using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
+using AlterCourse.Core.Strategic;
 using AlterCourse.Core.Tactical;
 using AlterCourse.Core.Tests.Gameplay;
 using FactionTestWorld = AlterCourse.Core.Tests.Gameplay.FactionBootstrapTests.FactionTestWorld;
@@ -16,6 +18,8 @@ namespace AlterCourse.Core.Tests.Persistence;
 /// <summary>Verifies V8 observation snapshots and the strict adjacent V7 migration.</summary>
 public sealed class GamePersistenceV8ObservationTests
 {
+    private static readonly GameSaveMetadata Metadata = Milestone3ProofFixture.Metadata;
+
     /// <summary>V7 migration preserves prior authority while inventing no observation-response history.</summary>
     [Fact]
     public void MigratesV7AdjacentlyWithDisabledEmptyObservationState()
@@ -169,6 +173,8 @@ public sealed class GamePersistenceV8ObservationTests
     [InlineData("unknown-posture")]
     [InlineData("unknown-handling")]
     [InlineData("future-receipt")]
+    [InlineData("late-receipt")]
+    [InlineData("overflow-receipt")]
     [InlineData("hidden-target")]
     [InlineData("too-many-received")]
     public void RejectsMalformedV8ObservationShape(string mutation)
@@ -180,6 +186,27 @@ public sealed class GamePersistenceV8ObservationTests
         JsonObject faction = simulation["factions"]![1]!.AsObject();
         JsonObject observation = faction["observation"]!.AsObject();
         JsonObject received = observation["receivedReports"]![0]!.AsObject();
+        ApplyMalformedShapeMutation(mutation, simulation, faction, observation, received);
+
+        Assert.Throws<GamePersistenceException>(() =>
+            GamePersistence.Deserialize(
+                Encoding.UTF8.GetBytes(root.ToJsonString()),
+                FactionTestWorld.ShipCatalog,
+                FactionTestWorld.FactionCatalog,
+                $"malformed-v8-{mutation}.json"
+            )
+        );
+        Assert.Equal(before, GamePersistence.Serialize(game, Milestone3ProofFixture.Metadata));
+    }
+
+    private static void ApplyMalformedShapeMutation(
+        string mutation,
+        JsonObject simulation,
+        JsonObject faction,
+        JsonObject observation,
+        JsonObject received
+    )
+    {
         switch (mutation)
         {
             case "missing-allocator":
@@ -200,6 +227,18 @@ public sealed class GamePersistenceV8ObservationTests
             case "future-receipt":
                 received["receivedAtMilliseconds"] = 2_100;
                 break;
+            case "late-receipt":
+                simulation["timeMilliseconds"] = 3_000;
+                received["receivedAtMilliseconds"] = 3_000;
+                observation["completionWatermarks"]![0]!["observedThroughMilliseconds"] = 3_000;
+                break;
+            case "overflow-receipt":
+                const long maximumFixedTime = 9_223_372_036_854_775_800;
+                simulation["timeMilliseconds"] = maximumFixedTime;
+                received["report"]!["observedAtMilliseconds"] = maximumFixedTime - 1_000;
+                received["receivedAtMilliseconds"] = maximumFixedTime;
+                observation["completionWatermarks"]![0]!["observedThroughMilliseconds"] = maximumFixedTime;
+                break;
             case "hidden-target":
                 received["report"]!["targetShipId"] = 1;
                 break;
@@ -216,16 +255,169 @@ public sealed class GamePersistenceV8ObservationTests
             default:
                 throw new ArgumentOutOfRangeException(nameof(mutation), mutation, "Unknown mutation.");
         }
+    }
 
-        Assert.Throws<GamePersistenceException>(() =>
-            GamePersistence.Deserialize(
-                Encoding.UTF8.GetBytes(root.ToJsonString()),
-                FactionTestWorld.ShipCatalog,
-                FactionTestWorld.FactionCatalog,
-                $"malformed-v8-{mutation}.json"
-            )
-        );
-        Assert.Equal(before, GamePersistence.Serialize(game, Milestone3ProofFixture.Metadata));
+    /// <summary>Invalid persisted observation graphs are rejected without changing the live simulation.</summary>
+    [Theory]
+    [InlineData("duplicate-report-id")]
+    [InlineData("allocator-not-after-report")]
+    [InlineData("missing-observer")]
+    [InlineData("player-observer")]
+    [InlineData("wrong-controller")]
+    [InlineData("future-observation")]
+    [InlineData("unknown-location")]
+    [InlineData("invalid-identification")]
+    [InlineData("duplicate-delivery-work")]
+    [InlineData("wrong-delivery-due")]
+    [InlineData("orphan-delivery-work")]
+    [InlineData("wrong-delivery-recipient")]
+    public void RejectsInvalidInFlightGraphAtomically(string mutation)
+    {
+        GameSimulation live = CreatePendingDeliveryGame();
+        byte[] before = GamePersistence.Serialize(live, Metadata);
+        JsonObject root = Parse(before);
+        JsonObject simulation = root["simulation"]!.AsObject();
+        JsonObject observation = simulation["factions"]![0]!["observation"]!.AsObject();
+        JsonObject first = observation["inFlightReports"]![0]!.AsObject();
+        JsonObject second = observation["inFlightReports"]![1]!.AsObject();
+        JsonObject report = first["report"]!.AsObject();
+        JsonArray work = simulation["scheduler"]!["outstandingWork"]!.AsArray();
+        switch (mutation)
+        {
+            case "duplicate-report-id":
+                second["report"]!["reportId"] = report["reportId"]!.DeepClone();
+                break;
+            case "allocator-not-after-report":
+                simulation["observationReportAllocatorNextId"] = report["reportId"]!.DeepClone();
+                break;
+            case "missing-observer":
+                report["observerShipId"] = 999;
+                break;
+            case "player-observer":
+                report["observerShipId"] = simulation["playerShipId"]!.DeepClone();
+                break;
+            case "wrong-controller":
+                report["observerShipId"] = 4;
+                break;
+            case "future-observation":
+                report["observedAtMilliseconds"] = 100;
+                first["dueTimeMilliseconds"] = 2_100;
+                FindWork(work, first["deliveryWorkId"]!.GetValue<long>())["dueTimeMilliseconds"] = 2_100;
+                break;
+            case "unknown-location":
+                report["observedAtLocationId"] = "missing";
+                break;
+            case "invalid-identification":
+                report["identification"] = "identified";
+                report["knownVesselDisplayName"] = null;
+                report["knownDesignDisplayName"] = null;
+                break;
+            case "duplicate-delivery-work":
+                second["deliveryWorkId"] = first["deliveryWorkId"]!.DeepClone();
+                break;
+            case "wrong-delivery-due":
+                first["dueTimeMilliseconds"] = 2_100;
+                break;
+            case "orphan-delivery-work":
+                observation["inFlightReports"]!.AsArray().RemoveAt(0);
+                break;
+            case "wrong-delivery-recipient":
+                FindWork(work, first["deliveryWorkId"]!.GetValue<long>())["targetFactionId"] = 2;
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(mutation), mutation, "Unknown mutation.");
+        }
+
+        AssertRejectedWithoutMutation(root, live, before, $"invalid-inflight-{mutation}.json");
+    }
+
+    /// <summary>Active-response correlations and completed-report evidence remain authoritative on load.</summary>
+    [Theory]
+    [InlineData("wrong-responder")]
+    [InlineData("player-responder")]
+    [InlineData("wrong-order")]
+    [InlineData("wrong-origin")]
+    [InlineData("wrong-destination")]
+    [InlineData("future-assignment")]
+    [InlineData("early-receipt")]
+    [InlineData("late-active-receipt")]
+    [InlineData("missing-wake")]
+    [InlineData("wrong-wake-due")]
+    [InlineData("handled-without-watermark")]
+    [InlineData("unwitnessed-watermark")]
+    [InlineData("watermark-after-assignment")]
+    public void RejectsInvalidResponseContinuationAtomically(string mutation)
+    {
+        GameSimulation live = mutation switch
+        {
+            "handled-without-watermark" or "unwitnessed-watermark" => CreateReceivedReportGame(),
+            "watermark-after-assignment" => Restore(CreateActiveWithHistoricalCompletion()),
+            _ => Restore(CreateLongActiveInvestigation()),
+        };
+        byte[] before = GamePersistence.Serialize(live, Metadata);
+        JsonObject root = Parse(before);
+        JsonObject simulation = root["simulation"]!.AsObject();
+        int factionIndex = mutation is "handled-without-watermark" or "unwitnessed-watermark" ? 1 : 0;
+        JsonObject faction = simulation["factions"]![factionIndex]!.AsObject();
+        JsonObject observation = faction["observation"]!.AsObject();
+        JsonObject? active = observation["activeInvestigation"]?.AsObject();
+        switch (mutation)
+        {
+            case "wrong-responder":
+                active!["responderShipId"] = 2;
+                break;
+            case "player-responder":
+                active!["responderShipId"] = 1;
+                break;
+            case "wrong-order":
+                active!["orderId"] = 999;
+                break;
+            case "wrong-origin":
+                active!["originLocationId"] = "gamma";
+                break;
+            case "wrong-destination":
+                active!["destinationLocationId"] = "alpha";
+                break;
+            case "future-assignment":
+                active!["assignedAtMilliseconds"] = 2_100;
+                break;
+            case "early-receipt":
+                active!["sourceReceivedAtMilliseconds"] = 1_900;
+                break;
+            case "late-active-receipt":
+                active!["sourceReceivedAtMilliseconds"] = 3_000;
+                break;
+            case "missing-wake":
+                faction["pendingDecisionWake"] = null;
+                break;
+            case "wrong-wake-due":
+                faction["pendingDecisionWake"]!["dueTimeMilliseconds"] = 69_900;
+                break;
+            case "handled-without-watermark":
+                observation["completionWatermarks"] = new JsonArray();
+                break;
+            case "unwitnessed-watermark":
+                observation["completionWatermarks"]![0]!["locationId"] = "alpha";
+                break;
+            case "watermark-after-assignment":
+                observation["completionWatermarks"]![0]!["observedThroughMilliseconds"] = 3_000;
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(mutation), mutation, "Unknown mutation.");
+        }
+
+        AssertRejectedWithoutMutation(root, live, before, $"invalid-response-{mutation}.json");
+    }
+
+    /// <summary>V8 reloads preserve pending delivery, active travel, completion, and suppression behavior.</summary>
+    [Fact]
+    public void ReloadedObservationContinuationsMatchUninterruptedSimulation()
+    {
+        AssertContinuation(CreatePendingDeliveryGame(), new SimulationTime(2_000));
+        AssertContinuation(Restore(CreateLongActiveInvestigation()), new SimulationTime(72_000));
+
+        GameSimulation completed = Advance(Restore(CreateLongActiveInvestigation()), new SimulationTime(72_000));
+        AssertContinuation(completed, new SimulationTime(72_100));
     }
 
     private static GameSimulation CreateReceivedReportGame()
@@ -277,6 +469,212 @@ public sealed class GamePersistenceV8ObservationTests
             ObservationReportIdAllocator = ObservationReportIdAllocator.Restore(2),
         };
         return GameSimulation.RestoreState(state, FactionTestWorld.ShipCatalog, FactionTestWorld.FactionCatalog);
+    }
+
+    private static GameSimulation CreatePendingDeliveryGame()
+    {
+        GameSimulation game = CreateObservationGame(ObservationResponsePosture.Enabled);
+        game.BootstrapHiddenCautiousContactObservation(new ShipInstanceId(2));
+        return game;
+    }
+
+    private static GameSimulation CreateObservationGame(ObservationResponsePosture posture)
+    {
+        ShipStart[] ships =
+        [
+            FactionTestWorld.CreateShip(1, FactionTestWorld.Gamma, null),
+            FactionTestWorld.CreateShip(2, FactionTestWorld.Alpha, FactionTestWorld.FactionA),
+            FactionTestWorld.CreateShip(3, FactionTestWorld.Alpha, FactionTestWorld.FactionA),
+            FactionTestWorld.CreateShip(4, FactionTestWorld.Beta, FactionTestWorld.FactionB),
+        ];
+        return new GameBootstrap(
+            new SimulationTime(0),
+            FactionTestWorld.CreateMap(),
+            ships[0].InstanceId,
+            ships,
+            [
+                new FactionStart(
+                    FactionTestWorld.FactionA,
+                    FactionTestWorld.DefinitionA,
+                    ObservationResponsePosture: posture
+                ),
+                new FactionStart(FactionTestWorld.FactionB, FactionTestWorld.DefinitionB),
+            ]
+        ).CreateSimulation(FactionTestWorld.ShipCatalog, FactionTestWorld.FactionCatalog);
+    }
+
+    private static SimulationState CreateLongActiveInvestigation()
+    {
+        StrategicMap map = CreateLongInvestigationMap();
+        ShipStart[] ships =
+        [
+            FactionTestWorld.CreateShip(1, FactionTestWorld.Gamma, null),
+            FactionTestWorld.CreateShip(2, FactionTestWorld.Beta, FactionTestWorld.FactionA),
+            FactionTestWorld.CreateShip(3, FactionTestWorld.Alpha, FactionTestWorld.FactionA),
+        ];
+        SimulationState state = new GameBootstrap(
+            new SimulationTime(0),
+            map,
+            ships[0].InstanceId,
+            ships,
+            [
+                new FactionStart(
+                    FactionTestWorld.FactionA,
+                    FactionTestWorld.DefinitionA,
+                    ObservationResponsePosture: ObservationResponsePosture.Enabled
+                ),
+            ]
+        )
+            .CreateSimulation(FactionTestWorld.ShipCatalog, FactionTestWorld.FactionCatalog)
+            .CaptureState();
+        ShipState observer = state.GetRequiredShip(new ShipInstanceId(2));
+        state = state.ReplaceShip(
+            observer.InstanceId,
+            observer with
+            {
+                SensorKnowledge = new SensorKnowledge(2, observer.SensorKnowledge.Contacts),
+            }
+        );
+        var report = new ObservationReportSnapshot(
+            new ObservationReportId(1),
+            observer.InstanceId,
+            new SensorContactId(1),
+            FactionTestWorld.Beta,
+            default,
+            new SimulationTime(0),
+            SensorContactIdentification.Detected
+        );
+        FactionState faction = state.Factions[0];
+        state = state.ReplaceFaction(
+            faction.Id,
+            faction with
+            {
+                Observation = new FactionObservationState(
+                    ObservationResponsePosture.Enabled,
+                    receivedReports: [new ReceivedObservationReport(report, new SimulationTime(2_000))]
+                ),
+            }
+        ) with
+        {
+            Time = new SimulationTime(2_000),
+            ObservationReportIdAllocator = ObservationReportIdAllocator.Restore(2),
+        };
+        FactionInvestigationProposal proposal = GameSimulation
+            .DecideFactionInvestigation(state, state.Factions[0])
+            .Proposal!;
+        return GameSimulation.ApplyFactionInvestigation(state, proposal, FactionTestWorld.ShipCatalog).CandidateState;
+    }
+
+    private static SimulationState CreateActiveWithHistoricalCompletion()
+    {
+        SimulationState state = CreateLongActiveInvestigation();
+        FactionState faction = state.Factions[0];
+        FactionObservationState observation = faction.Observation!;
+        ShipState source = state.GetRequiredShip(new ShipInstanceId(2));
+        state = state.ReplaceShip(
+            source.InstanceId,
+            source with
+            {
+                SensorKnowledge = new SensorKnowledge(3, source.SensorKnowledge.Contacts),
+            }
+        );
+        var historical = new ObservationReportSnapshot(
+            new ObservationReportId(2),
+            source.InstanceId,
+            new SensorContactId(2),
+            FactionTestWorld.Gamma,
+            default,
+            new SimulationTime(0),
+            SensorContactIdentification.Detected
+        );
+        state = state.ReplaceFaction(
+            faction.Id,
+            faction with
+            {
+                Observation = new FactionObservationState(
+                    ObservationResponsePosture.Enabled,
+                    receivedReports:
+                    [
+                        .. observation.ReceivedReports,
+                        new ReceivedObservationReport(historical, state.Time, ObservationReportHandling.Handled),
+                    ],
+                    activeInvestigation: observation.ActiveInvestigation,
+                    completionWatermarks:
+                    [
+                        new ObservationLocationCompletionWatermark(FactionTestWorld.Gamma, state.Time),
+                    ]
+                ),
+            }
+        ) with
+        {
+            ObservationReportIdAllocator = ObservationReportIdAllocator.Restore(3),
+        };
+        return GameSimulation
+            .AdvanceTo(state, new SimulationTime(3_000), FactionTestWorld.ShipCatalog, FactionTestWorld.FactionCatalog)
+            .State;
+    }
+
+    private static StrategicMap CreateLongInvestigationMap() =>
+        new(
+            [
+                new StrategicLocation(FactionTestWorld.Alpha, "Alpha", default),
+                new StrategicLocation(FactionTestWorld.Beta, "Beta", default),
+                new StrategicLocation(FactionTestWorld.Gamma, "Gamma", default),
+            ],
+            [new StrategicRoute(FactionTestWorld.Alpha, FactionTestWorld.Beta, new SimulationDuration(70_000))]
+        );
+
+    private static void AssertContinuation(GameSimulation simulation, SimulationTime target)
+    {
+        GameSimulation uninterrupted = Advance(simulation, target);
+        GameSimulation reloaded = Advance(Reload(simulation), target);
+        Assert.Equal(GamePersistence.Serialize(uninterrupted, Metadata), GamePersistence.Serialize(reloaded, Metadata));
+    }
+
+    private static GameSimulation Advance(GameSimulation simulation, SimulationTime target) =>
+        Restore(
+            GameSimulation
+                .AdvanceTo(
+                    simulation.CaptureState(),
+                    target,
+                    FactionTestWorld.ShipCatalog,
+                    FactionTestWorld.FactionCatalog
+                )
+                .State
+        );
+
+    private static GameSimulation Restore(SimulationState state) =>
+        GameSimulation.RestoreState(state, FactionTestWorld.ShipCatalog, FactionTestWorld.FactionCatalog);
+
+    private static GameSimulation Reload(GameSimulation simulation) =>
+        GamePersistence
+            .Deserialize(
+                GamePersistence.Serialize(simulation, Metadata),
+                FactionTestWorld.ShipCatalog,
+                FactionTestWorld.FactionCatalog,
+                "continuation-v8.json"
+            )
+            .Simulation;
+
+    private static JsonObject FindWork(JsonArray work, long id) =>
+        work.Single(item => item!["id"]!.GetValue<long>() == id)!.AsObject();
+
+    private static void AssertRejectedWithoutMutation(
+        JsonObject invalid,
+        GameSimulation live,
+        byte[] before,
+        string source
+    )
+    {
+        Assert.Throws<GamePersistenceException>(() =>
+            GamePersistence.Deserialize(
+                Encoding.UTF8.GetBytes(invalid.ToJsonString()),
+                FactionTestWorld.ShipCatalog,
+                FactionTestWorld.FactionCatalog,
+                source
+            )
+        );
+        Assert.Equal(before, GamePersistence.Serialize(live, Metadata));
     }
 
     private static JsonObject ToHistoricalV7(byte[] current)

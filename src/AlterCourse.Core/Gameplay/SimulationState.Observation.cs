@@ -71,8 +71,10 @@ internal sealed partial record SimulationState
         {
             ValidateReport(faction, received.Report);
             if (
-                received.ReceivedAt.Milliseconds - received.Report.ObservedAt.Milliseconds
-                    < FactionObservationState.ReportDeliveryDelayMilliseconds
+                received.ReceivedAt
+                    != received.Report.ObservedAt.AdvanceBy(
+                        new SimulationDuration(FactionObservationState.ReportDeliveryDelayMilliseconds)
+                    )
                 || received.ReceivedAt.Milliseconds > Time.Milliseconds
                 || !Enum.IsDefined(received.Handling)
             )
@@ -171,6 +173,15 @@ internal sealed partial record SimulationState
     )
     {
         ValidateReport(faction, active.SourceReport);
+        if (
+            active.SourceReceivedAt
+            != active.SourceReport.ObservedAt.AdvanceBy(
+                new SimulationDuration(FactionObservationState.ReportDeliveryDelayMilliseconds)
+            )
+        )
+        {
+            throw new InvalidOperationException("An active investigation requires its exact report receipt time.");
+        }
         ReceivedObservationReport? retained = observation.ReceivedReports.FirstOrDefault(item =>
             item.Report.ReportId == active.SourceReport.ReportId
         );
@@ -198,8 +209,6 @@ internal sealed partial record SimulationState
             || traveling.Travel.Departure != active.AssignedAt
             || active.AssignedAt.Milliseconds > Time.Milliseconds
             || active.SourceReceivedAt.Milliseconds > active.AssignedAt.Milliseconds
-            || active.SourceReceivedAt.Milliseconds - active.SourceReport.ObservedAt.Milliseconds
-                < FactionObservationState.ReportDeliveryDelayMilliseconds
             || active.AssignedAt.Milliseconds - active.SourceReport.ObservedAt.Milliseconds
                 >= FactionObservationState.ReportFreshnessMilliseconds
         )
@@ -208,6 +217,7 @@ internal sealed partial record SimulationState
                 "An active investigation lacks its fixed controlled travel commitment."
             );
         }
+        ValidateActiveCompletionChronology(observation, active);
         if (
             faction.PresenceObjective?.AssignedShipId == active.ResponderShipId
             || observation.CompletionWatermarks.Any(watermark =>
@@ -219,6 +229,23 @@ internal sealed partial record SimulationState
         {
             throw new InvalidOperationException(
                 "An investigation responder or route conflicts with another commitment."
+            );
+        }
+    }
+
+    private static void ValidateActiveCompletionChronology(
+        FactionObservationState observation,
+        ActiveFactionInvestigation active
+    )
+    {
+        if (
+            observation.CompletionWatermarks.Any(watermark =>
+                watermark.ObservedThrough.Milliseconds > active.AssignedAt.Milliseconds
+            )
+        )
+        {
+            throw new InvalidOperationException(
+                "An active investigation cannot coexist with a later investigation completion."
             );
         }
     }
