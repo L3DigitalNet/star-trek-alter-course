@@ -2,7 +2,7 @@
 schema_version: '1.1'
 id: 'decision-q4p7ns-strategic-contact-reporting'
 title: 'Strategic Contact Reporting'
-description: 'Owner-approved next development slice connecting local contact knowledge to durable strategic last-known information without introducing faction runtime.'
+description: 'Implemented slice connecting local contact knowledge to durable strategic last-known information, with its original non-faction boundary preserved.'
 doc_type: 'decision'
 status: 'active'
 created: '2026-09-06'
@@ -18,6 +18,7 @@ related:
   - 'docs/wiki/open-questions.md'
   - 'docs/wiki/decision-register.md'
   - 'docs/wiki/factions-and-organizations.md'
+  - 'docs/wiki/faction-intent-and-autonomous-assignment.md'
   - 'ROADMAP.md'
   - 'docs/adr/0004-own-semantic-spatial-model-and-adapt-godot-rendering.md'
   - 'docs/adr/0006-use-versioned-json-snapshot-saves.md'
@@ -34,11 +35,13 @@ source:
 
 ## Status and decision
 
-**Implemented** (Feature #77, Final PR #78, merged into `dev` as `80c3084`; released in v0.5.0). After reviewing the v0.4.0 implementation, the roadmap, the current sensor/AI code, and the approved political model, the owner selected **Strategic Contact Reporting** as the next bounded development step.
+**Implemented** (Feature #77, Final PR #78, merged into `dev` as `80c3084`; released in v0.5.0). After reviewing the v0.4.0 implementation, the roadmap, the current sensor/AI code, and the approved political model, the owner selected **Strategic Contact Reporting** as the next bounded development step after v0.4.0.
 
-This resolves the sequencing question in Q-01. The slice is intentionally a bridge between M3A's local observer knowledge and M5's later living-sector/faction autonomy. It should remove the largest information-model ambiguity before faction AI is introduced, while avoiding premature commitment to a complete intelligence system or political runtime.
+This resolved the sequencing question in Q-01. The slice is a bridge between M3A's local observer knowledge and later living-sector/faction autonomy, establishing reference-frame-qualified reports without committing to a complete intelligence system or political runtime.
 
-Do **not** canonically call this slice `M3B` yet. It may later be described as a continuation of Milestone 3, a prerequisite to Milestone 5, or another historical subdivision once implementation evidence exists. The approved name for the work itself is **Strategic Contact Reporting**.
+The next approved work after v0.5.0 is now [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md). That first M5 contribution uses only own-asset administrative knowledge; it does not require report sharing or consume this report seam. The behavioral requirements and non-goals below record the original contact-reporting contract, not a new implementation queue or restrictions on separately approved later work.
+
+Do **not** canonically call this slice `M3B` yet. Its historical milestone classification remains open. The approved name for the work itself is **Strategic Contact Reporting**.
 
 ### Implementation outcome
 
@@ -46,13 +49,13 @@ The runtime chose the smallest representation that satisfies the required behavi
 
 - `SensorContactTrack` gained a `LocationId? ObservedAtLocationId` frame: the strategic location the observation was recorded in. A fresh observation always carries one (non-nullable plumbing, required positional parameter); the frame is null only for a contact migrated from a pre-V6 save.
 - `StrategicProjection.KnownContactReports` exposes `StrategicContactReportProjection`, one per retained contact still legitimately qualified by an observation location: contact id, observed-at `LocationId`, last observed tactical position, last observed time, retained status (Current, Stale, or Lost), identification, and the learned vessel/design display names. It omits the hidden `ShipInstanceId` and omits any legacy contact with no qualifying frame.
-- Save schema advanced to V6 with simulation rules identity `strategic-contact-reporting-v1`. The adjacent chain stays V1→V6; the new V5→V6 hop sets every legacy contact's frame to null and derives nothing, so a migrated contact stays on the tactical surface without appearing in strategic reports until it is observed again post-migration.
+- Save schema advanced to V6 with simulation rules identity `strategic-contact-reporting-v1`. The implemented adjacent chain remains V1→V6; the new V5→V6 hop sets every legacy contact's frame to null and derives nothing, so a migrated contact stays on the tactical surface without appearing in strategic reports until it is observed again post-migration.
 - The Command Deck strategic inspector presents the reports in a "LAST KNOWN CONTACTS" telemetry section; the tactical surface is unchanged and still drops Lost contacts.
-- A headless Core-only Pathfinder/Kestrel scenario proves the full seam without Godot: observe at Dawn Anchor, go Stale/Lost, hidden NPC travel leaves the report unchanged, player travel leaves it unchanged, save/load equivalence holds, and reacquisition updates it.
+- A headless Core-only Pathfinder/Kestrel scenario proves the full seam without Godot: observe at Dawn Anchor, go Stale/Lost, hidden NPC travel leaves the report unchanged, player travel leaves the report unchanged, save/load equivalence holds, and reacquisition updates it.
 
-Q-02, Q-03, Q-04, and Q-05 remain open; this slice did not need to resolve them.
+Q-02, Q-03, Q-04, and Q-05 were left open by this implementation. The later faction-assignment approval resolves Q-05 and a narrow administrative portion of Q-04, without approving sensor-report sharing or changing the observation contract here.
 
-## Why this comes next
+## Why this came first
 
 M3A established a sound local knowledge boundary:
 
@@ -63,9 +66,7 @@ M3A established a sound local knowledge boundary:
 - identification currently means learned vessel/design display names, not political affiliation or intent;
 - Current, Stale, Lost, and reacquired contact states already survive through the local contact model.
 
-M5 will eventually require a faction or political actor to make strategic decisions from information it is legitimately allowed to know. Jumping directly to M5 would force one feature to invent faction identity, faction-owned knowledge, reporting/sharing, faction scheduling, political affiliation, strategic decision logic, assignment generation, and persistence at once.
-
-The next slice therefore proves a narrower causal seam first:
+Broader M5 intelligence-driven decisions will require information an actor is legitimately allowed to know. Combining external reporting, identity, affiliation, faction state, scheduling, and decision logic in one first feature would entangle several distinct questions. Strategic Contact Reporting therefore established the narrower observation seam first:
 
 ```text
 local tactical observation
@@ -77,7 +78,7 @@ actor-safe strategic report/projection
 later faction knowledge sharing and strategic decisions
 ```
 
-The final arrow is deliberately deferred to M5 or another later governed slice.
+The final arrow remains deferred to a later governed intelligence consumer. It is not a prerequisite for the approved own-asset assignment policy.
 
 ## Goal
 
@@ -150,13 +151,13 @@ Scanning currently establishes vessel/design identity only. Do not infer that a 
 
 Q-03 remains open. A later feature must deliberately select which information source establishes affiliation—communications, transponder data, prior reports, intelligence sharing, recognition, or another justified mechanism—and what the observer actually learns.
 
-The first M5 strategic decision can legitimately react to an unknown or merely identified vessel report; political affiliation knowledge is not required for this slice to provide useful architectural value.
+A later intelligence-driven faction decision could use an unknown or merely identified vessel report without political affiliation knowledge. The first approved assignment policy instead uses only its own controlled assets' administrative facts; neither slice approves affiliation learning.
 
 ## Faction knowledge sharing remains deferred
 
 This slice records information **for the observing ship/player knowledge boundary**. It does not establish how a faction receives reports from ships or organizations, whether reporting is automatic or delayed, how information is merged, or what the player receives from allied actors.
 
-Q-04 therefore remains open. The report/projection created here should be a plausible future input to a sharing mechanism, but it must not become an unreviewed faction intelligence network.
+The sensor-sharing portion of Q-04 remains open. The report/projection created here should be a plausible future input to a sharing mechanism, but it must not become an unreviewed faction intelligence network. D-10's later approval of own-asset administrative visibility does not authorize ingestion of these reports.
 
 ## Player-visible proof
 
@@ -181,7 +182,7 @@ The presentation can be deliberately small. The architectural proof is the durab
 
 Follow ADR 0006. Persist authoritative meaning, not presentation caches or duplicated truth.
 
-If the approved behavior requires new durable state that cannot be reconstructed safely from the current V5 snapshot, advance the save schema through the normal adjacent migration process. The implementation used a V5→V6 adjacent migration under rules identity `strategic-contact-reporting-v1`: a migrated legacy contact carries no reference frame and is omitted from strategic reports until a new qualifying observation is recorded.
+At this slice's admission, V5 was the input save schema. Because the observation frame could not be reconstructed safely, implementation used a V5→V6 adjacent migration under rules identity `strategic-contact-reporting-v1`: a migrated legacy contact carries no reference frame and is omitted from strategic reports until a new qualifying observation is recorded. V6 remains current; the later assignment slice's approved V7 migration is not implemented here.
 
 Any migration must create only facts legitimately derivable from the older snapshot. It must not invent:
 
@@ -215,7 +216,7 @@ A headless scenario should demonstrate the complete proof without requiring Godo
 
 ## Explicit non-goals
 
-Strategic Contact Reporting does **not** add or approve:
+Strategic Contact Reporting itself does **not** add or approve:
 
 - faction runtime state;
 - organization runtime state;
@@ -239,16 +240,16 @@ Strategic Contact Reporting does **not** add or approve:
 
 This slice is complete when the simulation can carry an actor-safe, reference-frame-qualified last-known contact observation from local tactical sensing into a durable strategic report/projection, preserve it correctly through movement and save/load, and demonstrate that hidden target truth does not leak into it.
 
-After that proof lands, M5 can focus on the political causal chain it is meant to establish:
+The following remains a possible later intelligence-driven chain, not the required path for the first assignment slice:
 
 ```text
 ship observes something
         ↓
 actor-safe strategic report        ← Strategic Contact Reporting
         ↓
-report reaches faction             ← later governed work
+report reaches faction             ← later governed intelligence work
         ↓
-faction evaluates goal/resources   ← M5
+faction evaluates goal/resources   ← later report-consuming decision
         ↓
 faction assigns an existing ship
         ↓
@@ -257,10 +258,10 @@ existing ShipOrder machinery
 offscreen durable world change
 ```
 
-Strategic Contact Reporting does not itself complete Milestone 3 or begin Milestone 5. Its historical milestone classification can be decided after implementation; the design purpose is to provide the smallest safe information seam between the two.
+The approved first [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) starts instead from an objective and own-asset administrative facts, with no report-sharing prerequisite. Strategic Contact Reporting did not itself complete M3 or begin M5; its historical milestone classification remains separate from this later sequencing decision.
 
 ## Implementation guidance
 
-Before coding, inspect the current M3A contact lifecycle, persistence mapping, player projection, strategic-location identity, and tests. Extend existing mechanisms when they satisfy the approved behavior rather than creating parallel knowledge stores.
+The original feature extended the M3A contact lifecycle, persistence mapping, player projection, strategic-location identity, and tests. Future work should continue to reuse those mechanisms when they satisfy approved behavior rather than creating parallel knowledge stores.
 
-If implementation discovery shows that one of the explicitly deferred identity, affiliation, reporting-distribution, or scheduler decisions is actually required to satisfy the approved exit condition, stop and refine the wiki/governing issue before adding that mechanism.
+If a later implementation needs a deferred identity, affiliation, or report-distribution rule, refine its owning wiki page and governing work before adding that mechanism. The separate D-11 approval selects Ship/Faction scheduling for the assignment slice; it does not retroactively put faction scheduling into the contact-reporting feature.

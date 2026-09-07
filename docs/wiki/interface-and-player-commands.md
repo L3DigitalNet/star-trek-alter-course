@@ -16,6 +16,7 @@ related:
   - 'docs/design/engineering-backbone.md'
   - 'README.md'
   - 'docs/wiki/strategic-contact-reporting.md'
+  - 'docs/wiki/faction-intent-and-autonomous-assignment.md'
 ---
 
 # Interface and player commands
@@ -47,6 +48,12 @@ The strategic inspector also lists the player's own `KnownContactReports`: one r
 Current shortcuts are 1 for strategic view, 2 for tactical view, Space for pause/resume, R to cycle rate, U to advance to a player-relevant event, Ctrl+S/Ctrl+L for quick save/load, E to engage selected travel, and C for the demonstration tactical course. Presentation rates are 0.5x, 1x, 2x, and 4x, with pause separate.
 
 Mouse and keyboard follow the same typed intent path. Controls reconcile by stable presentation identity, retain focus through refresh, and resolve the current payload at activation. Disabled/hidden controls do not remain actionable. Space pause must not also activate a focused command button. Known bugs and their fixes are indexed in [handoff bug records](../handoff/bugs/INDEX.md).
+
+## Approved next-slice presentation boundary
+
+[Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) is approved design, not implemented, and adds no faction, affiliation, political hierarchy, or intelligence UI. The player ship is outside faction autonomous control in its proof. Neither true direct control nor faction decision explanations become ordinary player-facing data.
+
+The later implementation must preserve current controls and actor-safe projections, including save/load and player-relevant event filtering. Offscreen faction work or NPC-NPC contact is not automatically a player notification or stop condition. Godot may adapt to the implemented save-format change without acquiring political simulation authority or a hidden-state diagnostic view.
 
 ## Layout and precision
 

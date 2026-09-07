@@ -13,6 +13,7 @@ aliases: []
 related:
   - 'docs/adr/0001-separate-simulation-from-godot.md'
   - 'docs/adr/0003-prefer-native-capabilities-and-demand-driven-dependencies.md'
+  - 'docs/wiki/faction-intent-and-autonomous-assignment.md'
   - 'Directory.Packages.props'
 ---
 
@@ -33,6 +34,14 @@ A future `AlterCourse.Narrative` assembly is an ADR-defined integration directio
 Model responsibilities according to systems, not UI screens. Existing `ShipState` composes strategic, tactical, engineering, order, sensor-knowledge, and autonomous state. `SimulationState` owns plural ships, scheduler, map, allocators, and player identity. Commands validate and construct candidate state before committing consequential changes where required; failed loading never partially replaces the live game.
 
 Avoid parallel mechanisms. New strategic decisions should consume established information projections and issue established domain commands where those fit. The political design does not authorize an entity framework, a universal faction/organization base class, or a generalized rules engine.
+
+## Approved next slice, not current runtime
+
+[Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) is the selected first bounded M5 contribution. It will add stable faction identity and bounded consequential faction state in Core, one optional asset-side direct faction controller with a derived roster, and a pure policy issuing existing ship-order commands only to idle controlled NPC ships. The player ship is excluded from faction autonomous control in the proof.
+
+The policy input is a narrow own-asset administrative projection, not unrestricted world/ship state or a faction sensor network. The existing scheduler will gain closed Ship/Faction targets with exact typed validation and preserved ordering. Faction state, controller links, and initial work belong in typed bootstrap and complete candidate validation, not post-construction proof mutations.
+
+The implementation is approved to introduce V7 with a non-inventive V6→V7 migration and zero-faction validity. Current runtime remains V6 with ship-targeted scheduled work. No organization/controller abstraction, hierarchy runtime, random policy, new dependency/framework, or political UI is part of the slice. These choices implement existing ADRs 0005-0007 and 0010; no ADR is changed by this documentation approval.
 
 ## Dependency choices
 
