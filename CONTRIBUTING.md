@@ -41,6 +41,10 @@ The [design wiki](docs/wiki/README.md) is the single source of truth for the gam
 
 A design idea the owner has not approved belongs in [open questions](docs/wiki/open-questions.md), not on a wiki system page. An architectural boundary changes only through a new or amended ADR; the wiki then reflects it.
 
+Follow the [recurring design reconciliation procedure](docs/wiki/development-and-governance.md#recurring-design-reconciliation) at task start, each behavior or bug-fix checkpoint, before Ready, and at merge/release closeout. Check the [review record](docs/wiki/sources.md#review-record) for an overdue seven-day full sweep. Reconcile unforeseen implementation constraints with approved design before treating the change as complete.
+
+In the PR's Acceptance coverage, name the wiki pages reviewed, link the relevant source/tests, and record corrections or why the existing contract remains accurate. For work with no game-design impact, state the concrete reason. A green automated gate or an updated date does not replace this review.
+
 ## Verify the change
 
 Run formatting when appropriate, then the canonical gate:
