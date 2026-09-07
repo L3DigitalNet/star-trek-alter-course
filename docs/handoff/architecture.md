@@ -36,9 +36,12 @@
 ## Implemented faction boundaries
 
 - [Faction assignment](../wiki/faction-intent-and-autonomous-assignment.md) is implemented on `dev`: direct idle-NPC assignment through existing orders.
-- One asset-side faction controller is authoritative; the roster is derived. Policy sees only approved own-asset administrative facts, not sensor reports.
+- One asset-side faction controller is authoritative; the roster is derived. Presence policy sees only approved own-asset administrative facts, not sensor reports.
 - Closed Ship/Faction targets extend the existing scheduler; typed bootstrap admits complete faction state and initial work without hidden follow-up mutations.
-- V7 migration preserves ship work and creates no factions or controller history; zero-faction worlds remain valid. Released v0.5.0 remains V6; `dev` has V7.
+- V7 migration preserves ship work and creates no factions or controller history; zero-faction worlds remain valid.
+- Investigation policy reads fresh received reports and bounded own-asset/routes; direct control authorizes application.
+- V8 persists bounded reports, in-flight delivery, active investigations, and per-location completion watermarks.
+- V7→V8 migration creates no response history and does not mine historical contacts. Released v0.5.0 remains V6; draft Feature #93 has V8.
 - No RNG, organization/hierarchy runtime, generic actor framework, political UI, or player-command override belongs to the first slice.
 
 ## Standing backlog

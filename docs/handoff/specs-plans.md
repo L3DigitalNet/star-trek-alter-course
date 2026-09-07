@@ -6,6 +6,7 @@
 - [Political model](../wiki/factions-and-organizations.md) records approved conceptual decisions; the bounded direct-faction assignment is implemented, while organization and hierarchy runtime remain future work.
 - [Open questions](../wiki/open-questions.md) separates resolved Q-05 and scoped decisions from the remaining unapproved topics.
 - [Faction assignment](../wiki/faction-intent-and-autonomous-assignment.md) owns the implemented bounded M5 slice and its six boundaries; broader political work remains future work.
+- [Observation-driven faction response](../wiki/observation-driven-faction-response.md) owns Feature #93's bounded V8 implementation; M6/Q-10 remains next.
 
 ## Tracked artifacts
 
@@ -31,3 +32,5 @@
 | Task #80 | Merged / Done | v0.5.0 Final PR #82 released as `0547d06`; sync PR #83 put the release ancestry on `dev` at `e761249`. |
 | Feature #86 | Merged / Done | Bounded M5 faction assignment merged through Final PR #87 as `0217296` into `dev`; it is unreleased. |
 | Task #88 | Merged / Done | Wiki contract consolidation and recurring reconciliation merged through Final PR #89 as `aa3df33` into `dev`; no runtime change or release. |
+| Task #91 | Merged / Done | Observation-response design merged through Final PR #92 as `ad73862`; no runtime change or release. |
+| Feature #93 | In progress | Bounded V8 observation response is implemented on draft Final PR #94 and awaits final admission. |

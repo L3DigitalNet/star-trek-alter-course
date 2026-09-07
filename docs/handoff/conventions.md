@@ -52,3 +52,7 @@ Record detailed game contracts on their owning `docs/wiki/` page in the same PR 
 - Apply it before Ready and at merge or release closeout.
 - During active work, complete a full sweep every seven calendar days and catch up an overdue sweep on resume.
 - Record named wiki pages plus source and test evidence; no automatic semantic detector exists.
+
+## C-010: Observation-response migration
+
+V7-to-V8 migration starts with no reports, deliveries, investigations, or completion watermarks. It never derives response history from legacy contacts.

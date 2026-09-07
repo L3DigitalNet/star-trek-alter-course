@@ -2,8 +2,8 @@
 
 ## Current focus
 
-- Feature #93 passed admission and is In progress: implement the approved observation-driven faction response from the owning wiki.
-- V8 format and migration are integrated on the Feature #93 branch; response runtime and end-to-end proofs remain pending.
+- Feature #93 is implemented on draft Final PR #94 and awaits final admission and exact-head gates; it is unreleased.
+- V8 persists bounded observation response without inventing V7 migration history or mining historical contacts.
 - Record recurring reconciliation evidence on named wiki pages, sources, and tests at task start/resume and behavior or bug checkpoints.
 - Reconcile before Ready, merge/release, and each seven calendar days of active work; the full-sweep deadline remains 2026-09-13.
 
