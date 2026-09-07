@@ -19,7 +19,7 @@ Use the repo-local `agent-handoff` skill at session startup and closeout. Do not
 ## Design authority
 
 - `docs/wiki/` is the single source of truth for game design. Read the owning wiki page before work that adds or changes a system's behavior, and record the design change on that page in the same pull request.
-- `docs/design/` and `docs/specs/` are supporting detail for wiki pages; `ROADMAP.md` is sequence, not design; archived conversations are history. When any of them disagrees with the wiki, fix the other document.
+- Keep game-design detail, formulas, state transitions, and milestone acceptance contracts inside `docs/wiki/`; do not create parallel design/specification documents outside it. `ROADMAP.md` owns sequence, README owns onboarding, and operational records own work state. ADRs retain their architectural decision role.
 - Do not approve design in prose. Unapproved ideas go to `docs/wiki/open-questions.md`; architectural boundaries change only through an ADR.
 - Follow `docs/wiki/development-and-governance.md#recurring-design-reconciliation` at task start/resume, each behavior or bug-fix checkpoint, before Ready, and merge/release closeout. Check `docs/wiki/sources.md#review-record` at startup; complete overdue seven-day full sweeps before new behavior work.
 - Record named wiki pages and source/test evidence in PR Acceptance coverage. Correct related drift in the same work. Bugs restore approved design; unforeseen behavior changes require explicit design resolution and same-change wiki reconciliation, not silent approval through code.

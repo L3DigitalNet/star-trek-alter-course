@@ -27,7 +27,7 @@ Load this skill before project implementation. The design wiki under `docs/wiki/
 
 ## Design routing
 
-Read the owning wiki page before changing a system, and record the design change on that page in the same change that implements it. `docs/design/` and `docs/specs/` hold supporting detail; correct them when they disagree with the wiki. Unapproved ideas belong in the open-question register, not on a system page.
+Read the owning wiki page before changing a system, and record the design change on that page in the same change that implements it. Keep detailed game contracts inside `docs/wiki/`, including milestone proofs; do not create a parallel design/specification tree. README and ROADMAP are entry points, while ADRs retain architectural decision authority. Unapproved ideas belong in the open-question register, not on a system page.
 
 Follow `docs/wiki/development-and-governance.md#recurring-design-reconciliation` for task-start, behavior/bug-fix, Ready, and landing reviews. Check `docs/wiki/sources.md#review-record` for overdue full sweeps. Record named pages and source/test evidence in PR Acceptance coverage; an unforeseen implementation constraint does not silently amend approved design.
 
