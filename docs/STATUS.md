@@ -16,4 +16,5 @@
 - The tracked launch script restores and builds before Godot starts, preventing stale local Debug content after branch changes.
 - [Design wiki](wiki/README.md) is the single source of truth; the bounded direct-faction assignment is implemented while organization and hierarchy runtime remain future work.
 - M3 and M5 remain incomplete. The merged slice adds no dependencies or UI; broader political runtime is future work, no release followed, and `main` is unchanged.
-- Task #88 / Final PR #89 consolidates game contracts in the wiki, removes superseded design records, and adds recurring reconciliation; verification evidence is in the PR.
+- Task #88 / Final PR #89 merged as `aa3df33`; it consolidates game contracts in the wiki, removes superseded design records, and adds recurring reconciliation.
+- All five PR checks and post-merge CI passed. The merged tree matches tested `0eed9b4`; no release followed and `main` remains `0547d06`.

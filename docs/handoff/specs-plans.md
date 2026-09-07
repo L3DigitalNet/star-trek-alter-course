@@ -30,3 +30,4 @@
 | Feature #77 | Merged / Done | Strategic Contact Reporting merged through Final PR #78 as squash `80c3084` into `dev`; released in v0.5.0. |
 | Task #80 | Merged / Done | v0.5.0 Final PR #82 released as `0547d06`; sync PR #83 put the release ancestry on `dev` at `e761249`. |
 | Feature #86 | Merged / Done | Bounded M5 faction assignment merged through Final PR #87 as `0217296` into `dev`; it is unreleased. |
+| Task #88 | Merged / Done | Wiki contract consolidation and recurring reconciliation merged through Final PR #89 as `aa3df33` into `dev`; no runtime change or release. |
