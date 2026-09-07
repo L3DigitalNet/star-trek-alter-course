@@ -79,7 +79,7 @@ Each faction may retain at most:
 - **1 active investigation**; and
 - the bounded location-response suppression state required by those retained reports.
 
-A received report is actionable for **60,000 ms after `ObservedAt`**. Expiry is evaluated on receipt and other meaningful faction decision boundaries; it does not require polling. Exact duplicate delivery of the same report identity is idempotent and never creates a second response.
+A received report is actionable while **`0 <= currentTime - ObservedAt < 60,000 ms`**; at exactly `ObservedAt + 60,000 ms` it is expired. Future observation times are invalid. Expiry is evaluated on receipt and other meaningful faction decision boundaries; it does not require polling. Exact duplicate delivery of the same report identity is idempotent and never creates a second response.
 
 When received retention would exceed 16 after expired/handled entries are removed, retain the 16 newest observations by `ObservedAt`, breaking ties by stable report identity. A report that loses that deterministic retention contest is discarded and cannot later reappear as fresh information. Implementation must preserve enough bounded causal bookkeeping that save/load, cache eviction, or a cooldown boundary cannot turn already-handled information into a new trigger.
 
