@@ -1421,32 +1421,6 @@ public static class GamePersistence
         }
     }
 
-    private static LoadedGameSave RestoreV6(SaveEnvelopeV6 envelope, ShipDefinitionCatalog catalog)
-    {
-        ValidateCandidateV6(envelope, catalog);
-        SimulationSnapshotV6 snapshot = envelope.Simulation;
-        var time = new SimulationTime(snapshot.TimeMilliseconds);
-        StrategicMap map = RestoreMapV2(snapshot.StrategicMap);
-        ShipState[] ships = [.. snapshot.Ships.Select(RestoreShipV6)];
-        SimulationScheduler scheduler = RestoreSchedulerV2(snapshot.Scheduler, V6SchemaVersion);
-        var state = new SimulationState(
-            time,
-            scheduler,
-            ShipInstanceIdAllocator.Restore(snapshot.ShipAllocatorNextId),
-            map,
-            new ShipInstanceId(snapshot.PlayerShipId),
-            ships,
-            ShipOrderIdAllocator.Restore(snapshot.OrderAllocatorNextId)
-        );
-        var metadata = new GameSaveMetadata(
-            envelope.Metadata.SaveId,
-            envelope.Metadata.DisplayName,
-            envelope.Metadata.CreatedAtUtc,
-            envelope.Metadata.SavedAtUtc
-        );
-        return new LoadedGameSave(metadata, GameSimulation.RestoreState(state, catalog));
-    }
-
     private static LoadedGameSave RestoreV7(
         SaveEnvelopeV7 envelope,
         ShipDefinitionCatalog catalog,
@@ -2844,19 +2818,6 @@ public static class GamePersistence
             ))
         );
 
-    private static SimulationScheduler RestoreSchedulerV2(SchedulerSnapshotV2 snapshot, int sourceSchemaVersion) =>
-        SimulationScheduler.Restore(
-            snapshot.NextWorkId,
-            snapshot.NextSequence,
-            snapshot.OutstandingWork.Select(work => new ScheduledWork(
-                new ScheduledWorkId(work.Id),
-                new SimulationTime(work.DueTimeMilliseconds),
-                work.Sequence,
-                new ShipInstanceId(work.TargetShipId),
-                ParseWorkKind(work.Kind, sourceSchemaVersion)
-            ))
-        );
-
     private static SimulationScheduler RestoreSchedulerV7(SaveModelsV7.SchedulerSnapshotV7 snapshot) =>
         SimulationScheduler.Restore(
             snapshot.NextWorkId,
@@ -2868,32 +2829,6 @@ public static class GamePersistence
                 ParseWorkTargetV7(work),
                 ParseWorkKind(work.Kind, CurrentSchemaVersion)
             ))
-        );
-
-    private static ShipState RestoreShipV6(ShipSnapshotV6 snapshot) =>
-        new(
-            new ShipInstanceId(snapshot.InstanceId),
-            new ShipDefinitionId(snapshot.DefinitionId),
-            snapshot.DisplayName,
-            new TacticalPosition(snapshot.TacticalPosition.XKilometers, snapshot.TacticalPosition.YKilometers),
-            new TacticalMotion(
-                new HeadingDegrees(snapshot.TacticalMotion.HeadingDegrees),
-                new SpeedKilometersPerSecond(snapshot.TacticalMotion.SpeedKilometersPerSecond)
-            ),
-            new ShipEngineeringState(
-                new SystemCondition(snapshot.Engineering.GenerationCondition),
-                new SystemCondition(snapshot.Engineering.SensorCondition),
-                new SystemCondition(snapshot.Engineering.ImpulseCondition),
-                new PowerAllocation(
-                    new PowerUnits(snapshot.Engineering.SensorAllocation),
-                    new PowerUnits(snapshot.Engineering.ImpulseAllocation)
-                ),
-                RestoreSystemRepairV5(snapshot.Engineering.ActiveRepair)
-            ),
-            RestoreStrategicStateV2(snapshot.StrategicState),
-            RestoreOrderV3(snapshot.ActiveOrder),
-            RestoreSensorKnowledgeV6(snapshot.SensorKnowledge),
-            RestoreAutonomousStateV4(snapshot.AutonomousState)
         );
 
     private static ShipState RestoreShipV7(ShipSnapshotV7 snapshot) =>

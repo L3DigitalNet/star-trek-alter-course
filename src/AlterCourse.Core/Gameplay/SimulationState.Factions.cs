@@ -124,10 +124,9 @@ internal sealed partial record SimulationState
             );
         }
 
-        if (objective.Status == FactionObjectiveStatus.Pending && faction.PendingDecisionWake is null)
+        if (objective.Status == FactionObjectiveStatus.Pending)
         {
-            ValidateFactionDormancy(faction, objective);
-            return;
+            ValidatePendingFactionWake(faction, objective);
         }
 
         if (objective.Status == FactionObjectiveStatus.Satisfied && faction.PendingDecisionWake is not null)
@@ -156,6 +155,31 @@ internal sealed partial record SimulationState
         )
         {
             throw new InvalidOperationException("A faction decision wake lacks its exact scheduled work.");
+        }
+    }
+
+    private void ValidatePendingFactionWake(FactionState faction, EstablishPresenceObjectiveState objective)
+    {
+        if (faction.PendingDecisionWake is not { } wake)
+        {
+            ValidateFactionDormancy(faction, objective);
+            return;
+        }
+
+        // Correlation alone cannot justify an arbitrary delay. A pending wake is either
+        // ready now or tied to the same finite release boundary used by runtime scheduling.
+        if (
+            wake.DueTime != Time
+            && (
+                wake.DueTime != GameSimulation.FindNextFactionOpportunity(this, faction)
+                || GameSimulation.DecideFactionAssignment(this, faction, objective).Outcome
+                    == FactionAssignmentDecisionOutcome.AssignmentProposed
+            )
+        )
+        {
+            throw new InvalidOperationException(
+                "A pending faction wake requires its next strategic decision boundary."
+            );
         }
     }
 

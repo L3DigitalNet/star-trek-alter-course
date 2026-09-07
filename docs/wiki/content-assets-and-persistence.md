@@ -55,7 +55,7 @@ The shell uses `user://quick-save.json`. The legacy default `quick-save-v1.json`
 
 Zero-faction worlds must remain valid. New-game typed bootstrap may create the proof's factions; loading a migrated save must not rerun that initialization. Persist consequential faction state, direct control, and exact typed Ship/Faction work; derive rosters and projections rather than duplicating authority. No faction/organization placeholder or RNG state is required.
 
-Candidate validation rejects missing or wrong-domain targets, bad correlations, and corrupted JSON before replacing live state. Maximum-shape coverage measures 111,545,748 bytes for 256 ships, 256 factions, full contacts, and 66,302 work items: 22,671,980 bytes below the unchanged 128 MiB envelope. The released v0.5.0 line remains V6.
+Candidate validation rejects missing or wrong-domain targets, bad correlations, and corrupted JSON before replacing live state. Maximum-shape coverage measures 111,544,212 bytes for 256 ships, 256 factions, full contacts, and 66,302 work items: 22,673,516 bytes below the unchanged 128 MiB envelope. The released v0.5.0 line remains V6.
 
 Godot compatibility evidence is complete: the shell loads both catalogs, accepts valid V7 quick-load continuation, and leaves its live state usable when faction/controller JSON is malformed. It exposes none of this data in the player UI. Targeted headless continuation and long-horizon scenarios also pass.
 

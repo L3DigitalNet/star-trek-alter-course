@@ -53,7 +53,7 @@ Feature #86 is the first implemented M5 contribution under review, not evidence 
 
 [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) is implemented in Feature #86 / Final PR #87. It provides the approved era-neutral root-faction proof primitives: deterministic candidate choice under commitment, idle directly controlled NPC-only application, narrow own-asset facts, typed bootstrap and scheduling, strict faction content V1, and V6→V7 migration without political invention.
 
-Q-05 is resolved for that slice. Q-04, Q-06, Q-08, and Q-14 have only the documented scoped decisions; Q-02, Q-03, and broader intelligence/political questions remain open. Targeted production and long-horizon scenarios pass; the full integrated gate remains pending. This review-branch status is not a release or merge claim.
+Q-05 is resolved for that slice. Q-04, Q-06, Q-08, and Q-14 have only the documented scoped decisions; Q-02, Q-03, and broader intelligence/political questions remain open. Production and long-horizon scenarios cover the bounded slice; the Final PR records verification evidence. This review-branch status is not a release or merge claim.
 
 ## Preview-only or absent
 

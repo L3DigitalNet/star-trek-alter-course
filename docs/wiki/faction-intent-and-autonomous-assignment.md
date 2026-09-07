@@ -100,7 +100,7 @@ This implements ADR 0007's existing typed-target requirements; it does not super
 
 Reusable production faction definitions use strict JSON, schema validation, stable content identity, reference resolution, and semantic validation under ADR 0005. Keep immutable authored definition data separate from mutable faction state, objectives/commitments that affect continuation, direct ship control, and scheduler correlations. Do not put changing direct control into a reusable ship-class definition.
 
-The implementation is approved to introduce **save V7**, retaining the adjacent V1 → V2 → V3 → V4 → V5 → V6 → V7 chain. V7 is planned, not the current runtime format. Persist the consequential faction state, direct controller relationships, and exact typed scheduled work needed for deterministic continuation; derive rosters, projections, and caches rather than making them parallel durable authorities.
+The implementation introduces **save V7**, retaining the adjacent V1 → V2 → V3 → V4 → V5 → V6 → V7 chain. Released v0.5.0 remains V6. Persist the consequential faction state, direct controller relationships, and exact typed scheduled work needed for deterministic continuation; derive rosters, projections, and caches rather than making them parallel durable authorities.
 
 The V6 → V7 migration must produce an empty faction collection, null direct-controller references for all historical ships, and no faction decision state or faction-targeted work. Existing scheduled work becomes explicitly ship-targeted while retaining its identities, due times, sequence, correlations, and allocator continuation. Preserve all existing ship/world/knowledge state. Do not assign historical vessels to new-game factions or invent political history, objectives, reports, or affiliations.
 
@@ -124,7 +124,7 @@ Do not implement global known-vessel identity, cross-observer correlation, repor
 
 ## Implementation evidence and remaining acceptance evidence
 
-Core policy, scheduler, bootstrap, runtime, content, and persistence tests exercise the implemented contracts below. Feature #86's combined Core gate recorded 493 passing tests. Targeted headless scenarios also pass: production baseline and committed alternate, forbidden-knowledge invariance, midflight V7 continuation, 30-day satisfied dormancy, two-patrol dormancy across 345,600 ordinary arrivals, and a finite-hold strategic wake. Godot compatibility is separately verified; the full integrated gate remains pending.
+Core policy, scheduler, bootstrap, runtime, content, and persistence tests exercise the implemented contracts below. Headless scenarios cover production baseline and committed alternate, forbidden-knowledge invariance, midflight V7 continuation, 30-day satisfied dormancy, two-patrol dormancy across 345,600 ordinary arrivals, and a finite-hold strategic wake. Godot compatibility tests cover private catalog loading, quick-load continuation, and malformed candidate rejection. The Final PR records exact verification commands and results.
 
 | Proof | Required evidence |
 | --- | --- |
@@ -134,11 +134,11 @@ Core policy, scheduler, bootstrap, runtime, content, and persistence tests exerc
 | Knowledge boundary | Vary hidden foreign truth and ship-local contact knowledge while keeping permitted faction facts fixed; the pure decision and explanation remain unchanged. |
 | Typed scheduler | Mixed Ship/Faction work preserves stable same-time ordering, exact correlation, and cancellation; wrong-domain, missing, and mismatched targets fail closed. |
 | Persistence | V7 round-trip and interrupted/continued scenario equivalence; V6 migration adds no political state, preserves ship work, and remains valid with zero factions; the supported adjacent chain passes. |
-| Bounded behavior | Tests cover dormancy, exact wake correlation, maximum input/save shape, the 111,545,748-byte maximum save (22,671,980 bytes below 128 MiB), and targeted 30-day/two-patrol long-horizon scenarios. |
+| Bounded behavior | Tests cover dormancy, exact wake correlation, maximum input/save shape, the 111,544,212-byte maximum save (22,673,516 bytes below 128 MiB), and targeted 30-day/two-patrol long-horizon scenarios. |
 | Existing boundaries | Core remains independent of Godot; insertion/construction order cannot change semantic outcomes; no RNG or forbidden framework/dependency appears. |
 | Player regression | Existing production projection, input, save/load, and player-event behavior remain safe; no hidden faction information or preview truth enters the UI. |
 
-The implemented policy selects shortest direct route duration, then lowest ship identity; application revalidates an idle, directly controlled non-player ship before issuing ordinary `TravelTo`. Arrival wakes the faction after the ship arrival, and an objective becomes permanently `Satisfied` when presence exists. A pending objective is dormant only when it has no eligible candidate and no future hold or travel release boundary. The full integrated gate remains pending.
+The implemented policy selects shortest direct route duration, then lowest ship identity; application revalidates an idle, directly controlled non-player ship before issuing ordinary `TravelTo`. Arrival wakes the faction after the ship arrival, and an objective becomes permanently `Satisfied` when presence exists. A pending objective is dormant only when it has no eligible candidate and no future hold or travel release boundary. A retained pending wake must be due now or at the next such release, with no assignment currently available; matching persisted correlation fields cannot authorize an arbitrary delay.
 
 ## Sources
 

@@ -272,7 +272,7 @@ public sealed class GamePersistenceV4SensorTests
         );
 
         Assert.InRange(saved.Length, 1, 128 * 1024 * 1024);
-        Assert.Equal(111_545_748, saved.Length);
+        Assert.Equal(111_544_212, saved.Length);
         Assert.Equal(256, loaded.Simulation.CaptureState().Ships.Length);
         Assert.Equal(256, loaded.Simulation.CaptureState().Factions.Length);
         Assert.Equal(66_302, loaded.Simulation.CaptureState().Scheduler.OutstandingWork.Length);
@@ -327,7 +327,7 @@ public sealed class GamePersistenceV4SensorTests
 
         (FactionState[] factions, FactionDefinitionCatalog factionCatalog) = CreateMaximumFactions(
             locationId,
-            contactLossDueTime,
+            new SimulationTime(0),
             work,
             ref nextWorkId
         );

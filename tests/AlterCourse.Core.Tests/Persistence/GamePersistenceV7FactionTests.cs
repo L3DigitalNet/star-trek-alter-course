@@ -11,6 +11,56 @@ namespace AlterCourse.Core.Tests.Persistence;
 /// <summary>Verifies the closed V7 faction, controller, objective, and typed-work persistence contract.</summary>
 public sealed class GamePersistenceV7FactionTests
 {
+    /// <summary>Exact wire correlation cannot postpone an initial decision to an arbitrary future time.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void CorrelatedPendingWakeRequiresAMeaningfulStrategicBoundary(bool anotherShipHasFutureRelease)
+    {
+        GameSimulation live = FactionTestWorld
+            .CreateBootstrap(
+                [new FactionStart(FactionTestWorld.FactionA, FactionTestWorld.DefinitionA, FactionTestWorld.Beta)],
+                controlledShips: true,
+                firstNpcOrder: anotherShipHasFutureRelease
+                    ? new HoldUntilOrderStart(new SimulationTime(86_400_000))
+                    : null
+            )
+            .CreateSimulation(FactionTestWorld.ShipCatalog, FactionTestWorld.FactionCatalog);
+        byte[] before = GamePersistence.Serialize(live, Milestone3ProofFixture.Metadata);
+        byte[] corrupted = Mutate(
+            before,
+            root =>
+            {
+                JsonNode simulation = root["simulation"]!;
+                simulation["factions"]![0]!["pendingDecisionWake"]!["dueTimeMilliseconds"] = 86_400_000L;
+                JsonArray work = simulation["scheduler"]!["outstandingWork"]!.AsArray();
+                JsonNode wake = Assert.Single(
+                    work,
+                    item => string.Equals(item!["targetKind"]!.GetValue<string>(), "faction", StringComparison.Ordinal)
+                )!;
+                wake["dueTimeMilliseconds"] = 86_400_000L;
+                simulation["scheduler"]!["outstandingWork"] = new JsonArray(
+                    work.OrderBy(item => item!["dueTimeMilliseconds"]!.GetValue<long>())
+                        .ThenBy(item => item!["sequence"]!.GetValue<long>())
+                        .Select(item => item!.DeepClone())
+                        .ToArray()
+                );
+            }
+        );
+
+        GamePersistenceException failure = Assert.Throws<GamePersistenceException>(() =>
+            GamePersistence.Deserialize(
+                corrupted,
+                FactionTestWorld.ShipCatalog,
+                FactionTestWorld.FactionCatalog,
+                "postponed-pending-wake.json"
+            )
+        );
+
+        Assert.Equal(GamePersistenceFailure.InvalidData, failure.Failure);
+        Assert.Equal(before, GamePersistence.Serialize(live, Milestone3ProofFixture.Metadata));
+    }
+
     /// <summary>Removing both sides of a pending wake correlation must not silently disable an actionable objective.</summary>
     [Fact]
     public void MissingPendingDecisionContinuationFailsWithoutReplacingLiveState()
