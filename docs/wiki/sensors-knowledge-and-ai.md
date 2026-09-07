@@ -6,7 +6,7 @@ description: 'Implemented local contact rules, actor-safe decisions, Strategic C
 doc_type: 'concept'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-06'
+updated: '2026-09-07'
 tags:
   - 'simulation'
   - 'sensors'
@@ -50,7 +50,7 @@ The `CautiousContact` policy receives own-ship facts and actor-safe contacts. It
 
 An explanation is diagnostic/test data, not automatically player-visible or durable political history. Changing hidden truth while holding actor knowledge and legitimate own capability constant must not change a pure policy's choice. Command resolution can still reject a stale proposal when real prerequisites no longer hold.
 
-ADR 0010 generalizes the decision discipline, not a mandatory algorithm: actor snapshot, goals/constraints, candidates, rejection, evaluation, deterministic selection, typed command or no-action, and explanation. Feature #86 implements the bounded assignment policy under review: it chooses shortest direct route duration then lowest ship ID, consumes no RNG, and returns typed explanations. No behavior-tree framework or external LLM is gameplay authority.
+ADR 0010 generalizes the decision discipline, not a mandatory algorithm: actor snapshot, goals/constraints, candidates, rejection, evaluation, deterministic selection, typed command or no-action, and explanation. Feature #86 / Final PR #87, merged into `dev` as `0217296`, implements the bounded assignment policy: it chooses shortest direct route duration then lowest ship ID, consumes no RNG, and returns typed explanations. No behavior-tree framework or external LLM is gameplay authority.
 
 ## Strategic Contact Reporting
 
@@ -64,7 +64,7 @@ Each retained tactical position is qualified by the strategic location it was ob
 
 ## Implemented faction-assignment information boundary
 
-[Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) is implemented in Feature #86 / Final PR #87, pending landing. The policy receives its objective, explicitly known proof-map topology, and the identities, current strategic states, and assignment/order status of directly controlled assets. This narrow own-asset administrative view is the only faction knowledge addition in the slice.
+[Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) is implemented in Feature #86 / Final PR #87, merged into `dev` as `0217296`. The policy receives its objective, explicitly known proof-map topology, and the identities, current strategic states, and assignment/order status of directly controlled assets. This narrow own-asset administrative view is the only faction knowledge addition in the slice.
 
 It receives no unrestricted `SimulationState` or `ShipState`, controlled-ship sensor contacts/scans, external reports, foreign hidden state, affiliation/intent facts, or another faction's knowledge. A faction's own ship identity does not expose hidden target identity to outside observers. Actual command resolution still enforces existing prerequisites without granting the policy extra knowledge.
 

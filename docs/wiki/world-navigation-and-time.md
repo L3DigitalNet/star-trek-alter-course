@@ -6,7 +6,7 @@ description: 'Persistent ship identity, map scales, orders, deterministic time, 
 doc_type: 'concept'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-06'
+updated: '2026-09-07'
 tags:
   - 'simulation'
   - 'architecture'
@@ -44,7 +44,7 @@ Tactical space uses continuous 2D position and motion. Domain coordinates are ki
 
 Canceling an order does not teleport or silently abort a physical voyage already underway. Cancellation removes only the correlated work it actually owns. Existing tests cover offscreen progression, cancellation, save/load, and insertion-order independence, including a 72-hour M2 scenario.
 
-The review-branch [faction-assignment slice](faction-intent-and-autonomous-assignment.md) reuses these order/application paths. It assigns only idle, directly controlled NPC ships; application revalidates that boundary before creating ordinary `TravelTo`. Existing order cancellation is not permission for faction AI to preempt an assignment or interrupt a voyage. The player ship remains outside faction autonomous control in the proof.
+The implemented [faction-assignment slice](faction-intent-and-autonomous-assignment.md) reuses these order/application paths. It assigns only idle, directly controlled NPC ships; application revalidates that boundary before creating ordinary `TravelTo`. Existing order cancellation is not permission for faction AI to preempt an assignment or interrupt a voyage. The player ship remains outside faction autonomous control in the proof.
 
 ## One timeline, several update rates
 

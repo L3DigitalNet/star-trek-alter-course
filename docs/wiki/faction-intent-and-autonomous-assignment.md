@@ -6,7 +6,7 @@ description: 'Owner-approved first bounded M5 slice: direct NPC assignment, own-
 doc_type: 'decision'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-06'
+updated: '2026-09-07'
 tags:
   - 'design'
   - 'simulation'
@@ -30,9 +30,9 @@ related:
 
 ## Status, authority, and provenance
 
-**Implemented in Feature #86 / Final PR #87, pending landing.** The checked-out implementation uses save V7; the released v0.5.0 line remains V6. This page records both the September 6 approval and the source-level implementation truth under review. It does not claim that the feature has merged into `dev` or that a V7 release exists.
+**Implemented in Feature #86 / Final PR #87, merged into `dev` as `0217296`.** The current `dev` implementation uses save V7; the released v0.5.0 line remains V6. This page records both the September 6 approval and the merged source-level implementation truth. It does not claim that a V7 release exists.
 
-This is the first implemented contribution toward **Milestone 5 — Living Sector and Faction Autonomy** after Strategic Contact Reporting. It is not all of M5, does not complete M3, and does not rename the earlier contact-reporting slice to M3B. Ship-definition content remains V4. The branch implementation is V7 while the current v0.5.0 release remains V6.
+This is the first implemented contribution toward **Milestone 5 — Living Sector and Faction Autonomy** after Strategic Contact Reporting. It is not all of M5, does not complete M3, and does not rename the earlier contact-reporting slice to M3B. Ship-definition content remains V4. The `dev` implementation is V7 while the current v0.5.0 release remains V6.
 
 The implementation adds no faction, affiliation, political hierarchy, or intelligence UI; it does not publish a release. Organizations, hierarchy traversal, information sharing, RNG, and a generic actor framework remain outside this slice.
 
@@ -97,6 +97,8 @@ Faction starts, direct controller links, consequential initial faction state, an
 This implements ADR 0007's existing typed-target requirements; it does not supersede that ADR. Root factions are sufficient for the proof. The approved eventual recursive parentage model remains unchanged, but parent/child runtime and hierarchy traversal are not required here.
 
 ## D-12 — Content, durable state, and the planned V7 migration
+
+This preserved historical heading now describes the implemented V7 migration in `dev`.
 
 Reusable production faction definitions use strict JSON, schema validation, stable content identity, reference resolution, and semantic validation under ADR 0005. Keep immutable authored definition data separate from mutable faction state, objectives/commitments that affect continuation, direct ship control, and scheduler correlations. Do not put changing direct control into a reusable ship-class definition.
 

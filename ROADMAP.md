@@ -14,10 +14,10 @@ The current operational state is tracked in [STATUS](docs/STATUS.md), while [Imp
 - **Milestone 1** and **Milestone 2** are implemented.
 - **Milestone 3A — First Observed Contact** is implemented, but **Milestone 3 as a whole is not complete**.
 - **Milestone 4 — Engineering Backbone and Degraded Operations** is implemented.
-- Released v0.5.0 uses content schema **V4** and save schema **V6**; the checked-out faction implementation uses strict faction content V1 and save V7 pending landing.
+- Released v0.5.0 uses content schema **V4** and save schema **V6**; the `dev` runtime adds strict faction content V1 and save V7 through Feature #86 / Final PR #87, merged as `0217296`.
 - The approved [factions and organizations](docs/wiki/factions-and-organizations.md) political model is **design only**. No faction hierarchy, organization runtime, government model, treaty system, layered jurisdiction runtime, or strategic affiliation-knowledge system exists yet.
 - [Strategic Contact Reporting](docs/wiki/strategic-contact-reporting.md) is **implemented** (Feature #77, Final PR #78), resolving Q-01. It is not canonically named `M3B`, does not complete Milestone 3, and did not itself begin M5.
-- [Faction Intent and Autonomous Assignment](docs/wiki/faction-intent-and-autonomous-assignment.md) is the implemented review-branch first M5 slice, resolving Q-05. It uses V7 pending landing; released v0.5.0 remains V6.
+- [Faction Intent and Autonomous Assignment](docs/wiki/faction-intent-and-autonomous-assignment.md) is the implemented first M5 slice, resolving Q-05. Current `dev` uses V7; released v0.5.0 remains V6.
 
 ## Execution model
 
@@ -160,7 +160,7 @@ Evaluate remaining M3 scope against actual consumers. Q-02 and Q-03 remain open;
 
 ### Approved first bounded slice — Faction Intent and Autonomous Assignment
 
-**Implemented in Feature #86 / Final PR #87, pending landing.** The [canonical wiki decision](docs/wiki/faction-intent-and-autonomous-assignment.md) records the selected era-neutral root-faction proof and six decisions D-08 through D-13. Q-05 is resolved for this first consumer; neither M3 nor M5 is complete.
+**Implemented in Feature #86 / Final PR #87, merged into `dev` as `0217296`.** The [canonical wiki decision](docs/wiki/faction-intent-and-autonomous-assignment.md) records the selected era-neutral root-faction proof and six decisions D-08 through D-13. Q-05 is resolved for this first consumer; neither M3 nor M5 is complete.
 
 Faction A selects an idle directly controlled NPC ship to establish presence at Vesper Reach, where B has a ship. Making A's preferred candidate already committed must change the selected valid assignment. The existing order, travel, and sensor paths produce an offscreen NPC-NPC consequence without player interaction. Presence does not imply political territory or a treaty effect.
 

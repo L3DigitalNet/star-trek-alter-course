@@ -6,7 +6,7 @@ description: 'Future strategic autonomy, durable political consequences, trade, 
 doc_type: 'concept'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-06'
+updated: '2026-09-07'
 tags:
   - 'design'
   - 'simulation'
@@ -24,13 +24,13 @@ related:
 
 ## Status
 
-These are future gameplay domains. The current v0.5.0 baseline supplies typed hail, bounded ship behavior, and strategic last-known contact reporting, not treaties, faction planning, trade, governments, or a generated campaign. The approved political framework and first faction-assignment design remain distinct from implemented runtime.
+These are future gameplay domains. The current v0.5.0 baseline supplies typed hail, bounded ship behavior, and strategic last-known contact reporting, not treaties, faction planning, trade, governments, or a generated campaign. Current `dev` adds the bounded root-faction assignment proof; the broader political framework remains distinct from implemented runtime.
 
 ## Living sector and faction autonomy
 
 M5 is intended to prove faction intent → autonomous ship assignment → offscreen activity → durable world change. The broader milestone requires multiple locations and ships, consequential choices by at least two autonomous political actors, and an NPC-NPC interaction that matters without the player witnessing it.
 
-The first bounded contribution is now selected: [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md), approved design, not implemented. Two era-neutral root factions use the existing fictional map where practical. A chooses among its directly controlled idle NPC ships to establish presence at Vesper Reach, where B has a ship; committing A's preferred candidate must change its choice. Existing orders, travel, and sensors create the offscreen consequence. This first proof does not complete the broader M5 milestone.
+The first bounded contribution is implemented: [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md), delivered by Feature #86 / Final PR #87 and merged into `dev` as `0217296`. Two era-neutral root factions use the existing fictional map where practical. A chooses among its directly controlled idle NPC ships to establish presence at Vesper Reach, where B has a ship; committing A's preferred candidate must change its choice. Existing orders, travel, and sensors create the offscreen consequence. This first proof does not complete the broader M5 milestone.
 
 The selected policy sees only its objective, explicitly known proof-map topology, and own-asset identity, strategic state, and assignment/order status. No sensor-report sharing, foreign truth, political affiliation learning, preemption, or player-command override is approved. It uses closed Ship/Faction scheduled work, typed bootstrap, the planned non-inventive V7 migration, and no RNG or political UI. Q-05 is resolved for this consumer; the other scoped and deferred choices are maintained in [Open questions](open-questions.md).
 

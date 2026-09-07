@@ -6,7 +6,7 @@ description: 'Simulation authority, project boundaries, dependency policy, and a
 doc_type: 'reference'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-06'
+updated: '2026-09-07'
 tags:
   - 'architecture'
 aliases: []
@@ -35,9 +35,9 @@ Model responsibilities according to systems, not UI screens. Existing `ShipState
 
 Avoid parallel mechanisms. New strategic decisions should consume established information projections and issue established domain commands where those fit. The political design does not authorize an entity framework, a universal faction/organization base class, or a generalized rules engine.
 
-## Implemented faction slice under review
+## Implemented faction slice
 
-[Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) is implemented in Feature #86 / Final PR #87, pending landing. Core has stable root faction identity and bounded consequential state, one optional asset-side direct faction controller with a derived roster, and a pure policy that issues existing ship-order commands only to idle controlled NPC ships. The player ship is excluded from faction autonomous control in the proof.
+[Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) is implemented in Feature #86 / Final PR #87, merged into `dev` as `0217296`. Core has stable root faction identity and bounded consequential state, one optional asset-side direct faction controller with a derived roster, and a pure policy that issues existing ship-order commands only to idle controlled NPC ships. The player ship is excluded from faction autonomous control in the proof.
 
 The policy input is a narrow own-asset administrative projection, not unrestricted world/ship state or a faction sensor network. The scheduler has closed Ship/Faction targets with exact typed validation and preserved ordering. Faction state, controller links, and initial work belong in typed bootstrap and complete candidate validation, not post-construction proof mutations.
 

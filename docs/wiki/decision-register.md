@@ -6,7 +6,7 @@ description: 'Stable index of architectural decisions, approved implementation/d
 doc_type: 'index'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-06'
+updated: '2026-09-07'
 tags:
   - 'design'
   - 'architecture'
@@ -51,7 +51,7 @@ D-07 resolved Q-01. The slice is not canonically named `M3B`, did not complete M
 
 ## Approved next-development decisions — September 6, 2026
 
-All six decisions below are owner-approved. [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) owns their complete meaning and proof. They select the first bounded contribution toward M5, not the entire milestone. Feature #86 / Final PR #87 implements them on its review branch with V7; v0.5.0 remains V6 and no release is claimed.
+All six decisions below are owner-approved. [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) owns their complete meaning and proof. They select the first bounded contribution toward M5, not the entire milestone. Feature #86 / Final PR #87 implements them in `dev` as `0217296` with V7; v0.5.0 remains V6 and no release is claimed.
 
 **D-08 — Era-neutral autonomous-assignment proof.** Two root factions; A has an objective to establish presence at Vesper Reach and at least two controlled NPC ships; B has a ship there. A's deterministic choice changes when the preferred candidate is already committed. Existing orders, travel, and sensors produce an offscreen NPC-NPC consequence without player interaction. Q-05 is resolved for this slice; Q-06 remains open for the eventual campaign.
 
@@ -61,7 +61,7 @@ All six decisions below are owner-approved. [Faction Intent and Autonomous Assig
 
 **D-11 — Closed Ship/Faction work targets and typed bootstrap.** Extend the existing deterministic scheduler with two explicit typed target domains, preserving stable ordering, exact correlation, validation, and budgets. Faction state, controller links, and initial wakes enter through typed bootstrap, not post-construction proof mutations. This implements ADR 0007 without changing its boundary or adding a framework.
 
-**D-12 — V7 and non-inventive migration.** The implementation uses ordinary validated JSON faction definitions and explicit mutable runtime state. Its adjacent V6→V7 migration produces zero factions, null historical ship controllers, and no faction state or wakes. Existing ship work retains its semantics and ordering as explicitly ship-targeted work. Zero-faction worlds remain valid; no new-game political history is injected into old saves.
+**D-12 — V7 and non-inventive migration.** Implemented in `dev`, this uses ordinary validated JSON faction definitions and explicit mutable runtime state. Its adjacent V6→V7 migration produces zero factions, null historical ship controllers, and no faction state or wakes. Existing ship work retains its semantics and ordering as explicitly ship-targeted work. Zero-faction worlds remain valid; no new-game political history is injected into old saves.
 
 **D-13 — No randomness in this policy.** Use deterministic candidates, constraints, selection, tie-breaking, and explanations. Q-14's next migration is selected and this policy consumes no RNG; the eventual versioned random algorithm and later compatibility decisions remain open.
 

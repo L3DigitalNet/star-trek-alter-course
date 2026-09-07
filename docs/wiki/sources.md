@@ -6,7 +6,7 @@ description: 'Coverage index of original architecture, design, specification, wo
 doc_type: 'index'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-06'
+updated: '2026-09-07'
 tags:
   - 'design'
   - 'architecture'
@@ -29,6 +29,16 @@ This catalog inventories the project-owned design/specification corpus present i
 
 The wiki is the single source of truth for design; this catalog lists the documents that supply supporting detail, architectural decisions, implementation evidence, and history. Active ADRs record architectural decisions. Supporting design and specification documents supply detail within the scope their owning wiki page assigns them and may not contradict it. Historical records explain origin, and current code/tests resolve implementation claims. A source's future tense, example, package candidate, or archived assistant recommendation is not evidence of an implemented feature or owner approval.
 
+## Review record
+
+Targeted review, 2026-09-07:
+
+- **Source:** `685a605`; merged Feature #86 / Final PR #87 commit `0217296`.
+- **Scope:** faction landing claims and summaries in the root [README](../../README.md), [roadmap](../../ROADMAP.md), and this wiki's implementation, architecture, faction, knowledge, navigation, persistence, decision, and campaign pages.
+- **Evidence:** static inspection of the [faction policy](../../src/AlterCourse.Core/AI/FactionAssignmentPolicy.cs), [runtime wakes](../../src/AlterCourse.Core/Gameplay/GameSimulation.Factions.cs), [V7 persistence](../../src/AlterCourse.Core/Persistence/GamePersistence.cs), and [targeted tests](../../tests/AlterCourse.Core.Tests/Gameplay/FactionAssignmentScenarioTests.cs). The audit used inherited PR #87 test evidence; this PR's verification records any reruns.
+- **Findings and disposition:** corrected stale pending-landing/review-branch claims and README V6/current-rules claims. Current `dev` is V7 under `faction-intent-autonomous-assignment-v1`; v0.5.0 remains the V6 release. M3 and M5 remain incomplete.
+- **Full-review cadence:** the initial 2026-09-06 full-corpus review remains the [Wiki home](README.md) provenance; the next full review is due 2026-09-13. This targeted review does not reset that date; follow the [recurring design-reconciliation procedure](development-and-governance.md#recurring-design-reconciliation).
+
 ## All active ADRs
 
 - [0001 — Separate simulation from Godot](../adr/0001-separate-simulation-from-godot.md): one-way assembly dependency and pure Core testing.
@@ -48,7 +58,7 @@ The wiki is the single source of truth for design; this catalog lists the docume
 ## Canonical wiki decisions and future design
 
 - [Strategic Contact Reporting](strategic-contact-reporting.md): implemented after v0.4.0 and released in v0.5.0 (Feature #77, Final PR #78); durable reference-frame-qualified actor-safe last-known contact reporting with its original non-goals preserved.
-- [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md): Feature #86 / Final PR #87 review-branch implementation of the bounded M5 slice; D-08 through D-13 cover its proof, control, knowledge, scheduler/bootstrap, V7 migration, and no-RNG decisions.
+- [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md): Feature #86 / Final PR #87 implementation of the bounded M5 slice, merged into `dev` as `0217296`; D-08 through D-13 cover its proof, control, knowledge, scheduler/bootstrap, V7 migration, and no-RNG decisions.
 - [Factions and organizations](factions-and-organizations.md): owner-approved conceptual political framework; its hierarchy, organization, government, and relationship runtime remains future work, while the first assignment consumer implements only the root-faction/direct-control subset.
 - [Open questions](open-questions.md): Q-01 and first-slice Q-05 resolved; Q-04/Q-06/Q-08/Q-14 scoped in part; Q-02/Q-03 and remaining intelligence, political, combat, campaign, and compatibility questions deferred.
 
@@ -82,8 +92,8 @@ The wiki is the single source of truth for design; this catalog lists the docume
 - [v0.4.0 release](https://github.com/L3DigitalNet/star-trek-alter-course/releases/tag/v0.4.0), [M3A feature #58](https://github.com/L3DigitalNet/star-trek-alter-course/issues/58), and [M4 feature #62](https://github.com/L3DigitalNet/star-trek-alter-course/issues/62).
 - [M3A PR #61](https://github.com/L3DigitalNet/star-trek-alter-course/pull/61) and [M4 PR #63](https://github.com/L3DigitalNet/star-trek-alter-course/pull/63): admission/test/manual evidence, not a fresh rerun in this wiki review.
 - [Strategic Contact Reporting documentation task #74](https://github.com/L3DigitalNet/star-trek-alter-course/issues/74): approval/provenance for the slice. [Strategic Contact Reporting feature #77](https://github.com/L3DigitalNet/star-trek-alter-course/issues/77) and [Final PR #78](https://github.com/L3DigitalNet/star-trek-alter-course/pull/78): implementation evidence.
-- [Faction policy](../../src/AlterCourse.Core/AI/FactionAssignmentPolicy.cs), [runtime wakes](../../src/AlterCourse.Core/Gameplay/GameSimulation.Factions.cs), [strict faction content](../../src/AlterCourse.Core/Content/FactionDefinitionCatalogLoader.cs), and [V7 persistence](../../src/AlterCourse.Core/Persistence/GamePersistence.cs): Feature #86 / Final PR #87 source evidence, pending landing.
-- [Faction policy tests](../../tests/AlterCourse.Core.Tests/AI/FactionAssignmentPolicyTests.cs), [scheduler target tests](../../tests/AlterCourse.Core.Tests/Simulation/FactionSchedulerTargetTests.cs), [runtime tests](../../tests/AlterCourse.Core.Tests/Gameplay/FactionRuntimeWakeTests.cs), and [V7 persistence tests](../../tests/AlterCourse.Core.Tests/Persistence/GamePersistenceV7FactionTests.cs): executed Core evidence.
+- [Faction policy](../../src/AlterCourse.Core/AI/FactionAssignmentPolicy.cs), [runtime wakes](../../src/AlterCourse.Core/Gameplay/GameSimulation.Factions.cs), [strict faction content](../../src/AlterCourse.Core/Content/FactionDefinitionCatalogLoader.cs), and [V7 persistence](../../src/AlterCourse.Core/Persistence/GamePersistence.cs): Feature #86 / Final PR #87 source evidence, merged into `dev` as `0217296`.
+- [Faction policy tests](../../tests/AlterCourse.Core.Tests/AI/FactionAssignmentPolicyTests.cs), [scheduler target tests](../../tests/AlterCourse.Core.Tests/Simulation/FactionSchedulerTargetTests.cs), [runtime tests](../../tests/AlterCourse.Core.Tests/Gameplay/FactionRuntimeWakeTests.cs), and [V7 persistence tests](../../tests/AlterCourse.Core.Tests/Persistence/GamePersistenceV7FactionTests.cs): inherited executed Core evidence from PR #87; not rerun in this review.
 - [Assignment scenarios](../../tests/AlterCourse.Core.Tests/Gameplay/FactionAssignmentScenarioTests.cs), [knowledge boundary](../../tests/AlterCourse.Core.Tests/Gameplay/FactionKnowledgeBoundaryTests.cs), and [long horizon](../../tests/AlterCourse.Core.Tests/Gameplay/FactionLongHorizonTests.cs): targeted production, continuation, forbidden-knowledge, dormancy, and finite-hold evidence at `407393d`.
 - Godot compatibility at `eeec0ce`: focused `GameplayShellTests` 65/65, warning-free build, private catalog loading, V7 quick-load continuation, malformed faction-data rejection, and player-safe faction hiding.
 

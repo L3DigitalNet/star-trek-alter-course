@@ -6,7 +6,7 @@ description: 'Distinct contracts for reusable definitions, durable saves, visual
 doc_type: 'reference'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-06'
+updated: '2026-09-07'
 tags:
   - 'architecture'
   - 'validation'
@@ -33,7 +33,7 @@ A ship class definition can be shared by many vessels; their names, conditions, 
 
 ADR 0005 makes strict UTF-8 JSON the canonical ordinary Core content format. System.Text.Json parsing, structural JSON Schema validation, explicit input models, stable IDs, reference resolution, and semantic validation admit immutable definitions. Reject malformed content, unknown members where not explicitly allowed, duplicate IDs, invalid bounds, unsupported versions, and broken references.
 
-The review branch adds strict faction-definition V1 loading alongside [Pathfinder content](../../src/AlterCourse.Godot/content/ships/pathfinder.json) and ship-definition V4. A faction definition has stable identity and display name; mutable objectives and direct ship control remain runtime state. Weapon and campaign content families remain absent.
+Current `dev` adds strict faction-definition V1 loading alongside [Pathfinder content](../../src/AlterCourse.Godot/content/ships/pathfinder.json) and ship-definition V4. A faction definition has stable identity and display name; mutable objectives and direct ship control remain runtime state. Weapon and campaign content families remain absent.
 
 Stable definition IDs are not display names or file paths. Content migration and save migration are separate responsibilities. A future specialized narrative source language requires the explicit ADR 0012 admission path; it does not authorize YAML as an alternate ordinary ship/faction definition format.
 
@@ -49,9 +49,11 @@ Loading validates an entire candidate before replacing the live simulation. The 
 
 The shell uses `user://quick-save.json`. The legacy default `quick-save-v1.json` fallback is consulted only if the generic slot is absent; custom paths do not use it. Broader compatibility promises, autosave policies, and eventual distribution remain separate decisions. Pre-1.0 does not promise perpetual migration support.
 
-## Implemented V7, pending landing
+## Implemented V7
 
-[Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md), D-12, implements V7 on Feature #86 / Final PR #87 and retains the complete adjacent V1→V7 chain. V6→V7 introduces an empty faction collection, null historical ship controller links, and no faction decision state or faction wakes. Existing work becomes explicitly ship-targeted while preserving identities, times, total ordering, correlation, and continuation counters. Existing world/ship/knowledge state is preserved; political history is not inferred from vessel names or current new-game content.
+[Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md), D-12, implements V7 in Feature #86 / Final PR #87, merged into `dev` as `0217296`, and retains the complete adjacent V1→V7 chain. V6→V7 introduces an empty faction collection, null historical ship controller links, and no faction decision state or faction wakes. Existing work becomes explicitly ship-targeted while preserving identities, times, total ordering, correlation, and continuation counters. Existing world/ship/knowledge state is preserved; political history is not inferred from vessel names or current new-game content.
+
+V7 uses rules identity `faction-intent-autonomous-assignment-v1`; V6's `strategic-contact-reporting-v1` identity remains part of the historical migration contract.
 
 Zero-faction worlds must remain valid. New-game typed bootstrap may create the proof's factions; loading a migrated save must not rerun that initialization. Persist consequential faction state, direct control, and exact typed Ship/Faction work; derive rosters and projections rather than duplicating authority. No faction/organization placeholder or RNG state is required.
 
