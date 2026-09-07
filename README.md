@@ -10,7 +10,9 @@ The [project design wiki](docs/wiki/README.md) is the single source of truth for
 
 The current immutable source-only release is v0.5.0 — Strategic Contact Reporting. It includes Milestone 3A first observed contact, the Milestone 4 Engineering Backbone, and reference-frame-qualified last-known contact reporting; no packaged game artifact is published.
 
-The next approved design is [Faction Intent and Autonomous Assignment](docs/wiki/faction-intent-and-autonomous-assignment.md), a bounded first contribution toward Milestone 5. It specifies an era-neutral autonomous-assignment proof, narrow direct NPC control and own-asset knowledge, typed Ship/Faction scheduling, a planned V7 migration, and no randomness or political UI. It is not implemented; current saves remain V6, ship-definition content remains V4, and neither M3 nor M5 is declared complete.
+Feature #86 / Final PR #87 implements [Faction Intent and Autonomous Assignment](docs/wiki/faction-intent-and-autonomous-assignment.md), a bounded first contribution toward Milestone 5, on its review branch. It provides root factions, narrow direct NPC control and own-asset knowledge, typed Ship/Faction scheduling, strict faction content V1, V7 migration, and no randomness or political UI. Released v0.5.0 saves remain V6, ship-definition content remains V4, and neither M3 nor M5 is declared complete.
+
+The Godot shell privately loads the faction catalog and V7 saves while keeping hidden controller, faction, objective, and scheduled-work state out of the normal player interface. Ordinary observed NPC vessels can still appear through existing player-safe contact rules.
 
 The command screen proves a small, persistent, deterministic slice of play: a captain selects a connected destination on an open strategic map, begins travel, allocates constrained power between sensors and impulse propulsion, and sees a damaged system repair as simulation time passes. Arrival is scheduled rather than immediate. A separate local tactical view displays continuous position and accepts a demonstration course command; neither map is governed by square or hex movement.
 

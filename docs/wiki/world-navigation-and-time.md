@@ -44,17 +44,17 @@ Tactical space uses continuous 2D position and motion. Domain coordinates are ki
 
 Canceling an order does not teleport or silently abort a physical voyage already underway. Cancellation removes only the correlated work it actually owns. Existing tests cover offscreen progression, cancellation, save/load, and insertion-order independence, including a 72-hour M2 scenario.
 
-The approved [first faction-assignment slice](faction-intent-and-autonomous-assignment.md) will reuse these order/application paths. It may assign idle, directly controlled NPC ships only; existing order cancellation is not permission for faction AI to preempt an assignment or interrupt a voyage. The player ship remains outside faction autonomous control in the proof. This is approved design, not implemented behavior.
+The review-branch [faction-assignment slice](faction-intent-and-autonomous-assignment.md) reuses these order/application paths. It assigns only idle, directly controlled NPC ships; application revalidates that boundary before creating ordinary `TravelTo`. Existing order cancellation is not permission for faction AI to preempt an assignment or interrupt a voyage. The player ship remains outside faction autonomous control in the proof.
 
 ## One timeline, several update rates
 
 Core time advances only through explicit operations. A pause submits no advancement; wall-clock time, rendering delays, and time spent with the process closed do not move the universe. Tactical/contact-sensitive work uses deterministic 100 ms boundaries. Strategic-only intervals can advance event-to-event, and repair state is analytically materialized at relevant boundaries.
 
-The scheduler has finite known work kinds, stable work IDs, persisted same-time ordering, exact cancellation/correlation, and bounded processing. Current kinds are travel arrival, system repair completion, order wake, contact loss, scan completion, and ship contact decision wake. Current work targets a ship; faction-owned scheduling remains unimplemented.
+The scheduler has finite known work kinds, stable work IDs, persisted same-time ordering, exact cancellation/correlation, and bounded processing. It now has closed Ship/Faction targets; faction decision wakes require their exact faction identity and correlation, while existing work retains ship meaning.
 
-D-11 now approves closed Ship/Faction targets for the first faction slice, not a generic actor registry or another scheduler. That implementation must preserve existing ship-work meaning, total same-time sequence, exact correlation, typed target validation, and budgets. Faction decision wakes use meaningful strategic boundaries rather than tactical-frequency faction polling. Typed bootstrap must create a complete valid initial aggregate, including faction state and initial work.
+D-11's implementation preserves existing ship-work meaning, total same-time sequence, exact correlation, typed target validation, and budgets. Faction decisions wake initially, at arrival, or at a future hold/travel release boundary; they do not poll at tactical frequency. A pending objective is dormant only when it has no eligible candidate and no release boundary. Typed bootstrap creates a complete valid aggregate, including faction state and initial work.
 
-`AdvanceUntilNextPlayerRelevantEvent` processes hidden NPC work but does not report it merely because it occurred. Player-safe events include their actual simulation occurrence times rather than inheriting the final time of a batch. Future faction work must retain that boundary; it is not automatically a player-relevant event.
+`AdvanceUntilNextPlayerRelevantEvent` processes hidden NPC work but does not report it merely because it occurred. Player-safe events include their actual simulation occurrence times rather than inheriting the final time of a batch. Implemented faction work follows that boundary and is not automatically player-relevant.
 
 ## Randomness and future scale
 

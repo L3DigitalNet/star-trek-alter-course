@@ -28,9 +28,9 @@ source:
 
 ## Status and provenance
 
-**Approved conceptual design; not implemented.** This page records the owner's explicit decisions in the September 6, 2026 design discussion consolidated under issue #68. It is the canonical record of those principles, not a schema, a complete political simulation specification, or authorization to implement every example now.
+**Approved conceptual design with one implemented bounded consumer under review.** This page records the owner's explicit decisions in the September 6, 2026 design discussion consolidated under issue #68. Feature #86 / Final PR #87 implements only root factions, direct ship control, and establish-presence assignment; this page is not a complete political simulation specification.
 
-The owner subsequently approved [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) as the first bounded M5 consumer. That page owns the six scoped pre-implementation decisions; it does not replace this broader framework. No political runtime is introduced by the documentation approval.
+The owner subsequently approved [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) as the first bounded M5 consumer. Its implementation is pending landing and does not replace this broader framework or introduce hierarchy, government, organization, or relationship runtime.
 
 Detailed authority matrices, constitutional procedures, general political scoring, action catalogs, and succession remain deferred. The current v0.5.0 implementation contains no faction hierarchy, organization runtime, diplomatic relationship state, government control, or layered jurisdiction model.
 
@@ -120,6 +120,6 @@ Structural parentage, governing control, coalition membership, and direct asset 
 
 Build only the smallest political slice that proves a real causal chain. Preserve actor-specific knowledge, deterministic scheduling, typed commands, explicit persistence, and meaningful offscreen activity. Existing ADRs still govern those boundaries.
 
-The first selected slice is [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md), approved through [documentation PR #84](https://github.com/L3DigitalNet/star-trek-alter-course/pull/84). It uses an era-neutral two-root-faction scenario, existing orders and sensors, closed Ship/Faction scheduled targets, a planned V7 migration that invents no political state, and no randomness or political UI. Its selection does not mean gameplay implementation has begun or the full M5 milestone is complete.
+The first selected slice is [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md), implemented in Feature #86 / Final PR #87 pending landing. It uses root factions, existing orders and sensors, closed Ship/Faction scheduled targets, V7 migration that invents no political state, and no randomness or political UI. It does not complete M5.
 
 [Open questions](open-questions.md) distinguishes resolved Q-05 from scoped administrative/control/compatibility decisions and still-open intelligence, identity, campaign, organization, and political mechanics. Do not repeatedly reopen the six approved decisions or silently implement this framework's entire future surface.
