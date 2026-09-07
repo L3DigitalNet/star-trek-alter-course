@@ -33,12 +33,12 @@
 - Command-interface fixtures are deterministic presentation data only. They cannot submit commands, persist state, or invent Core truth.
 - `scripts/launch-game.sh` is the safe direct-launch boundary: it restores and builds the Godot project before starting the editor.
 
-## Approved next-slice boundaries
+## Implemented faction boundaries
 
-- [Faction assignment](../wiki/faction-intent-and-autonomous-assignment.md) is implemented on the checked-out candidate: direct idle-NPC assignment through existing orders.
+- [Faction assignment](../wiki/faction-intent-and-autonomous-assignment.md) is implemented on `dev`: direct idle-NPC assignment through existing orders.
 - One asset-side faction controller is authoritative; the roster is derived. Policy sees only approved own-asset administrative facts, not sensor reports.
 - Closed Ship/Faction targets extend the existing scheduler; typed bootstrap admits complete faction state and initial work without hidden follow-up mutations.
-- V7 migration preserves ship work and creates no factions or controller history; zero-faction worlds remain valid. Released v0.5.0 remains V6.
+- V7 migration preserves ship work and creates no factions or controller history; zero-faction worlds remain valid. Released v0.5.0 remains V6; `dev` has V7.
 - No RNG, organization/hierarchy runtime, generic actor framework, political UI, or player-command override belongs to the first slice.
 
 ## Standing backlog
