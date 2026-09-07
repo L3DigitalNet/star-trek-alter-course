@@ -1070,6 +1070,167 @@ func test_normal_shell_never_projects_hidden_vessel_or_scheduler_truth() -> void
 	assert_str(presented).not_contains("OrderWake")
 	assert_str(presented).not_contains("ScheduledWork")
 	assert_str(presented).not_contains("FactionDecisionWake")
+	assert_str(presented).not_contains("ObservationReportDelivery")
+	assert_str(presented).not_contains("reportDelivery")
+	assert_str(presented).not_contains("activeInvestigation")
+	assert_str(presented).not_contains("receivedReports")
+	assert_str(presented).not_contains("completionWatermarks")
+
+
+func test_production_observation_response_remains_actor_safe_until_sensor_arrival() -> void:
+	var screen := _create_screen()
+	_advance_fixed_steps(screen, 160)
+	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(16000)
+	screen.call("QuickSave")
+	var response_save: Dictionary = JSON.parse_string(
+		FileAccess.get_file_as_string(TEST_QUICK_SAVE_PATH)
+	)
+	var simulation: Dictionary = response_save.get("simulation", {})
+	var factions: Array = simulation.get("factions", [])
+	var ships: Array = simulation.get("ships", [])
+	var observer_ids: Array[int] = []
+	var responder_ids: Array[int] = []
+	var hidden_ship_names: Array[String] = []
+	assert_int(factions.size()).is_equal(2)
+	for faction in factions:
+		var faction_id := int(faction.get("id", 0))
+		var observation: Dictionary = faction.get("observation", {})
+		var investigation: Dictionary = observation.get("activeInvestigation", {})
+		var source_report: Dictionary = investigation.get("sourceReport", {})
+		var observer_id := int(source_report.get("observerShipId", 0))
+		var responder_id := int(investigation.get("responderShipId", 0))
+		assert_str(observation.get("posture", "")).is_equal("enabled")
+		assert_int((observation.get("receivedReports", []) as Array).size()).is_greater(0)
+		assert_bool(investigation.is_empty()).is_false()
+		assert_int(observer_id).is_not_equal(1)
+		assert_int(responder_id).is_not_equal(1)
+		assert_int(observer_id).is_not_equal(responder_id)
+		assert_int(
+			int(_find_saved_ship(ships, observer_id).get("directControllerFactionId", 0))
+		).is_equal(faction_id)
+		assert_int(
+			int(_find_saved_ship(ships, responder_id).get("directControllerFactionId", 0))
+		).is_equal(faction_id)
+		assert_str(investigation.get("destinationLocationId", "")).is_equal("vesper-reach")
+		observer_ids.append(observer_id)
+		responder_ids.append(responder_id)
+		hidden_ship_names.append(_find_saved_ship(ships, observer_id).get("displayName", ""))
+		hidden_ship_names.append(_find_saved_ship(ships, responder_id).get("displayName", ""))
+	assert_int(observer_ids[0]).is_not_equal(observer_ids[1])
+	assert_int(responder_ids[0]).is_not_equal(responder_ids[1])
+	var presented_at_dawn := _collect_control_text(screen)
+	for hidden_ship_name in hidden_ship_names:
+		assert_str(hidden_ship_name).is_not_empty()
+		assert_str(presented_at_dawn).not_contains(hidden_ship_name)
+	for hidden_term in [
+		"Faction A",
+		"Faction B",
+		"activeInvestigation",
+		"receivedReports",
+		"reportDelivery",
+	]:
+		assert_str(presented_at_dawn).not_contains(hidden_term)
+
+	screen.call("SelectDestination", "vesper-reach")
+	screen.call("RequestSelectedTravel")
+	var player_arrival: int = screen.get_meta("travel_eta_milliseconds", -1)
+	assert_int(player_arrival).is_equal(28000)
+	_advance_fixed_steps(screen, int((player_arrival - 16000) / 100))
+	assert_bool(screen.get_meta("travel_active", true)).is_false()
+	screen.call("QuickSave")
+	var before_arrival_save: Dictionary = JSON.parse_string(
+		FileAccess.get_file_as_string(TEST_QUICK_SAVE_PATH)
+	)
+	var before_arrival_simulation: Dictionary = before_arrival_save.get("simulation", {})
+	var player_before := _find_saved_ship(before_arrival_simulation.get("ships", []), 1)
+	var contacts_before: Array = player_before.get("sensorKnowledge", {}).get("contacts", [])
+	var visible_contact_count_before: int = screen.get_meta("sensor_contact_count", -1)
+	var responder_arrival := 0
+	for responder_id in responder_ids:
+		assert_bool(_find_saved_contact(contacts_before, responder_id).is_empty()).is_true()
+		var responder := _find_saved_ship(before_arrival_simulation.get("ships", []), responder_id)
+		var expected_arrival := int(
+			responder.get("strategicState", {}).get("travel", {}).get(
+				"expectedArrivalMilliseconds", 0
+			)
+		)
+		if responder_arrival == 0 or expected_arrival < responder_arrival:
+			responder_arrival = expected_arrival
+	assert_int(responder_arrival).is_equal(30000)
+	_advance_fixed_steps(screen, int((responder_arrival - player_arrival) / 100))
+	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(responder_arrival)
+	screen.call("QuickSave")
+	var arrival_save: Dictionary = JSON.parse_string(
+		FileAccess.get_file_as_string(TEST_QUICK_SAVE_PATH)
+	)
+	var arrival_simulation: Dictionary = arrival_save.get("simulation", {})
+	var player_after := _find_saved_ship(arrival_simulation.get("ships", []), 1)
+	var contacts_after: Array = player_after.get("sensorKnowledge", {}).get("contacts", [])
+	var responder_contact_count := 0
+	var presented_on_arrival := _collect_control_text(screen)
+	for responder_id in responder_ids:
+		var responder_contact := _find_saved_contact(contacts_after, responder_id)
+		if responder_contact.is_empty():
+			continue
+		responder_contact_count += 1
+		assert_str(responder_contact.get("status", "")).is_equal("current")
+		assert_str(presented_on_arrival).contains(
+			"Contact %d" % int(responder_contact.get("id", 0))
+		)
+	assert_int(responder_contact_count).is_greater(0)
+	assert_int(screen.get_meta("sensor_contact_count", -1)).is_greater(visible_contact_count_before)
+	for hidden_ship_name in hidden_ship_names:
+		assert_str(presented_on_arrival).not_contains(hidden_ship_name)
+	assert_str(presented_on_arrival).not_contains("Pathfinder class")
+	assert_str(presented_on_arrival).not_contains("Faction A")
+	assert_str(presented_on_arrival).not_contains("Faction B")
+
+
+func test_quick_load_rejects_actual_player_sourced_report_without_damaging_live_state() -> void:
+	var screen := _create_screen()
+	_advance_fixed_steps(screen, 140)
+	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(14000)
+	screen.call("QuickSave")
+	var save_text := FileAccess.get_file_as_string(TEST_QUICK_SAVE_PATH)
+	var save_json: Dictionary = JSON.parse_string(save_text)
+	var factions: Array = save_json.get("simulation", {}).get("factions", [])
+	var actual_report: Dictionary = {}
+	for faction in factions:
+		var in_flight: Array = faction.get("observation", {}).get("inFlightReports", [])
+		if not in_flight.is_empty():
+			actual_report = in_flight[0].get("report", {})
+			break
+	assert_bool(actual_report.is_empty()).is_false()
+	var report_id := int(actual_report.get("reportId", 0))
+	var observer_id := int(actual_report.get("observerShipId", 0))
+	assert_int(report_id).is_greater(0)
+	assert_int(observer_id).is_not_equal(1)
+	var observer_pattern := RegEx.new()
+	assert_int(
+		observer_pattern.compile(
+			'"reportId"\\s*:\\s*%d\\s*,\\s*"observerShipId"\\s*:\\s*%d\\s*,'
+			% [report_id, observer_id]
+		)
+	).is_equal(OK)
+	assert_int(observer_pattern.search_all(save_text).size()).is_equal(1)
+	_write_text(
+		TEST_QUICK_SAVE_PATH,
+		observer_pattern.sub(save_text, '"reportId":%d,"observerShipId":1,' % report_id)
+	)
+	var retained_time: int = screen.get_meta("simulation_time_milliseconds", -1)
+	var retained_ship_name: String = screen.get_meta("ship_name", "")
+
+	screen.call("QuickLoad")
+
+	assert_str(screen.get_meta("quick_save_status", "")).is_equal("load_failed")
+	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(retained_time)
+	assert_str(screen.get_meta("ship_name", "")).is_equal(retained_ship_name)
+	assert_str(screen.get_meta("data_mode", "")).is_equal("Live")
+	assert_bool(screen.get_meta("travel_active", true)).is_false()
+	screen.call("SelectDestination", "vesper-reach")
+	screen.call("RequestSelectedTravel")
+	assert_bool(screen.get_meta("travel_active", false)).is_true()
+	assert_int(screen.get_meta("travel_eta_milliseconds", -1)).is_equal(retained_time + 12000)
 
 
 func test_default_quick_save_writes_production_v8_without_touching_legacy_slot() -> void:
@@ -1306,11 +1467,28 @@ func test_malformed_v8_controller_and_scheduler_targets_leave_live_simulation_us
 	var screen := _create_screen()
 	screen.call("QuickSave")
 	var valid_save := FileAccess.get_file_as_string(TEST_QUICK_SAVE_PATH)
+	var parsed_save: Dictionary = JSON.parse_string(valid_save)
+	var faction_work_id := 0
+	for work in parsed_save.get("simulation", {}).get("scheduler", {}).get("outstandingWork", []):
+		if int(work.get("targetFactionId", 0)) == 1:
+			faction_work_id = int(work.get("id", 0))
+			break
+	assert_int(faction_work_id).is_greater(0)
 	var retained_identity: int = screen.get_meta("simulation_identity", 0)
 
 	var invalid_saves := [
-		_replace_once(valid_save, '"directControllerFactionId": 2', '"directControllerFactionId": 99'),
-		_replace_once(valid_save, '"targetFactionId": 1', '"targetFactionId": 99'),
+		_replace_saved_object_field(
+			valid_save, "ships", "instanceId", 2, "directControllerFactionId", 2, 99
+		),
+		_replace_saved_object_field(
+			valid_save,
+			"outstandingWork",
+			"id",
+			faction_work_id,
+			"targetFactionId",
+			1,
+			99
+		),
 	]
 	for invalid_save in invalid_saves:
 		_write_text(TEST_QUICK_SAVE_PATH, invalid_save)
@@ -1571,6 +1749,15 @@ func _prepare_detected_contact(screen: Node) -> void:
 	assert_int(screen.get_meta("sensor_contact_count", 0)).is_equal(1)
 
 
+func _advance_fixed_steps(screen: Node, fixed_steps: int) -> void:
+	assert_int(fixed_steps).is_greater_equal(0)
+	var remaining := fixed_steps
+	while remaining > 0:
+		var batch := mini(remaining, 6)
+		assert_int(screen.call("ProcessSyntheticDelta", batch * 0.1)).is_equal(batch)
+		remaining -= batch
+
+
 func _collect_control_text(node: Node) -> String:
 	var presented := ""
 	if node is Label or node is Button:
@@ -1663,6 +1850,47 @@ func _find_saved_faction(factions: Array, faction_id: int) -> Dictionary:
 		if int(faction.get("id", 0)) == faction_id:
 			return faction
 	return {}
+
+
+func _find_saved_contact(contacts: Array, target_ship_id: int) -> Dictionary:
+	for contact in contacts:
+		if int(contact.get("targetShipId", 0)) == target_ship_id:
+			return contact
+	return {}
+
+
+func _replace_saved_object_field(
+	source: String,
+	collection_name: String,
+	identity_name: String,
+	identity_value: int,
+	field_name: String,
+	old_value: int,
+	new_value: int
+) -> String:
+	# Preserve every other raw JSON token while bounding the edit to one parsed object's stable identity.
+	# Re-serializing through Variant can normalize strict integer tokens and make the fixture fail for the wrong reason.
+	var collection_index := source.find('"%s"' % collection_name)
+	assert_int(collection_index).is_greater_equal(0)
+	var identity_pattern := RegEx.new()
+	assert_int(
+		identity_pattern.compile('"%s"\\s*:\\s*%d\\s*[,}]' % [identity_name, identity_value])
+	).is_equal(OK)
+	var identity_match := identity_pattern.search(source, collection_index)
+	assert_object(identity_match).is_not_null()
+	var field_pattern := RegEx.new()
+	assert_int(
+		field_pattern.compile('"%s"\\s*:\\s*%d' % [field_name, old_value])
+	).is_equal(OK)
+	var field_match := field_pattern.search(source, identity_match.get_end())
+	assert_object(field_match).is_not_null()
+	var next_identity_pattern := RegEx.new()
+	assert_int(next_identity_pattern.compile('"%s"\\s*:' % identity_name)).is_equal(OK)
+	var next_identity := next_identity_pattern.search(source, identity_match.get_end())
+	assert_bool(next_identity == null or field_match.get_start() < next_identity.get_start()).is_true()
+	return source.left(field_match.get_start()) + '"%s":%d' % [field_name, new_value] + source.substr(
+		field_match.get_end()
+	)
 
 
 func _replace_once(source: String, old_value: String, new_value: String) -> String:
