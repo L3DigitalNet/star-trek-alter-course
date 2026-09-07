@@ -12,7 +12,7 @@ namespace AlterCourse.Core.Tests.Persistence;
 
 /// <summary>Verifies the V6 observed-location frame, its V5 migration, and its load-time admission bounds.</summary>
 /// <remarks>
-/// The V5 fixtures are produced by downgrading a live V6 document rather than by hand-writing a whole
+/// The V5 fixtures are produced by downgrading a live current document rather than by hand-writing a whole
 /// V5 world: that keeps every unrelated member exactly as the V5 contract admitted it, so a failure
 /// here is always about the frame and never about a stale hand-copied envelope.
 /// </remarks>
@@ -28,12 +28,12 @@ public sealed class GamePersistenceV6ContactReportTests
 
     private readonly Milestone3ProofFixture _fixture = new();
 
-    /// <summary>Confirms a native V6 round trip preserves the frame and the whole report for every status.</summary>
+    /// <summary>Confirms a current round trip preserves the V6 frame and the whole report for every status.</summary>
     [Theory]
     [InlineData(StepsToAcquisition, SensorContactStatus.Current)]
     [InlineData(StepsToStale, SensorContactStatus.Stale)]
     [InlineData(StepsToLoss, SensorContactStatus.Lost)]
-    public void NativeV6RoundTripPreservesObservedFrameAndReports(int steps, SensorContactStatus expected)
+    public void CurrentRoundTripPreservesObservedFrameAndReports(int steps, SensorContactStatus expected)
     {
         GameSimulation game = CreateObservedWorld(steps);
         IReadOnlyList<StrategicContactReportProjection> before = Reports(game);
@@ -41,9 +41,9 @@ public sealed class GamePersistenceV6ContactReportTests
 
         byte[] saved = GamePersistence.Serialize(game, Milestone3ProofFixture.Metadata);
         JsonObject contact = FirstPlayerContact(Parse(saved));
-        LoadedGameSave loaded = GamePersistence.Deserialize(saved, _fixture.Catalog, "native-v6.json");
+        LoadedGameSave loaded = GamePersistence.Deserialize(saved, _fixture.Catalog, "native-v7.json");
 
-        Assert.Equal(6, Parse(saved)["schemaVersion"]!.GetValue<int>());
+        Assert.Equal(7, Parse(saved)["schemaVersion"]!.GetValue<int>());
         Assert.Equal("dawn-anchor", contact["observedAtLocationId"]!.GetValue<string>());
         Assert.Equal(Dawn, Assert.Single(Player(loaded.Simulation).SensorKnowledge.Contacts).ObservedAtLocationId);
         Assert.Equal(before, Reports(loaded.Simulation));
@@ -71,7 +71,7 @@ public sealed class GamePersistenceV6ContactReportTests
         Assert.Null(migrated.ObservedAtLocationId);
         Assert.Equal(original with { ObservedAtLocationId = null }, migrated);
         Assert.Equal(
-            6,
+            7,
             Parse(GamePersistence.Serialize(loaded.Simulation, loaded.Metadata))["schemaVersion"]!.GetValue<int>()
         );
         Assert.Null(
@@ -121,7 +121,7 @@ public sealed class GamePersistenceV6ContactReportTests
             .Deserialize(
                 GamePersistence.Serialize(CreateObservedWorld(StepsToAcquisition), Milestone3ProofFixture.Metadata),
                 _fixture.Catalog,
-                "mid-scenario-v6.json"
+                "mid-scenario-v7.json"
             )
             .Simulation;
 
@@ -212,7 +212,7 @@ public sealed class GamePersistenceV6ContactReportTests
             "legacy-v5.json"
         );
 
-    /// <summary>Rewrites a live V6 document into the V5 document the same world would have produced.</summary>
+    /// <summary>Rewrites a live V7 document into the V5 document the same world would have produced.</summary>
     private static byte[] ToLegacyV5Document(byte[] current) =>
         Mutate(
             current,
@@ -220,12 +220,19 @@ public sealed class GamePersistenceV6ContactReportTests
             {
                 root["schemaVersion"] = 5;
                 root["simulationRulesVersion"] = "engineering-backbone-v1";
+                root["simulation"]!.AsObject().Remove("factions");
                 foreach (JsonNode? ship in root["simulation"]!["ships"]!.AsArray())
                 {
+                    ship!.AsObject().Remove("directControllerFactionId");
                     foreach (JsonNode? contact in ship!["sensorKnowledge"]!["contacts"]!.AsArray())
                     {
                         contact!.AsObject().Remove("observedAtLocationId");
                     }
+                }
+                foreach (JsonNode? work in root["simulation"]!["scheduler"]!["outstandingWork"]!.AsArray())
+                {
+                    work!.AsObject().Remove("targetKind");
+                    work.AsObject().Remove("targetFactionId");
                 }
             }
         );
