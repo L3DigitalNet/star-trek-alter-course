@@ -24,7 +24,8 @@ internal sealed partial record SimulationState
         ShipInstanceId playerShipId,
         IEnumerable<ShipState> ships,
         ShipOrderIdAllocator? orderIdAllocator = null,
-        IEnumerable<FactionState>? factions = null
+        IEnumerable<FactionState>? factions = null,
+        ObservationReportIdAllocator? observationReportIdAllocator = null
     )
     {
         ArgumentNullException.ThrowIfNull(ships);
@@ -55,6 +56,7 @@ internal sealed partial record SimulationState
         StrategicMap = strategicMap;
         PlayerShipId = playerShipId;
         OrderIdAllocator = orderIdAllocator ?? ShipOrderIdAllocator.Create();
+        ObservationReportIdAllocator = observationReportIdAllocator ?? ObservationReportIdAllocator.Create();
         Factions = MaterializeFactions(factions ?? []);
         // Canonical order makes every per-ship pass independent of caller enumeration order.
         Ships = [.. materialized.OrderBy(ship => ship.InstanceId.Value)];
@@ -64,6 +66,7 @@ internal sealed partial record SimulationState
     internal SimulationScheduler Scheduler { get; init; }
     internal ShipInstanceIdAllocator ShipIdAllocator { get; init; }
     internal ShipOrderIdAllocator OrderIdAllocator { get; init; }
+    internal ObservationReportIdAllocator ObservationReportIdAllocator { get; init; }
     internal StrategicMap StrategicMap { get; init; }
     internal ShipInstanceId PlayerShipId { get; init; }
     internal ImmutableArray<ShipState> Ships { get; private init; }
@@ -175,7 +178,13 @@ internal sealed partial record SimulationState
 
     private void ValidateAggregateMembers()
     {
-        if (Scheduler is null || ShipIdAllocator is null || OrderIdAllocator is null || StrategicMap is null)
+        if (
+            Scheduler is null
+            || ShipIdAllocator is null
+            || OrderIdAllocator is null
+            || ObservationReportIdAllocator is null
+            || StrategicMap is null
+        )
         {
             throw new InvalidOperationException("Simulation state contains a null aggregate member.");
         }
@@ -193,6 +202,7 @@ internal sealed partial record SimulationState
         if (
             ShipIdAllocator.NextId == long.MaxValue
             || OrderIdAllocator.NextId == long.MaxValue
+            || ObservationReportIdAllocator.NextId == long.MaxValue
             || !SimulationScheduler.AreCountersWithinPersistedRange(Scheduler.NextWorkId, Scheduler.NextSequence)
         )
         {

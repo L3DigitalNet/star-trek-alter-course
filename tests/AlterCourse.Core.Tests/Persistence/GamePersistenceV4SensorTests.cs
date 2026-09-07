@@ -247,7 +247,8 @@ public sealed class GamePersistenceV4SensorTests
         Assert.Equal(255, SensorKnowledge.MaximumContactsPerObserver);
         Assert.Equal(65_280, contactLossMaximum);
         Assert.Equal(66_560, conservativeMaximum);
-        Assert.Equal(SimulationScheduler.MaximumOutstandingWork, conservativeMaximum + SimulationState.MaximumFactions);
+        int factionWorkMaximum = SimulationState.MaximumFactions * (1 + FactionObservationState.MaximumInFlightReports);
+        Assert.Equal(SimulationScheduler.MaximumOutstandingWork, conservativeMaximum + factionWorkMaximum);
     }
 
     /// <summary>Confirms the greatest simultaneous V7 faction world has a bounded, stable representation.</summary>

@@ -23,4 +23,7 @@ internal enum ScheduledWorkKind
 
     /// <summary>Wakes one faction for an autonomous strategic decision.</summary>
     FactionDecisionWake = 7,
+
+    /// <summary>Delivers one exactly correlated historical observation report to a faction.</summary>
+    ObservationReportDelivery = 8,
 }
