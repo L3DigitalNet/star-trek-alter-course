@@ -13,6 +13,7 @@ aliases: []
 related:
   - 'docs/adr/0001-separate-simulation-from-godot.md'
   - 'docs/adr/0003-prefer-native-capabilities-and-demand-driven-dependencies.md'
+  - 'docs/wiki/faction-intent-and-autonomous-assignment.md'
   - 'Directory.Packages.props'
 ---
 
@@ -32,7 +33,17 @@ A future `AlterCourse.Narrative` assembly is an ADR-defined integration directio
 
 Model responsibilities according to systems, not UI screens. Existing `ShipState` composes strategic, tactical, engineering, order, sensor-knowledge, and autonomous state. `SimulationState` owns plural ships, scheduler, map, allocators, and player identity. Commands validate and construct candidate state before committing consequential changes where required; failed loading never partially replaces the live game.
 
-Avoid parallel mechanisms. New strategic decisions should consume established information projections and issue established domain commands where those fit. The political design does not authorize an entity framework, a universal faction/organization base class, or a generalized rules engine.
+Avoid parallel mechanisms. New strategic decisions should consume purpose-built actor-safe inputs and issue established domain commands where those fit. An existing player projection is not a faction's information authority. The political design does not authorize an entity framework, a universal faction/organization base class, or a generalized rules engine.
+
+## Approved next-slice extension, not current runtime
+
+[Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) is the owner-approved first bounded M5 design. It introduces only the faction state, definition/bootstrap support, and decision mechanism needed to choose an ordinary ship assignment. The ship-side controller link is authoritative; controlled-asset rosters are derived. Authority is limited to directly controlled idle NPC ships without preempting orders/travel or controlling the player.
+
+A faction's immutable decision input contains its own objective, known topology, and narrowly permitted own-asset administrative identity, strategic state, and order/assignment status. It does not inherit ship-local sensors or external contact reports. True control, actor knowledge, and player presentation remain separate.
+
+The first non-ship decision wake justifies a closed typed Ship/Faction scheduler target under ADR 0007. Reuse the current scheduler and ordinary order application; do not add a generic actor hierarchy or second simulation loop. New political state/wakes enter through typed bootstrap and complete candidate validation. Planned V7 migration preserves existing ship work and creates no political history; V6 remains current until implementation.
+
+These decisions implement existing ADRs 0005, 0006, 0007, and 0010 without changing their authority boundaries. The slice adds no randomness, organization controller, hierarchy runtime, intelligence network, new faction UI, or dependency framework. The owning decision page records the complete scope and acceptance tests; this summary does not create runtime types.
 
 ## Dependency choices
 
@@ -61,4 +72,4 @@ ADR 0008 selects Serilog configured at a composition boundary through Microsoft 
 
 ## Sources
 
-[Core/Godot separation](../adr/0001-separate-simulation-from-godot.md), [dependency policy](../adr/0003-prefer-native-capabilities-and-demand-driven-dependencies.md), [testing](../adr/0009-use-layered-testing-and-architecture-conformance.md), [narrative](../adr/0012-keep-branching-narrative-subordinate-to-simulation.md), [package declarations](../../Directory.Packages.props), and [development quality](../development-quality.md).
+[Core/Godot separation](../adr/0001-separate-simulation-from-godot.md), [dependency policy](../adr/0003-prefer-native-capabilities-and-demand-driven-dependencies.md), [testing](../adr/0009-use-layered-testing-and-architecture-conformance.md), [narrative](../adr/0012-keep-branching-narrative-subordinate-to-simulation.md), [faction assignment decision](faction-intent-and-autonomous-assignment.md), [package declarations](../../Directory.Packages.props), and [development quality](../development-quality.md).
