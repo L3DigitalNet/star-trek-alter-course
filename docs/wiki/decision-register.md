@@ -14,6 +14,7 @@ aliases: []
 related:
   - 'docs/wiki/strategic-contact-reporting.md'
   - 'docs/wiki/faction-intent-and-autonomous-assignment.md'
+  - 'docs/wiki/observation-driven-faction-response.md'
   - 'docs/wiki/factions-and-organizations.md'
   - 'docs/wiki/implementation-status.md'
   - 'docs/wiki/open-questions.md'
@@ -49,7 +50,7 @@ The governing themes are pure Core authority; one canonical gate; native-first, 
 
 D-07 resolved Q-01. The slice is not canonically named `M3B`, did not complete M3, and did not itself begin M5. It left Q-02 through Q-05 unresolved at its completion. The later D-08 through D-13 approvals below select the next slice without retroactively changing D-07's scope.
 
-## Approved next-development decisions — September 6, 2026
+## Approved faction-assignment decisions — September 6, 2026
 
 All six decisions below are owner-approved. [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) owns their complete meaning and proof. They select the first bounded contribution toward M5, not the entire milestone. Feature #86 / Final PR #87 implements them in `dev` as `0217296` with V7; v0.5.0 remains V6 and no release is claimed.
 
@@ -66,6 +67,20 @@ All six decisions below are owner-approved. [Faction Intent and Autonomous Assig
 **D-13 — No randomness in this policy.** Use deterministic candidates, constraints, selection, tie-breaking, and explanations. Q-14's next migration is selected and this policy consumes no RNG; the eventual versioned random algorithm and later compatibility decisions remain open.
 
 The slice adds no faction/affiliation UI, political hierarchy runtime, organizations, treaties, diplomacy, combat, economy, or intelligence network. Broader political principles remain approved; they are not all required by this first consumer.
+
+## Approved next-development decisions — September 7, 2026
+
+The owner selected [Observation-Driven Faction Response](observation-driven-faction-response.md) as the next bounded slice and selected M6 Tactical Combat Foundation as the next major development family after it. These are design approvals only until corresponding runtime work lands.
+
+**D-14 — Observation must drive faction action before combat.** The next slice closes one information-to-action loop: a legitimate NPC observation produces a bounded delayed report to its direct controlling faction, the received information changes an explainable faction decision, an eligible ordinary NPC ship investigates the reported location, and ordinary local sensing establishes the outcome. This is a bounded M5 contribution and partial Q-04 resolution, not completion of M3/M5 or a general intelligence architecture.
+
+**D-15 — Direct historical reports, not shared live sensors.** The first reporting channel is directly controlled NPC ship → direct controlling faction only. Reports are immutable historical observation snapshots preserving observer provenance and observer-local `SensorContactId`; they do not carry hidden target identity/controller, infer affiliation/intent, or correlate contacts across observers. Delivery is deterministic after 2,000 ms of simulation time. Player, ally, hierarchy, organization, and communications-network propagation remain future work.
+
+**D-16 — One bounded deterministic investigation response.** Factions may investigate a fresh reported strategic location using only received reports, already-approved own-asset administrative facts, and legitimately known routes. The policy never preempts existing orders or commands the player, excludes the reporting observer as its own responder, uses stable report/candidate tie-breaks, allows at most one active investigation per faction, and treats arrival plus ordinary sensing as completion even when the originally observed vessel is gone. The slice caps each faction at 8 in-flight and 16 received reports and uses a 60,000 ms observation freshness window with location-based completion suppression to prevent feedback loops. Existing presence intent is processed first and keeps its one-shot meaning.
+
+**D-17 — Adjacent non-inventive persistence for reported knowledge.** If implementation still begins from V7, advance to V8 under rules identity `observation-driven-faction-response-v1`; otherwise consume the next adjacent version with the same semantics. Persist only consequential queued/received knowledge, exact delivery/response continuation, bounded handling state, posture, and required identity continuation. Migration creates no reports, investigations, or delivery work and disables the new posture for migrated factions. New-game bootstrap enables it explicitly for the proof. Re-measure scheduler/save maximum shape inside the existing 128 MiB envelope; no database or unbounded event history is admitted.
+
+**D-18 — Tactical combat follows this slice; Engineering grows through combat consumers.** After Observation-Driven Faction Response lands and is reconciled, M6 first combat engagement becomes the next major development family. Full M3 or M5 completion is not a prerequisite. The first M6 refinement should compose one bounded directed-energy/shield/targeting/damage/withdrawal interaction with existing sensing, motion, Engineering, AI, and persistence; exact Q-10 mechanics remain open until that refinement. Ship-system depth is added when it creates or materially changes a command decision rather than through an exhaustive pre-combat subsystem catalog.
 
 ## Political decisions approved September 6, 2026
 
@@ -98,11 +113,11 @@ P-10/P-17/P-19 must be read together: no mandatory Polity→member-state→movem
 
 ## Discussed but not approved
 
-A separate durable `KnownShipId`, cross-observer known-vessel correlation, a ship-to-faction sensor-report distribution mechanism, political affiliation-learning rules, a final campaign year, and a specific random algorithm remain future questions. The closed Ship/Faction scheduler target is now approved by D-11; it is no longer listed as an unapproved option.
+A separate durable `KnownShipId`, cross-observer known-vessel correlation, political affiliation-learning rules, a final campaign year, and a specific random algorithm remain future questions. D-15 now approves only the direct NPC ship-to-direct-faction historical reporting subset; broader report distribution, hierarchy propagation, and intelligence fusion remain unapproved. The closed Ship/Faction scheduler target is approved by D-11; D-17 reuses that boundary rather than adding a generic target registry.
 
-The earlier proposed `M3B→M5→M6` sequence is not the governing plan: D-07 selected Strategic Contact Reporting without canonically naming it M3B, and D-08 now selects a bounded assignment slice. Neither approval completes M3 or approves all future M5/M6 systems.
+The earlier proposed `M3B→M5→M6` sequence is not the governing plan: D-07 selected Strategic Contact Reporting without canonically naming it M3B, D-08 selected the bounded assignment slice, and D-14 now selects the bounded report-driven response slice before D-18 moves the main development axis to M6. Neither M3 nor M5 must be declared complete before that first combat refinement.
 
-The [open-question register](open-questions.md) retains the unresolved portions. No detailed permission matrix, treaty engine, general political scoring system, economic resource catalog, or complete organization taxonomy is approved by these decisions.
+The [open-question register](open-questions.md) retains the unresolved portions. No detailed permission matrix, treaty engine, general political scoring system, economic resource catalog, complete organization taxonomy, or exact combat rules are approved by these decisions.
 
 ## Maintaining the register
 

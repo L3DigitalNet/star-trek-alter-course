@@ -2,7 +2,7 @@
 schema_version: '1.1'
 id: 'concept-81vyg9-engineering-and-combat'
 title: 'Engineering and Combat'
-description: 'Implemented Engineering rules and the planned systems-driven combat foundation.'
+description: 'Implemented Engineering rules and the approved sequencing principles for the systems-driven combat foundation.'
 doc_type: 'concept'
 status: 'active'
 created: '2026-09-06'
@@ -14,6 +14,7 @@ aliases: []
 related:
   - 'docs/adr/0011-represent-physical-quantities-with-explicit-units.md'
   - 'docs/wiki/content-assets-and-persistence.md'
+  - 'docs/wiki/observation-driven-faction-response.md'
   - 'ROADMAP.md'
 ---
 
@@ -66,12 +67,47 @@ One ship can have one `SystemRepairState`, targeting only sensors or impulse. It
 
 `SystemRepairCompletion` is a finite scheduler kind. The active repair matched by exact work ID supplies the target. Candidate/load validation rejects missing, duplicate, mismatched, or orphaned repair work. There are no repair queues, teams, spare parts, generator repair, arbitrary payloads, background loops, or zero-time recurrence.
 
-## Presentation, combat, and evidence
+## Presentation and current combat boundary
 
 Live Engineering shows only the player's nominal/available power, allocations, reserve, own conditions/statuses, effective capability/range/speed, active repair, and Core-supplied action reasons. The hierarchy is Overview, Power, Sensors, Propulsion, and Repairs. It does not expose NPC Engineering, scheduler entries, persistence DTOs, AI diagnostics, target IDs, affiliation, or intent. The [interface page](interface-and-player-commands.md) owns interaction and preview rules.
 
 This is degraded operation and repair, not a general damage model. Shields, weapons, EPS topology, batteries, warp, life support, computers, structural systems, fuel, heat/coolant, crews, repair queues, inventory, generalized components, and dynamic strategic travel are absent or unavailable.
 
-M6 should compose existing movement, knowledge, power, condition, AI, persistence, and Engineering rather than a parallel hit-point game. Targeting must use actor knowledge; shields/weapons must connect to power/condition; damage must affect capability; survivors retain identity. Directed energy is only a likely first weapon. Facings, geometry, damage distribution, disengagement, randomness, torpedoes, boarding, cloaking, fleets, electronic warfare, and balance remain open.
+Combat is not implemented. [Observation-Driven Faction Response](observation-driven-faction-response.md) is the approved next slice. After it lands and is reconciled, **M6 Tactical Combat Foundation becomes the next major development family**. Full M3 or M5 completion is not a prerequisite for that first combat refinement.
 
-Rules are grounded in [Engineering state](../../src/AlterCourse.Core/Ships/ShipEngineeringState.cs), [repair correlation](../../src/AlterCourse.Core/Ships/SystemRepairState.cs), [Pathfinder content](../../src/AlterCourse.Godot/content/ships/pathfinder.json), [Engineering tests](../../tests/AlterCourse.Core.Tests/Ships/EngineeringBackboneTests.cs), and [scenario tests](../../tests/AlterCourse.Core.Tests/Gameplay/Milestone4EngineeringScenarioTests.cs). Combat is [roadmap M6](../../ROADMAP.md) intent, not playable-combat evidence.
+## First combat engagement direction
+
+M6 should compose existing movement, knowledge, power, condition, AI, persistence, and Engineering rather than a parallel hit-point game. The first bounded engagement should begin with:
+
+- one directed-energy weapon family;
+- a bounded shield model;
+- targeting/fire control constrained by actor knowledge;
+- meaningful power competition with sensing and propulsion;
+- tactical maneuver/range;
+- damage that degrades concrete systems/capability;
+- deterministic/explainable combat AI;
+- persistence of combat consequences; and
+- withdrawal, disengagement, and non-engagement as valid outcomes.
+
+These are sequencing and refinement constraints, not complete weapon/shield rules. Before M6 implementation, Q-10 must settle shield geometry/facings, firing cadence and eligibility, targeting knowledge, damage allocation, disengagement, and whether the first combat consumer needs a versioned random source.
+
+### Involuntary degradation is a required design decision
+
+The existing allocation/course rules govern **voluntary commands** and may reject a requested state that would exceed current capability. Combat damage is different: the simulation cannot reject physical damage merely because the resulting generator or impulse capability makes the ship's existing allocation, speed, scan, or repair state illegal under voluntary-command rules.
+
+Before the first damage implementation, explicitly define deterministic reconciliation for at least:
+
+- generation falling below already committed sensor/impulse allocations;
+- impulse capability falling below current tactical speed;
+- sensor capability becoming insufficient for an active scan; and
+- damage/condition changes interacting with an active repair.
+
+Do not quietly reuse voluntary allocation rejection as the damage rule and do not create hidden Godot-side correction. Core must own the forced transition and expose actor-safe consequences.
+
+## Combat-driven Engineering depth
+
+After the first combat proof, add ship systems because a concrete tactical or command decision requires them. A new system should create a meaningful choice, failure mode, or interaction rather than exist only for fidelity bookkeeping.
+
+Detailed EPS topology, batteries, heat/coolant, advanced warp Engineering, life support, crews, repair teams/queues, magazines, boarding, cloaking, electronic warfare, torpedoes, tractor beams, and other specialized systems remain deferred until a real consumer demonstrates need. This does not make them undesirable; it prevents an exhaustive subsystem catalog from delaying the first interconnected combat proof.
+
+Rules are grounded in [Engineering state](../../src/AlterCourse.Core/Ships/ShipEngineeringState.cs), [repair correlation](../../src/AlterCourse.Core/Ships/SystemRepairState.cs), [Pathfinder content](../../src/AlterCourse.Godot/content/ships/pathfinder.json), [Engineering tests](../../tests/AlterCourse.Core.Tests/Ships/EngineeringBackboneTests.cs), and [scenario tests](../../tests/AlterCourse.Core.Tests/Gameplay/Milestone4EngineeringScenarioTests.cs). Combat remains [roadmap M6](../../ROADMAP.md) intent until implemented evidence exists.
