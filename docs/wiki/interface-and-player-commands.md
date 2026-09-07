@@ -46,7 +46,7 @@ The live Engineering hierarchy is Overview, Power, Sensors, Propulsion, and Repa
 
 Live Engineering actions are **Balance power allocation**, **Prioritize sensors**, **Prioritize propulsion**, **Begin sensor repair**, **Begin impulse repair**, and **Return to Command Deck**. They use stable presentation identities and Core-supplied legality; a display label is not an authoritative system or command identity.
 
-The inspector's own `KnownContactReports` section lists retained reports: learned vessel or tactical label, last-seen location/time, Current/Stale/Lost status, and learned design name. It is capped/summarized when necessary, not a strategic-map marker or intelligence dashboard.
+The inspector's own `KnownContactReports` section lists retained reports: learned vessel or tactical label, last-seen location/time, Current/Stale/Lost status, and learned design name. It is capped/summarized when necessary, not a strategic-map marker or intelligence dashboard. Observation-Driven Faction Response keeps received NPC-faction reports, investigations, report IDs, and controller facts out of Godot/player projection; player visibility still depends on the player's own legitimate sensing.
 
 Shortcuts are 1 strategic, 2 tactical, Space pause/resume, R cycle rate, U advance to player-relevant event, Ctrl+S/Ctrl+L quick save/load, E engage selected travel, and C submit the demonstration course. Running rates are 0.5x, 1x, 2x, and 4x; pause is separate. The quick-save slot and its failure-preservation boundary are owned by [content, assets, and persistence](content-assets-and-persistence.md).
 
