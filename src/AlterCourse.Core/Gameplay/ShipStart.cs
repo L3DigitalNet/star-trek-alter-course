@@ -21,7 +21,8 @@ public sealed record ShipStart
         PowerAllocation allocation,
         ShipStrategicStart strategic,
         SystemRepairStart? systemRepair = null,
-        ShipOrderStart? activeOrder = null
+        ShipOrderStart? activeOrder = null,
+        FactionId? directControllerFactionId = null
     ) =>
         (
             InstanceId,
@@ -35,7 +36,8 @@ public sealed record ShipStart
             Allocation,
             Strategic,
             SystemRepair,
-            this.ActiveOrder
+            this.ActiveOrder,
+            DirectControllerFactionId
         ) = (
             instanceId,
             definitionId,
@@ -48,7 +50,8 @@ public sealed record ShipStart
             allocation,
             strategic,
             systemRepair,
-            activeOrder
+            activeOrder,
+            directControllerFactionId
         );
 
     internal ShipStart(
@@ -112,4 +115,7 @@ public sealed record ShipStart
 
     /// <summary>Gets the optional autonomous order.</summary>
     public ShipOrderStart? ActiveOrder { get; init; }
+
+    /// <summary>Gets the optional faction with direct autonomous assignment authority over this ship.</summary>
+    public FactionId? DirectControllerFactionId { get; init; }
 }

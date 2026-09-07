@@ -1,4 +1,5 @@
 using AlterCourse.Core.Content;
+using AlterCourse.Core.Factions;
 using AlterCourse.Core.Identity;
 using AlterCourse.Core.Quantities;
 using AlterCourse.Core.Ships;
@@ -25,6 +26,61 @@ public static class FirstGameSetup
         simulation.BootstrapHiddenCautiousContactObservation(starts[3].InstanceId);
         return simulation;
     }
+
+    /// <summary>Creates the six-ship two-faction production proof from validated catalogs.</summary>
+    public static GameSimulation Create(ShipDefinitionCatalog shipCatalog, FactionDefinitionCatalog factionCatalog)
+    {
+        ArgumentNullException.ThrowIfNull(shipCatalog);
+        ArgumentNullException.ThrowIfNull(factionCatalog);
+        ShipDefinition definition = shipCatalog.GetRequired(new ShipDefinitionId("pathfinder"));
+        (StrategicMap map, LocationId dawn, LocationId vesper, LocationId meridian) = CreateMap();
+        var initialTime = new SimulationTime(0);
+        FactionId factionA = new(1);
+        FactionId factionB = new(2);
+        ShipStart[] starts = CreateShipStarts(definition, dawn, vesper, meridian, initialTime);
+        starts[1] = starts[1] with { DirectControllerFactionId = factionB };
+        starts =
+        [
+            .. starts,
+            CreateFactionShip(new ShipInstanceId(5), "Expedition Vessel Aurora", definition.Id, meridian, factionA),
+            CreateFactionShip(new ShipInstanceId(6), "Expedition Vessel Resolute", definition.Id, meridian, factionA),
+        ];
+        FactionStart[] factions =
+        [
+            new(factionA, new FactionDefinitionId("faction-a"), vesper),
+            new(factionB, new FactionDefinitionId("faction-b")),
+        ];
+        GameSimulation simulation = new GameBootstrap(
+            initialTime,
+            map,
+            starts[0].InstanceId,
+            starts,
+            factions
+        ).CreateSimulation(shipCatalog, factionCatalog);
+        simulation.BootstrapHiddenCautiousContactObservation(starts[3].InstanceId);
+        return simulation;
+    }
+
+    private static ShipStart CreateFactionShip(
+        ShipInstanceId id,
+        string name,
+        ShipDefinitionId definitionId,
+        LocationId locationId,
+        FactionId controller
+    ) =>
+        new(
+            id,
+            definitionId,
+            name,
+            default,
+            default,
+            new SystemCondition(1),
+            new SystemCondition(1),
+            new SystemCondition(1),
+            new PowerAllocation(new PowerUnits(70), new PowerUnits(50)),
+            new AtLocationStart(locationId),
+            directControllerFactionId: controller
+        );
 
     private static ShipStart[] CreateShipStarts(
         ShipDefinition definition,

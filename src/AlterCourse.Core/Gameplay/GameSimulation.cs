@@ -13,7 +13,7 @@ using AlterCourse.Core.Tactical;
 namespace AlterCourse.Core.Gameplay;
 
 /// <summary>Owns authoritative mutation and immutable definition content for the simulation.</summary>
-public sealed class GameSimulation
+public sealed partial class GameSimulation
 {
     // These budgets bound one candidate advancement operation. A rejected candidate never consumes
     // capacity from a later request or commits partial time, ship, or scheduler state.
@@ -27,14 +27,21 @@ public sealed class GameSimulation
     // not a hidden grid or strategic-map projection.
     private static readonly TacticalPosition ArrivalPosition = new(0.25, -0.75);
     private readonly ShipDefinitionCatalog _shipCatalog;
+    private readonly FactionDefinitionCatalog _factionCatalog;
     private SimulationState _state;
 
-    private GameSimulation(SimulationState state, ShipDefinitionCatalog shipCatalog)
+    private GameSimulation(
+        SimulationState state,
+        ShipDefinitionCatalog shipCatalog,
+        FactionDefinitionCatalog factionCatalog
+    )
     {
         ArgumentNullException.ThrowIfNull(shipCatalog);
-        state.Validate(shipCatalog);
+        ArgumentNullException.ThrowIfNull(factionCatalog);
+        state.Validate(shipCatalog, factionCatalog);
         _state = state;
         _shipCatalog = shipCatalog;
+        _factionCatalog = factionCatalog;
     }
 
     /// <summary>Returns a fresh read-only projection of player-known simulation state.</summary>
@@ -395,9 +402,10 @@ public sealed class GameSimulation
         ArgumentOutOfRangeException.ThrowIfNegative(stepCount);
         int milliseconds = checked(stepCount * checked((int)SimulationFixedStep.Duration.Milliseconds));
         SimulationTime target = _state.Time.AdvanceBy(new SimulationDuration(milliseconds));
-        SimulationAdvanceTraceResult advance = AdvanceTo(_state, target, _shipCatalog);
+        SimulationAdvanceTraceResult advance = AdvanceTo(_state, target, _shipCatalog, _factionCatalog);
         Commit(advance.State);
         RememberLatestContactDecision(advance.Traces);
+        RememberLatestFactionDecision(advance.Traces);
         return new SimulationAdvanceResult(_state.Time, advance.PlayerEvents, Project(_state));
     }
 
@@ -406,7 +414,10 @@ public sealed class GameSimulation
     {
         ScheduledWork? nextPlayerWork = _state
             .Scheduler.OutstandingWork.Cast<ScheduledWork?>()
-            .FirstOrDefault(work => work!.Value.TargetShipId == _state.PlayerShipId);
+            .FirstOrDefault(work =>
+                work!.Value.Target.Kind == ScheduledWorkTargetKind.Ship
+                && work.Value.TargetShipId == _state.PlayerShipId
+            );
         if (nextPlayerWork is null)
         {
             PlayerProjection unchanged = Project(_state);
@@ -419,9 +430,10 @@ public sealed class GameSimulation
         }
 
         SimulationTime boundary = nextPlayerWork.Value.DueTime;
-        SimulationAdvanceTraceResult advance = AdvanceTo(_state, boundary, _shipCatalog, true);
+        SimulationAdvanceTraceResult advance = AdvanceTo(_state, boundary, _shipCatalog, _factionCatalog, true);
         Commit(advance.State);
         RememberLatestContactDecision(advance.Traces);
+        RememberLatestFactionDecision(advance.Traces);
         return new AdvanceUntilResult(
             AdvanceUntilOutcome.PlayerEventResolved,
             _state.Time,
@@ -460,7 +472,15 @@ public sealed class GameSimulation
     internal SimulationState CaptureState() => _state;
 
     internal static GameSimulation RestoreState(SimulationState restoredState, ShipDefinitionCatalog shipCatalog) =>
-        new(restoredState, shipCatalog);
+        new(restoredState, shipCatalog, FactionDefinitionCatalog.Empty);
+
+    internal static GameSimulation RestoreState(
+        SimulationState restoredState,
+        ShipDefinitionCatalog shipCatalog,
+        FactionDefinitionCatalog factionCatalog
+    ) => new(restoredState, shipCatalog, factionCatalog);
+
+    internal FactionDefinitionCatalog FactionCatalog => _factionCatalog;
 
     internal void BootstrapHiddenCautiousContactObservation(ShipInstanceId observerId)
     {
@@ -507,6 +527,14 @@ public sealed class GameSimulation
         SimulationTime target,
         ShipDefinitionCatalog shipCatalog,
         bool stopAfterPlayerEvent = false
+    ) => AdvanceTo(initial, target, shipCatalog, FactionDefinitionCatalog.Empty, stopAfterPlayerEvent);
+
+    internal static SimulationAdvanceTraceResult AdvanceTo(
+        SimulationState initial,
+        SimulationTime target,
+        ShipDefinitionCatalog shipCatalog,
+        FactionDefinitionCatalog factionCatalog,
+        bool stopAfterPlayerEvent = false
     )
     {
         initial.Time.AdvanceTo(target);
@@ -534,7 +562,14 @@ public sealed class GameSimulation
 
             current = AdvanceSegment(current, boundary, ref actualShipSteps);
             int priorPlayerEventCount = playerEvents.Count;
-            current = ResolveCurrentBoundary(current, shipCatalog, traces, playerEvents, ref totalExecutions);
+            current = ResolveCurrentBoundary(
+                current,
+                shipCatalog,
+                factionCatalog,
+                traces,
+                playerEvents,
+                ref totalExecutions
+            );
             if (stopAfterPlayerEvent && playerEvents.Count != priorPlayerEventCount)
             {
                 break;
@@ -546,13 +581,14 @@ public sealed class GameSimulation
             current = ResolveCurrentBoundary(
                 current,
                 shipCatalog,
+                factionCatalog,
                 traces,
                 playerEvents,
                 ref totalExecutions,
                 observe: false
             );
         }
-        current.Validate(shipCatalog);
+        current.Validate(shipCatalog, factionCatalog);
         return new SimulationAdvanceTraceResult(
             current,
             new ReadOnlyValueList<ScheduledConsequenceTrace>(traces),
@@ -1147,6 +1183,7 @@ public sealed class GameSimulation
     private static SimulationState ResolveCurrentBoundary(
         SimulationState state,
         ShipDefinitionCatalog shipCatalog,
+        FactionDefinitionCatalog factionCatalog,
         List<ScheduledConsequenceTrace> traces,
         List<PlayerAdvanceEvent> playerEvents,
         ref int totalExecutions,
@@ -1174,7 +1211,12 @@ public sealed class GameSimulation
             foreach (ScheduledWork work in dueWork)
             {
                 ChargeScheduledExecution(ref executions, ref totalExecutions);
-                (current, ScheduledConsequenceTrace trace) = ResolveScheduledWork(current, work, shipCatalog);
+                (current, ScheduledConsequenceTrace trace) = ResolveScheduledWork(
+                    current,
+                    work,
+                    shipCatalog,
+                    factionCatalog
+                );
                 traces.Add(trace);
                 AddPlayerScheduledEvent(trace, current.PlayerShipId, playerEvents);
                 current = ObserveAllShips(current, shipCatalog, playerEvents);
@@ -1204,7 +1246,8 @@ public sealed class GameSimulation
     private static (SimulationState State, ScheduledConsequenceTrace Trace) ResolveScheduledWork(
         SimulationState state,
         ScheduledWork work,
-        ShipDefinitionCatalog shipCatalog
+        ShipDefinitionCatalog shipCatalog,
+        FactionDefinitionCatalog factionCatalog
     ) =>
         work.Kind switch
         {
@@ -1214,6 +1257,7 @@ public sealed class GameSimulation
             ScheduledWorkKind.SensorContactLoss => LoseSensorContact(state, work),
             ScheduledWorkKind.ActiveSensorScanCompletion => CompleteActiveSensorScan(state, work, shipCatalog),
             ScheduledWorkKind.ShipContactDecisionWake => CompleteShipContactDecisionWake(state, work, shipCatalog),
+            ScheduledWorkKind.FactionDecisionWake => CompleteFactionDecisionWake(state, work, factionCatalog),
             _ => throw new InvalidOperationException("Scheduled work kind is unsupported."),
         };
 
@@ -1568,11 +1612,12 @@ public sealed class GameSimulation
         bool completed,
         SensorContactId? contactId = null,
         ShipSystemId? systemId = null,
-        ShipContactDecisionExplanation? contactDecision = null
+        ShipContactDecisionExplanation? contactDecision = null,
+        FactionAssignmentDecisionExplanation? factionDecision = null
     ) =>
         new(
             work.Id,
-            work.TargetShipId,
+            work.Target,
             work.Kind,
             state.Time,
             order?.Id,
@@ -1583,7 +1628,8 @@ public sealed class GameSimulation
             false,
             contactId,
             systemId,
-            contactDecision
+            contactDecision,
+            factionDecision
         );
 
     private void RememberLatestContactDecision(IReadOnlyList<ScheduledConsequenceTrace> traces)
@@ -1603,7 +1649,7 @@ public sealed class GameSimulation
         List<PlayerAdvanceEvent> playerEvents
     )
     {
-        if (trace.TargetShipId != playerShipId || !trace.Completed)
+        if (trace.Target.Kind != ScheduledWorkTargetKind.Ship || trace.TargetShipId != playerShipId || !trace.Completed)
         {
             return;
         }
@@ -1630,6 +1676,7 @@ public sealed class GameSimulation
                 trace.ContactId
             ),
             ScheduledWorkKind.OrderWake or ScheduledWorkKind.ShipContactDecisionWake => null,
+            ScheduledWorkKind.FactionDecisionWake => null,
             _ => throw new InvalidOperationException("A resolved scheduled consequence has an unknown kind."),
         };
         if (playerEvent is not null)
@@ -1940,7 +1987,7 @@ public sealed class GameSimulation
 
     private void Commit(SimulationState candidate)
     {
-        candidate.Validate(_shipCatalog);
+        candidate.Validate(_shipCatalog, _factionCatalog);
         _state = candidate;
     }
 }
