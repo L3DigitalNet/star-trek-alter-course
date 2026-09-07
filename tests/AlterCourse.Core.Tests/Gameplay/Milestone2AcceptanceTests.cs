@@ -241,13 +241,18 @@ public sealed class Milestone2AcceptanceTests
         ShipDefinitionCatalog catalog = CreateCatalog();
         GameSimulation game = CreateRapidPatrol(catalog);
         byte[] before = GamePersistence.Serialize(game, Metadata);
+        int failingAttempt = GameSimulation.TotalConsequenceExecutionBudget + 1;
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            game.AdvanceFixedSteps(10_001)
+            game.AdvanceFixedSteps(failingAttempt)
         );
 
-        Assert.Contains("10000 total consequence execution budget", exception.Message, StringComparison.Ordinal);
-        Assert.Contains("attempt 10001", exception.Message, StringComparison.Ordinal);
+        Assert.Contains(
+            $"{GameSimulation.TotalConsequenceExecutionBudget} total consequence execution budget",
+            exception.Message,
+            StringComparison.Ordinal
+        );
+        Assert.Contains($"attempt {failingAttempt}", exception.Message, StringComparison.Ordinal);
         Assert.Equal(before, GamePersistence.Serialize(game, Metadata));
         Assert.Equal(Time(0), game.CaptureState().Time);
     }

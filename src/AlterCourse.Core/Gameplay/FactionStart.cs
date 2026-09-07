@@ -8,5 +8,6 @@ namespace AlterCourse.Core.Gameplay;
 public sealed record FactionStart(
     FactionId Id,
     FactionDefinitionId DefinitionId,
-    LocationId? PresenceTargetLocationId = null
+    LocationId? PresenceTargetLocationId = null,
+    ObservationResponsePosture ObservationResponsePosture = ObservationResponsePosture.Disabled
 );

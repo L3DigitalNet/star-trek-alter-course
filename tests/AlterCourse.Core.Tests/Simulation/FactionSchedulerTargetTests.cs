@@ -14,6 +14,7 @@ public sealed class FactionSchedulerTargetTests
         Assert.Equal(1, (int)ScheduledWorkTargetKind.Ship);
         Assert.Equal(2, (int)ScheduledWorkTargetKind.Faction);
         Assert.Equal(7, (int)ScheduledWorkKind.FactionDecisionWake);
+        Assert.Equal(8, (int)ScheduledWorkKind.ObservationReportDelivery);
 
         var ship = ScheduledWorkTarget.ForShip(new ShipInstanceId(41));
         var faction = ScheduledWorkTarget.ForFaction(new FactionId(41));
@@ -58,11 +59,12 @@ public sealed class FactionSchedulerTargetTests
         Assert.Throws<ArgumentException>(() => Work(1, 0, Faction(1), kind));
     }
 
-    /// <summary>Confirms faction decisions reject ship targets and unknown kinds remain closed.</summary>
+    /// <summary>Confirms faction work rejects ship targets and unknown kinds remain closed.</summary>
     [Fact]
     public void FactionWorkRejectsShipTargetsAndUnknownKinds()
     {
         Assert.Throws<ArgumentException>(() => Work(1, 0, Ship(1), ScheduledWorkKind.FactionDecisionWake));
+        Assert.Throws<ArgumentException>(() => Work(1, 0, Ship(1), ScheduledWorkKind.ObservationReportDelivery));
         Assert.Throws<ArgumentOutOfRangeException>(() => Work(1, 0, Faction(1), (ScheduledWorkKind)0));
         Assert.Throws<ArgumentOutOfRangeException>(() => Work(1, 0, Faction(1), (ScheduledWorkKind)999));
     }
@@ -110,6 +112,31 @@ public sealed class FactionSchedulerTargetTests
         Assert.Equal(new[] { ship }, following.OutstandingWork);
     }
 
+    /// <summary>Confirms report delivery is admitted only as finite faction-targeted scheduled work.</summary>
+    [Fact]
+    public void ReportDeliveryUsesTheExistingExactFactionCorrelation()
+    {
+        (SimulationScheduler scheduler, ScheduledWork delivery) = SimulationScheduler
+            .Create()
+            .Schedule(new SimulationTime(2_000), Faction(7), ScheduledWorkKind.ObservationReportDelivery);
+
+        Assert.Equal(ScheduledWorkKind.ObservationReportDelivery, delivery.Kind);
+        Assert.Equal(Faction(7), delivery.Target);
+        Assert.True(
+            scheduler.ContainsExact(
+                delivery.Id,
+                Faction(7),
+                delivery.DueTime,
+                ScheduledWorkKind.ObservationReportDelivery
+            )
+        );
+        Assert.Throws<ArgumentException>(() =>
+            SimulationScheduler
+                .Create()
+                .Schedule(new SimulationTime(2_000), Ship(7), ScheduledWorkKind.ObservationReportDelivery)
+        );
+    }
+
     /// <summary>Confirms restore rejects default work and target-kind mismatches cannot enter through scheduling.</summary>
     [Fact]
     public void RestoreAndScheduleFailClosed()
@@ -130,7 +157,7 @@ public sealed class FactionSchedulerTargetTests
     public void OutstandingWorkBoundIncludesEveryFactionWake()
     {
         Assert.Equal(256, SimulationState.MaximumFactions);
-        Assert.Equal(66_816, SimulationScheduler.MaximumOutstandingWork);
+        Assert.Equal(68_864, SimulationScheduler.MaximumOutstandingWork);
     }
 
     private static ScheduledWork Work(long id, long sequence, ScheduledWorkTarget target, ScheduledWorkKind kind) =>

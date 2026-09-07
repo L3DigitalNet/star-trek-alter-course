@@ -7,5 +7,6 @@ internal sealed record FactionState(
     FactionId Id,
     FactionDefinitionId DefinitionId,
     EstablishPresenceObjectiveState? PresenceObjective = null,
-    PendingFactionDecisionWake? PendingDecisionWake = null
+    PendingFactionDecisionWake? PendingDecisionWake = null,
+    FactionObservationState? Observation = null
 );

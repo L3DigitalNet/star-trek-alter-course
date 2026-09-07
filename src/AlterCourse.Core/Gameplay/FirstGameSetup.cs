@@ -39,6 +39,7 @@ public static class FirstGameSetup
         FactionId factionB = new(2);
         ShipStart[] starts = CreateShipStarts(definition, dawn, vesper, meridian, initialTime);
         starts[1] = starts[1] with { DirectControllerFactionId = factionB };
+        starts[2] = starts[2] with { DirectControllerFactionId = factionB };
         starts =
         [
             .. starts,
@@ -47,8 +48,12 @@ public static class FirstGameSetup
         ];
         FactionStart[] factions =
         [
-            new(factionA, new FactionDefinitionId("faction-a"), vesper),
-            new(factionB, new FactionDefinitionId("faction-b")),
+            new(factionA, new FactionDefinitionId("faction-a"), vesper, ObservationResponsePosture.Enabled),
+            new(
+                factionB,
+                new FactionDefinitionId("faction-b"),
+                ObservationResponsePosture: ObservationResponsePosture.Enabled
+            ),
         ];
         GameSimulation simulation = new GameBootstrap(
             initialTime,

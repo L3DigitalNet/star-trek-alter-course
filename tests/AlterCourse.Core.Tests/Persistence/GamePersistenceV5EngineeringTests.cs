@@ -20,8 +20,8 @@ public sealed class GamePersistenceV5EngineeringTests
         JsonObject ship = simulation["ships"]![0]!.AsObject();
         JsonObject engineering = ship["engineering"]!.AsObject();
 
-        Assert.Equal(7, root["schemaVersion"]!.GetValue<int>());
-        Assert.Equal("faction-intent-autonomous-assignment-v1", root["simulationRulesVersion"]!.GetValue<string>());
+        Assert.Equal(8, root["schemaVersion"]!.GetValue<int>());
+        Assert.Equal("observation-driven-faction-response-v1", root["simulationRulesVersion"]!.GetValue<string>());
         Assert.Equal(0.625, engineering["generationCondition"]!.GetValue<double>());
         Assert.Equal(0.4, engineering["sensorCondition"]!.GetValue<double>());
         Assert.Equal(1, engineering["impulseCondition"]!.GetValue<double>());
@@ -62,11 +62,7 @@ public sealed class GamePersistenceV5EngineeringTests
             invalid = Encoding.UTF8.GetBytes(
                 Encoding
                     .UTF8.GetString(valid)
-                    .Replace(
-                        "\"generationCondition\": 0.625",
-                        "\"generationCondition\": 1e999",
-                        StringComparison.Ordinal
-                    )
+                    .Replace("\"generationCondition\":0.625", "\"generationCondition\":1e999", StringComparison.Ordinal)
             );
         }
 

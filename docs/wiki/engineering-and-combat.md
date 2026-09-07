@@ -30,7 +30,7 @@ Engineering is a deliberately small connected Core model: generated power constr
 
 `SystemCondition` is finite and bounded from zero through one; its Offline, Degraded, and Nominal labels are presentation states. `PowerUnits` is a non-negative abstract integer quantity bounded at 1,000,000. Construction rejects negative or out-of-range values, addition is checked, comparison is deterministic, and JSON uses an invariant integer. It is neither watts nor stored energy, fuel, heat, or a physical-precision claim.
 
-Content defines immutable capability. Authored power values are positive and bounded; active-scan, sensor-repair, and impulse-repair durations are positive and aligned to the 100 ms simulation step. Runtime state holds three conditions, exact sensor/impulse allocation, and optionally one repair. Derived power, reserve, capability, range, speed, repair-progress labels, and UI state are not persisted. The current V7 save contract and migrations belong to [content, assets, and persistence](content-assets-and-persistence.md); former V4/V5 details were historical contracts, not current format guidance.
+Content defines immutable capability. Authored power values are positive and bounded; active-scan, sensor-repair, and impulse-repair durations are positive and aligned to the 100 ms simulation step. Runtime state holds three conditions, exact sensor/impulse allocation, and optionally one repair. Derived power, reserve, capability, range, speed, repair-progress labels, and UI state are not persisted. The current unreleased V8 save contract and migrations belong to [content, assets, and persistence](content-assets-and-persistence.md); former V4/V5 details were historical contracts, not current format guidance.
 
 ## Power and capability
 
@@ -73,7 +73,7 @@ Live Engineering shows only the player's nominal/available power, allocations, r
 
 This is degraded operation and repair, not a general damage model. Shields, weapons, EPS topology, batteries, warp, life support, computers, structural systems, fuel, heat/coolant, crews, repair queues, inventory, generalized components, and dynamic strategic travel are absent or unavailable.
 
-Combat is not implemented. [Observation-Driven Faction Response](observation-driven-faction-response.md) is the approved next slice. After it lands and is reconciled, **M6 Tactical Combat Foundation becomes the next major development family**. Full M3 or M5 completion is not a prerequisite for that first combat refinement.
+Combat is not implemented. [Observation-Driven Faction Response](observation-driven-faction-response.md) is implemented. **M6 Tactical Combat Foundation is the next major development family.** Full M3 or M5 completion is not a prerequisite for that first combat refinement.
 
 ## First combat engagement direction
 

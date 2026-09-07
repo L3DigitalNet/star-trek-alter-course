@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using AlterCourse.Core.Factions;
 using AlterCourse.Core.Gameplay;
 using AlterCourse.Core.Identity;
 
@@ -8,14 +9,14 @@ namespace AlterCourse.Core.Simulation;
 internal sealed class SimulationScheduler
 {
     // Each ship can correlate travel, repair, order, scan, and decision work independently of one loss item per
-    // possible contact. Each faction can independently retain one decision wake. Keep these allowances aligned with
-    // aggregate scheduled-work validation.
+    // possible contact. Each faction can retain one decision wake plus every bounded in-flight report delivery. Keep
+    // these allowances aligned with aggregate scheduled-work validation.
     private const int IndependentlyCorrelatedWorkKindsPerShip = 5;
 
     /// <summary>Gets the maximum number of outstanding consequences retained by one scheduler.</summary>
     public const int MaximumOutstandingWork =
         SimulationState.MaximumShips * ((SimulationState.MaximumShips - 1) + IndependentlyCorrelatedWorkKindsPerShip)
-        + SimulationState.MaximumFactions;
+        + (SimulationState.MaximumFactions * (1 + FactionObservationState.MaximumInFlightReports));
 
     private SimulationScheduler(long nextWorkId, long nextSequence, ImmutableArray<ScheduledWork> outstandingWork)
     {

@@ -21,7 +21,8 @@ internal sealed record ScheduledConsequenceTrace(
     SensorContactId? ContactId = null,
     ShipSystemId? SystemId = null,
     ShipContactDecisionExplanation? ContactDecision = null,
-    FactionAssignmentDecisionExplanation? FactionDecision = null
+    FactionAssignmentDecisionExplanation? FactionDecision = null,
+    FactionInvestigationDecisionExplanation? FactionInvestigationDecision = null
 )
 {
     internal ShipInstanceId TargetShipId =>

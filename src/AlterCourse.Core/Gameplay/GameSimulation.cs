@@ -1,5 +1,6 @@
 using AlterCourse.Core.AI;
 using AlterCourse.Core.Content;
+using AlterCourse.Core.Factions;
 using AlterCourse.Core.Identity;
 using AlterCourse.Core.Orders;
 using AlterCourse.Core.Player;
@@ -15,10 +16,19 @@ namespace AlterCourse.Core.Gameplay;
 /// <summary>Owns authoritative mutation and immutable definition content for the simulation.</summary>
 public sealed partial class GameSimulation
 {
-    // These budgets bound one candidate advancement operation. A rejected candidate never consumes
-    // capacity from a later request or commits partial time, ship, or scheduler state.
-    private const int SameBoundaryExecutionBudget = 1024;
-    private const int TotalConsequenceExecutionBudget = 10_000;
+    // One boundary may begin with every reachable ship, faction, contact-wake, and report-delivery correlation, then
+    // generate one NPC contact-wake replacement before and after the coalesced faction pass. This conservative phase
+    // composition is intentionally below the scheduler's looser shape allowance because one ship work slot covers
+    // mutually exclusive travel/order correlations. The total policy adds a finite allowance for later-boundary
+    // recurrence within one call. A rejected candidate never commits partial time, ship, or scheduler state.
+    private const int MaximumNpcShips = SimulationState.MaximumShips - 1;
+    private const int MaximumPreexistingBoundaryWork =
+        SimulationState.MaximumShips * (SensorKnowledge.MaximumContactsPerObserver + 2)
+        + MaximumNpcShips
+        + SimulationState.MaximumFactions
+        + (MaximumNpcShips * FactionObservationState.MaximumInFlightReports);
+    internal const int SameBoundaryExecutionBudget = MaximumPreexistingBoundaryWork + (2 * MaximumNpcShips);
+    internal const int TotalConsequenceExecutionBudget = SameBoundaryExecutionBudget + 10_000;
     private const int ContactMaterializationBoundaryBudget = 10_000;
     private const long ShipStepWorkBudget = 1_000_000;
     private const long SensorContactLossMilliseconds = 5_000;
@@ -406,6 +416,7 @@ public sealed partial class GameSimulation
         Commit(advance.State);
         RememberLatestContactDecision(advance.Traces);
         RememberLatestFactionDecision(advance.Traces);
+        RememberLatestFactionInvestigationDecision(advance.Traces);
         return new SimulationAdvanceResult(_state.Time, advance.PlayerEvents, Project(_state));
     }
 
@@ -434,6 +445,7 @@ public sealed partial class GameSimulation
         Commit(advance.State);
         RememberLatestContactDecision(advance.Traces);
         RememberLatestFactionDecision(advance.Traces);
+        RememberLatestFactionInvestigationDecision(advance.Traces);
         return new AdvanceUntilResult(
             AdvanceUntilOutcome.PlayerEventResolved,
             _state.Time,
@@ -750,9 +762,12 @@ public sealed partial class GameSimulation
     private static SimulationState ObserveAllShips(
         SimulationState state,
         ShipDefinitionCatalog shipCatalog,
-        List<PlayerAdvanceEvent> playerEvents
+        List<PlayerAdvanceEvent> playerEvents,
+        ObservationPublicationCollector? publicationCollector = null
     )
     {
+        bool ownsCollector = publicationCollector is null;
+        publicationCollector ??= new ObservationPublicationCollector();
         ShipState[] truth = [.. state.Ships];
         SimulationState current = state;
         foreach (ShipState truthObserver in truth)
@@ -762,38 +777,11 @@ public sealed partial class GameSimulation
             double effectiveRange =
                 observerDefinition.PassiveSensorRange.Value
                 * observer.Engineering.SensorCapability(observerDefinition.Engineering);
-            var observableTargets = new HashSet<ShipInstanceId>();
-            // The observer's own location is the reference frame every observation recorded in this
-            // pass is qualified by. It stays coupled to observableTargets: a traveling observer
-            // resolves no location and therefore observes nothing, so a non-empty target set always
-            // implies a known frame.
-            LocationId? observerLocationId = null;
-            if (observer.StrategicState is AtLocationState observerLocation)
-            {
-                observerLocationId = observerLocation.LocationId;
-                IEnumerable<ShipState> targets =
-                    observer.SensorKnowledge.Contacts.Length == SensorKnowledge.MaximumContactsPerObserver
-                        ? observer.SensorKnowledge.Contacts.Select(contact =>
-                            truth[FindShipIndex(truth, contact.TargetShipId)]
-                        )
-                        : truth;
-                foreach (ShipState target in targets)
-                {
-                    if (
-                        effectiveRange > 0
-                        && target.InstanceId != observer.InstanceId
-                        && target.StrategicState is AtLocationState targetLocation
-                        && targetLocation.LocationId == observerLocation.LocationId
-                        && IsWithinInclusiveRange(
-                            Distance(observer.TacticalPosition, target.TacticalPosition),
-                            effectiveRange
-                        )
-                    )
-                    {
-                        observableTargets.Add(target.InstanceId);
-                    }
-                }
-            }
+            (HashSet<ShipInstanceId> observableTargets, LocationId? observerLocationId) = FindObservableTargets(
+                observer,
+                truth,
+                effectiveRange
+            );
 
             (current, observer) = ReconcileObserverContacts(
                 current,
@@ -803,6 +791,7 @@ public sealed partial class GameSimulation
                 observerLocationId,
                 playerEvents
             );
+            CollectObservationPublications(current, truthObserver, observer, publicationCollector);
             bool decisionRequired = HasMeaningfulContactTransition(
                 truthObserver.SensorKnowledge,
                 observer.SensorKnowledge
@@ -810,7 +799,39 @@ public sealed partial class GameSimulation
             current = ScheduleContactDecisionWake(current, observer, decisionRequired);
         }
 
-        return current;
+        return ownsCollector ? AdmitObservationPublications(current, publicationCollector) : current;
+    }
+
+    private static (HashSet<ShipInstanceId> Targets, LocationId? LocationId) FindObservableTargets(
+        ShipState observer,
+        ShipState[] truth,
+        double effectiveRange
+    )
+    {
+        var observableTargets = new HashSet<ShipInstanceId>();
+        if (observer.StrategicState is not AtLocationState observerLocation)
+        {
+            return (observableTargets, null);
+        }
+
+        IEnumerable<ShipState> targets =
+            observer.SensorKnowledge.Contacts.Length == SensorKnowledge.MaximumContactsPerObserver
+                ? observer.SensorKnowledge.Contacts.Select(contact => truth[FindShipIndex(truth, contact.TargetShipId)])
+                : truth;
+        foreach (ShipState target in targets)
+        {
+            if (
+                effectiveRange > 0
+                && target.InstanceId != observer.InstanceId
+                && target.StrategicState is AtLocationState targetLocation
+                && targetLocation.LocationId == observerLocation.LocationId
+                && IsWithinInclusiveRange(Distance(observer.TacticalPosition, target.TacticalPosition), effectiveRange)
+            )
+            {
+                observableTargets.Add(target.InstanceId);
+            }
+        }
+        return (observableTargets, observerLocation.LocationId);
     }
 
     private static int FindShipIndex(IReadOnlyList<ShipState> ships, ShipInstanceId shipId)
@@ -1191,9 +1212,12 @@ public sealed partial class GameSimulation
     )
     {
         SimulationState current = state;
+        var publicationCollector = new ObservationPublicationCollector();
+        var requestedFactions = new HashSet<FactionId>();
+        var evaluatedFactions = new HashSet<FactionId>();
         if (observe)
         {
-            current = ObserveAllShips(current, shipCatalog, playerEvents);
+            current = ObserveAllShips(current, shipCatalog, playerEvents, publicationCollector);
         }
 
         int executions = 0;
@@ -1204,25 +1228,165 @@ public sealed partial class GameSimulation
             );
             if (dueWork.Count == 0)
             {
-                return current;
+                if (
+                    !EvaluateRequestedFactions(
+                        ref current,
+                        requestedFactions,
+                        evaluatedFactions,
+                        shipCatalog,
+                        publicationCollector,
+                        playerEvents,
+                        traces
+                    )
+                )
+                {
+                    return AdmitObservationPublications(current, publicationCollector);
+                }
+                continue;
             }
 
             current = current with { Scheduler = scheduler };
-            foreach (ScheduledWork work in dueWork)
-            {
-                ChargeScheduledExecution(ref executions, ref totalExecutions);
-                (current, ScheduledConsequenceTrace trace) = ResolveScheduledWork(
-                    current,
-                    work,
-                    shipCatalog,
-                    factionCatalog
-                );
-                traces.Add(trace);
-                AddPlayerScheduledEvent(trace, current.PlayerShipId, playerEvents);
-                current = ObserveAllShips(current, shipCatalog, playerEvents);
-            }
+            current = ResolveDueWorkBatch(
+                current,
+                dueWork,
+                shipCatalog,
+                factionCatalog,
+                traces,
+                playerEvents,
+                publicationCollector,
+                requestedFactions,
+                ref executions,
+                ref totalExecutions
+            );
         }
     }
+
+    private static bool EvaluateRequestedFactions(
+        ref SimulationState state,
+        HashSet<FactionId> requested,
+        HashSet<FactionId> evaluated,
+        ShipDefinitionCatalog shipCatalog,
+        ObservationPublicationCollector collector,
+        List<PlayerAdvanceEvent> playerEvents,
+        List<ScheduledConsequenceTrace> traces
+    )
+    {
+        FactionId[] pending = [.. requested.Where(id => !evaluated.Contains(id)).OrderBy(id => id.Value)];
+        foreach (FactionId factionId in pending)
+        {
+            CoordinatedFactionDecision decision = CoordinateFactionDecision(
+                state,
+                factionId,
+                shipCatalog,
+                collector,
+                playerEvents
+            );
+            state = decision.State;
+            evaluated.Add(factionId);
+            int traceIndex = traces.FindLastIndex(trace => trace.Target.FactionId == factionId);
+            if (traceIndex >= 0)
+            {
+                traces[traceIndex] = traces[traceIndex] with
+                {
+                    FactionDecision = decision.PresenceDecision,
+                    FactionInvestigationDecision = decision.InvestigationDecision,
+                };
+            }
+        }
+        return pending.Length != 0;
+    }
+
+    private static SimulationState ResolveDueWorkBatch(
+        SimulationState state,
+        IReadOnlyList<ScheduledWork> dueWork,
+        ShipDefinitionCatalog shipCatalog,
+        FactionDefinitionCatalog factionCatalog,
+        List<ScheduledConsequenceTrace> traces,
+        List<PlayerAdvanceEvent> playerEvents,
+        ObservationPublicationCollector collector,
+        HashSet<FactionId> requestedFactions,
+        ref int boundaryExecutions,
+        ref int totalExecutions
+    )
+    {
+        SimulationState current = state;
+        foreach (ScheduledWork work in dueWork)
+        {
+            ChargeScheduledExecution(ref boundaryExecutions, ref totalExecutions);
+            current = ResolveOneDueWork(
+                current,
+                work,
+                shipCatalog,
+                factionCatalog,
+                traces,
+                playerEvents,
+                collector,
+                requestedFactions
+            );
+        }
+        return current;
+    }
+
+    private static SimulationState ResolveOneDueWork(
+        SimulationState state,
+        ScheduledWork work,
+        ShipDefinitionCatalog shipCatalog,
+        FactionDefinitionCatalog factionCatalog,
+        List<ScheduledConsequenceTrace> traces,
+        List<PlayerAdvanceEvent> playerEvents,
+        ObservationPublicationCollector collector,
+        HashSet<FactionId> requestedFactions
+    )
+    {
+        if (work.Kind == ScheduledWorkKind.ObservationReportDelivery)
+        {
+            (SimulationState deliveredState, bool delivered) = CompleteObservationReportDelivery(state, work);
+            traces.Add(ObservationDeliveryTrace(deliveredState, work, delivered));
+            if (delivered)
+                requestedFactions.Add(work.Target.FactionId!.Value);
+            return deliveredState;
+        }
+
+        (SimulationState current, ScheduledConsequenceTrace trace) = ResolveScheduledWork(
+            state,
+            work,
+            shipCatalog,
+            factionCatalog
+        );
+        traces.Add(trace);
+        AddPlayerScheduledEvent(trace, current.PlayerShipId, playerEvents);
+        if (work.Kind == ScheduledWorkKind.FactionDecisionWake)
+        {
+            requestedFactions.Add(work.Target.FactionId!.Value);
+            return current;
+        }
+
+        current = ObserveAllShips(current, shipCatalog, playerEvents, collector);
+        (current, FactionId? completed) = CompleteArrivedInvestigation(current, work, trace, collector);
+        if (completed is { } factionId)
+            requestedFactions.Add(factionId);
+        return current;
+    }
+
+    private static ScheduledConsequenceTrace ObservationDeliveryTrace(
+        SimulationState state,
+        ScheduledWork work,
+        bool delivered
+    ) =>
+        new(
+            work.Id,
+            work.Target,
+            work.Kind,
+            state.Time,
+            null,
+            null,
+            ScheduledConsequenceRule.ObservationReportDelivery,
+            delivered
+                ? ScheduledConsequenceAction.DeliverObservationReport
+                : ScheduledConsequenceAction.IgnoreInvalidatedObservationReportDelivery,
+            delivered,
+            false
+        );
 
     private static void ChargeScheduledExecution(ref int boundaryExecutions, ref int totalExecutions)
     {
@@ -1258,6 +1422,9 @@ public sealed partial class GameSimulation
             ScheduledWorkKind.ActiveSensorScanCompletion => CompleteActiveSensorScan(state, work, shipCatalog),
             ScheduledWorkKind.ShipContactDecisionWake => CompleteShipContactDecisionWake(state, work, shipCatalog),
             ScheduledWorkKind.FactionDecisionWake => CompleteFactionDecisionWake(state, work, factionCatalog),
+            ScheduledWorkKind.ObservationReportDelivery => throw new InvalidOperationException(
+                "Observation delivery must be coalesced at the shared faction boundary."
+            ),
             _ => throw new InvalidOperationException("Scheduled work kind is unsupported."),
         };
 

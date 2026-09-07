@@ -28,7 +28,7 @@ related:
 
 v0.5.0 is the immutable source-only release and uses V6 saves. Feature #86 / Final PR #87 merged the bounded faction slice into `dev` as `0217296`, where it uses V7; no V7 release is claimed. For the operational snapshot, consult [STATUS](../STATUS.md).
 
-[Observation-Driven Faction Response](observation-driven-faction-response.md) is owner-approved design for the next bounded slice and is **not implemented** in this reviewed baseline. Its proposed V8/report-delivery/investigation state must not be described as current runtime until implementation evidence lands.
+[Observation-Driven Faction Response](observation-driven-faction-response.md) is implemented by Feature #93 / Final PR #94, using V8 under `observation-driven-faction-response-v1` in unreleased development. v0.5.0 remains the released V6 baseline. The reviewed feature evidence includes its Core causal path, three production and three long-horizon scenarios, 67/67 Godot/player-safe tests, and the V8 conservative persistence bound.
 
 ## Implemented gameplay
 
@@ -40,9 +40,9 @@ Local tactical space has continuous 2D positions and course/speed commands. Obse
 
 Engineering owns generation condition, constrained allocation, sensor and impulse condition, derived capability, and one sensor or impulse repair per ship. Those values affect actual detection and tactical course limits. The live Engineering UI is not merely a preview.
 
-The current `dev` implementation also has root faction definitions and mutable presence objectives, ship-side optional direct `FactionId` control with a derived roster, pure own-asset assignment, typed Ship/Faction scheduler targets, and strict V1 faction JSON. It selects by route duration then ship ID, issues ordinary `TravelTo`, and keeps offscreen contact knowledge ship-local. Save V7 persists the consequential state and migrates V6 with zero factions, null controllers, and explicitly ship-targeted work. Ship-definition content V4 remains current.
+Feature #86 added root faction definitions and mutable presence objectives, ship-side optional direct `FactionId` control with a derived roster, pure own-asset assignment, typed Ship/Faction scheduler targets, and strict V1 faction JSON. It selects by route duration then ship ID, issues ordinary `TravelTo`, and keeps offscreen contact knowledge ship-local. Its V7 save persists the consequential state and migrates V6 with zero factions, null controllers, and explicitly ship-targeted work. Ship-definition content V4 remains current.
 
-The Godot shell privately loads both strict catalogs and adapts V7 saves without adding faction UI. Its focused 65-test compatibility suite verifies a production ship reaches Vesper after a midflight quick-load, root controllers retain a null player controller, malformed faction/controller data leaves the live shell usable, and ordinary UI hides faction names, vessels, and work.
+The Godot shell privately loads both strict catalogs and adapts V8 saves without adding faction UI. Its 67/67 compatibility suite verifies quick-load continuation, root controllers retain a null player controller, malformed faction/controller/response data leaves the live shell usable, and ordinary UI hides faction names, vessels, reports, and work.
 
 Implementation evidence: [FirstGameSetup](../../src/AlterCourse.Core/Gameplay/FirstGameSetup.cs), [ShipState](../../src/AlterCourse.Core/Ships/ShipState.cs), [SimulationState](../../src/AlterCourse.Core/Gameplay/SimulationState.cs), [GameSimulation](../../src/AlterCourse.Core/Gameplay/GameSimulation.cs), [Core gameplay tests](../../tests/AlterCourse.Core.Tests/Gameplay/), and the [Engineering contract](engineering-and-combat.md).
 
@@ -50,25 +50,25 @@ Implementation evidence: [FirstGameSetup](../../src/AlterCourse.Core/Gameplay/Fi
 
 Milestone 1 world/bootstrap and Milestone 2 active-world orders are implemented. Milestone 3A first observed contact and [Strategic Contact Reporting](strategic-contact-reporting.md) are implemented, but the roadmap explicitly does not declare all of Milestone 3 complete. Milestone 4 Engineering Backbone is implemented. M3A and M4 are included in v0.4.0; Strategic Contact Reporting was delivered in Feature #77 / Final PR #78, merged into `dev` as `80c3084`, and included in v0.5.0.
 
-Feature #86 is the first implemented M5 contribution, not evidence that M5 or M3 is complete. Observation-Driven Faction Response is the approved next bounded M5 contribution but remains design-only. After that slice is implemented and reconciled, M6 Tactical Combat Foundation becomes the next major development family; M3 and M5 do not need to be declared complete first. M6-M9 runtime remains future work. No canonical M3B milestone is admitted.
+Feature #86 is the first implemented M5 contribution, not evidence that M5 or M3 is complete. Observation-Driven Faction Response is the next bounded M5 contribution. M6 Tactical Combat Foundation is the next major development family; M3 and M5 do not need to be declared complete first. M6-M9 runtime remains future work. No canonical M3B milestone is admitted.
 
 ## Implemented bounded faction slice
 
 [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) is implemented in Feature #86 / Final PR #87. It provides the approved era-neutral root-faction proof primitives: deterministic candidate choice under commitment, idle directly controlled NPC-only application, narrow own-asset facts, typed bootstrap and scheduling, strict faction content V1, and V6→V7 migration without political invention.
 
-Q-05 is resolved for that slice. Q-04, Q-06, Q-08, and Q-14 have only the documented scoped decisions; Q-02, Q-03, and broader intelligence/political questions remain open. Production and long-horizon scenarios cover the bounded slice; the Final PR records inherited verification evidence. The `dev` implementation is not a V7 release claim.
+Q-05 is resolved for that slice. Q-04, Q-06, Q-08, and Q-14 have only the documented scoped decisions; Q-02, Q-03, and broader intelligence/political questions remain open. Production and long-horizon scenarios cover the bounded slice; the Final PR records inherited verification evidence. V7 is not a release claim.
 
-## Approved next slice, not implemented
+## Implemented observation response
 
 [Observation-Driven Faction Response](observation-driven-faction-response.md) approves one direct NPC ship-to-direct-faction report channel and one bounded investigation response. It selects a 2,000 ms deterministic report delay, observer-local historical provenance, eight in-flight and sixteen retained reports per faction, one active investigation, a 60,000 ms freshness window, no RNG, no preemption, and non-inventive adjacent persistence.
 
-None of the following are current implementation claims until the feature PR lands: faction received-report state, report-delivery scheduler work, observation-response posture, investigation commitments, V8 saves, both-factions report/response scenarios, or the associated Godot/player-safe proof. Historical current contacts remain ship-local in V7.
+The implementation provides faction received-report state, report-delivery scheduler work, observation-response posture, investigation commitments, and V8 saves. Three production and three long-horizon Core proofs establish the two-faction path and bounded continuation; the Godot suite is 67/67 and keeps the player projection actor-safe. A high-width graph fixture is 108,890,984 bytes compact; the source-derived conservative V8 ceiling is 113,024,376 bytes, 21,193,352 bytes below the unchanged 128 MiB envelope. Historical released contacts remain ship-local in V6; V7 is the preceding development schema.
 
 ## Preview-only or absent
 
 Combat mockups do not establish authoritative shields, weapons, fire-control solutions, or damage resolution. Detailed EPS networks, batteries, warp Engineering, life support, transporters, repair teams/queues, crew systems, fuel, inventory, and economy are absent. The actual repair model has one active repair, not the multi-team queue illustrated by earlier UI references.
 
-Strategic long-range sensor simulation, affiliation/intent knowledge, organizations, governments, political hierarchies, treaties, espionage, layered jurisdiction, and general faction intelligence sharing are not implemented. Durable last-known strategic contact reporting is implemented ship/player-side; the approved direct ship-to-faction response extension is not yet runtime.
+Strategic long-range sensor simulation, affiliation/intent knowledge, organizations, governments, political hierarchies, treaties, espionage, layered jurisdiction, and general faction intelligence sharing are not implemented. Durable last-known strategic contact reporting is implemented ship/player-side; Observation-Driven Faction Response adds only its direct ship-to-faction reporting extension.
 
 `KnownShipId`, cross-observer vessel correlation, organization controllers, narrative runtime, a database, ECS, and a public mod API remain absent and are not admitted by the approved next slice.
 

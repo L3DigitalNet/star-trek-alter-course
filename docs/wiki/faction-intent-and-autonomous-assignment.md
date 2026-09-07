@@ -30,9 +30,9 @@ related:
 
 ## Status, authority, and provenance
 
-**Implemented in Feature #86 / Final PR #87, merged into `dev` as `0217296`.** The current `dev` implementation uses save V7; the released v0.5.0 line remains V6. This page records both the September 6 approval and the merged source-level implementation truth. It does not claim that a V7 release exists.
+**Implemented in Feature #86 / Final PR #87, merged into `dev` as `0217296`.** That slice introduced save V7; unreleased development now uses V8, while the released v0.5.0 line remains V6. This page records both the September 6 approval and the merged source-level implementation truth. It does not claim that a V7 release exists.
 
-This is the first implemented contribution toward **Milestone 5 — Living Sector and Faction Autonomy** after Strategic Contact Reporting. It is not all of M5, does not complete M3, and does not rename the earlier contact-reporting slice to M3B. Ship-definition content remains V4. The `dev` implementation is V7 while the current v0.5.0 release remains V6.
+This is the first implemented contribution toward **Milestone 5 — Living Sector and Faction Autonomy** after Strategic Contact Reporting. It is not all of M5, does not complete M3, and does not rename the earlier contact-reporting slice to M3B. Ship-definition content remains V4. This slice introduced V7; unreleased development now uses V8 while the v0.5.0 release remains V6.
 
 The implementation adds no faction, affiliation, political hierarchy, or intelligence UI; it does not publish a release. Organizations, hierarchy traversal, information sharing, RNG, and a generic actor framework remain outside this slice.
 
@@ -120,7 +120,7 @@ Q-14 is therefore scoped in two ways: the next save migration is selected, and t
 
 ## Presentation and non-goals
 
-No faction, affiliation, political hierarchy, or intelligence UI is added. Existing player-safe maps, contacts, Engineering controls, save/load, and event advancement remain available. Godot loads V7 and both content catalogs, but it receives no faction diagnostic view or hidden NPC decision stream. A new offscreen consequence is not automatically a player-relevant event.
+No faction, affiliation, political hierarchy, or intelligence UI is added. Existing player-safe maps, contacts, Engineering controls, save/load, and event advancement remain available. Godot loads V8 and both content catalogs, but it receives no faction diagnostic view or hidden NPC decision stream. A new offscreen consequence is not automatically a player-relevant event.
 
 Do not implement global known-vessel identity, cross-observer correlation, report sharing, affiliation/intent learning, political attitudes, treaties, combat, diplomacy, organizations, governments, parent/child factions, layered jurisdiction, territory ownership, political resources/economy, canonical campaign generation, RNG, or a generic actor/rules framework. Do not select a complete organization taxonomy or complete M3 merely to label this slice finished.
 

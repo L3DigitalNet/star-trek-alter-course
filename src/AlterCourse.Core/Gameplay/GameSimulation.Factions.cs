@@ -27,30 +27,201 @@ public sealed partial class GameSimulation
 
         factionCatalog.GetRequired(faction.DefinitionId);
         SimulationState cleared = state.ReplaceFaction(faction.Id, faction with { PendingDecisionWake = null });
-        FactionState ready = cleared.GetRequiredFaction(faction.Id);
-        if (ready.PresenceObjective is not { } objective)
-        {
-            throw new InvalidOperationException("Faction decision wake requires an active objective.");
-        }
-
-        FactionAssignmentDecisionExplanation decision = DecideFactionAssignment(cleared, ready, objective);
-        SimulationState candidate = ApplyFactionDecision(cleared, ready, decision);
         return (
-            candidate,
+            cleared,
             new ScheduledConsequenceTrace(
                 work.Id,
                 work.Target,
                 work.Kind,
                 state.Time,
-                objective.AssignedOrderId,
-                objective.AssignedOrderId is null ? null : ShipOrderKind.TravelTo,
+                faction.PresenceObjective?.AssignedOrderId,
+                faction.PresenceObjective?.AssignedOrderId is null ? null : ShipOrderKind.TravelTo,
                 ScheduledConsequenceRule.FactionDecisionWake,
                 ScheduledConsequenceAction.WakeFactionDecision,
                 true,
-                false,
-                FactionDecision: decision
+                false
             )
         );
+    }
+
+    private sealed record CoordinatedFactionDecision(
+        SimulationState State,
+        FactionAssignmentDecisionExplanation? PresenceDecision,
+        FactionInvestigationDecisionExplanation InvestigationDecision
+    );
+
+    private static CoordinatedFactionDecision CoordinateFactionDecision(
+        SimulationState state,
+        FactionId factionId,
+        ShipDefinitionCatalog shipCatalog,
+        ObservationPublicationCollector publicationCollector,
+        List<PlayerAdvanceEvent> playerEvents
+    )
+    {
+        SimulationState current = CancelPendingFactionWake(state, factionId);
+        FactionState faction = current.GetRequiredFaction(factionId);
+        FactionAssignmentDecisionExplanation? presenceDecision = null;
+        if (faction.PresenceObjective is { Status: FactionObjectiveStatus.Pending } objective)
+        {
+            presenceDecision = DecideFactionAssignment(current, faction, objective);
+            current = ApplyFactionDecision(current, faction, presenceDecision);
+            current = ObserveAllShips(current, shipCatalog, playerEvents, publicationCollector);
+        }
+        else if (faction.PresenceObjective is { Status: FactionObjectiveStatus.Assigned } assigned)
+        {
+            ShipState assignedShip = current.GetRequiredShip(assigned.AssignedShipId!.Value);
+            if (
+                assignedShip.StrategicState is AtLocationState atLocation
+                && atLocation.LocationId == assigned.TargetLocationId
+            )
+            {
+                presenceDecision = DecideFactionAssignment(current, faction, assigned);
+                current = ApplyFactionDecision(current, faction, presenceDecision);
+                current = ObserveAllShips(current, shipCatalog, playerEvents, publicationCollector);
+            }
+        }
+
+        faction = current.GetRequiredFaction(factionId);
+        FactionInvestigationDecisionExplanation investigationDecision = DecideFactionInvestigation(
+            current,
+            faction,
+            publicationCollector
+        );
+        if (investigationDecision.Proposal is { } proposal)
+        {
+            FactionInvestigationApplicationResult application = ApplyFactionInvestigation(
+                current,
+                proposal,
+                shipCatalog,
+                publicationCollector,
+                playerEvents
+            );
+            current = application.CandidateState;
+        }
+
+        current = NormalizeFactionDecisionWake(current, factionId, publicationCollector);
+        return new CoordinatedFactionDecision(current, presenceDecision, investigationDecision);
+    }
+
+    private static SimulationState CancelPendingFactionWake(SimulationState state, FactionId factionId)
+    {
+        FactionState faction = state.GetRequiredFaction(factionId);
+        if (faction.PendingDecisionWake is not { } wake)
+        {
+            return state;
+        }
+
+        (SimulationScheduler scheduler, _) = state.Scheduler.Cancel(wake.WorkId);
+        return state.ReplaceFaction(faction.Id, faction with { PendingDecisionWake = null }) with
+        {
+            Scheduler = scheduler,
+        };
+    }
+
+    private static SimulationState NormalizeFactionDecisionWake(
+        SimulationState state,
+        FactionId factionId,
+        ObservationPublicationCollector? boundaryCollector = null
+    )
+    {
+        SimulationState current = CancelPendingFactionWake(state, factionId);
+        FactionState faction = current.GetRequiredFaction(factionId);
+        List<SimulationTime> opportunities = [];
+
+        if (faction.PresenceObjective is { Status: FactionObjectiveStatus.Assigned } assigned)
+        {
+            ShipState ship = current.GetRequiredShip(assigned.AssignedShipId!.Value);
+            if (ship.StrategicState is TravelingState traveling)
+            {
+                opportunities.Add(traveling.Travel.ExpectedArrival);
+            }
+        }
+        else if (faction.PresenceObjective is { Status: FactionObjectiveStatus.Pending })
+        {
+            SimulationTime? release = FindNextFactionOpportunity(current, faction);
+            if (release is { } due)
+            {
+                opportunities.Add(due);
+            }
+        }
+
+        FactionObservationState observation = faction.Observation ?? new FactionObservationState();
+        if (observation.ActiveInvestigation is { } active)
+        {
+            ShipState responder = current.GetRequiredShip(active.ResponderShipId);
+            if (responder.StrategicState is TravelingState traveling)
+            {
+                opportunities.Add(traveling.Travel.ExpectedArrival);
+            }
+        }
+        else if (
+            FindResponseReleaseOpportunity(current, faction, observation, boundaryCollector) is { } responseRelease
+        )
+        {
+            opportunities.Add(responseRelease);
+        }
+
+        SimulationTime? next = opportunities
+            .Where(value => value.Milliseconds > current.Time.Milliseconds)
+            .OrderBy(value => value.Milliseconds)
+            .Cast<SimulationTime?>()
+            .FirstOrDefault();
+        if (next is null)
+        {
+            return current;
+        }
+
+        return ScheduleFactionDecisionWake(current, faction, next.Value);
+    }
+
+    private static SimulationState ScheduleFactionDecisionWake(
+        SimulationState state,
+        FactionState faction,
+        SimulationTime dueTime
+    )
+    {
+        (SimulationScheduler scheduler, ScheduledWork work) = state.Scheduler.Schedule(
+            dueTime,
+            ScheduledWorkTarget.ForFaction(faction.Id),
+            ScheduledWorkKind.FactionDecisionWake
+        );
+        return state.ReplaceFaction(
+            faction.Id,
+            faction with
+            {
+                PendingDecisionWake = new PendingFactionDecisionWake(work.Id, work.DueTime),
+            }
+        ) with
+        {
+            Scheduler = scheduler,
+        };
+    }
+
+    internal static SimulationTime? FindResponseReleaseOpportunity(
+        SimulationState state,
+        FactionState faction,
+        FactionObservationState observation,
+        ObservationPublicationCollector? boundaryCollector = null
+    )
+    {
+        SimulationTime? boundary = FindNextFactionOpportunity(state, faction);
+        if (boundary is not { } candidate)
+        {
+            return null;
+        }
+
+        bool reportSurvives = observation.ReceivedReports.Any(report =>
+            report.Handling == ObservationReportHandling.Unhandled
+            && report.Report.ObservedAt.Milliseconds <= state.Time.Milliseconds
+            && candidate.Milliseconds - report.Report.ObservedAt.Milliseconds
+                < FactionObservationState.ReportFreshnessMilliseconds
+            && !observation.CompletionWatermarks.Any(watermark =>
+                watermark.LocationId == report.Report.ObservedAtLocationId
+                && watermark.ObservedThrough.Milliseconds >= report.Report.ObservedAt.Milliseconds
+            )
+            && !IsCoveredByBoundaryCompletion(boundaryCollector, faction.Id, report.Report)
+        );
+        return reportSurvives ? candidate : null;
     }
 
     internal static FactionAssignmentDecisionExplanation DecideFactionAssignment(

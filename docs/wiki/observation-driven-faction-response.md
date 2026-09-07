@@ -27,7 +27,7 @@ related:
 
 ## Status and purpose
 
-**Approved design, not implemented.** This is the next bounded gameplay slice after Faction Intent and Autonomous Assignment. It connects existing local sensor knowledge to existing faction decision and ship-order machinery without introducing a general intelligence service, political hierarchy, affiliation inference, combat, or communications-network simulation.
+**Implemented by Feature #93 / Final PR #94; unreleased development uses V8.** This bounded gameplay slice follows Faction Intent and Autonomous Assignment. It connects existing local sensor knowledge to existing faction decision and ship-order machinery without introducing a general intelligence service, political hierarchy, affiliation inference, combat, or communications-network simulation. v0.5.0 remains the released V6 baseline and V7 is the preceding development schema.
 
 The required causal proof is:
 
@@ -103,7 +103,7 @@ When received retention would exceed 16 after expired/handled entries are remove
 
 The implementation must derive scheduler capacity conservatively from the maximum allowed work shape, including all per-faction report-delivery slots. It must derive both the total consequence-execution budget and the same-boundary execution budget from the maximum reachable work and bounded consequences that can execute in one advancement or become due together. All three limits retain explicit finite-cycle guards; they must not be weakened merely to make a maximum-shape test pass. The maximum-shape proof must combine same-time report deliveries with the existing scheduled-work maximum and must obey real source-authority, player-exclusion, ship, and faction limits rather than constructing an unreachable fixture.
 
-The resulting V8 worst-case scheduler/save shape must remain within the existing 128 MiB save envelope. It may refine internal report constants downward if proof demonstrates that the approved maxima cannot fit, but it must not silently enlarge the envelope or introduce a database/event log to avoid the bound.
+The implemented V8 bounds are **68,864** outstanding work items, **68,853** same-boundary consequence executions, and **78,853** total consequence executions. The resulting V8 shape remains within the unchanged 128 MiB save envelope. It does not enlarge that envelope or introduce a database/event log to avoid the bound.
 
 ## Investigation policy
 
@@ -152,7 +152,7 @@ If the selected responder was already at the destination, Core performs the same
 
 ## Persistence and migration
 
-If current `dev` is still V7 when implementation begins, this slice advances saves to **V8** under a new rules identity `observation-driven-faction-response-v1`. If another governed change has already consumed V8, use the next adjacent version and preserve the same migration semantics.
+The implementation advances saves to **V8** under rules identity `observation-driven-faction-response-v1`. V7 remains the historical development schema and v0.5.0 remains the released V6 baseline.
 
 Persist only consequential authoritative state needed for deterministic continuation:
 
@@ -167,6 +167,14 @@ Derived projections, UI formatting, candidate lists, and reconstructible indexes
 The adjacent migration from the current development schema is deliberately non-inventive: existing factions receive the response posture **disabled**, empty in-flight/received report state, no active investigation, no report-delivery work, and no invented location-response history. Existing faction objectives, controllers, ship orders, contacts, simulation time, scheduler ordering, and identity continuation remain unchanged. Zero-faction worlds remain valid. Typed new-game bootstrap explicitly enables the response posture for both factions participating in the proof.
 
 Candidate/load validation is atomic and rejects duplicate report identities, missing/unauthorized source or recipient factions, report/source-controller contradictions at publication, impossible observation/receipt times, malformed locations/positions/identification, orphaned or wrong-domain delivery work, active investigation/order mismatches, missing responder/controller relationships, duplicate work, invalid counters, and unjustified missing continuation.
+
+## Implemented evidence and boundaries
+
+The reviewed implementation supplies the complete causal contract in Core: observation publication and same-boundary coalescing in `GameSimulation.Observation.cs`; bounded report, investigation, and watermark state in `FactionObservationState.cs`; deterministic investigation input and policy in the faction AI; and V8 serialization, migration, and candidate validation in `GamePersistence.cs`. The six new scenario and horizon tests divide into three production proofs and three long-horizon proofs. They cover both factions as reporter and recipient, the no-delivery counterfactual, ordinary responder travel, hidden-truth invariance, finite release/dormancy, feedback suppression, and save/load continuation. The Godot suite is **67/67** and keeps the added runtime state private to Core rather than turning it into player intelligence UI.
+
+V8 persists compact JSON after measurement under ADR 0006's explicit measured-benefit allowance. The fully populated high-width fixture is **108,890,984 bytes** compact. Its earlier pretty-printed form was **134,478,451 bytes**, so compact output saves **25,587,467 bytes**. The fixture exercises the strongest combined report/ship graph; the tested conservative universal ceiling is **113,024,376 bytes**, leaving **21,193,352 bytes** below 128 MiB. That ceiling deliberately adds full maximum encodings for omitted legal alternatives—256 locations, 1,024 routes, 256 patrol/travel/motion/Engineering/scan/autonomous variants, 256 faction objective/handling/active-investigation variants, and 521 unused scheduler slots—rather than treating the fixture itself as a universal maximum. It is a source-derived upper bound for the supported V8 shape, not a promise that every future schema revision fits unchanged.
+
+The implementation does not add combat, `KnownShipId`, a canonical M3B, affiliation inference, a political UI, or broad M3/M5 completion. Q-03 remains open. Q-10 must still refine exact first-combat mechanics and forced degradation before M6 implementation.
 
 ## Player-visible and NPC-only proofs
 
@@ -215,9 +223,9 @@ This slice does not implement:
 - a generic actor/entity/message/event framework; or
 - a new faction/political UI.
 
-## Development sequence after this slice
+## Next development sequence
 
-After this bounded information-to-action loop is implemented and reconciled, **M6 Tactical Combat Foundation becomes the next major development family**. M3 and M5 do not need to be declared complete first.
+After this bounded information-to-action loop, **M6 Tactical Combat Foundation is the next major development family**. M3 and M5 do not need to be declared complete first.
 
 The first M6 slice should be a **first combat engagement** that composes existing movement, sensing, Engineering, AI, persistence, and withdrawal. The intended narrow direction is one directed-energy weapon family, a bounded shield model, sensor-constrained targeting/fire control, meaningful power competition, maneuver/range, operational damage to concrete systems, explainable combat AI, and withdrawal/non-engagement.
 

@@ -30,7 +30,7 @@ source:
 
 **Approved conceptual design with one implemented bounded consumer.** This page records the owner's explicit decisions in the September 6, 2026 design discussion consolidated under issue #68. Feature #86 / Final PR #87, merged into `dev` as `0217296`, implements only root factions, direct ship control, and establish-presence assignment; this page is not a complete political simulation specification.
 
-The owner subsequently approved [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) as the first bounded M5 consumer. Its implementation does not replace this broader framework or introduce hierarchy, government, organization, or relationship runtime.
+The owner subsequently approved [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) as the first bounded M5 consumer. [Observation-Driven Faction Response](observation-driven-faction-response.md) is the second bounded consumer: it allows direct NPC ship-to-direct-faction historical reports and one investigation at a reported location. Neither implementation replaces this broader framework or introduces hierarchy, government, organization, or relationship runtime.
 
 Detailed authority matrices, constitutional procedures, general political scoring, action catalogs, and succession remain deferred. The current v0.5.0 implementation contains no faction hierarchy, organization runtime, diplomatic relationship state, government control, or layered jurisdiction model.
 
