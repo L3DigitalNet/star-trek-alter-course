@@ -62,11 +62,7 @@ public sealed class GamePersistenceV5EngineeringTests
             invalid = Encoding.UTF8.GetBytes(
                 Encoding
                     .UTF8.GetString(valid)
-                    .Replace(
-                        "\"generationCondition\": 0.625",
-                        "\"generationCondition\": 1e999",
-                        StringComparison.Ordinal
-                    )
+                    .Replace("\"generationCondition\":0.625", "\"generationCondition\":1e999", StringComparison.Ordinal)
             );
         }
 

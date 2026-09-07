@@ -24,10 +24,7 @@ public sealed class GamePersistenceV8ObservationTests
     [Fact]
     public void MigratesV7AdjacentlyWithDisabledEmptyObservationState()
     {
-        GameSimulation current = FirstGameSetup.Create(
-            new Milestone3ProofFixture().Catalog,
-            FactionTestWorld.FactionCatalog
-        );
+        GameSimulation current = CreateV7CompatibleCurrentGame();
         SimulationState assigned = GameSimulation
             .AdvanceTo(
                 current.CaptureState(),
@@ -469,6 +466,26 @@ public sealed class GamePersistenceV8ObservationTests
             ObservationReportIdAllocator = ObservationReportIdAllocator.Restore(2),
         };
         return GameSimulation.RestoreState(state, FactionTestWorld.ShipCatalog, FactionTestWorld.FactionCatalog);
+    }
+
+    private static GameSimulation CreateV7CompatibleCurrentGame()
+    {
+        var fixture = new Milestone3ProofFixture();
+        SimulationState state = FirstGameSetup.Create(fixture.Catalog, FactionTestWorld.FactionCatalog).CaptureState();
+        ScheduledWork[] v7Work =
+        [
+            .. state.Scheduler.OutstandingWork.Where(work => work.Kind != ScheduledWorkKind.ObservationReportDelivery),
+        ];
+        state = state with
+        {
+            Scheduler = SimulationScheduler.Restore(state.Scheduler.NextWorkId, state.Scheduler.NextSequence, v7Work),
+            ObservationReportIdAllocator = ObservationReportIdAllocator.Restore(1),
+        };
+        foreach (FactionState faction in state.Factions)
+        {
+            state = state.ReplaceFaction(faction.Id, faction with { Observation = new FactionObservationState() });
+        }
+        return GameSimulation.RestoreState(state, fixture.Catalog, FactionTestWorld.FactionCatalog);
     }
 
     private static GameSimulation CreatePendingDeliveryGame()

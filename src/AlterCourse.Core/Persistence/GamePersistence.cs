@@ -136,7 +136,9 @@ public static class GamePersistence
         byte[] json = JsonSerializer.SerializeToUtf8Bytes(envelope, SerializerOptions);
         if (json.Length > MaximumSaveBytes)
         {
-            throw new InvalidOperationException($"The V8 save exceeds the {MaximumSaveBytes}-byte contract limit.");
+            throw new InvalidOperationException(
+                $"The V8 save is {json.Length} bytes and exceeds the {MaximumSaveBytes}-byte contract limit."
+            );
         }
 
         return json;
@@ -3898,7 +3900,7 @@ public static class GamePersistence
             AllowTrailingCommas = false,
             ReadCommentHandling = JsonCommentHandling.Disallow,
             MaxDepth = MaximumJsonDepth,
-            WriteIndented = true,
+            WriteIndented = false,
         };
         options.Converters.Add(new FiniteDoubleJsonConverter());
         return options;
