@@ -21,3 +21,4 @@
 - Feature #93 is Done: Final PR #94 squash-merged as `e7bdfe3` on 2026-09-07; V8 is unreleased and `main` is unchanged.
 - The tested tree matched `567ee9d`; Core 598, AssetCtl 324, Godot 1+2+67, smoke, five hosted checks, and agent-operated manual proof passed.
 - Post-merge Verify #34171747308 passed. M6/Q-10 follows; M3/M5 remain incomplete.
+- Handoff `9ebee7b` used the ADR 0013 direct route; GitHub reported a configured PR/check bypass, contrary to this task's no-bypass constraint.
