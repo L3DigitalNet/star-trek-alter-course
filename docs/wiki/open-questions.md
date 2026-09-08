@@ -39,7 +39,7 @@ Strategic Contact Reporting is not canonically named `M3B`. It does not itself c
 
 ## Knowledge and campaign context
 
-**Q-02 — Durable known-vessel identity — OPEN; source provenance SCOPED for the next slice.** The approved observation-response slice may preserve the reporting observer's ordinary `ShipInstanceId`, that observer's local `SensorContactId`, observation reference frame, position/time, and legitimately learned vessel/design identification as source provenance. This does **not** identify the hidden target globally. `KnownShipId`, cross-observer correlation, matching-by-name, and a durable remembered vessel identity distinct from local tracks remain open.
+**Q-02 — Durable known-vessel identity — OPEN; source provenance IMPLEMENTED in v0.6.0.** The released observation-response slice preserves the reporting observer's ordinary `ShipInstanceId`, that observer's local `SensorContactId`, observation reference frame, position/time, and legitimately learned vessel/design identification as source provenance. This does **not** identify the hidden target globally. `KnownShipId`, cross-observer correlation, matching-by-name, and a durable remembered vessel identity distinct from local tracks remain open.
 
 How a future faction refers to a vessel it has never locally observed also remains open beyond the approved historical report snapshot. A faction can store “observer X reported its Contact Y at location Z” without claiming that Y is globally the same vessel as another observer's contact.
 
@@ -87,7 +87,7 @@ Both implemented faction assignment and the approved observation-response policy
 
 ## Implementation choices versus approvals
 
-The closed typed **Ship | Faction** scheduler target remains approved. The next slice may add a finite report-delivery work kind targeted to Faction with exact report correlation; this does not approve a generic actor/message/event target registry. Stable ordering, exact correlation, target validation, budgets, and typed bootstrap remain governed by existing ADRs.
+The closed typed **Ship | Faction** scheduler target remains approved. Released observation response adds a finite report-delivery work kind targeted to Faction with exact report correlation; this does not approve a generic actor/message/event target registry. Stable ordering, exact correlation, target validation, budgets, and typed bootstrap remain governed by existing ADRs.
 
 Exact internal type spelling, identity representation for report IDs, focused immutable policy-input types, JSON DTO layout, and measured scheduler/save maximum constants are implementation choices within the approved behavior. They must be explicit and tested; they are not permission to add unapproved identity correlation, affiliation knowledge, preemption, organizations, hierarchy, communications simulation, or RNG.
 
