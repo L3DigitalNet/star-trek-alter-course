@@ -6,7 +6,7 @@ description: 'Resolved and scoped decisions for the implemented faction-assignme
 doc_type: 'plan'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-07'
+updated: '2026-09-08'
 tags:
   - 'design'
 aliases: []
@@ -79,7 +79,7 @@ Ship-system depth should grow through combat consumers. Detailed EPS networks, b
 
 **Q-13 — Resources, officers, and trade — OPEN.** Define the first useful logistics or crew interaction before selecting economic catalogs, officer progression, markets, repair staffing, or fuel models. Preserve captain-without-levels and the existing concrete Engineering model. Current faction proofs use existing ship commitments, not a new political resource economy.
 
-**Q-14 — Compatibility and stochastic behavior — PARTIALLY RESOLVED through V8.** Unreleased development preserves the adjacent V1→V2→V3→V4→V5→V6→V7→V8 chain. The implemented V6→V7 migration creates no factions, controller assignments, faction decision state, or faction wakes and preserves historical ship/world state and scheduler semantics under explicit ship targets.
+**Q-14 — Compatibility and stochastic behavior — PARTIALLY RESOLVED through V8.** Released v0.6.0 preserves the adjacent V1→V2→V3→V4→V5→V6→V7→V8 chain. The implemented V6→V7 migration creates no factions, controller assignments, faction decision state, or faction wakes and preserves historical ship/world state and scheduler semantics under explicit ship targets.
 
 Observation-Driven Faction Response introduces V8 under rules identity `observation-driven-faction-response-v1`. Migration creates no reports, report-delivery work, investigation state, or location-response history and disables the new reporting/response posture for migrated factions. Existing contacts must not be mined to invent unsent history. Zero-faction worlds remain valid. New-game bootstrap enables the posture explicitly for the proof.
 

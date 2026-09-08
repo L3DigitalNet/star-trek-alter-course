@@ -6,7 +6,7 @@ description: 'Implemented slice connecting local contact knowledge to durable st
 doc_type: 'decision'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-06'
+updated: '2026-09-08'
 tags:
   - 'design'
   - 'simulation'
@@ -39,7 +39,7 @@ source:
 
 This resolved the sequencing question in Q-01. The slice is a bridge between M3A's local observer knowledge and later living-sector/faction autonomy, establishing reference-frame-qualified reports without committing to a complete intelligence system or political runtime.
 
-The next approved work after v0.5.0 is now [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md). That first M5 contribution uses only own-asset administrative knowledge; it does not require report sharing or consume this report seam. The behavioral requirements and non-goals below record the original contact-reporting contract, not a new implementation queue or restrictions on separately approved later work.
+The next approved work after v0.5.0 was [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md), followed by [Observation-Driven Faction Response](observation-driven-faction-response.md), both included in v0.6.0. The first M5 contribution uses only own-asset administrative knowledge; it does not require report sharing or consume this report seam. The behavioral requirements and non-goals below record the original contact-reporting contract, not a new implementation queue or restrictions on separately approved later work.
 
 Do **not** canonically call this slice `M3B` yet. Its historical milestone classification remains open. The approved name for the work itself is **Strategic Contact Reporting**.
 
