@@ -33,4 +33,4 @@
 | Feature #86 | Merged / Done | Bounded M5 faction assignment merged through Final PR #87 as `0217296` into `dev`; it is unreleased. |
 | Task #88 | Merged / Done | Wiki contract consolidation and recurring reconciliation merged through Final PR #89 as `aa3df33` into `dev`; no runtime change or release. |
 | Task #91 | Merged / Done | Observation-response design merged through Final PR #92 as `ad73862`; no runtime change or release. |
-| Feature #93 | In progress | Bounded V8 observation response is implemented on draft Final PR #94 and awaits final admission. |
+| Feature #93 | Merged / Done | Bounded V8 observation response merged through Final PR #94 as `e7bdfe3`; it is unreleased. |

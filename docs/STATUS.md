@@ -18,5 +18,6 @@
 - M3 and M5 remain incomplete. The merged slice adds no dependencies or UI; broader political runtime is future work, no release followed, and `main` is unchanged.
 - Design phase Final PR #92 merged as `ad73862`; Task #91 is Done and invalid staging PR #90 was closed unmerged; its branch was deleted.
 - PR #92 passed all five final-head checks, Branch policy, and post-merge Verify; design docs and ROADMAP changed without runtime code.
-- Feature #93 implements the approved bounded V8 observation-driven faction response on draft Final PR #94; it is unreleased and `main` is unchanged.
-- Feature #93 awaits final admission and exact-head gates. M6/Q-10 follows; M3/M5 remain incomplete.
+- Feature #93 is Done: Final PR #94 squash-merged as `e7bdfe3` on 2026-09-07; V8 is unreleased and `main` is unchanged.
+- The tested tree matched `567ee9d`; Core 598, AssetCtl 324, Godot 1+2+67, smoke, five hosted checks, and agent-operated manual proof passed.
+- Post-merge Verify #34171747308 passed. M6/Q-10 follows; M3/M5 remain incomplete.
