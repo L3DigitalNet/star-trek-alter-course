@@ -24,9 +24,9 @@ The order expresses dependency and risk, not a fixed release schedule. Governed 
 
 ## Current position
 
-The released baseline is source-only v0.5.0. Current `dev` also contains [Faction Intent and Autonomous Assignment](docs/wiki/faction-intent-and-autonomous-assignment.md), the first bounded M5 contribution. M3 and M5 remain incomplete. [Strategic Contact Reporting](docs/wiki/strategic-contact-reporting.md) remains its original bounded slice, not a renamed M3B or a claim of faction autonomy.
+The released baseline is source-only v0.6.0. It includes [Faction Intent and Autonomous Assignment](docs/wiki/faction-intent-and-autonomous-assignment.md), the first bounded M5 contribution, and [Observation-Driven Faction Response](docs/wiki/observation-driven-faction-response.md). M3 and M5 remain incomplete. [Strategic Contact Reporting](docs/wiki/strategic-contact-reporting.md) remains its original bounded slice, not a renamed M3B or a claim of faction autonomy.
 
-[Observation-Driven Faction Response](docs/wiki/observation-driven-faction-response.md) is implemented by Feature #93 / Final PR #94. Unreleased development uses V8 under `observation-driven-faction-response-v1`; v0.5.0 remains the released V6 baseline. The slice closes one legitimate observation→faction knowledge→investigation loop with reviewed scenario, Godot/player-safe, and bounded persistence evidence. Full M3 or M5 completion is not required before beginning that first combat refinement.
+[Observation-Driven Faction Response](docs/wiki/observation-driven-faction-response.md) is implemented by Feature #93 / Final PR #94 and released in v0.6.0. V8 uses `observation-driven-faction-response-v1`; v0.5.0 remains the historical V6 release. The slice closes one legitimate observation→faction knowledge→investigation loop with reviewed scenario, Godot/player-safe, and bounded persistence evidence. Full M3 or M5 completion is not required before beginning that first combat refinement.
 
 The next major family is **M6 first combat engagement**, followed by **combat-driven Engineering depth**. M6 should grow starship systems from concrete tactical decisions rather than requiring a broad standalone subsystem catalog before combat.
 

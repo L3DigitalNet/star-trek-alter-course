@@ -6,7 +6,7 @@ description: 'Resolved and scoped decisions for the implemented faction-assignme
 doc_type: 'plan'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-07'
+updated: '2026-09-08'
 tags:
   - 'design'
 aliases: []
@@ -39,7 +39,7 @@ Strategic Contact Reporting is not canonically named `M3B`. It does not itself c
 
 ## Knowledge and campaign context
 
-**Q-02 — Durable known-vessel identity — OPEN; source provenance SCOPED for the next slice.** The approved observation-response slice may preserve the reporting observer's ordinary `ShipInstanceId`, that observer's local `SensorContactId`, observation reference frame, position/time, and legitimately learned vessel/design identification as source provenance. This does **not** identify the hidden target globally. `KnownShipId`, cross-observer correlation, matching-by-name, and a durable remembered vessel identity distinct from local tracks remain open.
+**Q-02 — Durable known-vessel identity — OPEN; source provenance IMPLEMENTED in v0.6.0.** The released observation-response slice preserves the reporting observer's ordinary `ShipInstanceId`, that observer's local `SensorContactId`, observation reference frame, position/time, and legitimately learned vessel/design identification as source provenance. This does **not** identify the hidden target globally. `KnownShipId`, cross-observer correlation, matching-by-name, and a durable remembered vessel identity distinct from local tracks remain open.
 
 How a future faction refers to a vessel it has never locally observed also remains open beyond the approved historical report snapshot. A faction can store “observer X reported its Contact Y at location Z” without claiming that Y is globally the same vessel as another observer's contact.
 
@@ -79,7 +79,7 @@ Ship-system depth should grow through combat consumers. Detailed EPS networks, b
 
 **Q-13 — Resources, officers, and trade — OPEN.** Define the first useful logistics or crew interaction before selecting economic catalogs, officer progression, markets, repair staffing, or fuel models. Preserve captain-without-levels and the existing concrete Engineering model. Current faction proofs use existing ship commitments, not a new political resource economy.
 
-**Q-14 — Compatibility and stochastic behavior — PARTIALLY RESOLVED through V8.** Unreleased development preserves the adjacent V1→V2→V3→V4→V5→V6→V7→V8 chain. The implemented V6→V7 migration creates no factions, controller assignments, faction decision state, or faction wakes and preserves historical ship/world state and scheduler semantics under explicit ship targets.
+**Q-14 — Compatibility and stochastic behavior — PARTIALLY RESOLVED through V8.** Released v0.6.0 preserves the adjacent V1→V2→V3→V4→V5→V6→V7→V8 chain. The implemented V6→V7 migration creates no factions, controller assignments, faction decision state, or faction wakes and preserves historical ship/world state and scheduler semantics under explicit ship targets.
 
 Observation-Driven Faction Response introduces V8 under rules identity `observation-driven-faction-response-v1`. Migration creates no reports, report-delivery work, investigation state, or location-response history and disables the new reporting/response posture for migrated factions. Existing contacts must not be mined to invent unsent history. Zero-faction worlds remain valid. New-game bootstrap enables the posture explicitly for the proof.
 
@@ -87,7 +87,7 @@ Both implemented faction assignment and the approved observation-response policy
 
 ## Implementation choices versus approvals
 
-The closed typed **Ship | Faction** scheduler target remains approved. The next slice may add a finite report-delivery work kind targeted to Faction with exact report correlation; this does not approve a generic actor/message/event target registry. Stable ordering, exact correlation, target validation, budgets, and typed bootstrap remain governed by existing ADRs.
+The closed typed **Ship | Faction** scheduler target remains approved. Released observation response adds a finite report-delivery work kind targeted to Faction with exact report correlation; this does not approve a generic actor/message/event target registry. Stable ordering, exact correlation, target validation, budgets, and typed bootstrap remain governed by existing ADRs.
 
 Exact internal type spelling, identity representation for report IDs, focused immutable policy-input types, JSON DTO layout, and measured scheduler/save maximum constants are implementation choices within the approved behavior. They must be explicit and tested; they are not permission to add unapproved identity correlation, affiliation knowledge, preemption, organizations, hierarchy, communications simulation, or RNG.
 

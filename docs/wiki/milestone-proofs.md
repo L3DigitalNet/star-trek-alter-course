@@ -6,7 +6,7 @@ description: 'Milestone acceptance boundaries and architectural proofs, separate
 doc_type: 'reference'
 status: 'active'
 created: '2026-09-07'
-updated: '2026-09-07'
+updated: '2026-09-08'
 tags:
   - 'design'
   - 'validation'
@@ -24,16 +24,16 @@ related:
 
 This page owns the milestone acceptance boundaries formerly carried by the root roadmap. System pages own detailed behavior; active ADRs govern architecture. Future proofs specify what a milestone must demonstrate, not behavior already implemented or authorization to start it. The root roadmap records sequence and links here instead of defining game rules.
 
-## Reviewed implementation baseline — September 7, 2026
+## Reviewed implementation baseline — September 8, 2026
 
-- **v0.5.0 — Strategic Contact Reporting** is the current immutable source-only release; it succeeds v0.4.0 — First Contact & Engineering Backbone.
+- **v0.6.0 — Faction Observation and Response** is the current immutable source-only release; it succeeds v0.5.0 — Strategic Contact Reporting.
 - **Milestone 1** and **Milestone 2** are implemented.
 - **Milestone 3A — First Observed Contact** is implemented, but **Milestone 3 as a whole is not complete**.
 - **Milestone 4 — Engineering Backbone and Degraded Operations** is implemented.
-- Released v0.5.0 uses content schema **V4** and save schema **V6**. Feature #86 / Final PR #87 introduced strict faction content V1 and save V7; unreleased development now uses V8 through Feature #93 / Final PR #94.
+- Released v0.6.0 uses content schema **V4** and save schema **V8** through Feature #93 / Final PR #94. Feature #86 / Final PR #87 introduced strict faction content V1 and save V7; v0.5.0 remains the historical V6 release.
 - The broader approved [factions and organizations](factions-and-organizations.md) political model remains **design only** beyond the implemented root-faction/direct-control subset. No faction hierarchy, organization runtime, government model, treaty system, layered jurisdiction runtime, or strategic affiliation-knowledge system exists yet.
 - [Strategic Contact Reporting](strategic-contact-reporting.md) is **implemented** (Feature #77, Final PR #78), resolving Q-01. It is not canonically named `M3B`, does not complete Milestone 3, and did not itself begin M5.
-- [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) is the implemented first M5 slice, resolving Q-05. That slice introduced V7; unreleased development now uses V8 and released v0.5.0 remains V6.
+- [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) is the implemented first M5 slice, resolving Q-05. That slice introduced V7; v0.6.0 now uses V8 and v0.5.0 remains the historical V6 release.
 - [Observation-Driven Faction Response](observation-driven-faction-response.md) is implemented by Feature #93 / Final PR #94, with reviewed behavioral, presentation, and V8 persistence evidence. It is the next bounded M5 contribution. M6 Tactical Combat Foundation is the next major development family without requiring M3 or M5 to be declared complete.
 
 ## Execution model
@@ -131,7 +131,7 @@ This is a **partial Milestone 3 outcome**. Strategic contacts, affiliation/inten
 
 **Implemented by Feature #62 / Final PR #63; included in v0.4.0.**
 
-Core owns bounded generation, power allocation, concrete sensor/impulse condition, derived capability, and deterministic system repair. Those values affect real sensor reach, tactical speed, scan continuity, AI inputs, persistence, and the live Engineering workspace. Ship-definition content V4 is current. Save V5 was introduced by this milestone; Strategic Contact Reporting added released V6, Faction Intent and Autonomous Assignment added V7, and Observation-Driven Faction Response adds unreleased V8.
+Core owns bounded generation, power allocation, concrete sensor/impulse condition, derived capability, and deterministic system repair. Those values affect real sensor reach, tactical speed, scan continuity, AI inputs, persistence, and the live Engineering workspace. Ship-definition content V4 is current. Save V5 was introduced by this milestone; Strategic Contact Reporting added released V6, Faction Intent and Autonomous Assignment added V7, and Observation-Driven Faction Response added released V8.
 
 The milestone intentionally stops short of a universal component system, arbitrary combat damage, detailed EPS topology, batteries, warp power, fuel, heat/coolant, repair teams/queues, shields, weapons, or crew simulation.
 
@@ -189,7 +189,7 @@ This slice is a contribution toward the broader goals below, not a claim that al
 
 ### Implemented — Observation-Driven Faction Response
 
-**Implemented by Feature #93 / Final PR #94; unreleased development uses V8 while v0.5.0 remains the V6 baseline.** [Observation-Driven Faction Response](observation-driven-faction-response.md) owns D-14 through D-17 and the complete behavior/acceptance contract.
+**Implemented by Feature #93 / Final PR #94 and released in v0.6.0; v0.5.0 remains the historical V6 release.** [Observation-Driven Faction Response](observation-driven-faction-response.md) owns D-14 through D-17 and the complete behavior/acceptance contract.
 
 The slice proves:
 

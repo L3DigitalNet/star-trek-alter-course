@@ -6,7 +6,7 @@ description: 'Owner-approved conceptual political model with implementation and 
 doc_type: 'decision'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-07'
+updated: '2026-09-08'
 tags:
   - 'design'
   - 'simulation'
@@ -32,7 +32,7 @@ source:
 
 The owner subsequently approved [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) as the first bounded M5 consumer. [Observation-Driven Faction Response](observation-driven-faction-response.md) is the second bounded consumer: it allows direct NPC ship-to-direct-faction historical reports and one investigation at a reported location. Neither implementation replaces this broader framework or introduces hierarchy, government, organization, or relationship runtime.
 
-Detailed authority matrices, constitutional procedures, general political scoring, action catalogs, and succession remain deferred. The current v0.5.0 implementation contains no faction hierarchy, organization runtime, diplomatic relationship state, government control, or layered jurisdiction model.
+Detailed authority matrices, constitutional procedures, general political scoring, action catalogs, and succession remain deferred. The current v0.6.0 implementation contains no faction hierarchy, organization runtime, diplomatic relationship state, government control, or layered jurisdiction model.
 
 Examples illustrate desired game behavior. They are not claims about exact Star Trek constitutional law, a selected campaign epoch, or an exhaustive canonical taxonomy.
 
@@ -102,7 +102,7 @@ Territory and jurisdiction can be layered. A location can be governed by a const
 
 Ships, installations, fleets, and other assets should have one direct controlling faction or organization. Broader affiliation and applicable authority are derived through that controller's political relationships. Conceptually, a ship can be directly controlled by Starfleet and associated with the Federation, or controlled by a Great House within the Klingon Empire.
 
-Direct control, layered jurisdiction, and observer-known affiliation remain different facts. Deriving an asset's true political context does not authorize revealing that entire chain to sensors, UI, or AI. The current `dev` `ShipState` has the bounded optional direct-controller field; faction-affiliation and the broader political model remain future-domain requirements. Released v0.5.0 V6 saves predate that field.
+Direct control, layered jurisdiction, and observer-known affiliation remain different facts. Deriving an asset's true political context does not authorize revealing that entire chain to sensors, UI, or AI. The current `dev` `ShipState` has the bounded optional direct-controller field; faction-affiliation and the broader political model remain future-domain requirements. Historical v0.5.0 V6 saves predate that field.
 
 For the approved first assignment slice, D-09 selects one optional direct controlling `FactionId` stored on the ship/asset side, with a derived roster and no second mutable membership authority. Only idle, directly controlled NPC ships may receive an assignment; no preemption or player-command override is granted. Organization controllers, hierarchy, jurisdiction, and transfers remain deferred. A null controller denotes no modeled direct faction control, not an assertion of political neutrality.
 

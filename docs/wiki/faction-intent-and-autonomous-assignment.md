@@ -6,7 +6,7 @@ description: 'Owner-approved first bounded M5 slice: direct NPC assignment, own-
 doc_type: 'decision'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-07'
+updated: '2026-09-08'
 tags:
   - 'design'
   - 'simulation'
@@ -30,9 +30,9 @@ related:
 
 ## Status, authority, and provenance
 
-**Implemented in Feature #86 / Final PR #87, merged into `dev` as `0217296`.** That slice introduced save V7; unreleased development now uses V8, while the released v0.5.0 line remains V6. This page records both the September 6 approval and the merged source-level implementation truth. It does not claim that a V7 release exists.
+**Implemented in Feature #86 / Final PR #87, merged into `dev` as `0217296`.** That slice introduced save V7; the v0.6.0 release uses V8, while v0.5.0 remains the historical V6 release. This page records both the September 6 approval and the merged source-level implementation truth. It does not claim that a V7 release exists.
 
-This is the first implemented contribution toward **Milestone 5 — Living Sector and Faction Autonomy** after Strategic Contact Reporting. It is not all of M5, does not complete M3, and does not rename the earlier contact-reporting slice to M3B. Ship-definition content remains V4. This slice introduced V7; unreleased development now uses V8 while the v0.5.0 release remains V6.
+This is the first implemented contribution toward **Milestone 5 — Living Sector and Faction Autonomy** after Strategic Contact Reporting. It is not all of M5, does not complete M3, and does not rename the earlier contact-reporting slice to M3B. Ship-definition content remains V4. This slice introduced V7; v0.6.0 uses V8 while v0.5.0 remains the historical V6 release.
 
 The implementation adds no faction, affiliation, political hierarchy, or intelligence UI; it does not publish a release. Organizations, hierarchy traversal, information sharing, RNG, and a generic actor framework remain outside this slice.
 
@@ -102,7 +102,7 @@ This preserved historical heading now describes the implemented V7 migration in 
 
 Reusable production faction definitions use strict JSON, schema validation, stable content identity, reference resolution, and semantic validation under ADR 0005. Keep immutable authored definition data separate from mutable faction state, objectives/commitments that affect continuation, direct ship control, and scheduler correlations. Do not put changing direct control into a reusable ship-class definition.
 
-The implementation introduces **save V7**, retaining the adjacent V1 → V2 → V3 → V4 → V5 → V6 → V7 chain. Released v0.5.0 remains V6. Persist the consequential faction state, direct controller relationships, and exact typed scheduled work needed for deterministic continuation; derive rosters, projections, and caches rather than making them parallel durable authorities.
+The implementation introduces **save V7**, retaining the adjacent V1 → V2 → V3 → V4 → V5 → V6 → V7 chain. v0.5.0 remains the historical V6 release; v0.6.0 advances the released line to V8. Persist the consequential faction state, direct controller relationships, and exact typed scheduled work needed for deterministic continuation; derive rosters, projections, and caches rather than making them parallel durable authorities.
 
 The V6 → V7 migration must produce an empty faction collection, null direct-controller references for all historical ships, and no faction decision state or faction-targeted work. Existing scheduled work becomes explicitly ship-targeted while retaining its identities, due times, sequence, correlations, and allocator continuation. Preserve all existing ship/world/knowledge state. Do not assign historical vessels to new-game factions or invent political history, objectives, reports, or affiliations.
 

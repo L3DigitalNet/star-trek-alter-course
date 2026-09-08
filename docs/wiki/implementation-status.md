@@ -6,7 +6,7 @@ description: 'Reviewed gameplay baseline and explicit boundaries between runtime
 doc_type: 'reference'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-07'
+updated: '2026-09-08'
 tags:
   - 'simulation'
   - 'design'
@@ -26,9 +26,9 @@ related:
 
 ## Reviewed baseline
 
-v0.5.0 is the immutable source-only release and uses V6 saves. Feature #86 / Final PR #87 merged the bounded faction slice into `dev` as `0217296`, where it uses V7; no V7 release is claimed. For the operational snapshot, consult [STATUS](../STATUS.md).
+v0.6.0 is the immutable source-only release and uses V8 saves under `observation-driven-faction-response-v1`. It contains Feature #86 / Final PR #87's bounded faction slice and Feature #93 / Final PR #94's observation response. v0.5.0 remains the historical V6 release. For the operational snapshot, consult [STATUS](../STATUS.md).
 
-[Observation-Driven Faction Response](observation-driven-faction-response.md) is implemented by Feature #93 / Final PR #94, using V8 under `observation-driven-faction-response-v1` in unreleased development. v0.5.0 remains the released V6 baseline. The reviewed feature evidence includes its Core causal path, three production and three long-horizon scenarios, 67/67 Godot/player-safe tests, and the V8 conservative persistence bound.
+[Observation-Driven Faction Response](observation-driven-faction-response.md) is implemented by Feature #93 / Final PR #94 and released in v0.6.0, using V8 under `observation-driven-faction-response-v1`. v0.5.0 remains the historical V6 release. The reviewed feature evidence includes its Core causal path, three production and three long-horizon scenarios, 67/67 Godot/player-safe tests, and the V8 conservative persistence bound.
 
 ## Implemented gameplay
 
@@ -74,8 +74,8 @@ Strategic long-range sensor simulation, affiliation/intent knowledge, organizati
 
 ## Verification evidence, not a fresh execution claim
 
-The v0.5.0 release candidate gate reports 406 Core tests, 324 AssetCtl tests, 63 gameplay/UI tests, one Godot integration test, and two generated-asset import tests, with warning-free builds; the v0.4.0 release and M4 admission record reported 376, 324, 60, one, and two. These are baseline release results, not tests rerun merely by writing this page. Documentation PR #84 records its own actual checks separately and supplies no runtime faction-acceptance evidence.
+The v0.6.0 release gate reports 598 Core tests, 324 AssetCtl tests, 67 gameplay/UI tests, one Godot integration test, and two generated-asset import tests, with warning-free builds. The historical v0.5.0 release candidate gate reported 406, 324, 63, one, and two; v0.4.0 and M4 reported 376, 324, 60, one, and two. These are recorded release results, not tests rerun merely by writing this page. Documentation PR #84 records its own actual checks separately and supplies no runtime faction-acceptance evidence.
 
 The wiki-consolidation PR later verified the then-current `dev` state with 505 Core tests, 324 AssetCtl tests, 65 gameplay/UI tests, one Godot integration test, and two generated-asset import tests. That is inherited evidence for the implemented baseline, not execution evidence for Observation-Driven Faction Response.
 
-[v0.5.0 release](https://github.com/L3DigitalNet/star-trek-alter-course/releases/tag/v0.5.0) · [v0.4.0 release](https://github.com/L3DigitalNet/star-trek-alter-course/releases/tag/v0.4.0) · [M4 PR #63](https://github.com/L3DigitalNet/star-trek-alter-course/pull/63) · [Roadmap outcomes](../../ROADMAP.md)
+[v0.6.0 release](https://github.com/L3DigitalNet/star-trek-alter-course/releases/tag/v0.6.0) · [v0.5.0 release](https://github.com/L3DigitalNet/star-trek-alter-course/releases/tag/v0.5.0) · [v0.4.0 release](https://github.com/L3DigitalNet/star-trek-alter-course/releases/tag/v0.4.0) · [M4 PR #63](https://github.com/L3DigitalNet/star-trek-alter-course/pull/63) · [Roadmap outcomes](../../ROADMAP.md)
