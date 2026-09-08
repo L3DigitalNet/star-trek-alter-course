@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using AlterCourse.Core.AI;
 using AlterCourse.Core.Content;
+using AlterCourse.Core.Factions;
 using AlterCourse.Core.Gameplay;
 using AlterCourse.Core.Identity;
 using AlterCourse.Core.Orders;
@@ -21,6 +22,8 @@ using SaveEnvelopeV3 = AlterCourse.Core.Persistence.SaveModelsV3.SaveEnvelopeV3;
 using SaveEnvelopeV4 = AlterCourse.Core.Persistence.SaveModelsV4.SaveEnvelopeV4;
 using SaveEnvelopeV5 = AlterCourse.Core.Persistence.SaveModelsV5.SaveEnvelopeV5;
 using SaveEnvelopeV6 = AlterCourse.Core.Persistence.SaveModelsV6.SaveEnvelopeV6;
+using SaveEnvelopeV7 = AlterCourse.Core.Persistence.SaveModelsV7.SaveEnvelopeV7;
+using SaveEnvelopeV8 = AlterCourse.Core.Persistence.SaveModelsV8.SaveEnvelopeV8;
 using SaveMetadataV2 = AlterCourse.Core.Persistence.SaveModelsV2.SaveMetadataV2;
 using ScheduledWorkSnapshotV2 = AlterCourse.Core.Persistence.SaveModelsV2.ScheduledWorkSnapshotV2;
 using SchedulerSnapshotV1 = AlterCourse.Core.Persistence.SaveModelsV1.SchedulerSnapshotV1;
@@ -33,12 +36,15 @@ using ShipSnapshotV3 = AlterCourse.Core.Persistence.SaveModelsV3.ShipSnapshotV3;
 using ShipSnapshotV4 = AlterCourse.Core.Persistence.SaveModelsV4.ShipSnapshotV4;
 using ShipSnapshotV5 = AlterCourse.Core.Persistence.SaveModelsV5.ShipSnapshotV5;
 using ShipSnapshotV6 = AlterCourse.Core.Persistence.SaveModelsV6.ShipSnapshotV6;
+using ShipSnapshotV7 = AlterCourse.Core.Persistence.SaveModelsV7.ShipSnapshotV7;
 using SimulationSnapshotV1 = AlterCourse.Core.Persistence.SaveModelsV1.SimulationSnapshotV1;
 using SimulationSnapshotV2 = AlterCourse.Core.Persistence.SaveModelsV2.SimulationSnapshotV2;
 using SimulationSnapshotV3 = AlterCourse.Core.Persistence.SaveModelsV3.SimulationSnapshotV3;
 using SimulationSnapshotV4 = AlterCourse.Core.Persistence.SaveModelsV4.SimulationSnapshotV4;
 using SimulationSnapshotV5 = AlterCourse.Core.Persistence.SaveModelsV5.SimulationSnapshotV5;
 using SimulationSnapshotV6 = AlterCourse.Core.Persistence.SaveModelsV6.SimulationSnapshotV6;
+using SimulationSnapshotV7 = AlterCourse.Core.Persistence.SaveModelsV7.SimulationSnapshotV7;
+using SimulationSnapshotV8 = AlterCourse.Core.Persistence.SaveModelsV8.SimulationSnapshotV8;
 using StrategicLocationSnapshotV2 = AlterCourse.Core.Persistence.SaveModelsV2.StrategicLocationSnapshotV2;
 using StrategicMapSnapshotV1 = AlterCourse.Core.Persistence.SaveModelsV1.StrategicMapSnapshotV1;
 using StrategicMapSnapshotV2 = AlterCourse.Core.Persistence.SaveModelsV2.StrategicMapSnapshotV2;
@@ -63,17 +69,24 @@ public static class GamePersistence
     private const int V3SchemaVersion = 3;
     private const int V4SchemaVersion = 4;
     private const int V5SchemaVersion = 5;
-    private const int CurrentSchemaVersion = 6;
+    private const int V6SchemaVersion = 6;
+    private const int V7SchemaVersion = 7;
+    private const int CurrentSchemaVersion = 8;
     private const string V1SimulationRulesVersion = "first-playable-v1";
     private const string V2SimulationRulesVersion = "first-playable-v1";
     private const string V3SimulationRulesVersion = "active-world-orders-v1";
     private const string V4SimulationRulesVersion = "sensor-knowledge-first-contact-v1";
     private const string V5SimulationRulesVersion = "engineering-backbone-v1";
 
-    // The rules identity names the design slice a schema admits, not the schema number: V1 and V2
-    // share "first-playable-v1". Godot's gameplay shell asserts this literal from the written save
-    // (src/AlterCourse.Godot/tests/GameplayShellTest.gd), so changing it requires updating that end.
-    private const string CurrentSimulationRulesVersion = "strategic-contact-reporting-v1";
+    // Historical rules identities stay frozen because every adjacent migration validates its source
+    // before adding later state; changing one would relabel an old document instead of migrating it.
+    private const string V6SimulationRulesVersion = "strategic-contact-reporting-v1";
+
+    private const string V7SimulationRulesVersion = "faction-intent-autonomous-assignment-v1";
+
+    // Godot's gameplay shell asserts the current literal from the written save in
+    // src/AlterCourse.Godot/tests/GameplayShellTest.gd, so changing it requires updating that end.
+    private const string CurrentSimulationRulesVersion = "observation-driven-faction-response-v1";
     private const string TravelArrivalKind = "travelArrival";
     private const string SensorRepairCompletionKind = "sensorRepairCompletion";
     private const string SystemRepairCompletionKind = "systemRepairCompletion";
@@ -81,11 +94,22 @@ public static class GamePersistence
     private const string SensorContactLossKind = "sensorContactLoss";
     private const string ActiveSensorScanCompletionKind = "activeSensorScanCompletion";
     private const string ShipContactDecisionWakeKind = "shipContactDecisionWake";
+    private const string FactionDecisionWakeKind = "factionDecisionWake";
+    private const string ReportDeliveryKind = "reportDelivery";
+    private const string ShipTargetKind = "ship";
+    private const string FactionTargetKind = "faction";
+    private const string PendingObjectiveStatus = "pending";
+    private const string AssignedObjectiveStatus = "assigned";
+    private const string SatisfiedObjectiveStatus = "satisfied";
     private const string CurrentContactStatus = "current";
     private const string StaleContactStatus = "stale";
     private const string LostContactStatus = "lost";
     private const string DetectedContactIdentification = "detected";
     private const string IdentifiedContactIdentification = "identified";
+    private const string DisabledObservationResponsePosture = "disabled";
+    private const string EnabledObservationResponsePosture = "enabled";
+    private const string UnhandledObservationReport = "unhandled";
+    private const string HandledObservationReport = "handled";
     private const string CautiousContactPosture = "cautiousContact";
     private const string AtLocationKind = "atLocation";
     private const string TravelingKind = "traveling";
@@ -101,18 +125,20 @@ public static class GamePersistence
         MaxDepth = MaximumJsonDepth,
     };
 
-    /// <summary>Serializes a validated simulation and caller-supplied organization metadata as V6 UTF-8 JSON.</summary>
+    /// <summary>Serializes a validated simulation and caller-supplied organization metadata as V8 UTF-8 JSON.</summary>
     public static byte[] Serialize(GameSimulation simulation, GameSaveMetadata metadata)
     {
         ArgumentNullException.ThrowIfNull(simulation);
         ArgumentNullException.ThrowIfNull(metadata);
         ValidateMetadata(metadata);
 
-        SaveEnvelopeV6 envelope = CaptureV6(simulation.CaptureState(), metadata);
+        SaveEnvelopeV8 envelope = CaptureV8(simulation.CaptureState(), metadata);
         byte[] json = JsonSerializer.SerializeToUtf8Bytes(envelope, SerializerOptions);
         if (json.Length > MaximumSaveBytes)
         {
-            throw new InvalidOperationException($"The V6 save exceeds the {MaximumSaveBytes}-byte contract limit.");
+            throw new InvalidOperationException(
+                $"The V8 save is {json.Length} bytes and exceeds the {MaximumSaveBytes}-byte contract limit."
+            );
         }
 
         return json;
@@ -123,9 +149,18 @@ public static class GamePersistence
         ReadOnlySpan<byte> utf8Json,
         ShipDefinitionCatalog catalog,
         string sourceIdentity
+    ) => Deserialize(utf8Json, catalog, FactionDefinitionCatalog.Empty, sourceIdentity);
+
+    /// <summary>Loads bounded untrusted UTF-8 JSON with both immutable content catalogs.</summary>
+    public static LoadedGameSave Deserialize(
+        ReadOnlySpan<byte> utf8Json,
+        ShipDefinitionCatalog catalog,
+        FactionDefinitionCatalog factionCatalog,
+        string sourceIdentity
     )
     {
         ArgumentNullException.ThrowIfNull(catalog);
+        ArgumentNullException.ThrowIfNull(factionCatalog);
         ArgumentException.ThrowIfNullOrWhiteSpace(sourceIdentity);
         if (utf8Json.Length > MaximumSaveBytes)
         {
@@ -145,12 +180,14 @@ public static class GamePersistence
 
             return version switch
             {
-                V1SchemaVersion => LoadV1(documentBytes, catalog, sourceIdentity),
-                V2SchemaVersion => LoadV2(documentBytes, catalog, sourceIdentity),
-                V3SchemaVersion => LoadV3(documentBytes, catalog, sourceIdentity),
-                V4SchemaVersion => LoadV4(documentBytes, catalog, sourceIdentity),
-                V5SchemaVersion => LoadV5(documentBytes, catalog, sourceIdentity),
-                CurrentSchemaVersion => LoadV6(documentBytes, catalog, sourceIdentity),
+                V1SchemaVersion => LoadV1(documentBytes, catalog, factionCatalog, sourceIdentity),
+                V2SchemaVersion => LoadV2(documentBytes, catalog, factionCatalog, sourceIdentity),
+                V3SchemaVersion => LoadV3(documentBytes, catalog, factionCatalog, sourceIdentity),
+                V4SchemaVersion => LoadV4(documentBytes, catalog, factionCatalog, sourceIdentity),
+                V5SchemaVersion => LoadV5(documentBytes, catalog, factionCatalog, sourceIdentity),
+                V6SchemaVersion => LoadV6(documentBytes, catalog, factionCatalog, sourceIdentity),
+                V7SchemaVersion => LoadV7(documentBytes, catalog, factionCatalog, sourceIdentity),
+                CurrentSchemaVersion => LoadV8(documentBytes, catalog, factionCatalog, sourceIdentity),
                 _ => throw Failure(
                     GamePersistenceFailure.UnsupportedVersion,
                     sourceIdentity,
@@ -232,10 +269,19 @@ public static class GamePersistence
     }
 
     /// <summary>Reads a bounded save path and returns its newly reconstructed simulation and metadata.</summary>
-    public static LoadedGameSave Load(string path, ShipDefinitionCatalog catalog)
+    public static LoadedGameSave Load(string path, ShipDefinitionCatalog catalog) =>
+        Load(path, catalog, FactionDefinitionCatalog.Empty);
+
+    /// <summary>Reads a bounded save path using both immutable content catalogs.</summary>
+    public static LoadedGameSave Load(
+        string path,
+        ShipDefinitionCatalog catalog,
+        FactionDefinitionCatalog factionCatalog
+    )
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         ArgumentNullException.ThrowIfNull(catalog);
+        ArgumentNullException.ThrowIfNull(factionCatalog);
         string sourceIdentity = Path.GetFullPath(path);
 
         try
@@ -261,7 +307,7 @@ public static class GamePersistence
                 );
             }
 
-            return Deserialize(json, catalog, sourceIdentity);
+            return Deserialize(json, catalog, factionCatalog, sourceIdentity);
         }
         catch (GamePersistenceException)
         {
@@ -278,16 +324,23 @@ public static class GamePersistence
         }
     }
 
-    private static SaveEnvelopeV6 CaptureV6(SimulationState state, GameSaveMetadata metadata)
+    private static SaveEnvelopeV8 CaptureV8(SimulationState state, GameSaveMetadata metadata)
     {
         if (state.Ships.Length > SimulationState.MaximumShips)
         {
             throw new InvalidOperationException(
-                $"V6 persistence supports at most {SimulationState.MaximumShips} ships."
+                $"V8 persistence supports at most {SimulationState.MaximumShips} ships."
             );
         }
 
-        return new SaveEnvelopeV6
+        if (state.Factions.Length > SimulationState.MaximumFactions)
+        {
+            throw new InvalidOperationException(
+                $"V8 persistence supports at most {SimulationState.MaximumFactions} factions."
+            );
+        }
+
+        return new SaveEnvelopeV8
         {
             SchemaVersion = CurrentSchemaVersion,
             SimulationRulesVersion = CurrentSimulationRulesVersion,
@@ -298,33 +351,37 @@ public static class GamePersistence
                 CreatedAtUtc = metadata.CreatedAtUtc,
                 SavedAtUtc = metadata.SavedAtUtc,
             },
-            Simulation = new SimulationSnapshotV6
+            Simulation = new SimulationSnapshotV8
             {
                 TimeMilliseconds = state.Time.Milliseconds,
                 ShipAllocatorNextId = state.ShipIdAllocator.NextId,
                 OrderAllocatorNextId = state.OrderIdAllocator.NextId,
+                ObservationReportAllocatorNextId = state.ObservationReportIdAllocator.NextId,
                 PlayerShipId = state.PlayerShipId.Value,
-                Scheduler = CaptureSchedulerV2(state.Scheduler),
+                Scheduler = CaptureSchedulerV7(state.Scheduler),
                 StrategicMap = CaptureStrategicMapV2(state.StrategicMap),
-                Ships = [.. state.Ships.OrderBy(ship => ship.InstanceId.Value).Select(CaptureShipV6)],
+                Ships = [.. state.Ships.OrderBy(ship => ship.InstanceId.Value).Select(CaptureShipV7)],
+                Factions = [.. state.Factions.OrderBy(faction => faction.Id.Value).Select(CaptureFactionV8)],
             },
         };
     }
 
-    private static SchedulerSnapshotV2 CaptureSchedulerV2(SimulationScheduler scheduler) =>
+    private static SaveModelsV7.SchedulerSnapshotV7 CaptureSchedulerV7(SimulationScheduler scheduler) =>
         new()
         {
             NextWorkId = scheduler.NextWorkId,
             NextSequence = scheduler.NextSequence,
             OutstandingWork =
             [
-                .. scheduler.OutstandingWork.Select(work => new ScheduledWorkSnapshotV2
+                .. scheduler.OutstandingWork.Select(work => new SaveModelsV7.ScheduledWorkSnapshotV7
                 {
                     Id = work.Id.Value,
                     DueTimeMilliseconds = work.DueTime.Milliseconds,
                     Sequence = work.Sequence,
                     Kind = CaptureWorkKind(work.Kind),
-                    TargetShipId = work.TargetShipId.Value,
+                    TargetKind = CaptureTargetKind(work.Target.Kind),
+                    TargetShipId = work.Target.ShipId?.Value,
+                    TargetFactionId = work.Target.FactionId?.Value,
                 }),
             ],
         };
@@ -356,7 +413,7 @@ public static class GamePersistence
             ],
         };
 
-    private static ShipSnapshotV6 CaptureShipV6(ShipState ship) =>
+    private static ShipSnapshotV7 CaptureShipV7(ShipState ship) =>
         new()
         {
             InstanceId = ship.InstanceId.Value,
@@ -395,6 +452,116 @@ public static class GamePersistence
             ActiveOrder = CaptureOrderV3(ship.ActiveOrder),
             SensorKnowledge = CaptureSensorKnowledgeV6(ship.SensorKnowledge),
             AutonomousState = CaptureAutonomousStateV4(ship.AutonomousState),
+            DirectControllerFactionId = ship.DirectControllerFactionId?.Value,
+        };
+
+    private static SaveModelsV7.FactionSnapshotV7 CaptureFactionV7(FactionState faction) =>
+        new()
+        {
+            Id = faction.Id.Value,
+            DefinitionId = faction.DefinitionId.Value,
+            PresenceObjective = faction.PresenceObjective is null
+                ? null
+                : new SaveModelsV7.EstablishPresenceObjectiveSnapshotV7
+                {
+                    TargetLocationId = faction.PresenceObjective.TargetLocationId.Value,
+                    Status = CaptureObjectiveStatus(faction.PresenceObjective.Status),
+                    AssignedShipId = faction.PresenceObjective.AssignedShipId?.Value,
+                    AssignedOrderId = faction.PresenceObjective.AssignedOrderId?.Value,
+                },
+            PendingDecisionWake = faction.PendingDecisionWake is null
+                ? null
+                : new SaveModelsV7.PendingFactionDecisionWakeSnapshotV7
+                {
+                    WorkId = faction.PendingDecisionWake.WorkId.Value,
+                    DueTimeMilliseconds = faction.PendingDecisionWake.DueTime.Milliseconds,
+                },
+        };
+
+    private static SaveModelsV8.FactionSnapshotV8 CaptureFactionV8(FactionState faction)
+    {
+        SaveModelsV7.FactionSnapshotV7 captured = CaptureFactionV7(faction);
+        FactionObservationState observation = faction.Observation ?? new FactionObservationState();
+        return new SaveModelsV8.FactionSnapshotV8
+        {
+            Id = captured.Id,
+            DefinitionId = captured.DefinitionId,
+            PresenceObjective = captured.PresenceObjective,
+            PendingDecisionWake = captured.PendingDecisionWake,
+            Observation = new SaveModelsV8.FactionObservationSnapshotV8
+            {
+                Posture = CaptureObservationResponsePosture(observation.Posture),
+                InFlightReports = [.. observation.InFlightReports.Select(CaptureInFlightReportV8)],
+                ReceivedReports = [.. observation.ReceivedReports.Select(CaptureReceivedReportV8)],
+                ActiveInvestigation = observation.ActiveInvestigation is null
+                    ? null
+                    : CaptureActiveInvestigationV8(observation.ActiveInvestigation),
+                CompletionWatermarks =
+                [
+                    .. observation.CompletionWatermarks.Select(
+                        watermark => new SaveModelsV8.ObservationLocationCompletionWatermarkSnapshotV8
+                        {
+                            LocationId = watermark.LocationId.Value,
+                            ObservedThroughMilliseconds = watermark.ObservedThrough.Milliseconds,
+                        }
+                    ),
+                ],
+            },
+        };
+    }
+
+    private static SaveModelsV8.ObservationReportInFlightSnapshotV8 CaptureInFlightReportV8(
+        ObservationReportInFlight inFlight
+    ) =>
+        new()
+        {
+            Report = CaptureObservationReportV8(inFlight.Report),
+            DeliveryWorkId = inFlight.DeliveryWorkId.Value,
+            DueTimeMilliseconds = inFlight.DueTime.Milliseconds,
+        };
+
+    private static SaveModelsV8.ReceivedObservationReportSnapshotV8 CaptureReceivedReportV8(
+        ReceivedObservationReport received
+    ) =>
+        new()
+        {
+            Report = CaptureObservationReportV8(received.Report),
+            ReceivedAtMilliseconds = received.ReceivedAt.Milliseconds,
+            Handling = CaptureObservationReportHandling(received.Handling),
+        };
+
+    private static SaveModelsV8.ActiveFactionInvestigationSnapshotV8 CaptureActiveInvestigationV8(
+        ActiveFactionInvestigation investigation
+    ) =>
+        new()
+        {
+            SourceReport = CaptureObservationReportV8(investigation.SourceReport),
+            ResponderShipId = investigation.ResponderShipId.Value,
+            OriginLocationId = investigation.OriginLocationId.Value,
+            DestinationLocationId = investigation.DestinationLocationId.Value,
+            SourceReceivedAtMilliseconds = investigation.SourceReceivedAt.Milliseconds,
+            AssignedAtMilliseconds = investigation.AssignedAt.Milliseconds,
+            OrderId = investigation.OrderId.Value,
+        };
+
+    private static SaveModelsV8.ObservationReportSnapshotV8 CaptureObservationReportV8(
+        ObservationReportSnapshot report
+    ) =>
+        new()
+        {
+            ReportId = report.ReportId.Value,
+            ObserverShipId = report.ObserverShipId.Value,
+            ObserverContactId = report.ObserverContactId.Value,
+            ObservedAtLocationId = report.ObservedAtLocationId.Value,
+            ObservedPosition = new TacticalPositionSnapshotV2
+            {
+                XKilometers = report.ObservedPosition.XKilometers,
+                YKilometers = report.ObservedPosition.YKilometers,
+            },
+            ObservedAtMilliseconds = report.ObservedAt.Milliseconds,
+            Identification = CaptureContactIdentification(report.Identification),
+            KnownVesselDisplayName = report.KnownVesselDisplayName,
+            KnownDesignDisplayName = report.KnownDesignDisplayName,
         };
 
     private static SaveModelsV6.SensorKnowledgeSnapshotV6 CaptureSensorKnowledgeV6(SensorKnowledge knowledge) =>
@@ -509,7 +676,26 @@ public static class GamePersistence
             ScheduledWorkKind.SensorContactLoss => SensorContactLossKind,
             ScheduledWorkKind.ActiveSensorScanCompletion => ActiveSensorScanCompletionKind,
             ScheduledWorkKind.ShipContactDecisionWake => ShipContactDecisionWakeKind,
+            ScheduledWorkKind.FactionDecisionWake => FactionDecisionWakeKind,
+            ScheduledWorkKind.ObservationReportDelivery => ReportDeliveryKind,
             _ => throw new InvalidOperationException("Cannot persist an unknown scheduled work kind."),
+        };
+
+    private static string CaptureTargetKind(ScheduledWorkTargetKind kind) =>
+        kind switch
+        {
+            ScheduledWorkTargetKind.Ship => ShipTargetKind,
+            ScheduledWorkTargetKind.Faction => FactionTargetKind,
+            _ => throw new InvalidOperationException("Cannot persist an unknown scheduled-work target kind."),
+        };
+
+    private static string CaptureObjectiveStatus(FactionObjectiveStatus status) =>
+        status switch
+        {
+            FactionObjectiveStatus.Pending => PendingObjectiveStatus,
+            FactionObjectiveStatus.Assigned => AssignedObjectiveStatus,
+            FactionObjectiveStatus.Satisfied => SatisfiedObjectiveStatus,
+            _ => throw new InvalidOperationException("Cannot persist an unknown faction objective status."),
         };
 
     private static string CaptureContactStatus(SensorContactStatus status) =>
@@ -529,6 +715,22 @@ public static class GamePersistence
             _ => throw new InvalidOperationException("Cannot persist an unknown sensor contact identification."),
         };
 
+    private static string CaptureObservationResponsePosture(ObservationResponsePosture posture) =>
+        posture switch
+        {
+            ObservationResponsePosture.Disabled => DisabledObservationResponsePosture,
+            ObservationResponsePosture.Enabled => EnabledObservationResponsePosture,
+            _ => throw new InvalidOperationException("Cannot persist an unknown observation-response posture."),
+        };
+
+    private static string CaptureObservationReportHandling(ObservationReportHandling handling) =>
+        handling switch
+        {
+            ObservationReportHandling.Unhandled => UnhandledObservationReport,
+            ObservationReportHandling.Handled => HandledObservationReport,
+            _ => throw new InvalidOperationException("Cannot persist an unknown observation-report handling state."),
+        };
+
     private static string CaptureContactPosture(ShipContactPosture posture) =>
         posture switch
         {
@@ -536,7 +738,12 @@ public static class GamePersistence
             _ => throw new InvalidOperationException("Cannot persist an unknown ship contact posture."),
         };
 
-    private static LoadedGameSave LoadV1(byte[] json, ShipDefinitionCatalog catalog, string sourceIdentity)
+    private static LoadedGameSave LoadV1(
+        byte[] json,
+        ShipDefinitionCatalog catalog,
+        FactionDefinitionCatalog factionCatalog,
+        string sourceIdentity
+    )
     {
         try
         {
@@ -552,7 +759,9 @@ public static class GamePersistence
             ValidateCandidateV4(migratedV4, catalog);
             SaveEnvelopeV5 migratedV5 = MigrateV4ToV5(migratedV4, catalog);
             ValidateCandidateV5(migratedV5, catalog);
-            return RestoreV6(MigrateV5ToV6(migratedV5), catalog);
+            SaveEnvelopeV6 migratedV6 = MigrateV5ToV6(migratedV5);
+            ValidateCandidateV6(migratedV6, catalog);
+            return RestoreMigratedV7(MigrateV6ToV7(migratedV6), catalog, factionCatalog);
         }
         catch (GamePersistenceException)
         {
@@ -579,7 +788,12 @@ public static class GamePersistence
         }
     }
 
-    private static LoadedGameSave LoadV2(byte[] json, ShipDefinitionCatalog catalog, string sourceIdentity)
+    private static LoadedGameSave LoadV2(
+        byte[] json,
+        ShipDefinitionCatalog catalog,
+        FactionDefinitionCatalog factionCatalog,
+        string sourceIdentity
+    )
     {
         try
         {
@@ -593,7 +807,9 @@ public static class GamePersistence
             ValidateCandidateV4(migratedV4, catalog);
             SaveEnvelopeV5 migratedV5 = MigrateV4ToV5(migratedV4, catalog);
             ValidateCandidateV5(migratedV5, catalog);
-            return RestoreV6(MigrateV5ToV6(migratedV5), catalog);
+            SaveEnvelopeV6 migratedV6 = MigrateV5ToV6(migratedV5);
+            ValidateCandidateV6(migratedV6, catalog);
+            return RestoreMigratedV7(MigrateV6ToV7(migratedV6), catalog, factionCatalog);
         }
         catch (GamePersistenceException)
         {
@@ -620,7 +836,12 @@ public static class GamePersistence
         }
     }
 
-    private static LoadedGameSave LoadV3(byte[] json, ShipDefinitionCatalog catalog, string sourceIdentity)
+    private static LoadedGameSave LoadV3(
+        byte[] json,
+        ShipDefinitionCatalog catalog,
+        FactionDefinitionCatalog factionCatalog,
+        string sourceIdentity
+    )
     {
         try
         {
@@ -632,7 +853,9 @@ public static class GamePersistence
             ValidateCandidateV4(migratedV4, catalog);
             SaveEnvelopeV5 migratedV5 = MigrateV4ToV5(migratedV4, catalog);
             ValidateCandidateV5(migratedV5, catalog);
-            return RestoreV6(MigrateV5ToV6(migratedV5), catalog);
+            SaveEnvelopeV6 migratedV6 = MigrateV5ToV6(migratedV5);
+            ValidateCandidateV6(migratedV6, catalog);
+            return RestoreMigratedV7(MigrateV6ToV7(migratedV6), catalog, factionCatalog);
         }
         catch (GamePersistenceException)
         {
@@ -659,7 +882,12 @@ public static class GamePersistence
         }
     }
 
-    private static LoadedGameSave LoadV4(byte[] json, ShipDefinitionCatalog catalog, string sourceIdentity)
+    private static LoadedGameSave LoadV4(
+        byte[] json,
+        ShipDefinitionCatalog catalog,
+        FactionDefinitionCatalog factionCatalog,
+        string sourceIdentity
+    )
     {
         try
         {
@@ -669,7 +897,9 @@ public static class GamePersistence
             ValidateCandidateV4(envelope, catalog);
             SaveEnvelopeV5 migratedV5 = MigrateV4ToV5(envelope, catalog);
             ValidateCandidateV5(migratedV5, catalog);
-            return RestoreV6(MigrateV5ToV6(migratedV5), catalog);
+            SaveEnvelopeV6 migratedV6 = MigrateV5ToV6(migratedV5);
+            ValidateCandidateV6(migratedV6, catalog);
+            return RestoreMigratedV7(MigrateV6ToV7(migratedV6), catalog, factionCatalog);
         }
         catch (GamePersistenceException)
         {
@@ -696,7 +926,12 @@ public static class GamePersistence
         }
     }
 
-    private static LoadedGameSave LoadV5(byte[] json, ShipDefinitionCatalog catalog, string sourceIdentity)
+    private static LoadedGameSave LoadV5(
+        byte[] json,
+        ShipDefinitionCatalog catalog,
+        FactionDefinitionCatalog factionCatalog,
+        string sourceIdentity
+    )
     {
         try
         {
@@ -704,7 +939,9 @@ public static class GamePersistence
                 JsonSerializer.Deserialize<SaveEnvelopeV5>(json, SerializerOptions)
                 ?? throw new JsonException("The save root must be an object.");
             ValidateCandidateV5(envelope, catalog);
-            return RestoreV6(MigrateV5ToV6(envelope), catalog);
+            SaveEnvelopeV6 migratedV6 = MigrateV5ToV6(envelope);
+            ValidateCandidateV6(migratedV6, catalog);
+            return RestoreMigratedV7(MigrateV6ToV7(migratedV6), catalog, factionCatalog);
         }
         catch (GamePersistenceException)
         {
@@ -731,14 +968,20 @@ public static class GamePersistence
         }
     }
 
-    private static LoadedGameSave LoadV6(byte[] json, ShipDefinitionCatalog catalog, string sourceIdentity)
+    private static LoadedGameSave LoadV6(
+        byte[] json,
+        ShipDefinitionCatalog catalog,
+        FactionDefinitionCatalog factionCatalog,
+        string sourceIdentity
+    )
     {
         try
         {
             SaveEnvelopeV6 envelope =
                 JsonSerializer.Deserialize<SaveEnvelopeV6>(json, SerializerOptions)
                 ?? throw new JsonException("The save root must be an object.");
-            return RestoreV6(envelope, catalog);
+            ValidateCandidateV6(envelope, catalog);
+            return RestoreMigratedV7(MigrateV6ToV7(envelope), catalog, factionCatalog);
         }
         catch (GamePersistenceException)
         {
@@ -760,6 +1003,84 @@ public static class GamePersistence
                 GamePersistenceFailure.InvalidData,
                 sourceIdentity,
                 $"violates the V6 semantic contract: {exception.Message}",
+                exception
+            );
+        }
+    }
+
+    private static LoadedGameSave LoadV7(
+        byte[] json,
+        ShipDefinitionCatalog catalog,
+        FactionDefinitionCatalog factionCatalog,
+        string sourceIdentity
+    )
+    {
+        try
+        {
+            SaveEnvelopeV7 envelope =
+                JsonSerializer.Deserialize<SaveEnvelopeV7>(json, SerializerOptions)
+                ?? throw new JsonException("The save root must be an object.");
+            return RestoreMigratedV7(envelope, catalog, factionCatalog);
+        }
+        catch (GamePersistenceException)
+        {
+            throw;
+        }
+        catch (JsonException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+            when (exception
+                    is ArgumentException
+                        or InvalidOperationException
+                        or KeyNotFoundException
+                        or OverflowException
+            )
+        {
+            throw Failure(
+                GamePersistenceFailure.InvalidData,
+                sourceIdentity,
+                $"violates the V7 semantic contract: {exception.Message}",
+                exception
+            );
+        }
+    }
+
+    private static LoadedGameSave LoadV8(
+        byte[] json,
+        ShipDefinitionCatalog catalog,
+        FactionDefinitionCatalog factionCatalog,
+        string sourceIdentity
+    )
+    {
+        try
+        {
+            SaveEnvelopeV8 envelope =
+                JsonSerializer.Deserialize<SaveEnvelopeV8>(json, SerializerOptions)
+                ?? throw new JsonException("The save root must be an object.");
+            return RestoreV8(envelope, catalog, factionCatalog);
+        }
+        catch (GamePersistenceException)
+        {
+            throw;
+        }
+        catch (JsonException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+            when (exception
+                    is ArgumentException
+                        or InvalidOperationException
+                        or KeyNotFoundException
+                        or OverflowException
+            )
+        {
+            throw Failure(
+                GamePersistenceFailure.InvalidData,
+                sourceIdentity,
+                $"violates the V8 semantic contract: {exception.Message}",
                 exception
             );
         }
@@ -990,8 +1311,8 @@ public static class GamePersistence
     private static SaveEnvelopeV6 MigrateV5ToV6(SaveEnvelopeV5 envelope) =>
         new()
         {
-            SchemaVersion = CurrentSchemaVersion,
-            SimulationRulesVersion = CurrentSimulationRulesVersion,
+            SchemaVersion = V6SchemaVersion,
+            SimulationRulesVersion = V6SimulationRulesVersion,
             Metadata = envelope.Metadata,
             Simulation = new SimulationSnapshotV6
             {
@@ -1003,6 +1324,109 @@ public static class GamePersistence
                 StrategicMap = envelope.Simulation.StrategicMap,
                 Ships = [.. envelope.Simulation.Ships.Select(MigrateShipV5)],
             },
+        };
+
+    /// <remarks>
+    /// V6 has no political state. The migration preserves that absence rather than bootstrapping
+    /// current faction definitions, which would invent controllers, objectives, and future work.
+    /// Historical scheduled work remains ship-owned with its exact identity and ordering fields.
+    /// </remarks>
+    private static SaveEnvelopeV7 MigrateV6ToV7(SaveEnvelopeV6 envelope) =>
+        new()
+        {
+            SchemaVersion = V7SchemaVersion,
+            SimulationRulesVersion = V7SimulationRulesVersion,
+            Metadata = envelope.Metadata,
+            Simulation = new SimulationSnapshotV7
+            {
+                TimeMilliseconds = envelope.Simulation.TimeMilliseconds,
+                ShipAllocatorNextId = envelope.Simulation.ShipAllocatorNextId,
+                OrderAllocatorNextId = envelope.Simulation.OrderAllocatorNextId,
+                PlayerShipId = envelope.Simulation.PlayerShipId,
+                Scheduler = new SaveModelsV7.SchedulerSnapshotV7
+                {
+                    NextWorkId = envelope.Simulation.Scheduler.NextWorkId,
+                    NextSequence = envelope.Simulation.Scheduler.NextSequence,
+                    OutstandingWork =
+                    [
+                        .. envelope.Simulation.Scheduler.OutstandingWork.Select(
+                            work => new SaveModelsV7.ScheduledWorkSnapshotV7
+                            {
+                                Id = work.Id,
+                                DueTimeMilliseconds = work.DueTimeMilliseconds,
+                                Sequence = work.Sequence,
+                                Kind = work.Kind,
+                                TargetKind = ShipTargetKind,
+                                TargetShipId = work.TargetShipId,
+                                TargetFactionId = null,
+                            }
+                        ),
+                    ],
+                },
+                StrategicMap = envelope.Simulation.StrategicMap,
+                Ships =
+                [
+                    .. envelope.Simulation.Ships.Select(ship => new ShipSnapshotV7
+                    {
+                        InstanceId = ship.InstanceId,
+                        DefinitionId = ship.DefinitionId,
+                        DisplayName = ship.DisplayName,
+                        TacticalPosition = ship.TacticalPosition,
+                        TacticalMotion = ship.TacticalMotion,
+                        Engineering = ship.Engineering,
+                        StrategicState = ship.StrategicState,
+                        ActiveOrder = ship.ActiveOrder,
+                        SensorKnowledge = ship.SensorKnowledge,
+                        AutonomousState = ship.AutonomousState,
+                        DirectControllerFactionId = null,
+                    }),
+                ],
+                Factions = [],
+            },
+        };
+
+    /// <remarks>
+    /// V7 predates faction observation response. Migration preserves every existing political and
+    /// scheduling fact while adding only disabled, empty response state and its initial allocator.
+    /// </remarks>
+    private static SaveEnvelopeV8 MigrateV7ToV8(SaveEnvelopeV7 envelope) =>
+        new()
+        {
+            SchemaVersion = CurrentSchemaVersion,
+            SimulationRulesVersion = CurrentSimulationRulesVersion,
+            Metadata = envelope.Metadata,
+            Simulation = new SimulationSnapshotV8
+            {
+                TimeMilliseconds = envelope.Simulation.TimeMilliseconds,
+                ShipAllocatorNextId = envelope.Simulation.ShipAllocatorNextId,
+                OrderAllocatorNextId = envelope.Simulation.OrderAllocatorNextId,
+                ObservationReportAllocatorNextId = ObservationReportIdAllocator.Create().NextId,
+                PlayerShipId = envelope.Simulation.PlayerShipId,
+                Scheduler = envelope.Simulation.Scheduler,
+                StrategicMap = envelope.Simulation.StrategicMap,
+                Ships = envelope.Simulation.Ships,
+                Factions =
+                [
+                    .. envelope.Simulation.Factions.Select(faction => new SaveModelsV8.FactionSnapshotV8
+                    {
+                        Id = faction.Id,
+                        DefinitionId = faction.DefinitionId,
+                        PresenceObjective = faction.PresenceObjective,
+                        PendingDecisionWake = faction.PendingDecisionWake,
+                        Observation = CreateEmptyObservationSnapshotV8(),
+                    }),
+                ],
+            },
+        };
+
+    private static SaveModelsV8.FactionObservationSnapshotV8 CreateEmptyObservationSnapshotV8() =>
+        new()
+        {
+            Posture = DisabledObservationResponsePosture,
+            InFlightReports = [],
+            ReceivedReports = [],
+            ActiveInvestigation = null,
+            CompletionWatermarks = [],
         };
 
     private static ShipSnapshotV6 MigrateShipV5(ShipSnapshotV5 ship) =>
@@ -1197,22 +1621,34 @@ public static class GamePersistence
         }
     }
 
-    private static LoadedGameSave RestoreV6(SaveEnvelopeV6 envelope, ShipDefinitionCatalog catalog)
+    private static LoadedGameSave RestoreMigratedV7(
+        SaveEnvelopeV7 envelope,
+        ShipDefinitionCatalog catalog,
+        FactionDefinitionCatalog factionCatalog
+    )
     {
-        ValidateCandidateV6(envelope, catalog);
-        SimulationSnapshotV6 snapshot = envelope.Simulation;
-        var time = new SimulationTime(snapshot.TimeMilliseconds);
-        StrategicMap map = RestoreMapV2(snapshot.StrategicMap);
-        ShipState[] ships = [.. snapshot.Ships.Select(RestoreShipV6)];
-        SimulationScheduler scheduler = RestoreSchedulerV2(snapshot.Scheduler, CurrentSchemaVersion);
+        ValidateCandidateV7(envelope, catalog);
+        return RestoreV8(MigrateV7ToV8(envelope), catalog, factionCatalog);
+    }
+
+    private static LoadedGameSave RestoreV8(
+        SaveEnvelopeV8 envelope,
+        ShipDefinitionCatalog catalog,
+        FactionDefinitionCatalog factionCatalog
+    )
+    {
+        ValidateCandidateV8(envelope, catalog);
+        SimulationSnapshotV8 snapshot = envelope.Simulation;
         var state = new SimulationState(
-            time,
-            scheduler,
+            new SimulationTime(snapshot.TimeMilliseconds),
+            RestoreSchedulerV7(snapshot.Scheduler),
             ShipInstanceIdAllocator.Restore(snapshot.ShipAllocatorNextId),
-            map,
+            RestoreMapV2(snapshot.StrategicMap),
             new ShipInstanceId(snapshot.PlayerShipId),
-            ships,
-            ShipOrderIdAllocator.Restore(snapshot.OrderAllocatorNextId)
+            snapshot.Ships.Select(RestoreShipV7),
+            ShipOrderIdAllocator.Restore(snapshot.OrderAllocatorNextId),
+            snapshot.Factions.Select(RestoreFactionV8),
+            ObservationReportIdAllocator.Restore(snapshot.ObservationReportAllocatorNextId)
         );
         var metadata = new GameSaveMetadata(
             envelope.Metadata.SaveId,
@@ -1220,7 +1656,7 @@ public static class GamePersistence
             envelope.Metadata.CreatedAtUtc,
             envelope.Metadata.SavedAtUtc
         );
-        return new LoadedGameSave(metadata, GameSimulation.RestoreState(state, catalog));
+        return new LoadedGameSave(metadata, GameSimulation.RestoreState(state, catalog, factionCatalog));
     }
 
     private static void ValidateCandidateV2(SaveEnvelopeV2 envelope, ShipDefinitionCatalog catalog)
@@ -1365,12 +1801,12 @@ public static class GamePersistence
 
     private static void ValidateCandidateV6(SaveEnvelopeV6 envelope, ShipDefinitionCatalog catalog)
     {
-        if (envelope.SchemaVersion != CurrentSchemaVersion)
+        if (envelope.SchemaVersion != V6SchemaVersion)
         {
             throw new InvalidOperationException("The V6 mapper received a different schema version.");
         }
 
-        if (!string.Equals(envelope.SimulationRulesVersion, CurrentSimulationRulesVersion, StringComparison.Ordinal))
+        if (!string.Equals(envelope.SimulationRulesVersion, V6SimulationRulesVersion, StringComparison.Ordinal))
         {
             throw new InvalidOperationException(
                 $"Simulation rules version '{envelope.SimulationRulesVersion}' is unsupported."
@@ -1401,8 +1837,394 @@ public static class GamePersistence
         // downgraded view rather than restated. Ordering is load-bearing: the shared pass establishes
         // that ships, contacts, and the strategic map are structurally present and well formed, which
         // the observed-location pass below then relies on instead of repeating.
-        ValidateSimulationCandidateV5(ToBaseSnapshotV5(snapshot), catalog, CurrentSchemaVersion);
+        ValidateSimulationCandidateV5(ToBaseSnapshotV5(snapshot), catalog, V6SchemaVersion);
         ValidateObservedLocationCandidatesV6(snapshot);
+    }
+
+    private static void ValidateCandidateV7(SaveEnvelopeV7 envelope, ShipDefinitionCatalog catalog)
+    {
+        if (envelope.SchemaVersion != V7SchemaVersion)
+        {
+            throw new InvalidOperationException("The V7 mapper received a different schema version.");
+        }
+
+        if (!string.Equals(envelope.SimulationRulesVersion, V7SimulationRulesVersion, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Simulation rules version '{envelope.SimulationRulesVersion}' is unsupported."
+            );
+        }
+
+        if (envelope.Metadata is null || envelope.Simulation is null)
+        {
+            throw new InvalidOperationException("Required V7 envelope members cannot be null.");
+        }
+
+        ValidateMetadata(
+            new GameSaveMetadata(
+                envelope.Metadata.SaveId,
+                envelope.Metadata.DisplayName,
+                envelope.Metadata.CreatedAtUtc,
+                envelope.Metadata.SavedAtUtc
+            )
+        );
+        SimulationSnapshotV7 snapshot = envelope.Simulation;
+        if (
+            snapshot.Ships is null
+            || snapshot.Factions is null
+            || snapshot.Scheduler is null
+            || snapshot.StrategicMap is null
+        )
+        {
+            throw new InvalidOperationException("Required V7 simulation members cannot be null.");
+        }
+
+        ValidateSimulationCandidateV5(ToBaseSnapshotV5(snapshot), catalog, V6SchemaVersion);
+        ValidateObservedLocationCandidatesV6(ToObservedSnapshotV6(snapshot));
+        ValidateFactionShapeV7(snapshot);
+        ValidateSchedulerCandidateV7(snapshot);
+    }
+
+    private static void ValidateCandidateV8(SaveEnvelopeV8 envelope, ShipDefinitionCatalog catalog)
+    {
+        if (envelope.SchemaVersion != CurrentSchemaVersion)
+        {
+            throw new InvalidOperationException("The V8 mapper received a different schema version.");
+        }
+
+        if (!string.Equals(envelope.SimulationRulesVersion, CurrentSimulationRulesVersion, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Simulation rules version '{envelope.SimulationRulesVersion}' is unsupported."
+            );
+        }
+
+        if (envelope.Metadata is null || envelope.Simulation is null)
+        {
+            throw new InvalidOperationException("Required V8 envelope members cannot be null.");
+        }
+
+        ValidateMetadata(
+            new GameSaveMetadata(
+                envelope.Metadata.SaveId,
+                envelope.Metadata.DisplayName,
+                envelope.Metadata.CreatedAtUtc,
+                envelope.Metadata.SavedAtUtc
+            )
+        );
+        SimulationSnapshotV8 snapshot = envelope.Simulation;
+        if (
+            snapshot.Ships is null
+            || snapshot.Factions is null
+            || snapshot.Scheduler is null
+            || snapshot.StrategicMap is null
+        )
+        {
+            throw new InvalidOperationException("Required V8 simulation members cannot be null.");
+        }
+
+        // V8 shares the ship, map, and ordinary scheduler DTOs with V7, but its complete faction
+        // graph is validated only after reconstruction by SimulationState.Validate. Passing V8 through
+        // the frozen V7 presence-only graph validator would reject valid response continuations.
+        SimulationSnapshotV7 baseSnapshot = ToV7Snapshot(snapshot);
+        ValidateSimulationCandidateV5(ToBaseSnapshotV5(baseSnapshot), catalog, V6SchemaVersion);
+        ValidateObservedLocationCandidatesV6(ToObservedSnapshotV6(baseSnapshot));
+        ValidateFactionShapeV8(snapshot);
+        ValidateSchedulerCandidate(
+            snapshot.Scheduler,
+            snapshot.TimeMilliseconds,
+            snapshot.Ships.Select(ship => ship.InstanceId),
+            snapshot.Factions.Select(faction => faction.Id),
+            CurrentSchemaVersion
+        );
+        ValidateObservationShapeV8(snapshot);
+    }
+
+    private static SimulationSnapshotV7 ToV7Snapshot(SimulationSnapshotV8 snapshot) =>
+        new()
+        {
+            TimeMilliseconds = snapshot.TimeMilliseconds,
+            ShipAllocatorNextId = snapshot.ShipAllocatorNextId,
+            OrderAllocatorNextId = snapshot.OrderAllocatorNextId,
+            PlayerShipId = snapshot.PlayerShipId,
+            Scheduler = snapshot.Scheduler,
+            StrategicMap = snapshot.StrategicMap,
+            Ships = snapshot.Ships,
+            Factions =
+            [
+                .. snapshot.Factions.Select(faction =>
+                    faction is null
+                        ? null!
+                        : new SaveModelsV7.FactionSnapshotV7
+                        {
+                            Id = faction.Id,
+                            DefinitionId = faction.DefinitionId,
+                            PresenceObjective = faction.PresenceObjective,
+                            PendingDecisionWake = faction.PendingDecisionWake,
+                        }
+                ),
+            ],
+        };
+
+    private static void ValidateFactionShapeV8(SimulationSnapshotV8 snapshot)
+    {
+        EnsureCount(snapshot.Factions.Length, SimulationState.MaximumFactions, "factions");
+        var identities = new HashSet<long>();
+        foreach (SaveModelsV8.FactionSnapshotV8? faction in snapshot.Factions)
+        {
+            if (faction is null || faction.Id <= 0 || !identities.Add(faction.Id))
+            {
+                throw new InvalidOperationException("Factions require positive unique identities.");
+            }
+
+            ValidateText(faction.DefinitionId, "Faction definition identity", FactionDefinitionId.MaximumLength);
+            if (faction.PresenceObjective is { } objective)
+            {
+                ValidateText(objective.TargetLocationId, "Faction objective location", LocationId.MaximumLength);
+                _ = ParseObjectiveStatus(objective.Status);
+            }
+
+            if (faction.PendingDecisionWake is { } wake)
+            {
+                EnsureFixedStep(wake.DueTimeMilliseconds, "Faction decision wake due time");
+            }
+
+            if (faction.Observation is null)
+            {
+                throw new InvalidOperationException("Faction observation state is required.");
+            }
+        }
+    }
+
+    private static void ValidateObservationShapeV8(SimulationSnapshotV8 snapshot)
+    {
+        if (
+            snapshot.ObservationReportAllocatorNextId <= 0
+            || snapshot.ObservationReportAllocatorNextId == long.MaxValue
+        )
+        {
+            throw new InvalidOperationException("Observation-report allocator is outside the persisted range.");
+        }
+
+        HashSet<long> shipIds = [.. snapshot.Ships.Select(ship => ship.InstanceId)];
+        HashSet<string> locationIds = [.. snapshot.StrategicMap.Locations.Select(location => location.Id)];
+        foreach (SaveModelsV8.FactionSnapshotV8 faction in snapshot.Factions)
+        {
+            ValidateFactionObservationShapeV8(faction.Observation, snapshot, shipIds, locationIds);
+        }
+    }
+
+    private static void ValidateFactionObservationShapeV8(
+        SaveModelsV8.FactionObservationSnapshotV8 observation,
+        SimulationSnapshotV8 snapshot,
+        HashSet<long> shipIds,
+        HashSet<string> locationIds
+    )
+    {
+        if (
+            observation.InFlightReports is null
+            || observation.ReceivedReports is null
+            || observation.CompletionWatermarks is null
+        )
+        {
+            throw new InvalidOperationException("Required faction observation collections cannot be null.");
+        }
+
+        _ = ParseObservationResponsePosture(observation.Posture);
+        EnsureCount(
+            observation.InFlightReports.Length,
+            FactionObservationState.MaximumInFlightReports,
+            "in-flight observation reports"
+        );
+        EnsureCount(
+            observation.ReceivedReports.Length,
+            FactionObservationState.MaximumReceivedReports,
+            "received observation reports"
+        );
+        EnsureCount(
+            observation.CompletionWatermarks.Length,
+            FactionObservationState.MaximumCompletionWatermarks,
+            "observation completion watermarks"
+        );
+        foreach (SaveModelsV8.ObservationReportInFlightSnapshotV8? inFlight in observation.InFlightReports)
+        {
+            ValidateInFlightObservationReportV8(inFlight, snapshot, shipIds, locationIds);
+        }
+        foreach (SaveModelsV8.ReceivedObservationReportSnapshotV8? received in observation.ReceivedReports)
+        {
+            ValidateReceivedObservationReportV8(received, snapshot, shipIds, locationIds);
+        }
+        if (observation.ActiveInvestigation is { } active)
+        {
+            ValidateActiveInvestigationV8(active, snapshot, shipIds, locationIds);
+        }
+        ValidateObservationWatermarksV8(observation.CompletionWatermarks, snapshot, locationIds);
+
+        // Construction enforces per-faction bounds, ordering-independent identity uniqueness, and
+        // the prohibition against retaining one report in both delivery and received state.
+        _ = RestoreFactionObservationV8(observation);
+    }
+
+    private static void ValidateInFlightObservationReportV8(
+        SaveModelsV8.ObservationReportInFlightSnapshotV8? inFlight,
+        SimulationSnapshotV8 snapshot,
+        HashSet<long> shipIds,
+        HashSet<string> locationIds
+    )
+    {
+        if (inFlight is null)
+        {
+            throw new InvalidOperationException("In-flight observation reports cannot be null.");
+        }
+
+        ObservationReportSnapshot report = ValidateObservationReportV8(inFlight.Report, snapshot, shipIds, locationIds);
+        EnsureFixedStep(inFlight.DueTimeMilliseconds, "Observation report delivery due time");
+        if (inFlight.DueTimeMilliseconds < snapshot.TimeMilliseconds)
+        {
+            throw new InvalidOperationException("Observation report delivery cannot be overdue.");
+        }
+
+        _ = new ObservationReportInFlight(
+            report,
+            new ScheduledWorkId(inFlight.DeliveryWorkId),
+            new SimulationTime(inFlight.DueTimeMilliseconds)
+        );
+    }
+
+    private static void ValidateReceivedObservationReportV8(
+        SaveModelsV8.ReceivedObservationReportSnapshotV8? received,
+        SimulationSnapshotV8 snapshot,
+        HashSet<long> shipIds,
+        HashSet<string> locationIds
+    )
+    {
+        if (received is null)
+        {
+            throw new InvalidOperationException("Received observation reports cannot be null.");
+        }
+
+        ObservationReportSnapshot report = ValidateObservationReportV8(received.Report, snapshot, shipIds, locationIds);
+        EnsureFixedStep(received.ReceivedAtMilliseconds, "Observation report receipt time");
+        if (received.ReceivedAtMilliseconds > snapshot.TimeMilliseconds)
+        {
+            throw new InvalidOperationException("Observation report receipt cannot be in the future.");
+        }
+
+        _ = new ReceivedObservationReport(
+            report,
+            new SimulationTime(received.ReceivedAtMilliseconds),
+            ParseObservationReportHandling(received.Handling)
+        );
+    }
+
+    private static void ValidateObservationWatermarksV8(
+        SaveModelsV8.ObservationLocationCompletionWatermarkSnapshotV8[] watermarks,
+        SimulationSnapshotV8 snapshot,
+        HashSet<string> locationIds
+    )
+    {
+        foreach (SaveModelsV8.ObservationLocationCompletionWatermarkSnapshotV8? watermark in watermarks)
+        {
+            if (watermark is null)
+            {
+                throw new InvalidOperationException("Observation completion watermarks cannot be null.");
+            }
+
+            EnsureFixedStep(watermark.ObservedThroughMilliseconds, "Observation completion watermark time");
+            if (watermark.ObservedThroughMilliseconds > snapshot.TimeMilliseconds)
+            {
+                throw new InvalidOperationException("Observation completion watermark cannot be in the future.");
+            }
+
+            var restored = new ObservationLocationCompletionWatermark(
+                new LocationId(watermark.LocationId),
+                new SimulationTime(watermark.ObservedThroughMilliseconds)
+            );
+            if (!locationIds.Contains(restored.LocationId.Value))
+            {
+                throw new InvalidOperationException("Observation completion watermark location does not exist.");
+            }
+        }
+    }
+
+    private static ObservationReportSnapshot ValidateObservationReportV8(
+        SaveModelsV8.ObservationReportSnapshotV8? snapshot,
+        SimulationSnapshotV8 simulation,
+        HashSet<long> shipIds,
+        HashSet<string> locationIds
+    )
+    {
+        if (snapshot is null || snapshot.ObservedPosition is null)
+        {
+            throw new InvalidOperationException("Observation report source data cannot be null.");
+        }
+
+        EnsureFixedStep(snapshot.ObservedAtMilliseconds, "Observation report source time");
+        if (snapshot.ObservedAtMilliseconds > simulation.TimeMilliseconds)
+        {
+            throw new InvalidOperationException("Observation report source time cannot be in the future.");
+        }
+
+        ObservationReportSnapshot restored = RestoreObservationReportV8(snapshot);
+        if (restored.ReportId.Value >= simulation.ObservationReportAllocatorNextId)
+        {
+            throw new InvalidOperationException("Observation report identity must precede the allocator counter.");
+        }
+
+        if (!shipIds.Contains(restored.ObserverShipId.Value))
+        {
+            throw new InvalidOperationException("Observation report observer does not exist.");
+        }
+
+        if (!locationIds.Contains(restored.ObservedAtLocationId.Value))
+        {
+            throw new InvalidOperationException("Observation report location does not exist.");
+        }
+
+        return restored;
+    }
+
+    private static void ValidateActiveInvestigationV8(
+        SaveModelsV8.ActiveFactionInvestigationSnapshotV8 active,
+        SimulationSnapshotV8 snapshot,
+        HashSet<long> shipIds,
+        HashSet<string> locationIds
+    )
+    {
+        ObservationReportSnapshot source = ValidateObservationReportV8(
+            active.SourceReport,
+            snapshot,
+            shipIds,
+            locationIds
+        );
+        EnsureFixedStep(active.SourceReceivedAtMilliseconds, "Investigation source receipt time");
+        EnsureFixedStep(active.AssignedAtMilliseconds, "Investigation assignment time");
+        if (active.AssignedAtMilliseconds > snapshot.TimeMilliseconds)
+        {
+            throw new InvalidOperationException("Investigation assignment cannot be in the future.");
+        }
+
+        if (!shipIds.Contains(active.ResponderShipId))
+        {
+            throw new InvalidOperationException("Investigation responder does not exist.");
+        }
+
+        var restored = new ActiveFactionInvestigation(
+            source,
+            new ShipInstanceId(active.ResponderShipId),
+            new LocationId(active.OriginLocationId),
+            new LocationId(active.DestinationLocationId),
+            new SimulationTime(active.SourceReceivedAtMilliseconds),
+            new SimulationTime(active.AssignedAtMilliseconds),
+            new ShipOrderId(active.OrderId)
+        );
+        if (
+            !locationIds.Contains(restored.OriginLocationId.Value)
+            || !locationIds.Contains(restored.DestinationLocationId.Value)
+        )
+        {
+            throw new InvalidOperationException("Investigation locations must exist in the strategic map.");
+        }
     }
 
     private static void ValidateSimulationCandidateV5(
@@ -1526,6 +2348,60 @@ public static class GamePersistence
                     ActiveScan = ship.SensorKnowledge.ActiveScan,
                 },
             AutonomousState = ship.AutonomousState,
+        };
+
+    private static SimulationSnapshotV6 ToObservedSnapshotV6(SimulationSnapshotV7 snapshot) =>
+        new()
+        {
+            TimeMilliseconds = snapshot.TimeMilliseconds,
+            ShipAllocatorNextId = snapshot.ShipAllocatorNextId,
+            OrderAllocatorNextId = snapshot.OrderAllocatorNextId,
+            PlayerShipId = snapshot.PlayerShipId,
+            Scheduler = ToShipSchedulerV2(snapshot.Scheduler),
+            StrategicMap = snapshot.StrategicMap,
+            Ships = [.. snapshot.Ships.Select(ship => ship is null ? null! : ToShipV6(ship))],
+        };
+
+    private static SimulationSnapshotV5 ToBaseSnapshotV5(SimulationSnapshotV7 snapshot) =>
+        ToBaseSnapshotV5(ToObservedSnapshotV6(snapshot));
+
+    private static ShipSnapshotV6 ToShipV6(ShipSnapshotV7 ship) =>
+        new()
+        {
+            InstanceId = ship.InstanceId,
+            DefinitionId = ship.DefinitionId,
+            DisplayName = ship.DisplayName,
+            TacticalPosition = ship.TacticalPosition,
+            TacticalMotion = ship.TacticalMotion,
+            Engineering = ship.Engineering,
+            StrategicState = ship.StrategicState,
+            ActiveOrder = ship.ActiveOrder,
+            SensorKnowledge = ship.SensorKnowledge,
+            AutonomousState = ship.AutonomousState,
+        };
+
+    private static SchedulerSnapshotV2 ToShipSchedulerV2(SaveModelsV7.SchedulerSnapshotV7 scheduler) =>
+        new()
+        {
+            NextWorkId = scheduler.NextWorkId,
+            NextSequence = scheduler.NextSequence,
+            OutstandingWork = scheduler.OutstandingWork is null
+                ? null!
+                :
+                [
+                    .. scheduler
+                        .OutstandingWork.Where(work =>
+                            work is not null && string.Equals(work.TargetKind, ShipTargetKind, StringComparison.Ordinal)
+                        )
+                        .Select(work => new ScheduledWorkSnapshotV2
+                        {
+                            Id = work.Id,
+                            DueTimeMilliseconds = work.DueTimeMilliseconds,
+                            Sequence = work.Sequence,
+                            Kind = work.Kind,
+                            TargetShipId = work.TargetShipId ?? 0,
+                        }),
+                ],
         };
 
     private static SimulationSnapshotV3 ToBaseSnapshotV3(SimulationSnapshotV5 snapshot) =>
@@ -2129,6 +3005,148 @@ public static class GamePersistence
         return work;
     }
 
+    private static void ValidateSchedulerCandidateV7(SimulationSnapshotV7 snapshot)
+    {
+        ValidateSchedulerCandidate(
+            snapshot.Scheduler,
+            snapshot.TimeMilliseconds,
+            snapshot.Ships.Select(ship => ship.InstanceId),
+            snapshot.Factions.Select(faction => faction.Id),
+            V7SchemaVersion
+        );
+    }
+
+    private static void ValidateSchedulerCandidate(
+        SaveModelsV7.SchedulerSnapshotV7 scheduler,
+        long currentTime,
+        IEnumerable<long> candidateShipIds,
+        IEnumerable<long> candidateFactionIds,
+        int sourceSchemaVersion
+    )
+    {
+        if (scheduler.OutstandingWork is null)
+        {
+            throw new InvalidOperationException("Outstanding scheduler work is required.");
+        }
+
+        EnsureCount(scheduler.OutstandingWork.Length, SimulationScheduler.MaximumOutstandingWork, "scheduler work");
+        if (!SimulationScheduler.AreCountersWithinPersistedRange(scheduler.NextWorkId, scheduler.NextSequence))
+        {
+            throw new InvalidOperationException("Scheduler counters are outside the persisted range.");
+        }
+
+        HashSet<long> shipIds = [.. candidateShipIds];
+        HashSet<long> factionIds = [.. candidateFactionIds];
+        var identities = new HashSet<long>();
+        var sequences = new HashSet<long>();
+        long previousDue = -1;
+        long previousSequence = -1;
+        foreach (SaveModelsV7.ScheduledWorkSnapshotV7? work in scheduler.OutstandingWork)
+        {
+            ValidateScheduledWorkCandidate(
+                work,
+                scheduler,
+                currentTime,
+                shipIds,
+                factionIds,
+                identities,
+                sequences,
+                sourceSchemaVersion
+            );
+            if (
+                work!.DueTimeMilliseconds < previousDue
+                || (work.DueTimeMilliseconds == previousDue && work.Sequence <= previousSequence)
+            )
+            {
+                throw new InvalidOperationException(
+                    "Outstanding scheduler work is not in stable due-time and sequence order."
+                );
+            }
+
+            previousDue = work.DueTimeMilliseconds;
+            previousSequence = work.Sequence;
+        }
+    }
+
+    private static void ValidateScheduledWorkCandidate(
+        SaveModelsV7.ScheduledWorkSnapshotV7? work,
+        SaveModelsV7.SchedulerSnapshotV7 scheduler,
+        long currentTime,
+        HashSet<long> shipIds,
+        HashSet<long> factionIds,
+        HashSet<long> identities,
+        HashSet<long> sequences,
+        int sourceSchemaVersion
+    )
+    {
+        if (work is null)
+        {
+            throw new InvalidOperationException("Scheduler work items cannot be null.");
+        }
+
+        if (work.Id <= 0 || work.Id >= scheduler.NextWorkId || !identities.Add(work.Id))
+        {
+            throw new InvalidOperationException(
+                "Scheduler work identities must be positive, unique, and below the next counter."
+            );
+        }
+
+        if (work.Sequence < 0 || work.Sequence >= scheduler.NextSequence || !sequences.Add(work.Sequence))
+        {
+            throw new InvalidOperationException(
+                "Scheduler work sequences must be nonnegative, unique, and below the next counter."
+            );
+        }
+
+        EnsureFixedStep(work.DueTimeMilliseconds, "Scheduled due time");
+        if (work.DueTimeMilliseconds < currentTime)
+        {
+            throw new InvalidOperationException("Scheduled work cannot be overdue.");
+        }
+
+        ScheduledWorkTarget target = ParseWorkTargetV7(work);
+        if (
+            (target.ShipId is { } shipId && !shipIds.Contains(shipId.Value))
+            || (target.FactionId is { } factionId && !factionIds.Contains(factionId.Value))
+        )
+        {
+            throw new InvalidOperationException("Scheduled work target does not exist in its declared domain.");
+        }
+
+        _ = new ScheduledWork(
+            new ScheduledWorkId(work.Id),
+            new SimulationTime(work.DueTimeMilliseconds),
+            work.Sequence,
+            target,
+            ParseWorkKind(work.Kind, sourceSchemaVersion)
+        );
+    }
+
+    private static void ValidateFactionShapeV7(SimulationSnapshotV7 snapshot)
+    {
+        EnsureCount(snapshot.Factions.Length, SimulationState.MaximumFactions, "factions");
+        var identities = new HashSet<long>();
+        foreach (SaveModelsV7.FactionSnapshotV7? faction in snapshot.Factions)
+        {
+            if (faction is null || faction.Id <= 0 || !identities.Add(faction.Id))
+            {
+                throw new InvalidOperationException("Factions require positive unique identities.");
+            }
+
+            ValidateText(faction.DefinitionId, "Faction definition identity", FactionDefinitionId.MaximumLength);
+            if (faction.PresenceObjective is { } objective)
+            {
+                ValidateText(objective.TargetLocationId, "Faction objective location", LocationId.MaximumLength);
+                _ = ParseObjectiveStatus(objective.Status);
+            }
+
+            if (faction.PendingDecisionWake is { } wake)
+            {
+                EnsureFixedStep(wake.DueTimeMilliseconds, "Faction decision wake due time");
+            }
+        }
+    }
+
     private static void ValidateShipCandidateV2(
         ShipSnapshotV2 ship,
         ShipDefinition definition,
@@ -2371,7 +3389,7 @@ public static class GamePersistence
             ))
         );
 
-    private static SimulationScheduler RestoreSchedulerV2(SchedulerSnapshotV2 snapshot, int sourceSchemaVersion) =>
+    private static SimulationScheduler RestoreSchedulerV7(SaveModelsV7.SchedulerSnapshotV7 snapshot) =>
         SimulationScheduler.Restore(
             snapshot.NextWorkId,
             snapshot.NextSequence,
@@ -2379,12 +3397,12 @@ public static class GamePersistence
                 new ScheduledWorkId(work.Id),
                 new SimulationTime(work.DueTimeMilliseconds),
                 work.Sequence,
-                new ShipInstanceId(work.TargetShipId),
-                ParseWorkKind(work.Kind, sourceSchemaVersion)
+                ParseWorkTargetV7(work),
+                ParseWorkKind(work.Kind, CurrentSchemaVersion)
             ))
         );
 
-    private static ShipState RestoreShipV6(ShipSnapshotV6 snapshot) =>
+    private static ShipState RestoreShipV7(ShipSnapshotV7 snapshot) =>
         new(
             new ShipInstanceId(snapshot.InstanceId),
             new ShipDefinitionId(snapshot.DefinitionId),
@@ -2407,7 +3425,96 @@ public static class GamePersistence
             RestoreStrategicStateV2(snapshot.StrategicState),
             RestoreOrderV3(snapshot.ActiveOrder),
             RestoreSensorKnowledgeV6(snapshot.SensorKnowledge),
-            RestoreAutonomousStateV4(snapshot.AutonomousState)
+            RestoreAutonomousStateV4(snapshot.AutonomousState),
+            snapshot.DirectControllerFactionId is null ? null : new FactionId(snapshot.DirectControllerFactionId.Value)
+        );
+
+    private static FactionState RestoreFactionV7(SaveModelsV7.FactionSnapshotV7 snapshot) =>
+        new(
+            new FactionId(snapshot.Id),
+            new FactionDefinitionId(snapshot.DefinitionId),
+            snapshot.PresenceObjective is null
+                ? null
+                : new EstablishPresenceObjectiveState(
+                    new LocationId(snapshot.PresenceObjective.TargetLocationId),
+                    ParseObjectiveStatus(snapshot.PresenceObjective.Status),
+                    snapshot.PresenceObjective.AssignedShipId is null
+                        ? null
+                        : new ShipInstanceId(snapshot.PresenceObjective.AssignedShipId.Value),
+                    snapshot.PresenceObjective.AssignedOrderId is null
+                        ? null
+                        : new ShipOrderId(snapshot.PresenceObjective.AssignedOrderId.Value)
+                ),
+            snapshot.PendingDecisionWake is null
+                ? null
+                : new PendingFactionDecisionWake(
+                    new ScheduledWorkId(snapshot.PendingDecisionWake.WorkId),
+                    new SimulationTime(snapshot.PendingDecisionWake.DueTimeMilliseconds)
+                )
+        );
+
+    private static FactionState RestoreFactionV8(SaveModelsV8.FactionSnapshotV8 snapshot)
+    {
+        FactionState faction = RestoreFactionV7(
+            new SaveModelsV7.FactionSnapshotV7
+            {
+                Id = snapshot.Id,
+                DefinitionId = snapshot.DefinitionId,
+                PresenceObjective = snapshot.PresenceObjective,
+                PendingDecisionWake = snapshot.PendingDecisionWake,
+            }
+        );
+        return faction with { Observation = RestoreFactionObservationV8(snapshot.Observation) };
+    }
+
+    private static FactionObservationState RestoreFactionObservationV8(
+        SaveModelsV8.FactionObservationSnapshotV8 snapshot
+    ) =>
+        new(
+            ParseObservationResponsePosture(snapshot.Posture),
+            snapshot.InFlightReports.Select(inFlight => new ObservationReportInFlight(
+                RestoreObservationReportV8(inFlight.Report),
+                new ScheduledWorkId(inFlight.DeliveryWorkId),
+                new SimulationTime(inFlight.DueTimeMilliseconds)
+            )),
+            snapshot.ReceivedReports.Select(received => new ReceivedObservationReport(
+                RestoreObservationReportV8(received.Report),
+                new SimulationTime(received.ReceivedAtMilliseconds),
+                ParseObservationReportHandling(received.Handling)
+            )),
+            snapshot.ActiveInvestigation is null ? null : RestoreActiveInvestigationV8(snapshot.ActiveInvestigation),
+            snapshot.CompletionWatermarks.Select(watermark => new ObservationLocationCompletionWatermark(
+                new LocationId(watermark.LocationId),
+                new SimulationTime(watermark.ObservedThroughMilliseconds)
+            ))
+        );
+
+    private static ActiveFactionInvestigation RestoreActiveInvestigationV8(
+        SaveModelsV8.ActiveFactionInvestigationSnapshotV8 snapshot
+    ) =>
+        new(
+            RestoreObservationReportV8(snapshot.SourceReport),
+            new ShipInstanceId(snapshot.ResponderShipId),
+            new LocationId(snapshot.OriginLocationId),
+            new LocationId(snapshot.DestinationLocationId),
+            new SimulationTime(snapshot.SourceReceivedAtMilliseconds),
+            new SimulationTime(snapshot.AssignedAtMilliseconds),
+            new ShipOrderId(snapshot.OrderId)
+        );
+
+    private static ObservationReportSnapshot RestoreObservationReportV8(
+        SaveModelsV8.ObservationReportSnapshotV8 snapshot
+    ) =>
+        new(
+            new ObservationReportId(snapshot.ReportId),
+            new ShipInstanceId(snapshot.ObserverShipId),
+            new SensorContactId(snapshot.ObserverContactId),
+            new LocationId(snapshot.ObservedAtLocationId),
+            new TacticalPosition(snapshot.ObservedPosition.XKilometers, snapshot.ObservedPosition.YKilometers),
+            new SimulationTime(snapshot.ObservedAtMilliseconds),
+            ParseContactIdentification(snapshot.Identification),
+            snapshot.KnownVesselDisplayName,
+            snapshot.KnownDesignDisplayName
         );
 
     private static SensorKnowledge RestoreSensorKnowledgeV6(SaveModelsV6.SensorKnowledgeSnapshotV6 snapshot) =>
@@ -2508,6 +3615,44 @@ public static class GamePersistence
             _ => throw new InvalidOperationException("Ship strategic state kind is unknown."),
         };
 
+    private static ScheduledWorkTarget ParseWorkTargetV7(SaveModelsV7.ScheduledWorkSnapshotV7 work) =>
+        work.TargetKind switch
+        {
+            ShipTargetKind when work.TargetShipId is { } shipId && work.TargetFactionId is null =>
+                ScheduledWorkTarget.ForShip(new ShipInstanceId(shipId)),
+            FactionTargetKind when work.TargetFactionId is { } factionId && work.TargetShipId is null =>
+                ScheduledWorkTarget.ForFaction(new FactionId(factionId)),
+            ShipTargetKind or FactionTargetKind => throw new InvalidOperationException(
+                "Scheduled work requires exactly one identity matching its target kind."
+            ),
+            _ => throw new InvalidOperationException("Scheduled work target kind is unknown."),
+        };
+
+    private static FactionObjectiveStatus ParseObjectiveStatus(string? status) =>
+        status switch
+        {
+            PendingObjectiveStatus => FactionObjectiveStatus.Pending,
+            AssignedObjectiveStatus => FactionObjectiveStatus.Assigned,
+            SatisfiedObjectiveStatus => FactionObjectiveStatus.Satisfied,
+            _ => throw new InvalidOperationException("Faction objective status is unknown."),
+        };
+
+    private static ObservationResponsePosture ParseObservationResponsePosture(string? posture) =>
+        posture switch
+        {
+            DisabledObservationResponsePosture => ObservationResponsePosture.Disabled,
+            EnabledObservationResponsePosture => ObservationResponsePosture.Enabled,
+            _ => throw new InvalidOperationException("Observation-response posture is unknown."),
+        };
+
+    private static ObservationReportHandling ParseObservationReportHandling(string? handling) =>
+        handling switch
+        {
+            UnhandledObservationReport => ObservationReportHandling.Unhandled,
+            HandledObservationReport => ObservationReportHandling.Handled,
+            _ => throw new InvalidOperationException("Observation-report handling state is unknown."),
+        };
+
     private static ScheduledWorkKind ParseWorkKind(string? kind, int sourceSchemaVersion)
     {
         if (
@@ -2535,10 +3680,18 @@ public static class GamePersistence
             SensorContactLossKind => ScheduledWorkKind.SensorContactLoss,
             ActiveSensorScanCompletionKind => ScheduledWorkKind.ActiveSensorScanCompletion,
             ShipContactDecisionWakeKind => ScheduledWorkKind.ShipContactDecisionWake,
+            FactionDecisionWakeKind => ScheduledWorkKind.FactionDecisionWake,
+            ReportDeliveryKind => ScheduledWorkKind.ObservationReportDelivery,
             _ => throw new InvalidOperationException("Scheduled work kind is unknown."),
         };
 
-        bool allowed = sourceSchemaVersion switch
+        return IsWorkKindAllowed(parsed, sourceSchemaVersion)
+            ? parsed
+            : throw new InvalidOperationException("Scheduled work kind is unsupported by schema.");
+    }
+
+    private static bool IsWorkKindAllowed(ScheduledWorkKind parsed, int sourceSchemaVersion) =>
+        sourceSchemaVersion switch
         {
             V1SchemaVersion or V2SchemaVersion => parsed
                 is ScheduledWorkKind.TravelArrival
@@ -2547,24 +3700,32 @@ public static class GamePersistence
                 is ScheduledWorkKind.TravelArrival
                     or ScheduledWorkKind.SystemRepairCompletion
                     or ScheduledWorkKind.OrderWake,
-            V4SchemaVersion => parsed
+            V4SchemaVersion or V5SchemaVersion or V6SchemaVersion => parsed
                 is ScheduledWorkKind.TravelArrival
                     or ScheduledWorkKind.SystemRepairCompletion
                     or ScheduledWorkKind.OrderWake
                     or ScheduledWorkKind.SensorContactLoss
                     or ScheduledWorkKind.ActiveSensorScanCompletion
                     or ScheduledWorkKind.ShipContactDecisionWake,
-            V5SchemaVersion or CurrentSchemaVersion => parsed
+            V7SchemaVersion => parsed
                 is ScheduledWorkKind.TravelArrival
                     or ScheduledWorkKind.SystemRepairCompletion
                     or ScheduledWorkKind.OrderWake
                     or ScheduledWorkKind.SensorContactLoss
                     or ScheduledWorkKind.ActiveSensorScanCompletion
-                    or ScheduledWorkKind.ShipContactDecisionWake,
+                    or ScheduledWorkKind.ShipContactDecisionWake
+                    or ScheduledWorkKind.FactionDecisionWake,
+            CurrentSchemaVersion => parsed
+                is ScheduledWorkKind.TravelArrival
+                    or ScheduledWorkKind.SystemRepairCompletion
+                    or ScheduledWorkKind.OrderWake
+                    or ScheduledWorkKind.SensorContactLoss
+                    or ScheduledWorkKind.ActiveSensorScanCompletion
+                    or ScheduledWorkKind.ShipContactDecisionWake
+                    or ScheduledWorkKind.FactionDecisionWake
+                    or ScheduledWorkKind.ObservationReportDelivery,
             _ => false,
         };
-        return allowed ? parsed : throw new InvalidOperationException("Scheduled work kind is unsupported by schema.");
-    }
 
     private static SensorContactStatus ParseContactStatus(string? status) =>
         status switch
@@ -2739,7 +3900,7 @@ public static class GamePersistence
             AllowTrailingCommas = false,
             ReadCommentHandling = JsonCommentHandling.Disallow,
             MaxDepth = MaximumJsonDepth,
-            WriteIndented = true,
+            WriteIndented = false,
         };
         options.Converters.Add(new FiniteDoubleJsonConverter());
         return options;

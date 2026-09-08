@@ -6,7 +6,7 @@ description: 'Defines branch roles, change admission, merge history, protection,
 doc_type: 'adr'
 status: 'active'
 created: '2026-09-01'
-updated: '2026-09-01'
+updated: '2026-09-07'
 reviewed: '2026-09-01'
 owner: 'project-maintainers'
 consumer: 'mix'
@@ -16,7 +16,7 @@ tags:
   - 'standard'
 aliases: []
 related:
-  - 'docs/design/branch-release-governance.md'
+  - 'docs/wiki/development-and-governance.md'
 supersedes: []
 superseded_by: null
 source:
@@ -204,6 +204,6 @@ Conformance is confirmed by all of the following:
 
 ## More Information
 
-The approved discovery record is [Branch and release governance](../design/branch-release-governance.md). The governing implementation work is [Issue #9](https://github.com/L3DigitalNet/star-trek-alter-course/issues/9).
+The approved discovery record is preserved in [fixed-revision history](https://github.com/L3DigitalNet/star-trek-alter-course/blob/685a60577a671e4f39828608ae148263697a9013/docs/design/branch-release-governance.md); the [wiki governance page](../wiki/development-and-governance.md) summarizes these unchanged decisions. The governing implementation work is [Issue #9](https://github.com/L3DigitalNet/star-trek-alter-course/issues/9).
 
 Reconsider this decision when the repository gains multiple routine maintainers, supports more than one release line, needs concurrent release stabilization, gains a packaging pipeline, or GitHub adds path-conditioned actor bypass.

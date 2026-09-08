@@ -9,10 +9,10 @@
 - GdUnit4 tests under `src/AlterCourse.Godot/tests/` exercise the managed node and scene boundary through the actual Godot runtime.
 - `GameSimulation` owns immutable definitions and active Core state. It advances explicit simulation time in deterministic 100 ms tactical quanta.
 - World state holds ships in `ShipInstanceId` order, an explicit `PlayerShipId`, and per-ship strategic, tactical, sensor, and repair state.
-- Scheduled work, travel, and repairs target ships explicitly. Public player commands resolve `PlayerShipId`; arbitrary-ship control is not exposed.
+- Scheduled work, travel, and repairs currently target ships explicitly. Public player commands resolve `PlayerShipId`; arbitrary-ship control is not exposed.
 - Ship iteration is stable. Each advancement is capped at 1,000,000 moving-ship steps and 10,000 scheduled consequences.
 - Finite-long numeric exhaustion fails atomically; it is an explicit limitation rather than an indefinite-successor promise.
-- V6 persistence bounds world state, definitions, scheduler data, active orders, Engineering state, repairs, the order allocator, and known-contact reports.
+- V6 persistence bounds world state, definitions, scheduler data, orders, Engineering, repairs, allocators, and the contact knowledge backing derived reports.
 - Loading resolves references through the supplied immutable catalog. The adjacent chain migrates V1 through V6 before candidate validation.
 - Definitions are not serialized. V1 migration creates one ship, targets old work to the player, and uses its design label for the missing vessel name.
 - World construction and persistence admit at most 256 ships to bound untrusted input and fixed-step work; this is not a final capacity target.
@@ -32,6 +32,17 @@
 - Command Deck map views reuse the strategic and tactical adapters. Godot owns display transforms, selection, and context presentation.
 - Command-interface fixtures are deterministic presentation data only. They cannot submit commands, persist state, or invent Core truth.
 - `scripts/launch-game.sh` is the safe direct-launch boundary: it restores and builds the Godot project before starting the editor.
+
+## Implemented faction boundaries
+
+- [Faction assignment](../wiki/faction-intent-and-autonomous-assignment.md) is implemented on `dev`: direct idle-NPC assignment through existing orders.
+- One asset-side faction controller is authoritative; the roster is derived. Presence policy sees only approved own-asset administrative facts, not sensor reports.
+- Closed Ship/Faction targets extend the existing scheduler; typed bootstrap admits complete faction state and initial work without hidden follow-up mutations.
+- V7 migration preserves ship work and creates no factions or controller history; zero-faction worlds remain valid.
+- Investigation policy reads fresh received reports and bounded own-asset/routes; direct control authorizes application.
+- V8 persists bounded reports, in-flight delivery, active investigations, and per-location completion watermarks.
+- V7→V8 migration creates no response history and does not mine historical contacts. Released v0.5.0 remains V6; merged Feature #93 uses V8 on `dev`.
+- No RNG, organization/hierarchy runtime, generic actor framework, political UI, or player-command override belongs to the first slice.
 
 ## Standing backlog
 

@@ -15,8 +15,11 @@ public sealed class GamePersistenceV3OrderTests
         LoadedGameSave loaded = Load(CreateV3NoOrders());
         JsonObject normalized = Parse(GamePersistence.Serialize(loaded.Simulation, loaded.Metadata));
 
-        Assert.Equal(6, normalized["schemaVersion"]!.GetValue<int>());
-        Assert.Equal("strategic-contact-reporting-v1", normalized["simulationRulesVersion"]!.GetValue<string>());
+        Assert.Equal(8, normalized["schemaVersion"]!.GetValue<int>());
+        Assert.Equal(
+            "observation-driven-faction-response-v1",
+            normalized["simulationRulesVersion"]!.GetValue<string>()
+        );
         Assert.Equal(1, normalized["simulation"]!["orderAllocatorNextId"]!.GetValue<long>());
         Assert.Null(normalized["simulation"]!["ships"]![0]!["activeOrder"]);
         Assert.Equal(
@@ -237,8 +240,8 @@ public sealed class GamePersistenceV3OrderTests
         LoadedGameSave migrated = Load(CreateV2Travel());
         JsonObject current = Parse(GamePersistence.Serialize(migrated.Simulation, migrated.Metadata));
 
-        Assert.Equal(6, current["schemaVersion"]!.GetValue<int>());
-        Assert.Equal("strategic-contact-reporting-v1", current["simulationRulesVersion"]!.GetValue<string>());
+        Assert.Equal(8, current["schemaVersion"]!.GetValue<int>());
+        Assert.Equal("observation-driven-faction-response-v1", current["simulationRulesVersion"]!.GetValue<string>());
         Assert.Equal(1, current["simulation"]!["orderAllocatorNextId"]!.GetValue<long>());
         Assert.Null(current["simulation"]!["ships"]![0]!["activeOrder"]);
         Assert.Equal("traveling", current["simulation"]!["ships"]![0]!["strategicState"]!["kind"]!.GetValue<string>());

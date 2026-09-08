@@ -2,9 +2,11 @@
 
 ## Design entry points
 
-- [Project design wiki](../wiki/README.md) is the single source of truth for design; `docs/design/` and `docs/specs/` are supporting detail it links.
-- [Political model](../wiki/factions-and-organizations.md) records approved conceptual decisions; no political runtime is implemented.
-- [Open questions](../wiki/open-questions.md) retains unapproved proposals and deferred refinements; it does not admit gameplay work.
+- [Project design wiki](../wiki/README.md) is the single source of truth for detailed game design contracts; external documents cover operations, ADRs, and legal records.
+- [Political model](../wiki/factions-and-organizations.md) records approved conceptual decisions; the bounded direct-faction assignment is implemented, while organization and hierarchy runtime remain future work.
+- [Open questions](../wiki/open-questions.md) separates resolved Q-05 and scoped decisions from the remaining unapproved topics.
+- [Faction assignment](../wiki/faction-intent-and-autonomous-assignment.md) owns the implemented bounded M5 slice and its six boundaries; broader political work remains future work.
+- [Observation-driven faction response](../wiki/observation-driven-faction-response.md) owns Feature #93's bounded V8 implementation; M6/Q-10 remains next.
 
 ## Tracked artifacts
 
@@ -26,4 +28,9 @@
 | Task #64 | Merged / Done | v0.4.0 Final PR #66 released as `b3b6635`; sync PR #67 put the release ancestry on `dev` at `2edd194`. |
 | Task #68 | Merged / Done | Project design wiki consolidated under `docs/wiki/` through Final PR #69 as `75ebb55` into `dev`. |
 | Task #70 | Merged / Done | Design wiki declared the single source of truth for design; Final PR #71 merged as `1b8eec4` into `dev`. |
-| Feature #77 | Merged / Done | Strategic Contact Reporting merged through Final PR #78 as squash `80c3084` into `dev`. |
+| Feature #77 | Merged / Done | Strategic Contact Reporting merged through Final PR #78 as squash `80c3084` into `dev`; released in v0.5.0. |
+| Task #80 | Merged / Done | v0.5.0 Final PR #82 released as `0547d06`; sync PR #83 put the release ancestry on `dev` at `e761249`. |
+| Feature #86 | Merged / Done | Bounded M5 faction assignment merged through Final PR #87 as `0217296` into `dev`; it is unreleased. |
+| Task #88 | Merged / Done | Wiki contract consolidation and recurring reconciliation merged through Final PR #89 as `aa3df33` into `dev`; no runtime change or release. |
+| Task #91 | Merged / Done | Observation-response design merged through Final PR #92 as `ad73862`; no runtime change or release. |
+| Feature #93 | Merged / Done | Bounded V8 observation response merged through Final PR #94 as `e7bdfe3`; it is unreleased. |

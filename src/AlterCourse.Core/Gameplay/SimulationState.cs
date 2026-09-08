@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using AlterCourse.Core.AI;
 using AlterCourse.Core.Content;
+using AlterCourse.Core.Factions;
 using AlterCourse.Core.Identity;
 using AlterCourse.Core.Orders;
 using AlterCourse.Core.Sensors;
@@ -10,9 +11,10 @@ using AlterCourse.Core.Strategic;
 
 namespace AlterCourse.Core.Gameplay;
 
-internal sealed record SimulationState
+internal sealed partial record SimulationState
 {
     internal const int MaximumShips = 256;
+    internal const int MaximumFactions = 256;
 
     internal SimulationState(
         SimulationTime time,
@@ -21,7 +23,9 @@ internal sealed record SimulationState
         StrategicMap strategicMap,
         ShipInstanceId playerShipId,
         IEnumerable<ShipState> ships,
-        ShipOrderIdAllocator? orderIdAllocator = null
+        ShipOrderIdAllocator? orderIdAllocator = null,
+        IEnumerable<FactionState>? factions = null,
+        ObservationReportIdAllocator? observationReportIdAllocator = null
     )
     {
         ArgumentNullException.ThrowIfNull(ships);
@@ -52,6 +56,8 @@ internal sealed record SimulationState
         StrategicMap = strategicMap;
         PlayerShipId = playerShipId;
         OrderIdAllocator = orderIdAllocator ?? ShipOrderIdAllocator.Create();
+        ObservationReportIdAllocator = observationReportIdAllocator ?? ObservationReportIdAllocator.Create();
+        Factions = MaterializeFactions(factions ?? []);
         // Canonical order makes every per-ship pass independent of caller enumeration order.
         Ships = [.. materialized.OrderBy(ship => ship.InstanceId.Value)];
     }
@@ -60,9 +66,11 @@ internal sealed record SimulationState
     internal SimulationScheduler Scheduler { get; init; }
     internal ShipInstanceIdAllocator ShipIdAllocator { get; init; }
     internal ShipOrderIdAllocator OrderIdAllocator { get; init; }
+    internal ObservationReportIdAllocator ObservationReportIdAllocator { get; init; }
     internal StrategicMap StrategicMap { get; init; }
     internal ShipInstanceId PlayerShipId { get; init; }
     internal ImmutableArray<ShipState> Ships { get; private init; }
+    internal ImmutableArray<FactionState> Factions { get; private init; }
 
     internal ShipState GetRequiredShip(ShipInstanceId shipId)
     {
@@ -132,10 +140,14 @@ internal sealed record SimulationState
         };
     }
 
-    internal void Validate(ShipDefinitionCatalog catalog)
+    internal void Validate(ShipDefinitionCatalog catalog) => Validate(catalog, FactionDefinitionCatalog.Empty);
+
+    internal void Validate(ShipDefinitionCatalog catalog, FactionDefinitionCatalog factionCatalog)
     {
         ArgumentNullException.ThrowIfNull(catalog);
+        ArgumentNullException.ThrowIfNull(factionCatalog);
         ValidateAggregateMembers();
+        ValidateFactions(factionCatalog);
         var contactWorkIds = new HashSet<ScheduledWorkId>();
 
         foreach (ShipState ship in Ships)
@@ -166,7 +178,13 @@ internal sealed record SimulationState
 
     private void ValidateAggregateMembers()
     {
-        if (Scheduler is null || ShipIdAllocator is null || OrderIdAllocator is null || StrategicMap is null)
+        if (
+            Scheduler is null
+            || ShipIdAllocator is null
+            || OrderIdAllocator is null
+            || ObservationReportIdAllocator is null
+            || StrategicMap is null
+        )
         {
             throw new InvalidOperationException("Simulation state contains a null aggregate member.");
         }
@@ -184,6 +202,7 @@ internal sealed record SimulationState
         if (
             ShipIdAllocator.NextId == long.MaxValue
             || OrderIdAllocator.NextId == long.MaxValue
+            || ObservationReportIdAllocator.NextId == long.MaxValue
             || !SimulationScheduler.AreCountersWithinPersistedRange(Scheduler.NextWorkId, Scheduler.NextSequence)
         )
         {
@@ -220,6 +239,12 @@ internal sealed record SimulationState
 
     private void ValidateScheduledWork(ScheduledWork work)
     {
+        if (work.Target.Kind == ScheduledWorkTargetKind.Faction)
+        {
+            ValidateFactionScheduledWork(work);
+            return;
+        }
+
         ShipState target = GetRequiredShip(work.TargetShipId);
         // These five non-loss correlations define the per-ship scheduler allowance in SimulationScheduler; adding a
         // separately retainable work category requires that bound to grow with the world maximum.

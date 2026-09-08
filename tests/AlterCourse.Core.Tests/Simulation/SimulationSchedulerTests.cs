@@ -379,7 +379,7 @@ public sealed class SimulationSchedulerTests
                 new ScheduledWorkId(1),
                 new SimulationTime(0),
                 0,
-                default,
+                default(ShipInstanceId),
                 ScheduledWorkKind.TravelArrival
             )
         );
@@ -395,7 +395,9 @@ public sealed class SimulationSchedulerTests
 
         Assert.Equal("outstandingWork", invalidRestoration.ParamName);
         Assert.Throws<ArgumentException>(() =>
-            SimulationScheduler.Create().Schedule(new SimulationTime(0), default, ScheduledWorkKind.TravelArrival)
+            SimulationScheduler
+                .Create()
+                .Schedule(new SimulationTime(0), default(ShipInstanceId), ScheduledWorkKind.TravelArrival)
         );
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             SimulationScheduler.Create().Schedule(new SimulationTime(0), Target(), (ScheduledWorkKind)0)
@@ -452,7 +454,7 @@ public sealed class SimulationSchedulerTests
             maximum
         );
 
-        Assert.Equal(66_560, SimulationScheduler.MaximumOutstandingWork);
+        Assert.Equal(68_864, SimulationScheduler.MaximumOutstandingWork);
         Assert.Equal(SimulationScheduler.MaximumOutstandingWork, restored.OutstandingWork.Length);
         Assert.Throws<InvalidOperationException>(() =>
             restored.Schedule(

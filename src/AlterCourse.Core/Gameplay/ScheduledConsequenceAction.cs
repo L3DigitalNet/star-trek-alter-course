@@ -11,4 +11,7 @@ internal enum ScheduledConsequenceAction
     CompleteActiveSensorScan = 7,
     WakeShipContactDecision = 8,
     IgnoreInvalidatedWork = 9,
+    WakeFactionDecision = 10,
+    DeliverObservationReport = 11,
+    IgnoreInvalidatedObservationReportDelivery = 12,
 }

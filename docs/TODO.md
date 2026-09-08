@@ -6,6 +6,7 @@
 
 ## Agent tasks
 
-- PR #78 merged into `dev` as `80c3084`; next-slice selection awaits the owner, no further gameplay scope is admitted.
-- After PR #78 merges, park the repository: Handoff/STATUS closeout mirrors the v0.4.0 pattern.
-- No Milestone 5 work is admitted; restart from `docs/STATUS.md`, `docs/handoff/state.md`, and the design wiki.
+- Start M6 with Q-10 first-engagement refinement, then Engineering and M7.
+- Preserve the bounded faction slice; do not expand into deferred intelligence, organizations, hierarchy, RNG, or political UI.
+- Treat Q-02/Q-03 and the unresolved portion of Q-04 as future design work. Keep V7 historical-save migration noninventive.
+- If the hosted Godot teardown segfault ([bug 007](handoff/bugs/007-hosted-gdunit-teardown-segfault.md)) recurs, isolate it rather than rerunning.

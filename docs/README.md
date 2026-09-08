@@ -6,7 +6,7 @@ description: 'Entry point to the design wiki, the single source of truth for des
 doc_type: 'index'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-06'
+updated: '2026-09-07'
 tags:
   - 'design'
 aliases: []
@@ -21,4 +21,18 @@ Start with the [project design wiki](wiki/README.md). It is the single source of
 
 The wiki is stored in this repository so changes use the same review and version history as the game. It is not a second GitHub Wiki repository or a separately deployed documentation service.
 
-[Current status](STATUS.md), [future work](TODO.md), and [the roadmap](../ROADMAP.md) describe operational state and sequence, not design. [ADRs](adr/) record architectural decisions. The documents under [`design/`](design/) and [`specs/`](specs/) supply supporting detail for wiki pages and may not contradict them; the wiki [source catalog](wiki/sources.md) indexes them together with development references and historical records.
+Game-design contracts, detailed rules, and [milestone proofs](wiki/milestone-proofs.md) live inside the wiki. The former design/specification documents have been consolidated there; the [source catalog](wiki/sources.md#consolidation-map) records where their content went.
+
+The remaining documents have distinct authority:
+
+| Location | Owns | Does not own |
+| --- | --- | --- |
+| [Wiki](wiki/README.md) | Intended game behavior, implemented contracts, future design, decisions and questions | Live task or deployment state |
+| [ADRs](adr/) | Architectural decisions and their rationale | A separate set of gameplay rules |
+| [STATUS](STATUS.md), [TODO](TODO.md), [handoff](handoff/) | Work state, operational facts and historical session evidence | New game-design decisions |
+| [Roadmap](../ROADMAP.md), [root README](../README.md) | Sequence and onboarding pointers | Detailed game contracts |
+| [Development quality](development-quality.md), [agent skills](development-agent-skills.md) | Tool setup, verification and harness maintenance | Gameplay semantics |
+| [Dependency admission](dependency-admission/) | Package-admission evidence under ADR 0003 | Game features or blanket approval of future dependencies |
+| [License](../LICENSE.md), [legal notice](../LEGAL.md) | Licensing and rights boundaries | Game-design authority |
+
+Historical discussions are linked to fixed Git revisions in the wiki's [provenance record](wiki/sources.md#historical-provenance), rather than maintained as competing design files. Source/schema/tests establish what the implementation actually does; they do not silently approve a change to intended design.

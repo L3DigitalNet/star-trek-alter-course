@@ -19,6 +19,9 @@ public partial class GameScreen : Control
 {
     private const string SchemaPath = "res://content/schemas/ship-definition-v4.schema.json";
     private const string ShipPath = "res://content/ships/pathfinder.json";
+    private const string FactionSchemaPath = "res://content/schemas/faction-definition-v1.schema.json";
+    private const string FactionAPath = "res://content/factions/faction-a.json";
+    private const string FactionBPath = "res://content/factions/faction-b.json";
     private const string DefaultQuickSaveUserPath = "user://quick-save.json";
     private const string LegacyDefaultQuickSaveUserPath = "user://quick-save-v1.json";
     private const string QuickSaveId = "quick-save";
@@ -40,6 +43,7 @@ public partial class GameScreen : Control
     private readonly List<CommandInterfacePresenter.ActivityEvent> _recentActivity = [];
     private GameSimulation? _simulation;
     private ShipDefinitionCatalog? _shipCatalog;
+    private FactionDefinitionCatalog? _factionCatalog;
     private PlayerProjection? _projection;
     private LocationId? _selectedDestination;
     private SensorContactId? _selectedContact;
@@ -113,10 +117,12 @@ public partial class GameScreen : Control
                 DefaultQuickSaveUserPath,
                 StringComparison.Ordinal
             );
-            (ShipDefinitionCatalog catalog, GameSimulation simulation) = CreateSimulationFromCanonicalContent();
+            (ShipDefinitionCatalog shipCatalog, FactionDefinitionCatalog factionCatalog, GameSimulation simulation) =
+                CreateSimulationFromCanonicalContent();
             _quickSavePath = quickSavePath;
             _quickSaveUsesDefaultPath = quickSaveUsesDefaultPath;
-            _shipCatalog = catalog;
+            _shipCatalog = shipCatalog;
+            _factionCatalog = factionCatalog;
             _simulation = simulation;
             SetMeta("quick_save_user_path", QuickSaveUserPath);
             SetSimulationRate(1);
@@ -129,6 +135,7 @@ public partial class GameScreen : Control
             // definition and validation contracts never completed.
             _simulation = null;
             _shipCatalog = null;
+            _factionCatalog = null;
             _projection = null;
             _selectedDestination = null;
             _selectedContact = null;
@@ -321,6 +328,7 @@ public partial class GameScreen : Control
         if (
             _simulation is null
             || _shipCatalog is null
+            || _factionCatalog is null
             || _quickLoadButton.Disabled
             || _dataMode != CommandInterfaceDataMode.Live
         )
@@ -331,7 +339,7 @@ public partial class GameScreen : Control
         try
         {
             string loadPath = ResolveQuickLoadPath();
-            LoadedGameSave loaded = GamePersistence.Load(loadPath, _shipCatalog);
+            LoadedGameSave loaded = GamePersistence.Load(loadPath, _shipCatalog, _factionCatalog);
 
             // Core constructs and validates the candidate in isolation. Assignment stays after that
             // boundary so an unreadable or invalid save cannot damage the playable aggregate.
@@ -626,15 +634,22 @@ public partial class GameScreen : Control
         _quadRateButton = GetNode<Button>("%QuadRate");
     }
 
-    private (ShipDefinitionCatalog Catalog, GameSimulation Simulation) CreateSimulationFromCanonicalContent()
+    private (
+        ShipDefinitionCatalog ShipCatalog,
+        FactionDefinitionCatalog FactionCatalog,
+        GameSimulation Simulation
+    ) CreateSimulationFromCanonicalContent()
     {
-        string schema = ReadRequiredText(ShipSchemaResourcePath);
-        string definitionJson = ReadRequiredText(ShipDefinitionResourcePath);
-        var loader = new ShipDefinitionCatalogLoader(schema);
-        ShipDefinitionCatalog catalog = loader.LoadCatalog([
-            ShipDefinitionContent.FromText(ShipDefinitionResourcePath, definitionJson),
+        var shipLoader = new ShipDefinitionCatalogLoader(ReadRequiredText(ShipSchemaResourcePath));
+        ShipDefinitionCatalog shipCatalog = shipLoader.LoadCatalog([
+            ShipDefinitionContent.FromText(ShipDefinitionResourcePath, ReadRequiredText(ShipDefinitionResourcePath)),
         ]);
-        return (catalog, FirstGameSetup.Create(catalog));
+        var factionLoader = new FactionDefinitionCatalogLoader(ReadRequiredText(FactionSchemaPath));
+        FactionDefinitionCatalog factionCatalog = factionLoader.LoadCatalog([
+            FactionDefinitionContent.FromText(FactionAPath, ReadRequiredText(FactionAPath)),
+            FactionDefinitionContent.FromText(FactionBPath, ReadRequiredText(FactionBPath)),
+        ]);
+        return (shipCatalog, factionCatalog, FirstGameSetup.Create(shipCatalog, factionCatalog));
     }
 
     private static string ReadRequiredText(string path)
