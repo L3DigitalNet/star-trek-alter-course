@@ -6,7 +6,7 @@ description: 'Coverage index of original architecture, design, specification, wo
 doc_type: 'index'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-08'
+updated: '2026-09-26'
 tags:
   - 'design'
   - 'architecture'
@@ -32,21 +32,51 @@ The wiki is the single source of truth for game design, including detailed rules
 
 ## Review record
 
-Targeted release reconciliation, 2026-09-08:
+### Full baseline semantic reconciliation — 2026-09-26
+
+- **Review source:** `dev` commit `42e760b02be12591e43416bc8c02bbe585ca6632`, after source-only v0.6.2 at `255eaedc8e27b483b0fd4e2fe0bccf050486b3bf`; the latest gameplay-changing release remains v0.6.0/V8. The review inspected source and tests but did not execute gameplay or persistence tests.
+- **Scope:** every indexed wiki topic, the root README and roadmap, current STATUS/TODO and development operational prose including the #109/#110 language-server setup/verification records, and all active ADRs. It is a baseline reconciliation before any M6 behavior work; it makes no M6 implementation claim.
+- **Findings and disposition:** corrected the scheduler bound to 68,864, recognized assignment and observation response as two bounded faction consumers, labeled V7 size/round-trip evidence as historical, and retained V8's 88,092,638-byte no-report fixture, 108,890,984-byte high-width fixture, and 113,024,376-byte conservative ceiling. Corrected implemented-response tense, the source-only v0.6.2 release/synchronization record, AssetCtl's not-implemented live provider probe, and the caller-owned OpenBao resolution boundary. No conflict with the active ADR set was found.
+- **Next full review:** 2026-10-03. Targeted reviews and documentation-only updates do not reset this date.
+
+| Indexed topic | Inspected implementation and test evidence | Disposition |
+| --- | --- | --- |
+| [Wiki home](README.md) | [persistence](../../src/AlterCourse.Core/Persistence/GamePersistence.cs), release/tag history, linked topic evidence | Current release and gameplay-baseline language corrected. |
+| [Architecture](architecture.md) | [Core simulation](../../src/AlterCourse.Core/Gameplay/GameSimulation.cs), Godot project references, ADRs 0001–0013 | No boundary contradiction. |
+| [Asset pipeline tool](asset-pipeline-tool.md) | [doctor dispatch](../../tools/AlterCourse.AssetCtl/Cli/CliTypes.cs), [CLI tests](../../tests/AlterCourse.AssetCtl.Tests/CliAndLifecycleTests.cs) | Live provider probing remains planned; `doctor --probe` rejects with exit 2. |
+| [Content, assets, and persistence](content-assets-and-persistence.md) | [persistence](../../src/AlterCourse.Core/Persistence/GamePersistence.cs); [V8 bounds](../../tests/AlterCourse.Core.Tests/Persistence/GamePersistenceV4SensorTests.cs) | Current V8 and historical V7 bounds distinguished. |
+| [Decision register](decision-register.md) | [faction state](../../src/AlterCourse.Core/Factions/FactionState.cs), [response scenarios](../../tests/AlterCourse.Core.Tests/Gameplay/ObservationResponseScenarioTests.cs), release history | D-14 tense corrected; no decision changed. |
+| [Development and governance](development-and-governance.md) | [review procedure](development-and-governance.md#recurring-design-reconciliation), ADR catalog, [quality gate](../development-quality.md) | Review record and next due date updated. |
+| [Diplomacy, economy, and campaigns](diplomacy-economy-and-campaigns.md) | [response scenarios](../../tests/AlterCourse.Core.Tests/Gameplay/ObservationResponseScenarioTests.cs), [faction state](../../src/AlterCourse.Core/Factions/FactionState.cs) | Direct reports/investigation marked implemented; broader politics remain future. |
+| [Engineering and combat](engineering-and-combat.md) | [Engineering tests](../../tests/AlterCourse.Core.Tests/Ships/EngineeringBackboneTests.cs) | No discrepancy; combat remains future M6 work. |
+| [Faction intent and autonomous assignment](faction-intent-and-autonomous-assignment.md) | [assignment scenarios](../../tests/AlterCourse.Core.Tests/Gameplay/FactionAssignmentScenarioTests.cs), [persistence](../../src/AlterCourse.Core/Persistence/GamePersistence.cs) | Historical V7 proof separated from current V8 round-trip. |
+| [Factions and organizations](factions-and-organizations.md) | [faction state](../../src/AlterCourse.Core/Factions/FactionState.cs), [assignment scenarios](../../tests/AlterCourse.Core.Tests/Gameplay/FactionAssignmentScenarioTests.cs), [response scenarios](../../tests/AlterCourse.Core.Tests/Gameplay/ObservationResponseScenarioTests.cs) | Two bounded consumers recorded. |
+| [Implementation status](implementation-status.md) | release history, [response scenarios](../../tests/AlterCourse.Core.Tests/Gameplay/ObservationResponseScenarioTests.cs), [V8 bounds](../../tests/AlterCourse.Core.Tests/Persistence/GamePersistenceV4SensorTests.cs) | Second bounded M5 contribution marked implemented. |
+| [Interface and player commands](interface-and-player-commands.md) | [Game screen](../../src/AlterCourse.Godot/src/Gameplay/GameScreen.cs), [shell tests](../../src/AlterCourse.Godot/tests/GameplayShellTest.gd) | No discrepancy. |
+| [Milestone proofs](milestone-proofs.md) | release history, [response scenarios](../../tests/AlterCourse.Core.Tests/Gameplay/ObservationResponseScenarioTests.cs) | Response contribution marked implemented; M6 remains future. |
+| [Observation-driven faction response](observation-driven-faction-response.md) | [response scenarios](../../tests/AlterCourse.Core.Tests/Gameplay/ObservationResponseScenarioTests.cs), [faction state](../../src/AlterCourse.Core/Factions/FactionState.cs), [V8 bounds](../../tests/AlterCourse.Core.Tests/Persistence/GamePersistenceV4SensorTests.cs) | No discrepancy. |
+| [Open questions](open-questions.md) | [response implementation](../../src/AlterCourse.Core/Gameplay/GameSimulation.Observation.cs), [decision register](decision-register.md) | Implemented response wording and faction-slice tense corrected. |
+| [Sensors, knowledge, and AI](sensors-knowledge-and-ai.md) | [sensor knowledge](../../src/AlterCourse.Core/Sensors/SensorKnowledge.cs), [observation tests](../../tests/AlterCourse.Core.Tests/Gameplay/SensorObservationCommandTests.cs) | No discrepancy. |
+| [Strategic contact reporting](strategic-contact-reporting.md) | [persistence chain](../../src/AlterCourse.Core/Persistence/GamePersistence.cs), [reporting tests](../../tests/AlterCourse.Core.Tests/Gameplay/StrategicContactReportTests.cs) | Historical sequence clarified as continued by implemented response. |
+| [Vision and scope](vision-and-scope.md) | [implementation status](implementation-status.md), [decision register](decision-register.md) | No discrepancy. |
+| [World, navigation, and time](world-navigation-and-time.md) | [scheduler](../../src/AlterCourse.Core/Simulation/SimulationScheduler.cs); [scheduler tests](../../tests/AlterCourse.Core.Tests/Simulation/SimulationSchedulerTests.cs) | Scheduler capacity corrected from 66,816 to 68,864. |
+| [Design source catalog](sources.md) | all rows above, active ADR catalog, and release history | This full reconciliation replaces the overdue full-sweep deadline. |
+
+### Historical targeted release reconciliation — 2026-09-08
 
 - **Source:** signed `v0.6.0` tag and release commit `d00460ea8b472c44ea2a8343d43e676efb96000b`, whose tree equals candidate `13bbe41bd9b8d6c94934642d3dfdcc7a4ded1307`.
 - **Scope:** postpublication release language in the root [README](../../README.md), [roadmap](../../ROADMAP.md), wiki home, implementation status, persistence, milestone, faction, architecture, decision, knowledge, and future-domain summaries.
 - **Evidence:** immutable source-only [v0.6.0 release](https://github.com/L3DigitalNet/star-trek-alter-course/releases/tag/v0.6.0), published 2026-09-08T01:04:05Z; Feature #86 / Final PR #87 and Feature #93 / Final PR #94; the release candidate’s recorded 598 Core, 324 AssetCtl, and 67 Godot gameplay tests, plus one Godot integration and two asset-import tests. The published release includes V8 under `observation-driven-faction-response-v1`, bounded response limits of 8 in-flight reports, 16 retained reports, 1 active investigation, a 60,000 ms freshness window, and a 2,000 ms delivery delay; the compact high-width fixture is 108,890,984 bytes and the conservative ceiling is 113,024,376 bytes.
 - **Findings and disposition:** replaced stale “unreleased V8” and “current v0.5.0/V6” claims with the published v0.6.0/V8 baseline. Retained v0.5.0/V6 and V7 statements when they describe migration or release history. M3 and M5 remain incomplete; M6 first engagement, Q-10 refinement, then combat-driven Engineering remain next.
-- **Full-review cadence:** this is a targeted release reconciliation, not a full semantic sweep. The existing next full-review deadline remains 2026-09-13.
+- **Full-review cadence:** historical and superseded by the full semantic reconciliation above.
 
-Targeted review, 2026-09-07:
+### Historical targeted review — 2026-09-07
 
 - **Source:** `685a605`; merged Feature #86 / Final PR #87 commit `0217296`.
 - **Scope:** faction landing claims and summaries in the root [README](../../README.md), [roadmap](../../ROADMAP.md), and this wiki's implementation, architecture, faction, knowledge, navigation, persistence, decision, and campaign pages.
 - **Evidence:** static inspection of the [faction policy](../../src/AlterCourse.Core/AI/FactionAssignmentPolicy.cs), [runtime wakes](../../src/AlterCourse.Core/Gameplay/GameSimulation.Factions.cs), [V7 persistence](../../src/AlterCourse.Core/Persistence/GamePersistence.cs), and [targeted tests](../../tests/AlterCourse.Core.Tests/Gameplay/FactionAssignmentScenarioTests.cs). [FirstGameSetup](../../src/AlterCourse.Core/Gameplay/FirstGameSetup.cs) and [bootstrap tests](../../tests/AlterCourse.Core.Tests/Gameplay/FactionBootstrapTests.cs) distinguish the six-ship production and four-ship legacy worlds. The audit used inherited PR #87 test evidence; [PR #89](https://github.com/L3DigitalNet/star-trek-alter-course/pull/89) records the verification reruns.
 - **Findings and disposition:** corrected stale pending-landing/review-branch claims, four-ship production summaries, and README V6/current-rules claims. At that review, `dev` used V7 under `faction-intent-autonomous-assignment-v1`; v0.5.0 remains the V6 release. M3 and M5 remain incomplete.
-- **Full-review cadence:** the initial 2026-09-06 full-corpus review remains the [Wiki home](README.md) provenance; the next full review is due 2026-09-13. This targeted review does not reset that date; follow the [recurring design-reconciliation procedure](development-and-governance.md#recurring-design-reconciliation).
+- **Full-review cadence:** historical and superseded by the full semantic reconciliation above.
 
 ### Design-admission reconciliation — 2026-09-07
 

@@ -6,7 +6,7 @@ description: 'Owner-approved conceptual political model with implementation and 
 doc_type: 'decision'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-08'
+updated: '2026-09-26'
 tags:
   - 'design'
   - 'simulation'
@@ -28,7 +28,7 @@ source:
 
 ## Status and provenance
 
-**Approved conceptual design with one implemented bounded consumer.** This page records the owner's explicit decisions in the September 6, 2026 design discussion consolidated under issue #68. Feature #86 / Final PR #87, merged into `dev` as `0217296`, implements only root factions, direct ship control, and establish-presence assignment; this page is not a complete political simulation specification.
+**Approved conceptual design with two implemented bounded consumers.** This page records the owner's explicit decisions in the September 6, 2026 design discussion consolidated under issue #68. Feature #86 / Final PR #87, merged into `dev` as `0217296`, implements root factions, direct ship control, and establish-presence assignment; Feature #93 / Final PR #94 adds direct report delivery and bounded investigation. This page is not a complete political simulation specification.
 
 The owner subsequently approved [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) as the first bounded M5 consumer. [Observation-Driven Faction Response](observation-driven-faction-response.md) is the second bounded consumer: it allows direct NPC ship-to-direct-faction historical reports and one investigation at a reported location. Neither implementation replaces this broader framework or introduces hierarchy, government, organization, or relationship runtime.
 

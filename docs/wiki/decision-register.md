@@ -6,7 +6,7 @@ description: 'Stable index of architectural decisions, approved implementation/d
 doc_type: 'index'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-08'
+updated: '2026-09-26'
 tags:
   - 'design'
   - 'architecture'
@@ -70,9 +70,9 @@ The slice adds no faction/affiliation UI, political hierarchy runtime, organizat
 
 ## Approved next-development decisions — September 7, 2026
 
-The owner selected [Observation-Driven Faction Response](observation-driven-faction-response.md) as the next bounded slice and selected M6 Tactical Combat Foundation as the next major development family after it. Feature #93 / Final PR #94 implements the selected response contract and v0.6.0 releases it with V8. v0.5.0 remains the historical V6 release.
+The owner selected [Observation-Driven Faction Response](observation-driven-faction-response.md) before its implementation and selected M6 Tactical Combat Foundation as the next major development family after it. Feature #93 / Final PR #94 implements the response contract and v0.6.0 releases it with V8. v0.5.0 remains the historical V6 release.
 
-**D-14 — Observation must drive faction action before combat.** The next slice closes one information-to-action loop: a legitimate NPC observation produces a bounded delayed report to its direct controlling faction, the received information changes an explainable faction decision, an eligible ordinary NPC ship investigates the reported location, and ordinary local sensing establishes the outcome. This is a bounded M5 contribution and partial Q-04 resolution, not completion of M3/M5 or a general intelligence architecture.
+**D-14 — Observation must drive faction action before combat.** This approved slice closes one information-to-action loop: a legitimate NPC observation produces a bounded delayed report to its direct controlling faction, the received information changes an explainable faction decision, an eligible ordinary NPC ship investigates the reported location, and ordinary local sensing establishes the outcome. It is implemented as a bounded M5 contribution and partial Q-04 resolution, not completion of M3/M5 or a general intelligence architecture.
 
 **D-15 — Direct historical reports, not shared live sensors.** The first reporting channel is directly controlled NPC ship → direct controlling faction only. Reports are immutable historical observation snapshots preserving observer provenance and observer-local `SensorContactId`; they do not carry hidden target identity/controller, infer affiliation/intent, or correlate contacts across observers. Delivery is deterministic after 2,000 ms of simulation time. Player, ally, hierarchy, organization, and communications-network propagation remain future work.
 

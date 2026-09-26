@@ -6,7 +6,7 @@ description: 'Single source of truth for the design of the game: decisions, impl
 doc_type: 'index'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-08'
+updated: '2026-09-26'
 tags:
   - 'design'
   - 'architecture'
@@ -27,7 +27,7 @@ related:
 
 This wiki is the single source of truth for the design of the game: what it is intended to become, what the code actually does, which decisions are settled, and which questions remain open. Detailed game rules and milestone acceptance contracts live here. [Documents outside the wiki](../README.md) have distinct architectural, operational, onboarding, or legal roles; they do not introduce additional gameplay rules.
 
-The initial implementation review is against `dev` commit `42481ca7fbc6c5c9da96985e02565f78a236cab7`, reviewed September 6, 2026. The current released gameplay baseline is source-only [v0.6.0](https://github.com/L3DigitalNet/star-trek-alter-course/releases/tag/v0.6.0), Faction Observation and Response, at `d00460e`; it includes both Feature #86 faction assignment and Feature #93 observation response. Strategic Contact Reporting remains the v0.5.0 historical V6 release; it does not complete Milestone 3 and does not itself begin Milestone 5.
+The initial implementation review is against `dev` commit `42481ca7fbc6c5c9da96985e02565f78a236cab7`, reviewed September 6, 2026. The current source-only release is [v0.6.2](https://github.com/L3DigitalNet/star-trek-alter-course/releases/tag/v0.6.2), at `255eaedc8e27b483b0fd4e2fe0bccf050486b3bf`; its latest gameplay baseline is [v0.6.0](https://github.com/L3DigitalNet/star-trek-alter-course/releases/tag/v0.6.0), Faction Observation and Response, at `d00460e`. It includes both Feature #86 faction assignment and Feature #93 observation response. Strategic Contact Reporting remains the v0.5.0 historical V6 release; it does not complete Milestone 3 and does not itself begin Milestone 5.
 
 [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) is the first implemented contribution toward M5, delivered by Feature #86 / Final PR #87 and merged into `dev` as `0217296`. Its era-neutral proof implements the six selected boundary decisions and introduced V7 saves with faction content V1. The v0.6.0 release uses V8; v0.5.0 remains the historical V6 release and ship-definition content remains V4. This does not declare M3 or M5 complete.
 

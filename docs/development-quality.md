@@ -6,7 +6,7 @@ description: 'Canonical setup and verification workflow for Godot, C#, and Asset
 doc_type: 'runbook'
 status: 'active'
 created: '2026-09-01'
-updated: '2026-09-01'
+updated: '2026-09-26'
 tags:
   - 'development'
   - 'testing'
@@ -42,7 +42,7 @@ Apply safe formatting, then run the complete gate:
 ./scripts/verify.sh
 ```
 
-`fix.sh` runs CSharpier for repository-owned C#, Prettier for tracked Markdown and structured configuration, and `shfmt` for shell scripts and Git hooks. `verify.sh` checks their output, locked dependencies, markdownlint, ShellCheck, actionlint, gitleaks, diagnostic-suppression and solution-configuration policy, a warning-free solution-wide Release build, Core and AssetCtl .NET tests, offline read-only AssetCtl configuration and catalog validation, and Godot integration. After proving the solution's Release mapping, verification builds the Godot project explicitly as Debug because the Godot editor runtime loads that managed configuration for GdUnit and headless smoke tests.
+`fix.sh` runs CSharpier for repository-owned C#, Prettier for tracked Markdown and structured configuration, and `shfmt` for shell scripts and Git hooks. `verify.sh` checks their output, locked dependencies, markdownlint, ShellCheck, actionlint, gitleaks, diagnostic-suppression and solution-configuration policy, a warning-free solution-wide Release build, Core and AssetCtl .NET tests, offline read-only AssetCtl configuration and catalog validation, project language-server transport tests, and Godot integration. After proving the solution's Release mapping, verification builds the Godot project explicitly as Debug because the Godot editor runtime loads that managed configuration for GdUnit and headless smoke tests.
 
 CSharpier is the sole C# whitespace formatter. Bare `dotnet format` and `dotnet format whitespace` are noncanonical because Roslyn's formatter can produce whitespace that CSharpier changes. `.editorconfig`, SDK analyzers, and Meziantou own semantic style; the compiler owns language correctness. Private instance fields use `_camelCase`, while private constants and static readonly fields use PascalCase.
 

@@ -6,7 +6,7 @@ description: 'Resolved and scoped decisions for the implemented faction-assignme
 doc_type: 'plan'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-08'
+updated: '2026-09-26'
 tags:
   - 'design'
 aliases: []
@@ -47,7 +47,7 @@ How a future faction refers to a vessel it has never locally observed also remai
 
 **Q-04 — Knowledge ownership and sharing — PARTIALLY RESOLVED for assignment and one direct report channel.** The implemented assignment policy may receive its objective, explicitly known proof-map topology, and assignment-relevant administrative facts of its own directly controlled assets: identity, current strategic state, and existing assignment/order status.
 
-The approved next slice adds exactly one sensor-information path: **directly controlled NPC ship → its direct controlling faction**. A new local observation episode may produce an immutable historical snapshot delivered after 2,000 ms of simulation time. The recipient stores explicit bounded received reports; it does not read a live union of ship sensor stores. The report preserves observer-local provenance and never gains hidden target identity/controller, affiliation, intent, or later target movement. The player is not part of this reporting path.
+The implemented response slice adds exactly one sensor-information path: **directly controlled NPC ship → its direct controlling faction**. A new local observation episode may produce an immutable historical snapshot delivered after 2,000 ms of simulation time. The recipient stores explicit bounded received reports; it does not read a live union of ship sensor stores. The report preserves observer-local provenance and never gains hidden target identity/controller, affiliation, intent, or later target movement. The player is not part of this reporting path.
 
 What propagates through political hierarchy, organizations, allies, treaty partners, other factions, or to the player remains open. Communications range/relays/jamming, intelligence fusion, confidence, cross-observer correlation, and broader report summarization remain open. This direct path is not an instantaneous sensor network or a general message bus.
 
@@ -55,7 +55,7 @@ What propagates through political hierarchy, organizations, allies, treaty partn
 
 ## When political presentation and government mechanics become consumers
 
-**Q-07 — Atypical hierarchy labels — OPEN.** Direct parentage, derived depth, three initial supported depths for the eventual hierarchy, and role/depth separation are settled. Exact UI wording for atypical branches must not turn Polity/Constituent/Internal into restrictive actor types. The current and next faction slices need roots only and add no political UI.
+**Q-07 — Atypical hierarchy labels — OPEN.** Direct parentage, derived depth, three initial supported depths for the eventual hierarchy, and role/depth separation are settled. Exact UI wording for atypical branches must not turn Polity/Constituent/Internal into restrictive actor types. The current implemented faction slices need roots only and add no political UI.
 
 **Q-08 — Minimal authority and consequence rules — PARTIALLY RESOLVED for direct assignment and investigation only.** A faction may assign only an idle, directly controlled NPC ship satisfying existing order/travel prerequisites. The observation-response slice may issue one bounded investigation assignment under the same authority, excluding the reporting observer for its own report and never preempting existing work. Existing presence intent is processed first; the player ship remains excluded.
 

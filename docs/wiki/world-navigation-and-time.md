@@ -6,7 +6,7 @@ description: 'Persistent ship identity, map scales, orders, deterministic time, 
 doc_type: 'concept'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-07'
+updated: '2026-09-26'
 tags:
   - 'simulation'
   - 'architecture'
@@ -52,7 +52,7 @@ Core time advances only through explicit operations. A pause submits no advancem
 
 The scheduler has finite known work kinds, stable work IDs, persisted same-time ordering, exact cancellation/correlation, and bounded processing. It has closed Ship/Faction targets: each item contains exactly one initialized identity matching its target kind, and each known work kind accepts only its intended target domain. Faction decision wakes require their exact faction identity and correlation, while existing work retains ship meaning. A malformed or mismatched target/kind fails validation rather than being reinterpreted.
 
-The persisted scheduler capacity is `MaximumShips * (MaximumShips - 1 + 5) + MaximumFactions`: at the current 256 ship and 256 faction bounds, that is 66,816 outstanding items. The five per-ship allowance covers independently correlated travel, repair, order, scan, and decision work in addition to one possible contact-loss item for every other ship; each faction may retain one decision wake. This is an admission bound for a valid aggregate, not a promise that normal play creates that population.
+The persisted scheduler capacity is `MaximumShips * (MaximumShips - 1 + 5) + MaximumFactions * (1 + MaximumInFlightReports)`: at the current 256 ship and 256 faction bounds, that is 68,864 outstanding items. The five per-ship allowance covers independently correlated travel, repair, order, scan, and decision work in addition to one possible contact-loss item for every other ship. Each faction may retain one decision wake and up to eight in-flight report-delivery items. This is an admission bound for a valid aggregate, not a promise that normal play creates that population.
 
 D-11's implementation preserves existing ship-work meaning, total same-time sequence, exact correlation, typed target validation, and budgets. Faction decisions wake initially, at arrival, report delivery, or a future hold/travel release boundary; they do not poll at tactical frequency. A pending objective or report response is dormant only when it has no eligible candidate and no release boundary. Typed bootstrap creates a complete valid aggregate, including faction state and initial work. It schedules the ship's existing work before the faction's decision work, so a wake observes the already-established order/travel state instead of a partially initialized world. Observation-Driven Faction Response coalesces same-time report delivery with one deterministic faction evaluation and retains finite execution guards.
 

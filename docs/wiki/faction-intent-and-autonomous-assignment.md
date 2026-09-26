@@ -6,7 +6,7 @@ description: 'Owner-approved first bounded M5 slice: direct NPC assignment, own-
 doc_type: 'decision'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-08'
+updated: '2026-09-26'
 tags:
   - 'design'
   - 'simulation'
@@ -126,7 +126,7 @@ Do not implement global known-vessel identity, cross-observer correlation, repor
 
 ## Implementation evidence and remaining acceptance evidence
 
-Core policy, scheduler, bootstrap, runtime, content, and persistence tests exercise the implemented contracts below. Headless scenarios cover production baseline and committed alternate, forbidden-knowledge invariance, midflight V7 continuation, 30-day satisfied dormancy, two-patrol dormancy across 345,600 ordinary arrivals, and a finite-hold strategic wake. Godot compatibility tests cover private catalog loading, quick-load continuation, and malformed candidate rejection. The Final PR records exact verification commands and results.
+Core policy, scheduler, bootstrap, runtime, content, and persistence tests exercise the implemented contracts below. Headless scenarios cover production baseline and committed alternate, forbidden-knowledge invariance, the historical midflight V7 continuation proof, current V8 round-trip continuation, 30-day satisfied dormancy, two-patrol dormancy across 345,600 ordinary arrivals, and a finite-hold strategic wake. Godot compatibility tests cover private catalog loading, quick-load continuation, and malformed candidate rejection. The Final PR records exact verification commands and results.
 
 | Proof | Required evidence |
 | --- | --- |
@@ -135,8 +135,8 @@ Core policy, scheduler, bootstrap, runtime, content, and persistence tests exerc
 | Control boundary | Foreign, uncontrolled, player-controlled, already committed, and otherwise invalid targets cannot receive an unauthorized assignment; rejection causes no partial state mutation. |
 | Knowledge boundary | Vary hidden foreign truth and ship-local contact knowledge while keeping permitted faction facts fixed; the pure decision and explanation remain unchanged. |
 | Typed scheduler | Mixed Ship/Faction work preserves stable same-time ordering, exact correlation, and cancellation; wrong-domain, missing, and mismatched targets fail closed. |
-| Persistence | V7 round-trip and interrupted/continued scenario equivalence; V6 migration adds no political state, preserves ship work, and remains valid with zero factions; the supported adjacent chain passes. |
-| Bounded behavior | Tests cover dormancy, exact wake correlation, maximum input/save shape, the 111,544,212-byte maximum save (22,673,516 bytes below 128 MiB), and targeted 30-day/two-patrol long-horizon scenarios. |
+| Persistence | Current V8 round-trip and interrupted/continued scenario equivalence; the historical V7 round-trip proof remains retained; V6→V7 migration adds no political state, preserves ship work, and remains valid with zero factions; the supported adjacent chain passes. |
+| Bounded behavior | Tests cover dormancy, exact wake correlation, maximum input/save shape, the historical V7 111,544,212-byte maximum save (22,673,516 bytes below 128 MiB), and targeted 30-day/two-patrol long-horizon scenarios. |
 | Existing boundaries | Core remains independent of Godot; insertion/construction order cannot change semantic outcomes; no RNG or forbidden framework/dependency appears. |
 | Player regression | Existing production projection, input, save/load, and player-event behavior remain safe; no hidden faction information or preview truth enters the UI. |
 

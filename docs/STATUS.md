@@ -2,14 +2,13 @@
 
 ## Current snapshot
 
-- The current immutable source-only GitHub Release is available at <https://github.com/L3DigitalNet/star-trek-alter-course/releases/latest>.
-- v0.6.1 is the historical build-process correction release; its signed annotated tag targets Final PR #103's merge `f0af2653ca44f17b9f701f6271e199cda1429d16`.
+- The current immutable source-only GitHub Release is v0.6.2 at `255eaedc8e27b483b0fd4e2fe0bccf050486b3bf`; it is available at <https://github.com/L3DigitalNet/star-trek-alter-course/releases/latest>.
+- v0.6.2 is a source-only documentation release. v0.6.1 remains the historical build-process correction release at `f0af2653ca44f17b9f701f6271e199cda1429d16`.
 - Milestone 3A first observed contact, Milestone 4 Engineering Backbone, and Strategic Contact Reporting are released; Features #58, #62, and #77 are Done.
 - Strategic Contact Reporting merged into `dev` as `80c3084` (Final PR #78) and shipped in v0.5.0 through release Task #80 / Final PR #82 on 2026-09-06.
 - Current released rules are `observation-driven-faction-response-v1`, content schema V4, and save schema V8; V6/V7 migrations remain noninventive.
-- `main` contains Final PR #97's v0.6.0 release merge. Post-merge Verify #34175359813 succeeded.
-- Supporting PR #98 synchronized `main` to `dev` as `fb58ffe1b6781bd816ac7888dd2eec545bc8129d`; at synchronization, `origin/dev` contained `main` and their trees matched.
-- All sync hosted checks, including fresh Canonical verification #34175435539, passed.
+- Historically, Final PR #97 released v0.6.0 and Supporting PR #98 synchronized it to `dev`; their recorded checks remain release evidence.
+- Current `dev` contains the v0.6.2 release through PR #107's synchronization merge `1778634bd192ed393f40b30708fa88e049714a8a`.
 - v0.5.0 verification passed: Core 406, AssetCtl 324, Godot 1+2+63, smoke OK, and zero warnings or errors; later PRs record their own checks.
 - [Faction Intent and Autonomous Assignment](wiki/faction-intent-and-autonomous-assignment.md) merged into `dev` as `0217296` through Final PR #87.
 - Features #86 and #93 are released in v0.6.0; Issue #100's verification build-server repair is released in v0.6.1.
@@ -27,6 +26,6 @@
 - Handoff `9ebee7b` used the ADR 0013 direct route; GitHub reported a configured PR/check bypass, contrary to Feature #93's no-bypass constraint.
 - PR #101 fixed verification build-server reuse. Release and Debug verification passed with Core 598, AssetCtl 324, Godot integration and smoke checks.
 - The verification process scan found no remaining `dotnet`, `MSBuild`, or `VBCSCompiler` processes. Issue #100 and Task #102 are Done.
-- PR #104 synchronized the v0.6.1 release ancestry to `dev` as `5ad16bb` and Canonical verification passed.
+- Historically, PR #104 synchronized v0.6.1 release ancestry to `dev` as `5ad16bb`; PR #107 subsequently synchronized v0.6.2.
 - Issue #108 is Done; PR #109 merged project-scoped C# and Godot language-server setup into `dev` as `eb900f3`.
 - Live Codex C#/Godot probes and Claude project-scope checks passed; see [agent setup](development-agent-skills.md).

@@ -6,7 +6,7 @@ description: 'Milestone acceptance boundaries and architectural proofs, separate
 doc_type: 'reference'
 status: 'active'
 created: '2026-09-07'
-updated: '2026-09-08'
+updated: '2026-09-26'
 tags:
   - 'design'
   - 'validation'
@@ -24,9 +24,9 @@ related:
 
 This page owns the milestone acceptance boundaries formerly carried by the root roadmap. System pages own detailed behavior; active ADRs govern architecture. Future proofs specify what a milestone must demonstrate, not behavior already implemented or authorization to start it. The root roadmap records sequence and links here instead of defining game rules.
 
-## Reviewed implementation baseline — September 8, 2026
+## Reviewed implementation baseline — September 26, 2026
 
-- **v0.6.0 — Faction Observation and Response** is the current immutable source-only release; it succeeds v0.5.0 — Strategic Contact Reporting.
+- **v0.6.2** is the current immutable source-only release; its latest gameplay baseline is **v0.6.0 — Faction Observation and Response**, which succeeds v0.5.0 — Strategic Contact Reporting.
 - **Milestone 1** and **Milestone 2** are implemented.
 - **Milestone 3A — First Observed Contact** is implemented, but **Milestone 3 as a whole is not complete**.
 - **Milestone 4 — Engineering Backbone and Degraded Operations** is implemented.
@@ -34,7 +34,7 @@ This page owns the milestone acceptance boundaries formerly carried by the root 
 - The broader approved [factions and organizations](factions-and-organizations.md) political model remains **design only** beyond the implemented root-faction/direct-control subset. No faction hierarchy, organization runtime, government model, treaty system, layered jurisdiction runtime, or strategic affiliation-knowledge system exists yet.
 - [Strategic Contact Reporting](strategic-contact-reporting.md) is **implemented** (Feature #77, Final PR #78), resolving Q-01. It is not canonically named `M3B`, does not complete Milestone 3, and did not itself begin M5.
 - [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) is the implemented first M5 slice, resolving Q-05. That slice introduced V7; v0.6.0 now uses V8 and v0.5.0 remains the historical V6 release.
-- [Observation-Driven Faction Response](observation-driven-faction-response.md) is implemented by Feature #93 / Final PR #94, with reviewed behavioral, presentation, and V8 persistence evidence. It is the next bounded M5 contribution. M6 Tactical Combat Foundation is the next major development family without requiring M3 or M5 to be declared complete.
+- [Observation-Driven Faction Response](observation-driven-faction-response.md) is implemented by Feature #93 / Final PR #94, with reviewed behavioral, presentation, and V8 persistence evidence. It is the implemented second bounded M5 contribution. M6 Tactical Combat Foundation is the next major development family without requiring M3 or M5 to be declared complete.
 
 ## Execution model
 

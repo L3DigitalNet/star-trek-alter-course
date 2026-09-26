@@ -6,7 +6,7 @@ description: 'Distinct contracts for reusable definitions, durable saves, visual
 doc_type: 'reference'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-08'
+updated: '2026-09-26'
 tags:
   - 'architecture'
   - 'validation'
@@ -59,7 +59,7 @@ V7 uses rules identity `faction-intent-autonomous-assignment-v1`; V6's `strategi
 
 Zero-faction worlds must remain valid. New-game typed bootstrap may create the proof's factions; loading a migrated save must not rerun that initialization. Persist consequential faction state, direct control, and exact typed Ship/Faction work; derive rosters and projections rather than duplicating authority. No faction/organization placeholder or RNG state is required.
 
-Candidate validation rejects missing or wrong-domain targets, bad correlations, and corrupted JSON before replacing live state. It validates the envelope's schema and rules identity, required members, metadata, every reference and counter, and then constructs a complete candidate before a load can replace live state. The 128 MiB UTF-8 envelope and depth-32 JSON input limits apply before the candidate becomes authoritative. Maximum-shape coverage measures 111,544,212 bytes for 256 ships, 256 factions, full contacts, and 66,302 simultaneously valid work items: 22,673,516 bytes below the unchanged 128 MiB envelope. The wider scheduler admission ceiling is 66,816; the lower test population reflects the incompatible per-ship commitments in that constructed world. v0.5.0 remains the historical V6 line.
+Candidate validation rejects missing or wrong-domain targets, bad correlations, and corrupted JSON before replacing live state. It validates the envelope's schema and rules identity, required members, metadata, every reference and counter, and then constructs a complete candidate before a load can replace live state. The 128 MiB UTF-8 envelope and depth-32 JSON input limits apply before the candidate becomes authoritative. The historical V7 maximum-shape coverage measured 111,544,212 bytes for 256 ships, 256 factions, full contacts, and 66,302 simultaneously valid work items: 22,673,516 bytes below the unchanged 128 MiB envelope. Its V7 scheduler admission ceiling was 66,816; the lower test population reflects the incompatible per-ship commitments in that constructed world. The current V8 scheduler admission ceiling is 68,864. v0.5.0 remains the historical V6 line.
 
 Godot compatibility evidence is complete: the shell loads both catalogs, accepts valid V7 quick-load continuation, and leaves its live state usable when faction/controller JSON is malformed. It exposes none of this data in the player UI. Targeted headless continuation and long-horizon scenarios also pass.
 

@@ -6,7 +6,7 @@ description: 'Future strategic autonomy, durable political consequences, trade, 
 doc_type: 'concept'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-08'
+updated: '2026-09-26'
 tags:
   - 'design'
   - 'simulation'
@@ -34,7 +34,7 @@ The first bounded contribution is implemented: [Faction Intent and Autonomous As
 
 The selected policy sees only its objective, explicitly known proof-map topology, and own-asset identity, strategic state, and assignment/order status. No sensor-report sharing, foreign truth, political affiliation learning, preemption, or player-command override is approved. It uses closed Ship/Faction scheduled work, typed bootstrap, the implemented non-inventive V7 migration, and no RNG or political UI. Q-05 is resolved for this consumer; the other scoped and deferred choices are maintained in [Open questions](open-questions.md).
 
-Later faction consumers may add information, doctrine, resource constraints, and political interactions only when separately refined. Reports, investigation, rerouting, withdrawal, or support remain possible later mechanisms, not additions to the approved first assignment proof. Long-horizon tests should catch starvation, zero-time loops, order oscillation, unbounded state growth, dangling references, and save/load divergence.
+Later faction consumers may add information, doctrine, resource constraints, and political interactions only when separately refined. Direct reports and one bounded investigation are implemented by Observation-Driven Faction Response; rerouting, withdrawal, support, and broader political responses remain later mechanisms, not additions to the original assignment proof. Long-horizon tests should catch starvation, zero-time loops, order oscillation, unbounded state growth, dangling references, and save/load divergence.
 
 The layered political model does not require implementing every depth, organization type, government mechanism, or covert operation in M5. Root-only scope now preserves the approved eventual recursive hierarchy without requiring child/grandchild runtime in the first slice.
 

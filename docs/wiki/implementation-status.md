@@ -6,7 +6,7 @@ description: 'Reviewed gameplay baseline and explicit boundaries between runtime
 doc_type: 'reference'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-08'
+updated: '2026-09-26'
 tags:
   - 'simulation'
   - 'design'
@@ -26,7 +26,7 @@ related:
 
 ## Reviewed baseline
 
-v0.6.0 is the immutable source-only release and uses V8 saves under `observation-driven-faction-response-v1`. It contains Feature #86 / Final PR #87's bounded faction slice and Feature #93 / Final PR #94's observation response. v0.5.0 remains the historical V6 release. For the operational snapshot, consult [STATUS](../STATUS.md).
+v0.6.2 is the current immutable source-only release. Its latest gameplay baseline is v0.6.0, which uses V8 saves under `observation-driven-faction-response-v1` and contains Feature #86 / Final PR #87's bounded faction slice and Feature #93 / Final PR #94's observation response. v0.5.0 remains the historical V6 release. For the operational snapshot, consult [STATUS](../STATUS.md).
 
 [Observation-Driven Faction Response](observation-driven-faction-response.md) is implemented by Feature #93 / Final PR #94 and released in v0.6.0, using V8 under `observation-driven-faction-response-v1`. v0.5.0 remains the historical V6 release. The reviewed feature evidence includes its Core causal path, three production and three long-horizon scenarios, 67/67 Godot/player-safe tests, and the V8 conservative persistence bound.
 
@@ -50,7 +50,7 @@ Implementation evidence: [FirstGameSetup](../../src/AlterCourse.Core/Gameplay/Fi
 
 Milestone 1 world/bootstrap and Milestone 2 active-world orders are implemented. Milestone 3A first observed contact and [Strategic Contact Reporting](strategic-contact-reporting.md) are implemented, but the roadmap explicitly does not declare all of Milestone 3 complete. Milestone 4 Engineering Backbone is implemented. M3A and M4 are included in v0.4.0; Strategic Contact Reporting was delivered in Feature #77 / Final PR #78, merged into `dev` as `80c3084`, and included in v0.5.0.
 
-Feature #86 is the first implemented M5 contribution, not evidence that M5 or M3 is complete. Observation-Driven Faction Response is the next bounded M5 contribution. M6 Tactical Combat Foundation is the next major development family; M3 and M5 do not need to be declared complete first. M6-M9 runtime remains future work. No canonical M3B milestone is admitted.
+Feature #86 is the first implemented M5 contribution, not evidence that M5 or M3 is complete. Observation-Driven Faction Response is the implemented second bounded M5 contribution. M6 Tactical Combat Foundation is the next major development family; M3 and M5 do not need to be declared complete first. M6-M9 runtime remains future work. No canonical M3B milestone is admitted.
 
 ## Implemented bounded faction slice
 
