@@ -115,6 +115,38 @@ public sealed class HeterogeneousBootstrapTests
         }
     }
 
+    /// <summary>
+    /// Storage admits two sensors, but the typed world boundary refuses them at bootstrap as a distinct cardinality
+    /// rule naming both identities, rather than silently using one.
+    /// </summary>
+    [Fact]
+    public void BootstrapRefusesUnsupportedCardinality()
+    {
+        var twoSensors = ShipSystemsStart.Explicit(
+            7,
+            [
+                new(
+                    TestShipContent.Generator,
+                    new SystemDefinitionId("pathfinder.power-generation"),
+                    new SystemCondition(1),
+                    null
+                ),
+                new(
+                    TestShipContent.Sensors,
+                    new SystemDefinitionId("pathfinder.sensors"),
+                    new SystemCondition(1),
+                    new PowerUnits(30)
+                ),
+                new(new InstalledSystemId(6), LongRangeSensors.Id, new SystemCondition(1), new PowerUnits(30)),
+            ]
+        );
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => Create((twoSensors, 0)));
+
+        Assert.Contains("at most one installed 'sensors'", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("ids 2, 6", exception.Message, StringComparison.Ordinal);
+    }
+
     /// <summary>Strategic travel needs no impulse installation.</summary>
     [Fact]
     public void StrategicTravelDoesNotRequireImpulse()
