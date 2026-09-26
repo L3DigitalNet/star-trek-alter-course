@@ -30,6 +30,8 @@ Only ships at the same strategic location observe each other. Passive observatio
 
 New detection is Current and Detected; continued detection refreshes facts. Loss makes a contact Stale, keeps its last observation, and schedules one exact loss work item five seconds later. That work rechecks detectability before Lost. Reacquisition cancels its exact work, restores Current, and preserves local ID/identification. Lost contacts remain bounded correlation memory but leave live tactical projection.
 
+A Current contact is present-time knowledge. It is valid only when both observer and target are `AtLocation` at the same location and, when an observation-location frame is present, that frame names the same location. A null legacy frame remains null. Stale and Lost contacts retain historical frames without a constraint from either ship's present location.
+
 ## Scan, hail, and cautious response
 
 One observer can own one active scan, targeting a current detected local contact. Completion revalidates Current status, then identifies it and records vessel/design names. Staleness/loss or zero effective sensor capability cancels exact completion work, clears the operation, and returns a player-safe interruption. Restoring a contact or power never revives it.

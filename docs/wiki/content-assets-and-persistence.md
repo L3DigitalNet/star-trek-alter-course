@@ -73,6 +73,8 @@ M6A is unreleased development; V8 remains the released format. V9 uses rules ide
 
 V8→V9 initializes the new conditions and allocations to zero, readiness to zero, and no stimulus/combat work. It preserves existing conditions, allocation, repair, order, contact, faction, time, and scheduler identities. Migration creates no historical combat capability, damage, aggression, target identification, or new content-derived state. A new game deliberately starts the new systems nominal, while a migrated player can later repair and allocate them through ordinary commands. Frozen V1–V8 DTOs and work-kind validation retain their strict historical meanings; malformed V9 state, work, timing, or correlation fails candidate validation.
 
+Candidate validation treats Current contacts as present-time state: observer and target must both be `AtLocation` at the same location, and a present observation-location frame must match it. A null legacy frame remains null; Stale and Lost frames remain historical and are not constrained by present locations. Rejection leaves the live simulation unchanged.
+
 The V9 faction fixture measures 88,137,170 bytes and the high-width report vertex measures 108,935,516 bytes. The conservative supported-shape bound is 113,292,140 bytes, below the unchanged 128 MiB envelope. These are persistence-proof measurements and bounds, not ordinary save sizes. The empty-combat report vertex does not demonstrate a populated combat continuation; that separate proof covers the legal maximum combat stimulus shape.
 
 ## AssetCtl pipeline
