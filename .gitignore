@@ -26,6 +26,7 @@ mono_crash.*.json
 TestResults/
 StrykerOutput/
 .assetctl/
+.tools/agent-lsp/
 
 # Recoverable AssetCtl publication residue beside tracked manifests and assets
 /config/assets/catalog/**/*.asset.yaml.assetctl-stage-*

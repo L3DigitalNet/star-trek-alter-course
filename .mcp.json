@@ -1,6 +1,22 @@
 {
 	"mcpServers": {
 		"project-standards": { "command": "project-standards", "args": ["mcp"] },
-		"figma": { "type": "http", "url": "https://mcp.figma.com/mcp" }
+		"figma": { "type": "http", "url": "https://mcp.figma.com/mcp" },
+		"csharp-lsp": {
+			"type": "stdio",
+			"command": "bash",
+			"args": [
+				"-c",
+				"exec node \"$(git rev-parse --show-toplevel)/scripts/agent-lsp.mjs\" csharp"
+			]
+		},
+		"godot-lsp": {
+			"type": "stdio",
+			"command": "bash",
+			"args": [
+				"-c",
+				"exec node \"$(git rev-parse --show-toplevel)/scripts/agent-lsp.mjs\" godot"
+			]
+		}
 	}
 }

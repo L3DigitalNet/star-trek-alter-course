@@ -28,3 +28,4 @@
 - PR #101 fixed verification build-server reuse. Release and Debug verification passed with Core 598, AssetCtl 324, Godot integration and smoke checks.
 - The verification process scan found no remaining `dotnet`, `MSBuild`, or `VBCSCompiler` processes. Issue #100 and Task #102 are Done.
 - PR #104 synchronized the v0.6.1 release ancestry to `dev` as `5ad16bb` and Canonical verification passed.
+- Issue #108 adds project-scoped C# and Godot language-server entries for Codex CLI and Claude Code; see [agent setup](development-agent-skills.md).

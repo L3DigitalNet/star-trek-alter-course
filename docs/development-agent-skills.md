@@ -6,7 +6,7 @@ description: 'Provenance, adaptation policy, harness installation, and update pr
 doc_type: 'reference'
 status: 'active'
 created: '2026-09-01'
-updated: '2026-09-06'
+updated: '2026-09-26'
 owner: 'project-maintainers'
 consumer: 'agent'
 tags:
@@ -44,6 +44,26 @@ This repository carries five project-local Godot skills and 14 official Figma MC
 Each skill is present as a byte-identical pair under `.claude/skills/<name>/` and `.codex/skills/<name>/`. Harness metadata therefore does not diverge from substantive guidance.
 
 The Figma MCP server is project-scoped in both `.mcp.json` and `.codex/config.toml` at `https://mcp.figma.com/mcp`. After opening this repository in Codex, authorize the configured server interactively with `codex mcp login figma`; credentials remain outside the repository.
+
+## CLI language servers
+
+Codex CLI and Claude Code share two project-scoped MCP entries, `csharp-lsp` and `godot-lsp`, in `.codex/config.toml` and `.mcp.json`. These expose language-server navigation, hover, references, and diagnostics through MCP tools. They do not require VS Code, its extensions, or a Claude native LSP plugin.
+
+From the repository root on Linux x86_64, install with:
+
+```bash
+./scripts/install-agent-lsp.sh
+```
+
+The installer requires Node 18 or newer, Bash, curl, tar, sha256sum, and unzip. It installs [Microsoft's standalone Roslyn tool](https://www.nuget.org/packages/roslyn-language-server.linux-x64/5.12.0-1.26426.8) at version `5.12.0-1.26426.8` from NuGet and the [cclsp bridge](https://github.com/ktnyt/cclsp) at `0.7.0` from its upstream npm artifact, checked against a pinned SHA-256. Both live under ignored `.tools/agent-lsp/`. The existing repository resolvers reuse or download the pinned Microsoft .NET SDK and official Godot .NET editor. No global CLI configuration or global .NET tool installation is changed.
+
+Restart each CLI in this trusted checkout after installation. Check registration with `codex mcp get csharp-lsp`, `codex mcp get godot-lsp`, and the corresponding `claude mcp get` commands. Claude's project settings enable these two entries. Each checkout or worktree needs its own installation; run the installer again after moving a checkout or changing pinned versions. MCP startup performs no downloads.
+
+Use `csharp-lsp` for `.cs` files throughout the solution, including Godot C# scripts. Use `godot-lsp` for `.gd` files beneath `src/AlterCourse.Godot`; it does not provide scene/resource-file or C# language analysis. Both offer `find_definition`, `find_references`, `get_hover`, and `get_diagnostics`. Other advertised operations depend on the underlying server's capabilities. Language-server diagnostics complement the canonical verification gate.
+
+Each MCP session owns its bridge and language-server processes. The Godot entry starts a dedicated headless editor with isolated editor settings and an ephemeral local LSP port. It adapts cclsp's `.gd` language identifier to `gdscript`, which Godot requires before parsing an opened document. Shutdown closes these owned processes. The launcher waits for bridge preloading before forwarding client requests because concurrent first requests otherwise start duplicate servers. Upstream cclsp logs a three-second initialization-wait warning even after the LSP initialization response; the launcher separately requires successful preload.
+
+If startup reports missing tooling, rerun the installer. To disable these integrations, remove their two project MCP entries and Claude's matching `enabledMcpjsonServers` entries, then restart both CLIs. The ignored installation directory can be removed after the sessions stop; shared SDK/editor caches belong to the repository's existing resolvers.
 
 ## Figma MCP pin and inventory
 
