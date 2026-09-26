@@ -18,5 +18,13 @@ public sealed record EngineeringProjection(
     DistanceKilometers EffectivePassiveSensorRange,
     SpeedKilometersPerSecond EffectiveMaximumTacticalSpeed,
     SystemRepairProjection? ActiveRepair,
-    IReadOnlyList<EngineeringActionProjection> Actions
+    IReadOnlyList<EngineeringActionProjection> Actions,
+    SystemCondition ShieldCondition,
+    SystemCondition DirectedEnergyCondition,
+    double ShieldCapability,
+    double DirectedEnergyCapability,
+    PowerUnits ShieldAllocation,
+    PowerUnits DirectedEnergyAllocation,
+    PowerUnits NominalShieldDemand,
+    PowerUnits NominalDirectedEnergyDemand
 );

@@ -26,4 +26,25 @@ public enum PlayerAdvanceEventKind
 
     /// <summary>An active scan was interrupted because its contact ceased to be current.</summary>
     ActiveSensorScanInterrupted = 8,
+
+    /// <summary>The player fired an accepted directed-energy shot.</summary>
+    DirectedEnergyFired = 9,
+
+    /// <summary>An observed shot impacted shields.</summary>
+    ShieldImpact = 10,
+
+    /// <summary>An observed shot penetrated to its selected system.</summary>
+    SubsystemPenetration = 11,
+
+    /// <summary>The player suffered positive system damage.</summary>
+    OwnSystemDamaged = 12,
+
+    /// <summary>Damage interrupted the player exactly correlated repair.</summary>
+    SystemRepairInterrupted = 13,
+
+    /// <summary>Reduced generation forced the player allocation down.</summary>
+    PowerBrownout = 14,
+
+    /// <summary>Reduced capability forced slower motion while preserving heading.</summary>
+    ForcedDeceleration = 15,
 }

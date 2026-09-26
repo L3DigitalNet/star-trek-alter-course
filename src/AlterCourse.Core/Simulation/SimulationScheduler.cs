@@ -8,10 +8,10 @@ namespace AlterCourse.Core.Simulation;
 /// <summary>Stores and orders immutable data-only scheduled simulation work.</summary>
 internal sealed class SimulationScheduler
 {
-    // Each ship can correlate travel, repair, order, scan, and decision work independently of one loss item per
+    // Each ship can correlate travel, repair, order, scan, contact decision, and combat decision work independently of one loss item per
     // possible contact. Each faction can retain one decision wake plus every bounded in-flight report delivery. Keep
     // these allowances aligned with aggregate scheduled-work validation.
-    private const int IndependentlyCorrelatedWorkKindsPerShip = 5;
+    private const int IndependentlyCorrelatedWorkKindsPerShip = 6;
 
     /// <summary>Gets the maximum number of outstanding consequences retained by one scheduler.</summary>
     public const int MaximumOutstandingWork =

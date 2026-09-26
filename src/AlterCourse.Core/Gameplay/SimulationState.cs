@@ -166,6 +166,7 @@ internal sealed partial record SimulationState
             ValidateShip(ship, definition);
             ValidateSensorKnowledge(ship, catalog, contactWorkIds);
             ValidateAutonomousState(ship, contactWorkIds);
+            ValidateCombatState(ship, definition, contactWorkIds);
         }
 
         ValidateOrders();
@@ -246,7 +247,7 @@ internal sealed partial record SimulationState
         }
 
         ShipState target = GetRequiredShip(work.TargetShipId);
-        // These five non-loss correlations define the per-ship scheduler allowance in SimulationScheduler; adding a
+        // These six non-loss correlations define the per-ship scheduler allowance in SimulationScheduler; adding a
         // separately retainable work category requires that bound to grow with the world maximum.
         bool correlated = work.Kind switch
         {
@@ -270,6 +271,9 @@ internal sealed partial record SimulationState
             ScheduledWorkKind.ShipContactDecisionWake => target.AutonomousState.PendingContactDecisionWake is { } wake
                 && wake.ScheduledWorkId == work.Id
                 && wake.DueTime == work.DueTime,
+            ScheduledWorkKind.ShipCombatDecisionWake => target.Combat.PendingStimulus is { } stimulus
+                && stimulus.ScheduledWorkId == work.Id
+                && stimulus.DueTime == work.DueTime,
             _ => false,
         };
         if (!correlated)

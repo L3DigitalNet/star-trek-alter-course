@@ -24,14 +24,14 @@ public sealed partial class GameSimulation
     private const int MaximumNpcShips = SimulationState.MaximumShips - 1;
     private const int MaximumPreexistingBoundaryWork =
         SimulationState.MaximumShips * (SensorKnowledge.MaximumContactsPerObserver + 2)
-        + MaximumNpcShips
+        + (2 * MaximumNpcShips)
         + SimulationState.MaximumFactions
         + (MaximumNpcShips * FactionObservationState.MaximumInFlightReports);
     internal const int SameBoundaryExecutionBudget = MaximumPreexistingBoundaryWork + (2 * MaximumNpcShips);
     internal const int TotalConsequenceExecutionBudget = SameBoundaryExecutionBudget + 10_000;
     private const int ContactMaterializationBoundaryBudget = 10_000;
     private const long ShipStepWorkBudget = 1_000_000;
-    private const long SensorContactLossMilliseconds = 5_000;
+    internal const long SensorContactLossMilliseconds = 5_000;
 
     // Local arrival frames use one non-origin offset so tactical positions remain continuous values,
     // not a hidden grid or strategic-map projection.
@@ -155,7 +155,12 @@ public sealed partial class GameSimulation
             return new SystemRepairResult(SystemRepairOutcome.RepairAlreadyActive);
         }
 
-        if (targetSystem != ShipSystemId.Sensors && targetSystem != ShipSystemId.ImpulsePropulsion)
+        if (
+            targetSystem != ShipSystemId.Sensors
+            && targetSystem != ShipSystemId.ImpulsePropulsion
+            && targetSystem != ShipSystemId.Shields
+            && targetSystem != ShipSystemId.DirectedEnergyWeapons
+        )
         {
             return new SystemRepairResult(SystemRepairOutcome.UnsupportedSystem);
         }
@@ -219,7 +224,11 @@ public sealed partial class GameSimulation
             return PowerAllocationOutcome.ImpulseDemandExceeded;
         }
 
-        int allocated = checked(allocation.Sensors.Value + allocation.ImpulsePropulsion.Value);
+        if (allocation.Shields > definition.Engineering.NominalShieldDemand)
+            return PowerAllocationOutcome.ShieldDemandExceeded;
+        if (allocation.DirectedEnergyWeapons > definition.Engineering.NominalDirectedEnergyDemand)
+            return PowerAllocationOutcome.DirectedEnergyDemandExceeded;
+        int allocated = allocation.Total;
         if (allocated > ship.Engineering.AvailablePower(definition.Engineering).Value)
         {
             return PowerAllocationOutcome.AvailablePowerExceeded;
@@ -415,6 +424,7 @@ public sealed partial class GameSimulation
         SimulationAdvanceTraceResult advance = AdvanceTo(_state, target, _shipCatalog, _factionCatalog);
         Commit(advance.State);
         RememberLatestContactDecision(advance.Traces);
+        RememberLatestCombatDecision(advance.Traces);
         RememberLatestFactionDecision(advance.Traces);
         RememberLatestFactionInvestigationDecision(advance.Traces);
         return new SimulationAdvanceResult(_state.Time, advance.PlayerEvents, Project(_state));
@@ -423,35 +433,48 @@ public sealed partial class GameSimulation
     /// <summary>Advances through hidden work to the next consequence targeting the player ship.</summary>
     public AdvanceUntilResult AdvanceUntilNextPlayerRelevantEvent()
     {
-        ScheduledWork? nextPlayerWork = _state
-            .Scheduler.OutstandingWork.Cast<ScheduledWork?>()
-            .FirstOrDefault(work =>
-                work!.Value.Target.Kind == ScheduledWorkTargetKind.Ship
-                && work.Value.TargetShipId == _state.PlayerShipId
-            );
-        if (nextPlayerWork is null)
+        SimulationState candidate = _state;
+        for (int attempts = 0; attempts < TotalConsequenceExecutionBudget; attempts++)
         {
-            PlayerProjection unchanged = Project(_state);
+            ScheduledWork? next = candidate
+                .Scheduler.OutstandingWork.Cast<ScheduledWork?>()
+                .FirstOrDefault(work =>
+                    work!.Value.Target.Kind == ScheduledWorkTargetKind.Ship
+                    && (
+                        work.Value.TargetShipId == candidate.PlayerShipId
+                        || work.Value.Kind == ScheduledWorkKind.ShipCombatDecisionWake
+                    )
+                );
+            if (next is null)
+                return new AdvanceUntilResult(
+                    AdvanceUntilOutcome.NoPlayerEvent,
+                    _state.Time,
+                    new ReadOnlyValueList<PlayerAdvanceEvent>([]),
+                    Project(_state)
+                );
+            SimulationAdvanceTraceResult advance = AdvanceTo(
+                candidate,
+                next.Value.DueTime,
+                _shipCatalog,
+                _factionCatalog,
+                true
+            );
+            candidate = advance.State;
+            if (advance.PlayerEvents.Count == 0)
+                continue;
+            Commit(candidate);
+            RememberLatestContactDecision(advance.Traces);
+            RememberLatestCombatDecision(advance.Traces);
+            RememberLatestFactionDecision(advance.Traces);
+            RememberLatestFactionInvestigationDecision(advance.Traces);
             return new AdvanceUntilResult(
-                AdvanceUntilOutcome.NoPlayerEvent,
+                AdvanceUntilOutcome.PlayerEventResolved,
                 _state.Time,
-                new ReadOnlyValueList<PlayerAdvanceEvent>([]),
-                unchanged
+                advance.PlayerEvents,
+                Project(_state)
             );
         }
-
-        SimulationTime boundary = nextPlayerWork.Value.DueTime;
-        SimulationAdvanceTraceResult advance = AdvanceTo(_state, boundary, _shipCatalog, _factionCatalog, true);
-        Commit(advance.State);
-        RememberLatestContactDecision(advance.Traces);
-        RememberLatestFactionDecision(advance.Traces);
-        RememberLatestFactionInvestigationDecision(advance.Traces);
-        return new AdvanceUntilResult(
-            AdvanceUntilOutcome.PlayerEventResolved,
-            _state.Time,
-            advance.PlayerEvents,
-            Project(_state)
-        );
+        throw new InvalidOperationException("Player-event lookahead exceeded its finite consequence budget.");
     }
 
     internal OrderCancellationResult CancelOrder(ShipOrderId orderId)
@@ -1183,7 +1206,7 @@ public sealed partial class GameSimulation
     private static bool IsWithinInclusiveRange(double distance, double range)
     {
         double tolerance = Math.Max(1, range) * 1e-12;
-        return distance <= range + tolerance;
+        return double.IsFinite(distance) && (distance <= range || distance - range <= tolerance);
     }
 
     private static void AddContactEvent(
@@ -1310,9 +1333,45 @@ public sealed partial class GameSimulation
     )
     {
         SimulationState current = state;
+        var canceledRepairs = new HashSet<ScheduledWork>();
         foreach (ScheduledWork work in dueWork)
         {
             ChargeScheduledExecution(ref boundaryExecutions, ref totalExecutions);
+            if (
+                canceledRepairs.Any(canceled =>
+                    canceled.Id == work.Id
+                    && canceled.Target == work.Target
+                    && canceled.Kind == work.Kind
+                    && canceled.DueTime == work.DueTime
+                )
+            )
+            {
+                traces.Add(
+                    Trace(
+                        current,
+                        work,
+                        null,
+                        ScheduledConsequenceRule.SystemRepairCompletion,
+                        ScheduledConsequenceAction.IgnoreInvalidatedWork,
+                        false
+                    )
+                );
+                continue;
+            }
+            if (work.Kind == ScheduledWorkKind.ShipCombatDecisionWake)
+            {
+                current = CompleteCombatWake(
+                    current,
+                    work,
+                    shipCatalog,
+                    playerEvents,
+                    canceledRepairs,
+                    traces,
+                    collector
+                );
+                current = ObserveAllShips(current, shipCatalog, playerEvents, collector);
+                continue;
+            }
             current = ResolveOneDueWork(
                 current,
                 work,
@@ -1842,7 +1901,9 @@ public sealed partial class GameSimulation
                 trace.ResolutionTime,
                 trace.ContactId
             ),
-            ScheduledWorkKind.OrderWake or ScheduledWorkKind.ShipContactDecisionWake => null,
+            ScheduledWorkKind.OrderWake
+            or ScheduledWorkKind.ShipContactDecisionWake
+            or ScheduledWorkKind.ShipCombatDecisionWake => null,
             ScheduledWorkKind.FactionDecisionWake => null,
             _ => throw new InvalidOperationException("A resolved scheduled consequence has an unknown kind."),
         };
@@ -1982,7 +2043,8 @@ public sealed partial class GameSimulation
                 activeScan?.TargetContactId,
                 ActiveScanProgressAt(state.Time, activeScan)
             ),
-            ProjectEngineering(state, playerShip, playerDefinition)
+            ProjectEngineering(state, playerShip, playerDefinition),
+            ProjectCombat(state, playerShip, playerDefinition)
         );
     }
 
@@ -2014,7 +2076,15 @@ public sealed partial class GameSimulation
                     repair.ProgressAt(state.Time),
                     repair.ExpectedCompletion
                 ),
-            new ReadOnlyValueList<EngineeringActionProjection>(ProjectEngineeringActions(ship, definition))
+            new ReadOnlyValueList<EngineeringActionProjection>(ProjectEngineeringActions(ship, definition)),
+            engineering.ShieldCondition,
+            engineering.DirectedEnergyCondition,
+            engineering.ShieldCapability(definition.Engineering),
+            engineering.DirectedEnergyCapability(definition.Engineering),
+            engineering.Allocation.Shields,
+            engineering.Allocation.DirectedEnergyWeapons,
+            definition.Engineering.NominalShieldDemand,
+            definition.Engineering.NominalDirectedEnergyDemand
         );
     }
 
@@ -2036,6 +2106,22 @@ public sealed partial class GameSimulation
             definition,
             PowerAllocationPreset.PrioritizePropulsion
         );
+        AddAllocationAction(
+            actions,
+            EngineeringAction.PrioritizeShields,
+            ship,
+            definition,
+            PowerAllocationPreset.PrioritizeShields
+        );
+        AddAllocationAction(
+            actions,
+            EngineeringAction.PrioritizeDirectedEnergyWeapons,
+            ship,
+            definition,
+            PowerAllocationPreset.PrioritizeDirectedEnergyWeapons
+        );
+        AddRepairAction(actions, EngineeringAction.BeginShieldRepair, ship, ShipSystemId.Shields);
+        AddRepairAction(actions, EngineeringAction.BeginDirectedEnergyRepair, ship, ShipSystemId.DirectedEnergyWeapons);
         AddRepairAction(actions, EngineeringAction.BeginSensorRepair, ship, ShipSystemId.Sensors);
         AddRepairAction(actions, EngineeringAction.BeginImpulseRepair, ship, ShipSystemId.ImpulsePropulsion);
         actions.Add(new EngineeringActionProjection(EngineeringAction.ReturnToCommand, true));

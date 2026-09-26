@@ -107,6 +107,12 @@ public sealed record ShipStart
     /// <summary>Gets exact initial allocation.</summary>
     public PowerAllocation Allocation { get; init; }
 
+    /// <summary>Gets explicitly declared initial shield condition; legacy declarations remain offline.</summary>
+    public SystemCondition ShieldCondition { get; init; }
+
+    /// <summary>Gets explicitly declared initial weapon condition; legacy declarations remain offline.</summary>
+    public SystemCondition DirectedEnergyCondition { get; init; }
+
     /// <summary>Gets initial strategic state.</summary>
     public ShipStrategicStart Strategic { get; init; }
 

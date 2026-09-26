@@ -92,6 +92,7 @@ internal readonly record struct ScheduledWork
                 and not ScheduledWorkKind.ShipContactDecisionWake
                 and not ScheduledWorkKind.FactionDecisionWake
                 and not ScheduledWorkKind.ObservationReportDelivery
+                and not ScheduledWorkKind.ShipCombatDecisionWake
         )
         {
             throw new ArgumentOutOfRangeException(nameof(kind), kind, "Scheduled work kind is not supported.");
@@ -109,7 +110,8 @@ internal readonly record struct ScheduledWork
             or ScheduledWorkKind.OrderWake
             or ScheduledWorkKind.SensorContactLoss
             or ScheduledWorkKind.ActiveSensorScanCompletion
-            or ScheduledWorkKind.ShipContactDecisionWake => target.Kind == ScheduledWorkTargetKind.Ship,
+            or ScheduledWorkKind.ShipContactDecisionWake
+            or ScheduledWorkKind.ShipCombatDecisionWake => target.Kind == ScheduledWorkTargetKind.Ship,
             _ => false,
         };
         if (!valid)

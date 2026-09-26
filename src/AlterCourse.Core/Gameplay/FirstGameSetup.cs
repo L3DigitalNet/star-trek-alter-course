@@ -85,7 +85,11 @@ public static class FirstGameSetup
             new PowerAllocation(new PowerUnits(70), new PowerUnits(50)),
             new AtLocationStart(locationId),
             directControllerFactionId: controller
-        );
+        )
+        {
+            ShieldCondition = new SystemCondition(1),
+            DirectedEnergyCondition = new SystemCondition(1),
+        };
 
     private static ShipStart[] CreateShipStarts(
         ShipDefinition definition,
@@ -101,7 +105,7 @@ public static class FirstGameSetup
         var fullAllocation = new PowerAllocation(new PowerUnits(70), new PowerUnits(50));
         var balancedAllocation = new PowerAllocation(new PowerUnits(44), new PowerUnits(31));
         var zeroMotion = new TacticalMotion(new HeadingDegrees(0), new SpeedKilometersPerSecond(0));
-        return
+        ShipStart[] starts =
         [
             new(
                 new ShipInstanceId(1),
@@ -153,7 +157,28 @@ public static class FirstGameSetup
                 new AtLocationStart(dawn)
             ),
         ];
+        return InitializeCombat(starts, nominal);
     }
+
+    private static ShipStart[] InitializeCombat(ShipStart[] starts, SystemCondition nominal) =>
+        starts
+            .Select(start =>
+                start with
+                {
+                    ShieldCondition = nominal,
+                    DirectedEnergyCondition = nominal,
+                    Allocation =
+                        start.InstanceId == new ShipInstanceId(4)
+                            ? new PowerAllocation(
+                                new PowerUnits(70),
+                                new PowerUnits(5),
+                                new PowerUnits(15),
+                                new PowerUnits(30)
+                            )
+                            : start.Allocation,
+                }
+            )
+            .ToArray();
 
     private static (StrategicMap Map, LocationId Dawn, LocationId Vesper, LocationId Meridian) CreateMap()
     {

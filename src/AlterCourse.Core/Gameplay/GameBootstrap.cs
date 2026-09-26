@@ -228,6 +228,8 @@ public sealed class GameBootstrap
             start.GenerationCondition,
             start.SensorCondition,
             start.ImpulseCondition,
+            start.ShieldCondition,
+            start.DirectedEnergyCondition,
             start.Allocation,
             repair
         );
@@ -340,7 +342,10 @@ public sealed class GameBootstrap
             work.Id
         );
         SystemCondition declared =
-            start.TargetSystem == ShipSystemId.Sensors ? ship.SensorCondition : ship.ImpulseCondition;
+            start.TargetSystem == ShipSystemId.Sensors ? ship.SensorCondition
+            : start.TargetSystem == ShipSystemId.ImpulsePropulsion ? ship.ImpulseCondition
+            : start.TargetSystem == ShipSystemId.Shields ? ship.ShieldCondition
+            : ship.DirectedEnergyCondition;
         if (declared != repair.ConditionAt(InitialTime))
         {
             throw new ArgumentException("System condition must match active repair progress.", nameof(ship));

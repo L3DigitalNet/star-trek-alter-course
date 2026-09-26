@@ -12,4 +12,5 @@ internal enum ScheduledConsequenceRule
     ShipContactDecisionWake = 8,
     FactionDecisionWake = 9,
     ObservationReportDelivery = 10,
+    ShipCombatDecisionWake = 11,
 }

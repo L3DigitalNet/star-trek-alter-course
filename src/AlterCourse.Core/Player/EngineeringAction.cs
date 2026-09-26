@@ -20,4 +20,16 @@ public enum EngineeringAction
 
     /// <summary>Returns presentation focus to command.</summary>
     ReturnToCommand = 6,
+
+    /// <summary>Applies the shield-priority allocation preset.</summary>
+    PrioritizeShields = 7,
+
+    /// <summary>Applies the weapon-priority allocation preset.</summary>
+    PrioritizeDirectedEnergyWeapons = 8,
+
+    /// <summary>Begins a complete shield repair.</summary>
+    BeginShieldRepair = 9,
+
+    /// <summary>Begins a complete weapon repair.</summary>
+    BeginDirectedEnergyRepair = 10,
 }
