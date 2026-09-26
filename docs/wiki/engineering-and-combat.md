@@ -60,15 +60,15 @@ A rejected voluntary allocation is atomic: it changes no Engineering, contact, s
 
 Pathfinder V5 is a proof configuration, not a permanent balance commitment:
 
-| Authored quantity | Value |
-| --- | --- |
-| Nominal generation | 120 power units |
+| Authored quantity                                   | Value                         |
+| --------------------------------------------------- | ----------------------------- |
+| Nominal generation                                  | 120 power units               |
 | Sensor / impulse / shield / directed-energy demands | 70 / 50 / 40 / 30 power units |
-| Passive range / maximum tactical speed | 30 km / 10 km/s |
-| Active scan duration / weapon cooldown | 2,000 ms / 2,000 ms |
-| Directed-energy range / base shot damage | 20 km / 0.25 |
-| Sensor / shield repair duration | 8,000 ms each |
-| Impulse / directed-energy repair duration | 6,000 ms each |
+| Passive range / maximum tactical speed              | 30 km / 10 km/s               |
+| Active scan duration / weapon cooldown              | 2,000 ms / 2,000 ms           |
+| Directed-energy range / base shot damage            | 20 km / 0.25                  |
+| Sensor / shield repair duration                     | 8,000 ms each                 |
+| Impulse / directed-energy repair duration           | 6,000 ms each                 |
 
 The player's generator condition of 0.625 yields 75 units. In consumer order, Balanced is 28/20/16/11, Sensors-first is 70/5/0/0, and Propulsion-first is 25/50/0/0. The new-game player retains the historical travel allocation 44/31/0/0 rather than applying the expanded Balanced preset automatically.
 
