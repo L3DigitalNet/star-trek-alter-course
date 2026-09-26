@@ -2,27 +2,29 @@
 
 ## Current snapshot
 
-- The current immutable source-only GitHub Release is v0.6.2 at `255eaedc8e27b483b0fd4e2fe0bccf050486b3bf`; it is available at <https://github.com/L3DigitalNet/star-trek-alter-course/releases/latest>.
+- The current immutable source-only GitHub Release is v0.6.2 (`255eaed`); see <https://github.com/L3DigitalNet/star-trek-alter-course/releases/latest>.
 - v0.6.2 is a source-only documentation release. v0.6.1 remains the historical build-process correction release at `f0af2653ca44f17b9f701f6271e199cda1429d16`.
 - Milestone 3A first observed contact, Milestone 4 Engineering Backbone, and Strategic Contact Reporting are released; Features #58, #62, and #77 are Done.
 - Strategic Contact Reporting merged into `dev` as `80c3084` (Final PR #78) and shipped in v0.5.0 through release Task #80 / Final PR #82 on 2026-09-06.
-- Current released rules are `observation-driven-faction-response-v1`, content schema V4, and save schema V8; V6/V7 migrations remain noninventive.
+- Released v0.6.0 rules remain `observation-driven-faction-response-v1`, content schema V4, and save schema V8; V6/V7 migrations remain noninventive.
+- Current `dev` has unreleased M6A first combat engagement: V5 ship content and V9 saves under `first-combat-engagement-v1`.
+- The source-complete M6A canonical gate passed at `3996fbd`: 779 Core, 324 AssetCtl, and 76 Godot tests; no warnings.
 - Historically, Final PR #97 released v0.6.0 and Supporting PR #98 synchronized it to `dev`; their recorded checks remain release evidence.
 - Current `dev` contains the v0.6.2 release through PR #107's synchronization merge `1778634bd192ed393f40b30708fa88e049714a8a`.
 - v0.5.0 verification passed: Core 406, AssetCtl 324, Godot 1+2+63, smoke OK, and zero warnings or errors; later PRs record their own checks.
 - [Faction Intent and Autonomous Assignment](wiki/faction-intent-and-autonomous-assignment.md) merged into `dev` as `0217296` through Final PR #87.
 - Features #86 and #93 are released in v0.6.0; Issue #100's verification build-server repair is released in v0.6.1.
 - Q-05 is resolved and Q-04 is partial for the first bounded M5 slice. Q-02/Q-03/Q-06/Q-08/Q-14 remain future or partly scoped work.
-- The shell retains strategic travel, tactical movement, Engineering power and repair, deterministic time controls, quick save/load, and last-known contact reporting.
+- The shell retains travel, tactical movement, four-consumer Engineering, Combat, time controls, quick save/load, and last-known reporting.
 - Core owns plural ordinary `ShipState`; Godot projects player-visible state and does not own authoritative simulation state.
 - The tracked launch script restores and builds before Godot starts, preventing stale local Debug content after branch changes.
 - [Design wiki](wiki/README.md) is the single source of truth; the bounded direct-faction assignment is implemented while organization and hierarchy runtime remain future work.
 - M3 and M5 remain incomplete. The released bounded faction slice adds no dependencies or UI; broader political runtime is future work.
 - Design phase Final PR #92 merged as `ad73862`; Task #91 is Done and invalid staging PR #90 was closed unmerged; its branch was deleted.
 - PR #92 passed all five final-head checks, Branch policy, and post-merge Verify; design docs and ROADMAP changed without runtime code.
-- Feature #93's V8 observation response is released in v0.6.0.
+- Feature #93's V8 observation response is released in v0.6.0; M6A remains unreleased development toward partial M6.
 - Release tree verification passed: Core 598, AssetCtl 324, Godot 1+2+67, smoke, warning-free checks, all text gates, standards 38, and frontmatter/handoff 0.
-- Independent release review was confirmed, and all five hosted Final PR #97 checks passed. M6/Q-10 follows; M3/M5 remain incomplete.
+- Independent release review was confirmed, and all five hosted Final PR #97 checks passed. M3/M5 remain incomplete.
 - Handoff `9ebee7b` used the ADR 0013 direct route; GitHub reported a configured PR/check bypass, contrary to Feature #93's no-bypass constraint.
 - PR #101 fixed verification build-server reuse. Release and Debug verification passed with Core 598, AssetCtl 324, Godot integration and smoke checks.
 - The verification process scan found no remaining `dotnet`, `MSBuild`, or `VBCSCompiler` processes. Issue #100 and Task #102 are Done.

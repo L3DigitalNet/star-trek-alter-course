@@ -225,7 +225,7 @@ This slice does not implement:
 
 ## Next development sequence
 
-After this bounded information-to-action loop, **M6 Tactical Combat Foundation is the next major development family**. M3 and M5 do not need to be declared complete first.
+After this bounded information-to-action loop, **M6A First Combat Engagement is implemented on `dev` as an unreleased contribution toward partial M6**. M3 and M5 do not need to be declared complete first.
 
 The first M6 slice should be a **first combat engagement** that composes existing movement, sensing, Engineering, AI, persistence, and withdrawal. The intended narrow direction is one directed-energy weapon family, a bounded shield model, sensor-constrained targeting/fire control, meaningful power competition, maneuver/range, operational damage to concrete systems, explainable combat AI, and withdrawal/non-engagement.
 

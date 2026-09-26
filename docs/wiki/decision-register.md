@@ -82,7 +82,7 @@ The owner selected [Observation-Driven Faction Response](observation-driven-fact
 
 **D-18 — Tactical combat follows this slice; Engineering grows through combat consumers.** In this September 7 decision, M6 first combat engagement was the next major development family and Q-10 remained open for later refinement. Full M3 or M5 completion is not a prerequisite. The first M6 refinement should compose one bounded directed-energy/shield/targeting/damage/withdrawal interaction with existing sensing, motion, Engineering, AI, and persistence. Ship-system depth is added when it creates or materially changes a command decision rather than through an exhaustive pre-combat subsystem catalog. D-19 now resolves M6A's bounded mechanics.
 
-**D-19 — Bounded M6A first engagement.** The owner resolves Q-10 for implementation in progress: one all-aspect directed-energy/shield interaction uses Current, Identified local contacts; four-consumer power allocation; direct concrete-system condition loss after shield absorption; deterministic brownout/reconciliation; one delayed defensive ship wake; and planned adjacent V8→V9 persistence. M6A has no RNG, hull pool, recharge, broader geometry/facings, periodic weapon work, faction-driven combat policy, or travel/order preemption. Its detailed contract belongs to [Engineering and combat](engineering-and-combat.md); this approval is not implementation evidence.
+**D-19 — Bounded M6A first engagement.** Q-10 is resolved and this approved interaction is implemented on `dev`: one all-aspect directed-energy/shield interaction uses Current, Identified local contacts; four-consumer power allocation; direct concrete-system condition loss after shield absorption; deterministic brownout/reconciliation; one delayed defensive ship wake; and adjacent V8→V9 persistence. M6A has no RNG, hull pool, recharge, broader geometry/facings, periodic weapon work, faction-driven combat policy, or travel/order preemption. [Engineering and combat](engineering-and-combat.md) owns its detailed contract; M6A remains unreleased development toward partial M6.
 
 ## Political decisions approved September 6, 2026
 
@@ -119,7 +119,7 @@ A separate durable `KnownShipId`, cross-observer known-vessel correlation, polit
 
 The earlier proposed `M3B→M5→M6` sequence is not the governing plan: D-07 selected Strategic Contact Reporting without canonically naming it M3B, D-08 selected the bounded assignment slice, and D-14 now selects the bounded report-driven response slice before D-18 moves the main development axis to M6. Neither M3 nor M5 must be declared complete before that first combat refinement.
 
-The [open-question register](open-questions.md) retains the unresolved portions. No detailed permission matrix, treaty engine, general political scoring system, economic resource catalog, complete organization taxonomy, or exact combat rules are approved by these decisions.
+The [open-question register](open-questions.md) retains the unresolved portions. No detailed permission matrix, treaty engine, general political scoring system, economic resource catalog, complete organization taxonomy, or combat refinements beyond M6A are approved by these decisions.
 
 ## Maintaining the register
 

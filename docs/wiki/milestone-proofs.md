@@ -30,11 +30,11 @@ This page owns the milestone acceptance boundaries formerly carried by the root 
 - **Milestone 1** and **Milestone 2** are implemented.
 - **Milestone 3A — First Observed Contact** is implemented, but **Milestone 3 as a whole is not complete**.
 - **Milestone 4 — Engineering Backbone and Degraded Operations** is implemented.
-- Released v0.6.0 uses content schema **V4** and save schema **V8** through Feature #93 / Final PR #94. Feature #86 / Final PR #87 introduced strict faction content V1 and save V7; v0.5.0 remains the historical V6 release.
+- Released v0.6.0 uses content schema **V4** and save schema **V8** through Feature #93 / Final PR #94. Current `dev` adds unreleased M6A content schema **V5** and save schema **V9**. Feature #86 / Final PR #87 introduced strict faction content V1 and save V7; v0.5.0 remains the historical V6 release.
 - The broader approved [factions and organizations](factions-and-organizations.md) political model remains **design only** beyond the implemented root-faction/direct-control subset. No faction hierarchy, organization runtime, government model, treaty system, layered jurisdiction runtime, or strategic affiliation-knowledge system exists yet.
 - [Strategic Contact Reporting](strategic-contact-reporting.md) is **implemented** (Feature #77, Final PR #78), resolving Q-01. It is not canonically named `M3B`, does not complete Milestone 3, and did not itself begin M5.
 - [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) is the implemented first M5 slice, resolving Q-05. That slice introduced V7; v0.6.0 now uses V8 and v0.5.0 remains the historical V6 release.
-- [Observation-Driven Faction Response](observation-driven-faction-response.md) is implemented by Feature #93 / Final PR #94, with reviewed behavioral, presentation, and V8 persistence evidence. It is the implemented second bounded M5 contribution. M6 Tactical Combat Foundation is the next major development family without requiring M3 or M5 to be declared complete.
+- [Observation-Driven Faction Response](observation-driven-faction-response.md) is implemented by Feature #93 / Final PR #94, with reviewed behavioral, presentation, and V8 persistence evidence. It is the implemented second bounded M5 contribution. M6A first combat engagement is an implemented, unreleased contribution toward partial M6; M3 and M5 remain incomplete.
 
 ## Execution model
 
@@ -92,7 +92,7 @@ Canon should establish the chosen campaign's required historical and political s
 | 3 | **Sensor Knowledge and First Contact** | **Partial — M3A and Strategic Contact Reporting implemented; M3 not complete** | M3A proves observer-local knowledge and information-limited ship behavior; Strategic Contact Reporting carries legitimate last-known contact information into strategic context without defining the final intelligence model. |
 | 4 | **Engineering Backbone and Degraded Operations** | **Implemented** | Power, condition, capability, and repair interact with existing sensing and maneuvering rather than living in a parallel subsystem. |
 | 5 | **Living Sector and Faction Autonomy** | **Partial — faction assignment and observation response implemented** | Faction intent and legitimate received knowledge cause explainable assignments, offscreen activity, and durable actor-local consequences using actor-appropriate information. |
-| 6 | **Tactical Combat Foundation** | **Future — next major family after observation-driven response** | Combat composes motion, observation, Engineering, AI, persistence, and withdrawal instead of becoming a separate hit-point game. |
+| 6 | **Tactical Combat Foundation** | **Partial — M6A first engagement implemented on `dev`** | Combat composes motion, observation, Engineering, AI, persistence, and withdrawal instead of becoming a separate hit-point game. |
 | 7 | **Diplomacy, Incidents, and Durable Consequences** | **Future** | The world distinguishes events, knowledge/attribution, legal status, attitudes, and remembered consequences that affect later decisions. |
 | 8 | **Canon-Anchored Campaign Bootstrap and Divergent History** | **Future** | A campaign begins from reproducible canon-consistent boundary conditions plus already-active noncanonical local activity. |
 | 9 | **Persistent Regional Campaign Integration** | **Future** | The preceding systems form one durable regional gameplay loop that remains coherent over extended simulation time. |
@@ -131,7 +131,7 @@ This is a **partial Milestone 3 outcome**. Strategic contacts, affiliation/inten
 
 **Implemented by Feature #62 / Final PR #63; included in v0.4.0.**
 
-Core owns bounded generation, power allocation, concrete sensor/impulse condition, derived capability, and deterministic system repair. Those values affect real sensor reach, tactical speed, scan continuity, AI inputs, persistence, and the live Engineering workspace. Ship-definition content V4 is current. Save V5 was introduced by this milestone; Strategic Contact Reporting added released V6, Faction Intent and Autonomous Assignment added V7, and Observation-Driven Faction Response added released V8.
+Core owns bounded generation, four-consumer power allocation, five concrete system conditions, derived capability, and deterministic system repair. Those values affect real sensor reach, tactical speed, scan continuity, AI inputs, persistence, and the live Engineering workspace. V4 is the released ship-content baseline; M6A adds V5. Save V5 was introduced by this milestone; Strategic Contact Reporting added released V6, Faction Intent and Autonomous Assignment added V7, Observation-Driven Faction Response added released V8, and unreleased M6A adds V9.
 
 The milestone intentionally stops short of a universal component system, arbitrary combat damage, detailed EPS topology, batteries, warp power, fuel, heat/coolant, repair teams/queues, shields, weapons, or crew simulation.
 
@@ -245,7 +245,7 @@ Do not create three faction classes for Polity/Constituent/Internal, infer power
 
 ### Sequencing and first slice
 
-After Observation-Driven Faction Response, **M6 first combat engagement is the next major development family**. Full completion of M3 or M5 is not a prerequisite. Q-10 is now resolved for M6A First Combat Engagement, whose implementation is in progress; this approval is not evidence that combat behavior is complete.
+M6A First Combat Engagement is implemented on `dev` as the first partial M6 contribution. Full completion of M3 or M5 was not a prerequisite. Q-10 is resolved for this bounded work; M6 remains incomplete and later refinements require their own evidence.
 
 The first engagement should start narrow: one directed-energy weapon family, a bounded shield model, sensor-constrained targeting/fire control, meaningful power competition, tactical maneuver/range, damage to concrete systems, deterministic/explainable combat AI, persistence of consequences, and withdrawal/non-engagement. The purpose is to stress the existing joints between sensing, motion, Engineering, AI, and persistence rather than to build a broad weapon catalog.
 
@@ -264,7 +264,7 @@ Add the smallest combat model that proves existing systems compose under pressur
 - Withdrawal, disengagement, and non-engagement remain valid outcomes.
 - Tactical AI issues validated Core commands and remains deterministic/explainable at the consequence boundary.
 
-M6A admits one non-facing directed-energy/shield model, local Current/Identified targeting, direct subsystem condition loss, deterministic ReturnFire/Withdraw/Hold response, and planned V9 continuation. Its acceptance evidence must demonstrate atomic rejection, absorption/penetration, brownout remainder order, forced speed/scan/repair reconciliation, actor-safe projection, bounded delayed defense, V8→V9 non-inventive migration, and persistence continuation. It must not claim facings, recharge, hull, periodic weapon work, RNG, political combat policy, or broader combat behavior without a later approved contract and evidence.
+M6A implements one non-facing directed-energy/shield model, local Current/Identified targeting, direct subsystem condition loss, deterministic ReturnFire/Withdraw/Hold response, and V9 continuation. Checked-in tests cover atomic rejection, absorption/penetration, brownout remainder order, forced speed/scan/repair reconciliation, actor-safe projection, bounded delayed defense, V8→V9 non-inventive migration, populated continuation, and a 512-shot horizon with 512 accepted return fires, at most one outstanding wake, and 60-second dormant convergence. It does not claim facings, recharge, hull, periodic weapon work, RNG, political combat policy, or broader combat behavior.
 
 ---
 

@@ -8,7 +8,7 @@ The [project design wiki](docs/wiki/README.md) is the single source of truth for
 
 ## Project status
 
-The current source-only release is [v0.6.2](https://github.com/L3DigitalNet/star-trek-alter-course/releases/tag/v0.6.2). Its latest gameplay baseline remains [v0.6.0 — Faction Observation and Response](https://github.com/L3DigitalNet/star-trek-alter-course/releases/tag/v0.6.0): bounded faction assignment and observation-driven response using V8 saves under `observation-driven-faction-response-v1`. v0.5.0 remains the historical V6 release. M3 and M5 remain incomplete, and no packaged game artifact is published. See [implementation status](docs/wiki/implementation-status.md) for the reviewed behavior and save-version boundaries, and the [roadmap](ROADMAP.md) for development sequence.
+The current source-only release is [v0.6.2](https://github.com/L3DigitalNet/star-trek-alter-course/releases/tag/v0.6.2). Its latest released gameplay baseline remains [v0.6.0 — Faction Observation and Response](https://github.com/L3DigitalNet/star-trek-alter-course/releases/tag/v0.6.0), using V8 saves under `observation-driven-faction-response-v1`. Current `dev` also contains the unreleased M6A first-combat contribution with V5 ship content and V9 saves under `first-combat-engagement-v1`. v0.5.0 remains the historical V6 release. M3 and M5 remain incomplete, and no packaged game artifact is published. See [implementation status](docs/wiki/implementation-status.md) for reviewed behavior and save-version boundaries, and the [roadmap](ROADMAP.md) for development sequence.
 
 This README is an onboarding guide. The wiki owns game rules, controls, persistence contracts, and future design; [ADRs](docs/adr/) record architectural decisions.
 
