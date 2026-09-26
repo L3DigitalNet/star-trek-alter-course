@@ -24,7 +24,7 @@ related:
 ## Required environment
 
 - Linux x86_64 with Git, Bash, `curl`, `tar` with xz support, `unzip`, and `sha256sum`.
-- The exact .NET SDK selected by [`global.json`](../global.json), with roll-forward disabled. The resolver supplies that SDK plus the .NET 8 runtime required by Godot.
+- The exact .NET SDK selected by [`global.json`](../global.json), with roll-forward disabled. The resolver supplies that SDK plus the .NET 8 runtime required by Godot. `scripts/resolve-dotnet.sh` downloads the checksum-pinned SDK to the user cache and links it as the untracked repository-root `.dotnet`, which `global.json` searches before the running host's own SDKs. Editors and shells that start a system `dotnet` with a different patch SDK therefore still resolve the pinned SDK. If an editor reports that no required SDK was found, run `./scripts/resolve-dotnet.sh` once from the repository root and reload the workspace.
 - Node 24 with `npx`, selected by [`.node-version`](../.node-version). Repository scripts reject a different Node major before running npm-based tools.
 - Godot 4.7.2 stable .NET/C#. The verifier accepts an exact matching `GODOT_BIN` or `godot` command, or downloads the checksum-pinned official editor to the user cache.
 - GdUnit4 6.2.0, vendored from upstream commit `d18770221c2df4a3c991a42fdce7907df40eea75` under the Godot project.
