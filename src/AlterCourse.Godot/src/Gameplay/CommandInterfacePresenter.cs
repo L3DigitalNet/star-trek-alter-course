@@ -973,6 +973,8 @@ public static class CommandInterfacePresenter
                 "Unavailable: another system repair is active.",
             (false, EngineeringActionUnavailableReason.SystemAlreadyNominal) =>
                 "Unavailable: this system is already nominal.",
+            (false, EngineeringActionUnavailableReason.UnsupportedSystem) =>
+                "Unavailable: this system is not installed.",
             _ => "Unavailable: Core does not currently support this Engineering action.",
         };
 

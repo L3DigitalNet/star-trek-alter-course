@@ -218,6 +218,85 @@ func test_public_combat_damage_disables_weapon_and_weapon_repair_restores_capabi
 	assert_int(screen.get_meta("engineering_shield_allocation", -1)).is_equal(40)
 
 
+func test_combat_quick_save_restores_readiness_and_reaction_continuation() -> void:
+	var screen := _create_screen()
+	_prepare_combat_encounter(screen)
+	(_find_action_button(screen, "fire-phasers") as Button).emit_signal("pressed")
+	assert_str(screen.get_meta("last_fire_outcome", "")).is_equal("Accepted")
+	var ready_at: int = screen.get_meta("combat_next_ready_at", -1)
+	var fired_at: int = screen.get_meta("simulation_time_milliseconds", -1)
+	assert_int(ready_at).is_equal(fired_at + 2000)
+	screen.call("QuickSave")
+	assert_str(screen.get_meta("quick_save_status", "")).is_equal("saved")
+	var saved_text := FileAccess.get_file_as_string(TEST_QUICK_SAVE_PATH)
+	var saved: Dictionary = JSON.parse_string(saved_text)
+	var simulation: Dictionary = saved.get("simulation", {})
+	var pending_count := 0
+	for ship in simulation.get("ships", []):
+		var combat: Dictionary = ship.get("combat", {})
+		var stimulus = combat.get("pendingStimulus")
+		if stimulus != null:
+			pending_count += 1
+			assert_int(int(stimulus.get("observedAtMilliseconds", -1))).is_equal(fired_at)
+			assert_int(int(stimulus.get("dueTimeMilliseconds", -1))).is_equal(fired_at + 100)
+	assert_int(pending_count).is_equal(1)
+	_advance_fixed_steps(screen, 20)
+	var shield_condition: float = screen.get_meta("engineering_shield_condition", -1.0)
+	var weapon_condition: float = screen.get_meta("engineering_weapon_condition", -1.0)
+	assert_float(shield_condition).is_less(1.0)
+	screen.call("QuickLoad")
+	assert_str(screen.get_meta("quick_save_status", "")).is_equal("loaded")
+	screen.call("SelectContact", 1)
+	assert_int(screen.get_meta("combat_next_ready_at", -1)).is_equal(ready_at)
+	assert_int(screen.get_meta("combat_remaining_cooldown", -1)).is_equal(2000)
+	assert_bool((_find_action_button(screen, "fire-phasers") as Button).disabled).is_true()
+	screen.call("QuickSave")
+	var loaded: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(TEST_QUICK_SAVE_PATH))
+	assert_dict(loaded.get("simulation", {})).is_equal(simulation)
+	_advance_fixed_steps(screen, 20)
+	assert_int(screen.get_meta("combat_remaining_cooldown", -1)).is_equal(0)
+	assert_float(screen.get_meta("engineering_shield_condition", -1.0)).is_equal_approx(shield_condition, 0.000001)
+	assert_float(screen.get_meta("engineering_weapon_condition", -1.0)).is_equal_approx(weapon_condition, 0.000001)
+	assert_bool((_find_action_button(screen, "fire-phasers") as Button).disabled).is_false()
+
+
+func test_core_out_of_range_reason_uses_legitimate_contact_and_player_only_allocation_fixture() -> void:
+	var screen := _create_screen()
+	_prepare_detected_contact(screen)
+	screen.call("ShowTacticalView")
+	screen.call("SelectContact", 1)
+	(_find_action_button(screen, "active-scan") as Button).emit_signal("pressed")
+	screen.call("AdvanceUntilNextPlayerRelevantEvent")
+	assert_str(screen.get_meta("first_contact_identification", "")).is_equal("Identified")
+	assert_float(screen.get_meta("combat_known_range", -1.0)).is_greater(20.0)
+	(_find_action_button(screen, "hail") as Button).emit_signal("pressed")
+	(screen.get_node("%StopCourseButton") as Button).emit_signal("pressed")
+	screen.call("QuickSave")
+	var save_text := FileAccess.get_file_as_string(TEST_QUICK_SAVE_PATH)
+	var parsed: Dictionary = JSON.parse_string(save_text)
+	assert_int(int(parsed.get("schemaVersion", -1))).is_equal(9)
+	var simulation: Dictionary = parsed.get("simulation", {})
+	var player_id := int(simulation.get("playerShipId", 0))
+	# Presets cannot jointly power weapons and sense beyond 20 km with 75 units. Only own allocation
+	# changes in this fixture; scan acquired the Current/Identified contact through ordinary controls.
+	save_text = _replace_saved_object_field(save_text, "ships", "instanceId", player_id, "impulseAllocation", 5, 0)
+	save_text = _replace_saved_object_field(save_text, "ships", "instanceId", player_id, "directedEnergyAllocation", 0, 5)
+	_write_text(TEST_QUICK_SAVE_PATH, save_text)
+	screen.call("QuickLoad")
+	assert_str(screen.get_meta("quick_save_status", "")).is_equal("loaded")
+	screen.call("SelectContact", 1)
+	assert_str(screen.get_meta("first_contact_status", "")).is_equal("Current")
+	assert_str(screen.get_meta("first_contact_identification", "")).is_equal("Identified")
+	assert_str(screen.get_meta("combat_target_outcome", "")).is_equal("OutOfRange")
+	var fire := _find_action_button(screen, "fire-phasers") as Button
+	assert_bool(fire.disabled).is_true()
+	assert_str(fire.tooltip_text).contains("out of weapon range")
+	assert_str(_collect_control_text(_command_deck(screen))).contains("out of weapon range")
+	var ready_at: int = screen.get_meta("combat_next_ready_at", -1)
+	fire.emit_signal("pressed")
+	assert_int(screen.get_meta("combat_next_ready_at", -1)).is_equal(ready_at)
+
+
 func test_quick_save_and_load_controls_exist() -> void:
 	var screen := _create_screen()
 
@@ -1412,7 +1491,7 @@ func test_quick_load_rejects_actual_player_sourced_report_without_damaging_live_
 	assert_int(screen.get_meta("travel_eta_milliseconds", -1)).is_equal(retained_time + 12000)
 
 
-func test_default_quick_save_writes_production_v8_without_touching_legacy_slot() -> void:
+func test_default_quick_save_writes_production_v9_without_touching_legacy_slot() -> void:
 	_write_text(LEGACY_DEFAULT_QUICK_SAVE_PATH, "legacy-slot-sentinel")
 	var screen := _create_default_screen()
 
@@ -1423,9 +1502,9 @@ func test_default_quick_save_writes_production_v8_without_touching_legacy_slot()
 	var save_json: Dictionary = JSON.parse_string(
 		FileAccess.get_file_as_string(DEFAULT_QUICK_SAVE_PATH)
 	)
-	assert_int(int(save_json.get("schemaVersion", -1))).is_equal(8)
+	assert_int(int(save_json.get("schemaVersion", -1))).is_equal(9)
 	assert_str(save_json.get("simulationRulesVersion", "")).is_equal(
-		"observation-driven-faction-response-v1"
+		"first-combat-engagement-v1"
 	)
 	var simulation: Dictionary = save_json.get("simulation", {})
 	assert_int((simulation.get("factions", []) as Array).size()).is_equal(2)
@@ -1439,7 +1518,7 @@ func test_default_quick_save_writes_production_v8_without_touching_legacy_slot()
 	)
 
 
-func test_default_quick_load_discovers_legacy_slot_path_then_saves_generic_v8() -> void:
+func test_default_quick_load_discovers_legacy_slot_path_then_saves_generic_v9() -> void:
 	var snapshot_screen := _create_screen()
 	snapshot_screen.call("ProcessSyntheticDelta", 0.6)
 	snapshot_screen.call("QuickSave")
@@ -1458,9 +1537,9 @@ func test_default_quick_load_discovers_legacy_slot_path_then_saves_generic_v8() 
 	var save_json: Dictionary = JSON.parse_string(
 		FileAccess.get_file_as_string(DEFAULT_QUICK_SAVE_PATH)
 	)
-	assert_int(int(save_json.get("schemaVersion", -1))).is_equal(8)
+	assert_int(int(save_json.get("schemaVersion", -1))).is_equal(9)
 	assert_str(save_json.get("simulationRulesVersion", "")).is_equal(
-		"observation-driven-faction-response-v1"
+		"first-combat-engagement-v1"
 	)
 	assert_str(FileAccess.get_file_as_string(LEGACY_DEFAULT_QUICK_SAVE_PATH)).is_equal(
 		legacy_contents
@@ -1642,7 +1721,7 @@ func test_quick_save_load_retains_faction_travel_and_continues_to_satisfied_pres
 	)
 
 
-func test_malformed_v8_controller_and_scheduler_targets_leave_live_simulation_usable() -> void:
+func test_malformed_current_controller_and_scheduler_targets_leave_live_simulation_usable() -> void:
 	var screen := _create_screen()
 	screen.call("QuickSave")
 	var valid_save := FileAccess.get_file_as_string(TEST_QUICK_SAVE_PATH)
