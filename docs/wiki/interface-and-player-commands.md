@@ -6,7 +6,7 @@ description: 'Command Deck design, live Engineering, actor-safe presentation, an
 doc_type: 'reference'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-07'
+updated: '2026-09-26'
 tags:
   - 'godot'
   - 'ui'
@@ -40,15 +40,17 @@ The 1920×1080 reference composition uses a 122 px Systems Spine, expanding map,
 
 ## Live surface and commands
 
-M3A made actor-local tactical contacts, identification, and hail live. M4 made generation, allocation, sensor/impulse condition/capability, and one sensor or impulse repair live. Strategic Contact Reporting added a minimal **LAST KNOWN CONTACTS** section to the strategic inspector. Combat fire solutions, shields/weapons, detailed EPS topology, unsupported component telemetry, and repair-team queues remain preview-only, unavailable, or absent; reference imagery is not an implementation commitment.
+M3A made actor-local tactical contacts, identification, and hail live. M4 made generation, allocation, sensor/impulse condition/capability, and one repair live. Strategic Contact Reporting added a minimal **LAST KNOWN CONTACTS** section to the strategic inspector. M6A adds the minimal live Combat workspace, shield/weapon power and repair controls, and native heading/speed Apply and Stop through existing typed Core course rules. Combat uses only local contact selection and actor-safe feedback; it does not show target health, affiliation, controller, faction, condition, capability, or pending NPC intent. Detailed EPS topology, unsupported component telemetry, and repair-team queues remain unavailable or absent; reference imagery is not an implementation commitment.
 
-The live Engineering hierarchy is Overview, Power, Sensors, Propulsion, and Repairs. It presents Core values and Core-supplied action availability/reasons; it does not simulate allocation preview or optimistically mutate a ship. The strategic map selects connected destinations and engages scheduled travel. Tactical view shows the local frame, actor-known contact markers, selected-contact facts, scan, and hail. The demonstration course is 045 degrees at 2 km/s, subject to effective impulse limit; it is not a complete navigation console.
+The live Engineering hierarchy is Overview, Power, Sensors, Propulsion, Shields, Weapons, and Repairs. It presents Core values and Core-supplied action availability/reasons; it does not simulate allocation preview or optimistically mutate a ship. The strategic map selects connected destinations and engages scheduled travel. Tactical view shows the local frame, actor-known contact markers, selected-contact facts, scan, hail, heading and speed fields, Apply, and Stop. Course controls remain subject to the effective impulse limit; they are not a complete navigation console.
 
-Live Engineering actions are **Balance power allocation**, **Prioritize sensors**, **Prioritize propulsion**, **Begin sensor repair**, **Begin impulse repair**, and **Return to Command Deck**. They use stable presentation identities and Core-supplied legality; a display label is not an authoritative system or command identity.
+Live Engineering actions include **Balance power allocation**, priorities for Sensors, Propulsion, Shields, and Directed Energy, repairs for all repairable systems, and **Return to Command Deck**. Combat provides stable target selection and **Fire directed energy**. Actions remain visible when disabled and provide Core-supplied reasons, including no selected/Current/Identified contact, out of range, unpowered or offline weapons, cooldown, unsupported target system, and unavailable repair/allocation/course state. A display label is not an authoritative system or command identity.
+
+A fire control submits local contact and selected subsystem identities; it does not calculate range, capability, readiness, damage, or hit outcome. Actor-safe attacker feedback may state shot fired, shield hit, or penetration to the selected system, never target identity/controller/faction/condition/capability/percentages. The player victim may receive its own damage, brownout, forced-speed, and repair-interruption consequences. Pending NPC intent is never displayed.
 
 The inspector's own `KnownContactReports` section lists retained reports: learned vessel or tactical label, last-seen location/time, Current/Stale/Lost status, and learned design name. It is capped/summarized when necessary, not a strategic-map marker or intelligence dashboard. Observation-Driven Faction Response keeps received NPC-faction reports, investigations, report IDs, and controller facts out of Godot/player projection; player visibility still depends on the player's own legitimate sensing.
 
-Shortcuts are 1 strategic, 2 tactical, Space pause/resume, R cycle rate, U advance to player-relevant event, Ctrl+S/Ctrl+L quick save/load, E engage selected travel, and C submit the demonstration course. Running rates are 0.5x, 1x, 2x, and 4x; pause is separate. The quick-save slot and its failure-preservation boundary are owned by [content, assets, and persistence](content-assets-and-persistence.md).
+Shortcuts are 1 strategic, 2 tactical, Space pause/resume, R cycle rate, U advance to player-relevant event, Ctrl+S/Ctrl+L quick save/load, E engage selected travel, and C submit the current course fields. Engineering and Combat workspaces are selected through their visible controls. Running rates are 0.5x, 1x, 2x, and 4x; pause is separate. The quick-save slot and its failure-preservation boundary are owned by [content, assets, and persistence](content-assets-and-persistence.md).
 
 ## Interaction and precision
 

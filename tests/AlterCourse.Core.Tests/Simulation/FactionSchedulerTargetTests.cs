@@ -157,7 +157,7 @@ public sealed class FactionSchedulerTargetTests
     public void OutstandingWorkBoundIncludesEveryFactionWake()
     {
         Assert.Equal(256, SimulationState.MaximumFactions);
-        Assert.Equal(68_864, SimulationScheduler.MaximumOutstandingWork);
+        Assert.Equal(69_120, SimulationScheduler.MaximumOutstandingWork);
     }
 
     private static ScheduledWork Work(long id, long sequence, ScheduledWorkTarget target, ScheduledWorkKind kind) =>

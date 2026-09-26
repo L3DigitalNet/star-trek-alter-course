@@ -6,7 +6,7 @@ description: 'Reviewed gameplay baseline and explicit boundaries between runtime
 doc_type: 'reference'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-08'
+updated: '2026-09-26'
 tags:
   - 'simulation'
   - 'design'
@@ -26,7 +26,7 @@ related:
 
 ## Reviewed baseline
 
-v0.6.0 is the immutable source-only release and uses V8 saves under `observation-driven-faction-response-v1`. It contains Feature #86 / Final PR #87's bounded faction slice and Feature #93 / Final PR #94's observation response. v0.5.0 remains the historical V6 release. For the operational snapshot, consult [STATUS](../STATUS.md).
+v0.6.2 is the current immutable source-only release. Its latest released gameplay baseline is v0.6.0, which uses V8 saves under `observation-driven-faction-response-v1` and contains Feature #86 / Final PR #87's bounded faction slice and Feature #93 / Final PR #94's observation response. Current `dev` additionally has unreleased M6A first combat engagement using V5 ship content and V9 saves under `first-combat-engagement-v1`. v0.5.0 remains the historical V6 release. For the operational snapshot, consult [STATUS](../STATUS.md).
 
 [Observation-Driven Faction Response](observation-driven-faction-response.md) is implemented by Feature #93 / Final PR #94 and released in v0.6.0, using V8 under `observation-driven-faction-response-v1`. v0.5.0 remains the historical V6 release. The reviewed feature evidence includes its Core causal path, three production and three long-horizon scenarios, 67/67 Godot/player-safe tests, and the V8 conservative persistence bound.
 
@@ -38,11 +38,11 @@ Strategic travel has scheduled arrival. Durable `TravelTo`, `PatrolRoute`, and `
 
 Local tactical space has continuous 2D positions and course/speed commands. Observer-local contacts support Current, Stale, Lost, reacquisition, active identification, and a typed hail acknowledgement. A bounded cautious-contact policy acts from its own knowledge rather than hidden target state.
 
-Engineering owns generation condition, constrained allocation, sensor and impulse condition, derived capability, and one sensor or impulse repair per ship. Those values affect actual detection and tactical course limits. The live Engineering UI is not merely a preview.
+Engineering owns generation condition, constrained four-consumer allocation, five system conditions, derived capability, and one repair per ship for every system except generation. Those values affect detection, tactical course limits, shields, directed-energy fire, and deterministic forced reconciliation after damage. The live Engineering and Combat UI is not merely a preview.
 
-Feature #86 added root faction definitions and mutable presence objectives, ship-side optional direct `FactionId` control with a derived roster, pure own-asset assignment, typed Ship/Faction scheduler targets, and strict V1 faction JSON. It selects by route duration then ship ID, issues ordinary `TravelTo`, and keeps offscreen contact knowledge ship-local. Its V7 save persists the consequential state and migrates V6 with zero factions, null controllers, and explicitly ship-targeted work. Ship-definition content V4 remains current.
+Feature #86 added root faction definitions and mutable presence objectives, ship-side optional direct `FactionId` control with a derived roster, pure own-asset assignment, typed Ship/Faction scheduler targets, and strict V1 faction JSON. It selects by route duration then ship ID, issues ordinary `TravelTo`, and keeps offscreen contact knowledge ship-local. Its V7 save persists the consequential state and migrates V6 with zero factions, null controllers, and explicitly ship-targeted work. V4 ship content remains the released baseline; M6A uses V5 content.
 
-The Godot shell privately loads both strict catalogs and adapts V8 saves without adding faction UI. Its 67/67 compatibility suite verifies quick-load continuation, root controllers retain a null player controller, malformed faction/controller/response data leaves the live shell usable, and ordinary UI hides faction names, vessels, reports, and work.
+The Godot shell privately loads both strict catalogs and adapts V9 saves without adding faction UI. It exposes the minimal live Combat workspace, four-consumer Engineering, and heading/speed Apply and Stop through existing Core commands while retaining actor-safe projections: no target health, controller, affiliation, faction, or pending intent telemetry.
 
 Implementation evidence: [FirstGameSetup](../../src/AlterCourse.Core/Gameplay/FirstGameSetup.cs), [ShipState](../../src/AlterCourse.Core/Ships/ShipState.cs), [SimulationState](../../src/AlterCourse.Core/Gameplay/SimulationState.cs), [GameSimulation](../../src/AlterCourse.Core/Gameplay/GameSimulation.cs), [Core gameplay tests](../../tests/AlterCourse.Core.Tests/Gameplay/), and the [Engineering contract](engineering-and-combat.md).
 
@@ -50,7 +50,7 @@ Implementation evidence: [FirstGameSetup](../../src/AlterCourse.Core/Gameplay/Fi
 
 Milestone 1 world/bootstrap and Milestone 2 active-world orders are implemented. Milestone 3A first observed contact and [Strategic Contact Reporting](strategic-contact-reporting.md) are implemented, but the roadmap explicitly does not declare all of Milestone 3 complete. Milestone 4 Engineering Backbone is implemented. M3A and M4 are included in v0.4.0; Strategic Contact Reporting was delivered in Feature #77 / Final PR #78, merged into `dev` as `80c3084`, and included in v0.5.0.
 
-Feature #86 is the first implemented M5 contribution, not evidence that M5 or M3 is complete. Observation-Driven Faction Response is the next bounded M5 contribution. M6 Tactical Combat Foundation is the next major development family; M3 and M5 do not need to be declared complete first. M6-M9 runtime remains future work. No canonical M3B milestone is admitted.
+Feature #86 is the first implemented M5 contribution, not evidence that M5 or M3 is complete. Observation-Driven Faction Response is the implemented second bounded M5 contribution. M6A first combat engagement is an unreleased, implemented contribution toward partial M6; M3 and M5 do not need to be declared complete first. Later M6 refinement and M7-M9 runtime remain future work. No canonical M3B milestone is admitted.
 
 ## Implemented bounded faction slice
 
@@ -64,9 +64,15 @@ Q-05 is resolved for that slice. Q-04, Q-06, Q-08, and Q-14 have only the docume
 
 The implementation provides faction received-report state, report-delivery scheduler work, observation-response posture, investigation commitments, and V8 saves. Three production and three long-horizon Core proofs establish the two-faction path and bounded continuation; the Godot suite is 67/67 and keeps the player projection actor-safe. A high-width graph fixture is 108,890,984 bytes compact; the source-derived conservative V8 ceiling is 113,024,376 bytes, 21,193,352 bytes below the unchanged 128 MiB envelope. Historical released contacts remain ship-local in V6; V7 is the preceding development schema.
 
+## Implemented M6A combat
+
+M6A composes local Current and Identified contacts, same-location/range legality, one generic directed-energy weapon, all-aspect shields, five damage targets, four competing power consumers, one repair, tactical movement, deterministic defensive response, and V9 continuation. Fire has a per-ship persisted absolute readiness time; rejection is atomic. An accepted shot uses `baseDamage × weaponCapability`, shields absorb `min(output, shieldCondition × shieldPowerSatisfaction)`, and any remaining damage reduces the selected system. Damage may force allocation, speed, scan, and repair reconciliation without inventing a hull pool, recharge, global encounter, random outcome, affiliation, or political hostility.
+
+A victim can retain one future wake at `observed + 100 ms` when it has a Current local contact for the attacker. The wake consumes that stimulus and explains Return Fire, Withdraw, and Hold from local tactical facts, capabilities, readiness, and time only; it chooses that fixed order and does not wait for cooldown. Events reveal only actor-safe qualitative facts.
+
 ## Preview-only or absent
 
-Combat mockups do not establish authoritative shields, weapons, fire-control solutions, or damage resolution. Detailed EPS networks, batteries, warp Engineering, life support, transporters, repair teams/queues, crew systems, fuel, inventory, and economy are absent. The actual repair model has one active repair, not the multi-team queue illustrated by earlier UI references.
+Detailed EPS networks, batteries, warp Engineering, life support, transporters, repair teams/queues, crew systems, fuel, inventory, and economy are absent. The actual repair model has one active repair, not the multi-team queue illustrated by earlier UI references. Shield facings, recharge, a hull system, other weapon families, global encounters, and random combat outcomes are absent.
 
 Strategic long-range sensor simulation, affiliation/intent knowledge, organizations, governments, political hierarchies, treaties, espionage, layered jurisdiction, and general faction intelligence sharing are not implemented. Durable last-known strategic contact reporting is implemented ship/player-side; Observation-Driven Faction Response adds only its direct ship-to-faction reporting extension.
 

@@ -62,7 +62,7 @@ using TravelToOrderSnapshotV3 = AlterCourse.Core.Persistence.SaveModelsV3.Travel
 namespace AlterCourse.Core.Persistence;
 
 /// <summary>Maps the authoritative simulation to and from the strict explicit JSON save contract.</summary>
-public static class GamePersistence
+public static partial class GamePersistence
 {
     private const int V1SchemaVersion = 1;
     private const int V2SchemaVersion = 2;
@@ -71,7 +71,8 @@ public static class GamePersistence
     private const int V5SchemaVersion = 5;
     private const int V6SchemaVersion = 6;
     private const int V7SchemaVersion = 7;
-    private const int CurrentSchemaVersion = 8;
+    private const int V8SchemaVersion = 8;
+    private const int CurrentSchemaVersion = 9;
     private const string V1SimulationRulesVersion = "first-playable-v1";
     private const string V2SimulationRulesVersion = "first-playable-v1";
     private const string V3SimulationRulesVersion = "active-world-orders-v1";
@@ -86,7 +87,8 @@ public static class GamePersistence
 
     // Godot's gameplay shell asserts the current literal from the written save in
     // src/AlterCourse.Godot/tests/GameplayShellTest.gd, so changing it requires updating that end.
-    private const string CurrentSimulationRulesVersion = "observation-driven-faction-response-v1";
+    private const string V8SimulationRulesVersion = "observation-driven-faction-response-v1";
+    private const string CurrentSimulationRulesVersion = "first-combat-engagement-v1";
     private const string TravelArrivalKind = "travelArrival";
     private const string SensorRepairCompletionKind = "sensorRepairCompletion";
     private const string SystemRepairCompletionKind = "systemRepairCompletion";
@@ -96,6 +98,7 @@ public static class GamePersistence
     private const string ShipContactDecisionWakeKind = "shipContactDecisionWake";
     private const string FactionDecisionWakeKind = "factionDecisionWake";
     private const string ReportDeliveryKind = "reportDelivery";
+    private const string ShipCombatDecisionWakeKind = "shipCombatDecisionWake";
     private const string ShipTargetKind = "ship";
     private const string FactionTargetKind = "faction";
     private const string PendingObjectiveStatus = "pending";
@@ -125,19 +128,19 @@ public static class GamePersistence
         MaxDepth = MaximumJsonDepth,
     };
 
-    /// <summary>Serializes a validated simulation and caller-supplied organization metadata as V8 UTF-8 JSON.</summary>
+    /// <summary>Serializes a validated simulation and caller-supplied organization metadata as V9 UTF-8 JSON.</summary>
     public static byte[] Serialize(GameSimulation simulation, GameSaveMetadata metadata)
     {
         ArgumentNullException.ThrowIfNull(simulation);
         ArgumentNullException.ThrowIfNull(metadata);
         ValidateMetadata(metadata);
 
-        SaveEnvelopeV8 envelope = CaptureV8(simulation.CaptureState(), metadata);
+        SaveModelsV9.SaveEnvelopeV9 envelope = CaptureV9(simulation.CaptureState(), metadata);
         byte[] json = JsonSerializer.SerializeToUtf8Bytes(envelope, SerializerOptions);
         if (json.Length > MaximumSaveBytes)
         {
             throw new InvalidOperationException(
-                $"The V8 save is {json.Length} bytes and exceeds the {MaximumSaveBytes}-byte contract limit."
+                $"The V9 save is {json.Length} bytes and exceeds the {MaximumSaveBytes}-byte contract limit."
             );
         }
 
@@ -187,7 +190,8 @@ public static class GamePersistence
                 V5SchemaVersion => LoadV5(documentBytes, catalog, factionCatalog, sourceIdentity),
                 V6SchemaVersion => LoadV6(documentBytes, catalog, factionCatalog, sourceIdentity),
                 V7SchemaVersion => LoadV7(documentBytes, catalog, factionCatalog, sourceIdentity),
-                CurrentSchemaVersion => LoadV8(documentBytes, catalog, factionCatalog, sourceIdentity),
+                V8SchemaVersion => LoadV8(documentBytes, catalog, factionCatalog, sourceIdentity),
+                CurrentSchemaVersion => LoadV9(documentBytes, catalog, factionCatalog, sourceIdentity),
                 _ => throw Failure(
                     GamePersistenceFailure.UnsupportedVersion,
                     sourceIdentity,
@@ -342,8 +346,8 @@ public static class GamePersistence
 
         return new SaveEnvelopeV8
         {
-            SchemaVersion = CurrentSchemaVersion,
-            SimulationRulesVersion = CurrentSimulationRulesVersion,
+            SchemaVersion = V8SchemaVersion,
+            SimulationRulesVersion = V8SimulationRulesVersion,
             Metadata = new SaveMetadataV2
             {
                 SaveId = metadata.SaveId,
@@ -678,6 +682,7 @@ public static class GamePersistence
             ScheduledWorkKind.ShipContactDecisionWake => ShipContactDecisionWakeKind,
             ScheduledWorkKind.FactionDecisionWake => FactionDecisionWakeKind,
             ScheduledWorkKind.ObservationReportDelivery => ReportDeliveryKind,
+            ScheduledWorkKind.ShipCombatDecisionWake => ShipCombatDecisionWakeKind,
             _ => throw new InvalidOperationException("Cannot persist an unknown scheduled work kind."),
         };
 
@@ -1059,7 +1064,8 @@ public static class GamePersistence
             SaveEnvelopeV8 envelope =
                 JsonSerializer.Deserialize<SaveEnvelopeV8>(json, SerializerOptions)
                 ?? throw new JsonException("The save root must be an object.");
-            return RestoreV8(envelope, catalog, factionCatalog);
+            ValidateCandidateV8(envelope, catalog);
+            return RestoreV9(MigrateV8ToV9(envelope), catalog, factionCatalog);
         }
         catch (GamePersistenceException)
         {
@@ -1392,8 +1398,8 @@ public static class GamePersistence
     private static SaveEnvelopeV8 MigrateV7ToV8(SaveEnvelopeV7 envelope) =>
         new()
         {
-            SchemaVersion = CurrentSchemaVersion,
-            SimulationRulesVersion = CurrentSimulationRulesVersion,
+            SchemaVersion = V8SchemaVersion,
+            SimulationRulesVersion = V8SimulationRulesVersion,
             Metadata = envelope.Metadata,
             Simulation = new SimulationSnapshotV8
             {
@@ -1628,7 +1634,9 @@ public static class GamePersistence
     )
     {
         ValidateCandidateV7(envelope, catalog);
-        return RestoreV8(MigrateV7ToV8(envelope), catalog, factionCatalog);
+        SaveEnvelopeV8 migrated = MigrateV7ToV8(envelope);
+        ValidateCandidateV8(migrated, catalog);
+        return RestoreV9(MigrateV8ToV9(migrated), catalog, factionCatalog);
     }
 
     private static LoadedGameSave RestoreV8(
@@ -1887,12 +1895,12 @@ public static class GamePersistence
 
     private static void ValidateCandidateV8(SaveEnvelopeV8 envelope, ShipDefinitionCatalog catalog)
     {
-        if (envelope.SchemaVersion != CurrentSchemaVersion)
+        if (envelope.SchemaVersion != V8SchemaVersion)
         {
             throw new InvalidOperationException("The V8 mapper received a different schema version.");
         }
 
-        if (!string.Equals(envelope.SimulationRulesVersion, CurrentSimulationRulesVersion, StringComparison.Ordinal))
+        if (!string.Equals(envelope.SimulationRulesVersion, V8SimulationRulesVersion, StringComparison.Ordinal))
         {
             throw new InvalidOperationException(
                 $"Simulation rules version '{envelope.SimulationRulesVersion}' is unsupported."
@@ -1935,7 +1943,7 @@ public static class GamePersistence
             snapshot.TimeMilliseconds,
             snapshot.Ships.Select(ship => ship.InstanceId),
             snapshot.Factions.Select(faction => faction.Id),
-            CurrentSchemaVersion
+            V8SchemaVersion
         );
         ValidateObservationShapeV8(snapshot);
     }
@@ -3389,7 +3397,10 @@ public static class GamePersistence
             ))
         );
 
-    private static SimulationScheduler RestoreSchedulerV7(SaveModelsV7.SchedulerSnapshotV7 snapshot) =>
+    private static SimulationScheduler RestoreSchedulerV7(
+        SaveModelsV7.SchedulerSnapshotV7 snapshot,
+        int sourceSchemaVersion = V8SchemaVersion
+    ) =>
         SimulationScheduler.Restore(
             snapshot.NextWorkId,
             snapshot.NextSequence,
@@ -3398,7 +3409,7 @@ public static class GamePersistence
                 new SimulationTime(work.DueTimeMilliseconds),
                 work.Sequence,
                 ParseWorkTargetV7(work),
-                ParseWorkKind(work.Kind, CurrentSchemaVersion)
+                ParseWorkKind(work.Kind, sourceSchemaVersion)
             ))
         );
 
@@ -3682,6 +3693,7 @@ public static class GamePersistence
             ShipContactDecisionWakeKind => ScheduledWorkKind.ShipContactDecisionWake,
             FactionDecisionWakeKind => ScheduledWorkKind.FactionDecisionWake,
             ReportDeliveryKind => ScheduledWorkKind.ObservationReportDelivery,
+            ShipCombatDecisionWakeKind => ScheduledWorkKind.ShipCombatDecisionWake,
             _ => throw new InvalidOperationException("Scheduled work kind is unknown."),
         };
 
@@ -3715,7 +3727,7 @@ public static class GamePersistence
                     or ScheduledWorkKind.ActiveSensorScanCompletion
                     or ScheduledWorkKind.ShipContactDecisionWake
                     or ScheduledWorkKind.FactionDecisionWake,
-            CurrentSchemaVersion => parsed
+            V8SchemaVersion => parsed
                 is ScheduledWorkKind.TravelArrival
                     or ScheduledWorkKind.SystemRepairCompletion
                     or ScheduledWorkKind.OrderWake
@@ -3724,6 +3736,8 @@ public static class GamePersistence
                     or ScheduledWorkKind.ShipContactDecisionWake
                     or ScheduledWorkKind.FactionDecisionWake
                     or ScheduledWorkKind.ObservationReportDelivery,
+            CurrentSchemaVersion => IsWorkKindAllowed(parsed, V8SchemaVersion)
+                || parsed == ScheduledWorkKind.ShipCombatDecisionWake,
             _ => false,
         };
 

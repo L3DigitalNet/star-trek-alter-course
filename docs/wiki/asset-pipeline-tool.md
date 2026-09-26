@@ -6,8 +6,8 @@ description: 'Implementation specification for a configuration-driven AI-assiste
 doc_type: 'spec'
 status: 'active'
 created: '2026-09-01'
-updated: '2026-09-07'
-reviewed: '2026-09-01'
+updated: '2026-09-26'
+reviewed: '2026-09-26'
 owner: 'project-maintainers'
 consumer: 'agent'
 tags:
@@ -570,7 +570,7 @@ INTERSECT
 configured model capabilities
 ```
 
-This check proves that application code can perform the operation. It does not prove that a vendor has not changed a model remotely. `assetctl doctor --probe` MAY perform a minimal provider-specific capability probe when credentials and owner-approved spend are available. Canonical verification MUST use fixture-based adapter contract tests instead of live probes.
+This check proves that application code can perform the operation. It does not prove that a vendor has not changed a model remotely. Live provider capability probing is a planned requirement: the current `assetctl doctor --probe` option is recognized but exits 2 because live provider probes are not implemented. Canonical verification MUST use fixture-based adapter contract tests instead of live probes.
 
 ### Provider-specific options
 
@@ -772,7 +772,7 @@ ui.engineering.warp-drive.disabled
 ui.engineering.shields.degraded
 tactical.marker.hostile-ship
 tactical.marker.anomaly
-illustration.planet.m-class.placeholder-01
+illustration.planet.m-class.surface-01
 background.space.nebula.blue-01
 ```
 
@@ -1011,7 +1011,7 @@ Reports:
 - route integrity;
 - optional provider health.
 
-`--probe` enables live provider checks. A probe MUST state whether it may spend. Default doctor behavior MUST be offline and free.
+Live provider probing is a planned doctor capability. The current `--probe` option exits 2 with an explicit not-implemented result; default doctor reports `probe: not-run`, performs local writable-root diagnostics, and never spends. When implemented, a probe MUST state whether it may spend.
 
 #### `assetctl find`
 
@@ -1039,7 +1039,7 @@ Generates or regenerates a `placeholder` or `candidate` from a manifest or speci
 
 #### `assetctl verify`
 
-Verifies one asset or the complete catalog. Mechanical checks are offline. Semantic review runs only when explicitly requested or required as part of a generation command with an available reviewer.
+Verifies one asset or the complete catalog. Mechanical checks are offline. Semantic review as a standalone verification operation is planned; the current `verify` command has no live-review option. Generation may use an available reviewer when a configured quality tier requires it.
 
 #### `assetctl approve`
 

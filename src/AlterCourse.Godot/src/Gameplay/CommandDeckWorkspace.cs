@@ -1,4 +1,5 @@
 using AlterCourse.Core.Sensors;
+using AlterCourse.Core.Ships;
 using AlterCourse.Core.Strategic;
 using Godot;
 
@@ -32,6 +33,11 @@ public partial class CommandDeckWorkspace : Control
 
     private readonly Dictionary<string, Button> _actionButtons = new(StringComparer.Ordinal);
     private readonly Dictionary<string, CommandInterfaceAction> _presentedActions = new(StringComparer.Ordinal);
+    private readonly Dictionary<int, ShipSystemId> _targetSystems = [];
+    private readonly Dictionary<string, int> _targetItemIds = new(StringComparer.Ordinal);
+    private OptionButton _targetSelector = null!;
+    private Label _targetSystemLabel = null!;
+    private ShipSystemId? _selectedTargetSystem;
     private VBoxContainer _systemRows = null!;
     private Label _systemsSummary = null!;
     private Label _mapTitle = null!;
@@ -81,6 +87,9 @@ public partial class CommandDeckWorkspace : Control
         _inspectorHeading = GetNode<Label>("%InspectorHeading");
         _inspectorContent = GetNode<VBoxContainer>("%InspectorContent");
         _contextActions = GetNode<VBoxContainer>("%ContextActions");
+        _targetSelector = GetNode<OptionButton>("%TargetSystemSelector");
+        _targetSystemLabel = GetNode<Label>("%TargetSystemLabel");
+        _targetSelector.ItemSelected += OnTargetSystemSelected;
         _strategicMap = GetNode<StrategicMapView>("%StrategicMap");
         _tacticalMap = GetNode<TacticalMapView>("%TacticalMap");
         _strategicMap.DestinationSelected = OnDestinationSelected;
@@ -109,6 +118,7 @@ public partial class CommandDeckWorkspace : Control
         PresentSystems(presentation);
         PresentMap(presentation);
         PresentInspector(presentation);
+        PresentTargetSystems(presentation);
         PresentActions(presentation);
     }
 
@@ -129,7 +139,72 @@ public partial class CommandDeckWorkspace : Control
 
     /// <summary>Gets visible enabled context actions for shell-owned focus traversal.</summary>
     public IEnumerable<Control> GetVisibleFocusControls() =>
-        _actionButtons.Values.Where(button => button.IsVisibleInTree() && !button.Disabled);
+        new Control[] { _targetSelector }
+            .Where(control => control.IsVisibleInTree() && !_targetSelector.Disabled)
+            .Concat(_actionButtons.Values.Where(button => button.IsVisibleInTree() && !button.Disabled));
+
+    private void PresentTargetSystems(CommandInterfacePresentation presentation)
+    {
+        bool liveCombat =
+            presentation.DataMode == CommandInterfaceDataMode.Live && presentation.Mode == CommandInterfaceMode.Combat;
+        _targetSelector.Visible = liveCombat;
+        _targetSystemLabel.Visible = liveCombat;
+        ShipSystemId[] choices = liveCombat ? [.. presentation.CombatTarget?.SupportedSystems ?? []] : [];
+        bool retainedFocus = _targetSelector.HasFocus();
+        bool changed = !_targetSystems.Values.SequenceEqual(choices);
+        if (changed)
+        {
+            _targetSelector.Clear();
+            _targetSystems.Clear();
+            foreach (ShipSystemId system in choices)
+            {
+                // Item IDs are presentation-local handles, never domain enum ordinals or list positions.
+                if (!_targetItemIds.TryGetValue(system.Value, out int itemId))
+                {
+                    itemId = _targetItemIds.Count + 1;
+                    _targetItemIds.Add(system.Value, itemId);
+                }
+                _targetSystems.Add(itemId, system);
+                _targetSelector.AddItem(TargetSystemLabel(system), itemId);
+            }
+        }
+        if (_selectedTargetSystem is not { } selected || !choices.Contains(selected))
+            _selectedTargetSystem = choices.Length > 0 ? choices[0] : null;
+        int selectedItem = _selectedTargetSystem is { } current ? _targetItemIds[current.Value] : -1;
+        _targetSelector.Select(selectedItem < 0 ? -1 : _targetSelector.GetItemIndex(selectedItem));
+        _targetSelector.Disabled = choices.Length == 0;
+        SetMeta("selected_target_system", _selectedTargetSystem?.Value ?? string.Empty);
+        if (retainedFocus && !_targetSelector.Disabled)
+            _targetSelector.GrabFocus();
+    }
+
+    private void OnTargetSystemSelected(long index)
+    {
+        if (
+            CurrentDataMode != CommandInterfaceDataMode.Live
+            || _targetSelector.Disabled
+            || index < 0
+            || index >= _targetSelector.ItemCount
+        )
+            return;
+        int itemId = _targetSelector.GetItemId((int)index);
+        if (_targetSystems.TryGetValue(itemId, out ShipSystemId system))
+        {
+            _selectedTargetSystem = system;
+            SetMeta("selected_target_system", system.Value);
+        }
+    }
+
+    private static string TargetSystemLabel(ShipSystemId system) =>
+        system.Value switch
+        {
+            "power-generation" => "Power generation",
+            "sensors" => "Sensors",
+            "impulse-propulsion" => "Impulse propulsion",
+            "shields" => "Shields",
+            "directed-energy-weapons" => "Directed-energy weapons",
+            _ => system.Value,
+        };
 
     private void PresentSystems(CommandInterfacePresentation presentation)
     {
@@ -358,6 +433,12 @@ public partial class CommandDeckWorkspace : Control
             && _presentedActions.TryGetValue(actionId, out CommandInterfaceAction? action)
         )
         {
+            if (action.Intent == CommandInterfaceIntent.FireDirectedEnergy)
+            {
+                if (_selectedTargetSystem is not { } system || !_targetSystems.ContainsValue(system))
+                    return;
+                action = action with { FocusedSystemId = system };
+            }
             PresentationActionRequested?.Invoke(this, new ActionEventArgs(action));
         }
     }

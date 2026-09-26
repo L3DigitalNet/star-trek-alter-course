@@ -50,8 +50,8 @@ public sealed class GamePersistenceV8ObservationTests
         JsonObject migrated = Parse(GamePersistence.Serialize(loaded.Simulation, loaded.Metadata));
         JsonNode migratedSimulation = migrated["simulation"]!;
 
-        Assert.Equal(8, migrated["schemaVersion"]!.GetValue<int>());
-        Assert.Equal("observation-driven-faction-response-v1", migrated["simulationRulesVersion"]!.GetValue<string>());
+        Assert.Equal(9, migrated["schemaVersion"]!.GetValue<int>());
+        Assert.Equal("first-combat-engagement-v1", migrated["simulationRulesVersion"]!.GetValue<string>());
         Assert.Equal(1, migratedSimulation["observationReportAllocatorNextId"]!.GetValue<long>());
         Assert.Equal(
             originalSimulation["timeMilliseconds"]!.ToJsonString(),
@@ -66,6 +66,7 @@ public sealed class GamePersistenceV8ObservationTests
             migratedSimulation["orderAllocatorNextId"]!.ToJsonString()
         );
         Assert.Equal(originalSimulation["scheduler"]!.ToJsonString(), migratedSimulation["scheduler"]!.ToJsonString());
+        GamePersistenceV9CombatTests.StripCombat(migrated);
         Assert.Equal(originalSimulation["ships"]!.ToJsonString(), migratedSimulation["ships"]!.ToJsonString());
         Assert.All(
             migratedSimulation["factions"]!.AsArray(),
@@ -118,7 +119,7 @@ public sealed class GamePersistenceV8ObservationTests
         LoadedGameSave loaded = GamePersistence.Deserialize(saved, fixture.Catalog, "zero-factions-v8.json");
         JsonObject root = Parse(saved);
 
-        Assert.Equal(8, root["schemaVersion"]!.GetValue<int>());
+        Assert.Equal(9, root["schemaVersion"]!.GetValue<int>());
         Assert.Empty(root["simulation"]!["factions"]!.AsArray());
         Assert.Equal(1, root["simulation"]!["observationReportAllocatorNextId"]!.GetValue<long>());
         Assert.Equal(saved, GamePersistence.Serialize(loaded.Simulation, loaded.Metadata));
@@ -417,6 +418,47 @@ public sealed class GamePersistenceV8ObservationTests
         AssertContinuation(completed, new SimulationTime(72_100));
     }
 
+    /// <summary>V8 histories, in-flight work, and investigations survive adjacent migration without combat invention.</summary>
+    [Theory]
+    [InlineData("received")]
+    [InlineData("inflight")]
+    [InlineData("active")]
+    public void MigratesV8ObservationContinuationsWithoutChangingOldAuthority(string shape)
+    {
+        GameSimulation game = shape switch
+        {
+            "received" => CreateReceivedReportGame(),
+            "inflight" => CreatePendingDeliveryGame(),
+            "active" => Restore(CreateLongActiveInvestigation()),
+            _ => throw new ArgumentOutOfRangeException(nameof(shape)),
+        };
+        JsonObject source = Parse(GamePersistence.Serialize(game, Metadata));
+        GamePersistenceV9CombatTests.StripCombat(source);
+        source["schemaVersion"] = 8;
+        source["simulationRulesVersion"] = "observation-driven-faction-response-v1";
+        LoadedGameSave loaded = GamePersistence.Deserialize(
+            Encoding.UTF8.GetBytes(source.ToJsonString()),
+            FactionTestWorld.ShipCatalog,
+            FactionTestWorld.FactionCatalog,
+            "historical-v8-observation.json"
+        );
+        foreach (ShipState ship in loaded.Simulation.CaptureState().Ships)
+        {
+            Assert.Equal(0, ship.Engineering.ShieldCondition.Value);
+            Assert.Equal(0, ship.Engineering.DirectedEnergyCondition.Value);
+            Assert.Equal(ShipCombatState.Empty, ship.Combat);
+        }
+        JsonObject projected = Parse(GamePersistence.Serialize(loaded.Simulation, loaded.Metadata));
+        GamePersistenceV9CombatTests.StripCombat(projected);
+        projected["schemaVersion"] = 8;
+        projected["simulationRulesVersion"] = "observation-driven-faction-response-v1";
+        Assert.True(JsonNode.DeepEquals(source, projected));
+        AssertContinuation(
+            loaded.Simulation,
+            new SimulationTime(loaded.Simulation.CaptureState().Time.Milliseconds + 2_000)
+        );
+    }
+
     private static GameSimulation CreateReceivedReportGame()
     {
         GameSimulation initial = FactionTestWorld
@@ -697,6 +739,7 @@ public sealed class GamePersistenceV8ObservationTests
     private static JsonObject ToHistoricalV7(byte[] current)
     {
         JsonObject root = Parse(current);
+        GamePersistenceV9CombatTests.StripCombat(root);
         root["schemaVersion"] = 7;
         root["simulationRulesVersion"] = "faction-intent-autonomous-assignment-v1";
         JsonObject simulation = root["simulation"]!.AsObject();

@@ -43,8 +43,8 @@ public static class FirstGameSetup
         starts =
         [
             .. starts,
-            CreateFactionShip(new ShipInstanceId(5), "Expedition Vessel Aurora", definition.Id, meridian, factionA),
-            CreateFactionShip(new ShipInstanceId(6), "Expedition Vessel Resolute", definition.Id, meridian, factionA),
+            CreateFactionShip(new ShipInstanceId(5), "Expedition Vessel Aurora", definition, meridian, factionA),
+            CreateFactionShip(new ShipInstanceId(6), "Expedition Vessel Resolute", definition, meridian, factionA),
         ];
         FactionStart[] factions =
         [
@@ -69,13 +69,13 @@ public static class FirstGameSetup
     private static ShipStart CreateFactionShip(
         ShipInstanceId id,
         string name,
-        ShipDefinitionId definitionId,
+        ShipDefinition definition,
         LocationId locationId,
         FactionId controller
     ) =>
         new(
             id,
-            definitionId,
+            definition.Id,
             name,
             default,
             default,
@@ -85,7 +85,12 @@ public static class FirstGameSetup
             new PowerAllocation(new PowerUnits(70), new PowerUnits(50)),
             new AtLocationStart(locationId),
             directControllerFactionId: controller
-        );
+        )
+        {
+            ShieldCondition = definition.Engineering.NominalShieldDemand.Value > 0 ? new SystemCondition(1) : default,
+            DirectedEnergyCondition =
+                definition.Engineering.NominalDirectedEnergyDemand.Value > 0 ? new SystemCondition(1) : default,
+        };
 
     private static ShipStart[] CreateShipStarts(
         ShipDefinition definition,
@@ -101,7 +106,7 @@ public static class FirstGameSetup
         var fullAllocation = new PowerAllocation(new PowerUnits(70), new PowerUnits(50));
         var balancedAllocation = new PowerAllocation(new PowerUnits(44), new PowerUnits(31));
         var zeroMotion = new TacticalMotion(new HeadingDegrees(0), new SpeedKilometersPerSecond(0));
-        return
+        ShipStart[] starts =
         [
             new(
                 new ShipInstanceId(1),
@@ -153,7 +158,34 @@ public static class FirstGameSetup
                 new AtLocationStart(dawn)
             ),
         ];
+        return InitializeCombat(starts, nominal, definition.Engineering);
     }
+
+    private static ShipStart[] InitializeCombat(
+        ShipStart[] starts,
+        SystemCondition nominal,
+        ShipEngineeringDefinition engineering
+    ) =>
+        starts
+            .Select(start =>
+                start with
+                {
+                    ShieldCondition = engineering.NominalShieldDemand.Value > 0 ? nominal : default,
+                    DirectedEnergyCondition = engineering.NominalDirectedEnergyDemand.Value > 0 ? nominal : default,
+                    Allocation =
+                        start.InstanceId == new ShipInstanceId(4)
+                        && engineering.NominalShieldDemand.Value > 0
+                        && engineering.NominalDirectedEnergyDemand.Value > 0
+                            ? new PowerAllocation(
+                                new PowerUnits(70),
+                                new PowerUnits(5),
+                                new PowerUnits(15),
+                                new PowerUnits(30)
+                            )
+                            : start.Allocation,
+                }
+            )
+            .ToArray();
 
     private static (StrategicMap Map, LocationId Dawn, LocationId Vesper, LocationId Meridian) CreateMap()
     {

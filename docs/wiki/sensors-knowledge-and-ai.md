@@ -6,7 +6,7 @@ description: 'Actor-local sensor knowledge, contact operations, and the determin
 doc_type: 'concept'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-08'
+updated: '2026-09-26'
 tags:
   - 'ai'
   - 'sensors'
@@ -30,6 +30,8 @@ Only ships at the same strategic location observe each other. Passive observatio
 
 New detection is Current and Detected; continued detection refreshes facts. Loss makes a contact Stale, keeps its last observation, and schedules one exact loss work item five seconds later. That work rechecks detectability before Lost. Reacquisition cancels its exact work, restores Current, and preserves local ID/identification. Lost contacts remain bounded correlation memory but leave live tactical projection.
 
+A Current contact is present-time knowledge. It is valid only when both observer and target are `AtLocation` at the same location and, when an observation-location frame is present, that frame names the same location. A null legacy frame remains null. Stale and Lost contacts retain historical frames without a constraint from either ship's present location.
+
 ## Scan, hail, and cautious response
 
 One observer can own one active scan, targeting a current detected local contact. Completion revalidates Current status, then identifies it and records vessel/design names. Staleness/loss or zero effective sensor capability cancels exact completion work, clears the operation, and returns a player-safe interruption. Restoring a contact or power never revives it.
@@ -44,10 +46,12 @@ An unidentified Current contact selects Withdraw at 0.5 km/s, clamped by effecti
 
 Contact-sensitive local work uses the fixed 100 ms grid only when motion or changing sensor condition can alter observation. At a boundary Core snapshots world truth, evaluates observer/target pairs in observer-ID then target-ID order, applies contact changes in that order, and schedules same-time decision wakes in observer order. Contact loss, scan completion, repair, and decisions use exact correlations and revalidate prerequisites. Inactive strategic work remains event-to-event: no global polling sweep or future range-crossing solver.
 
-`AdvanceUntilNextPlayerRelevantEvent` processes hidden NPC observation/decision work without reporting it. It can stop at player-safe lifecycle or scan events. Events carry exact simulation occurrence time and optional local contact ID, preserving chronology without reconstruction from final projection. The current released V8 persistence model belongs to [content, assets, and persistence](content-assets-and-persistence.md); former V4 sensor schema/migration are historical evidence.
+`AdvanceUntilNextPlayerRelevantEvent` processes hidden NPC observation/decision work without reporting it. It can stop at player-safe lifecycle or scan events. Events carry exact simulation occurrence time and optional local contact ID, preserving chronology without reconstruction from final projection. Released V8 and current unreleased V9 continuation belong to [content, assets, and persistence](content-assets-and-persistence.md); former V4 sensor schema/migration are historical evidence.
 
 ## Deferrals and evidence
 
-There is no confidence/error model, estimated stale position, long-range strategic sensor simulation, cloaking, emissions, electronic warfare, false contact, NPC scan, additional doctrine, dialogue tree, or Science/Communications workspace. Durable last-known strategic reports are implemented and owned by [Strategic Contact Reporting](strategic-contact-reporting.md). Observation-Driven Faction Response does not add global or live shared sensors, identity correlation, affiliation inference, or a player intelligence feed. Combat, shields, weapons, damage, and advanced Engineering remain outside this slice.
+There is no confidence/error model, estimated stale position, long-range strategic sensor simulation, cloaking, emissions, electronic warfare, false contact, NPC scan, additional doctrine, dialogue tree, or Science/Communications workspace. Durable last-known strategic reports are implemented and owned by [Strategic Contact Reporting](strategic-contact-reporting.md). Observation-Driven Faction Response does not add global or live shared sensors, identity correlation, affiliation inference, or a player intelligence feed.
+
+M6A fire control uses only the acting ship's same-location Current and Identified local contact, and it never upgrades an unknown attacker to identified. Mutual identification for its defensive proof arises through existing scan and hail behavior; M6A adds no NPC scan rule. Its defensive policy receives a local contact snapshot and own tactical/capability/readiness/time facts, with no aggregate state or hidden target truth. One eligible pending stimulus wakes once after 100 ms and is consumed before the policy selects ReturnFire, Withdraw, or Hold. Broader sensor, doctrine, and Engineering systems remain outside the implemented slice.
 
 See [sensor knowledge](../../src/AlterCourse.Core/Sensors/SensorKnowledge.cs), [cautious policy](../../src/AlterCourse.Core/AI/CautiousContactDecisionPolicy.cs), [contact scenario tests](../../tests/AlterCourse.Core.Tests/Gameplay/Milestone3ProofScenarioTests.cs), [hail tests](../../tests/AlterCourse.Core.Tests/Gameplay/HailAndContactDecisionTests.cs), and [policy tests](../../tests/AlterCourse.Core.Tests/AI/CautiousContactDecisionPolicyTests.cs).

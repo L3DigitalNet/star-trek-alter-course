@@ -166,6 +166,7 @@ internal sealed partial record SimulationState
             ValidateShip(ship, definition);
             ValidateSensorKnowledge(ship, catalog, contactWorkIds);
             ValidateAutonomousState(ship, contactWorkIds);
+            ValidateCombatState(ship, definition, contactWorkIds);
         }
 
         ValidateOrders();
@@ -246,7 +247,7 @@ internal sealed partial record SimulationState
         }
 
         ShipState target = GetRequiredShip(work.TargetShipId);
-        // These five non-loss correlations define the per-ship scheduler allowance in SimulationScheduler; adding a
+        // These six non-loss correlations define the per-ship scheduler allowance in SimulationScheduler; adding a
         // separately retainable work category requires that bound to grow with the world maximum.
         bool correlated = work.Kind switch
         {
@@ -270,6 +271,9 @@ internal sealed partial record SimulationState
             ScheduledWorkKind.ShipContactDecisionWake => target.AutonomousState.PendingContactDecisionWake is { } wake
                 && wake.ScheduledWorkId == work.Id
                 && wake.DueTime == work.DueTime,
+            ScheduledWorkKind.ShipCombatDecisionWake => target.Combat.PendingStimulus is { } stimulus
+                && stimulus.ScheduledWorkId == work.Id
+                && stimulus.DueTime == work.DueTime,
             _ => false,
         };
         if (!correlated)
@@ -346,7 +350,7 @@ internal sealed partial record SimulationState
             }
 
             ValidateObservedFacts(contact, target, catalog);
-            ValidateObservedLocation(observer, contact);
+            ValidateObservedLocation(observer, target, contact);
             ValidateContactLoss(observer, contact, contactWorkIds);
         }
 
@@ -409,13 +413,29 @@ internal sealed partial record SimulationState
     }
 
     /// <remarks>
-    /// A null frame is an explicitly unqualified legacy observation and carries no constraint. A
+    /// A null frame is an explicitly unqualified legacy observation and is never inferred. A
     /// stale or lost contact's frame is deliberately never compared with either ship's present
     /// location: a retained report records where an observation happened, and later movement by the
     /// observer or the target must not invalidate or rewrite it.
     /// </remarks>
-    private void ValidateObservedLocation(ShipState observer, SensorContactTrack contact)
+    private void ValidateObservedLocation(ShipState observer, ShipState target, SensorContactTrack contact)
     {
+        // Current knowledge comes from a shared local observation pass, even when migration retained
+        // an unqualified frame. Historical knowledge remains independent of later ship movement.
+        if (
+            contact.Status == SensorContactStatus.Current
+            && (
+                observer.StrategicState is not AtLocationState observerContext
+                || target.StrategicState is not AtLocationState targetContext
+                || observerContext.LocationId != targetContext.LocationId
+            )
+        )
+        {
+            throw new InvalidOperationException(
+                "A current sensor contact requires observer and target at the same current location."
+            );
+        }
+
         if (contact.ObservedAtLocationId is not { } observedAtLocation)
         {
             return;
@@ -443,9 +463,7 @@ internal sealed partial record SimulationState
             );
         }
 
-        // A current contact is only ever produced by an observation pass that runs after every
-        // strategic-state change and immediately stales anything no longer observable, so a current
-        // contact's frame is the observer's present location by construction.
+        // Observation refresh after strategic movement keeps Current frames in the shared context.
         if (contact.Status != SensorContactStatus.Current)
         {
             return;

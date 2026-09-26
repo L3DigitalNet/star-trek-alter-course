@@ -17,4 +17,7 @@ public enum CommandInterfaceIntent
 
     /// <summary>Request a bounded hail to one identified observer-local sensor contact.</summary>
     Hail = 5,
+
+    /// <summary>Fire at one local contact and semantic subsystem through Core.</summary>
+    FireDirectedEnergy = 6,
 }

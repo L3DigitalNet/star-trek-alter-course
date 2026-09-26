@@ -16,7 +16,8 @@ public sealed record ShipDefinition
         SpeedKilometersPerSecond maximumTacticalSpeed,
         DistanceKilometers passiveSensorRange,
         SimulationDuration activeScanDuration,
-        ShipEngineeringDefinition engineering
+        ShipEngineeringDefinition engineering,
+        DirectedEnergyWeaponDefinition? directedEnergyWeapon = null
     )
     {
         if (string.IsNullOrWhiteSpace(id.Value))
@@ -54,6 +55,7 @@ public sealed record ShipDefinition
         PassiveSensorRange = passiveSensorRange;
         ActiveScanDuration = activeScanDuration;
         Engineering = engineering;
+        DirectedEnergyWeapon = directedEnergyWeapon;
     }
 
     internal ShipDefinition(
@@ -96,6 +98,9 @@ public sealed record ShipDefinition
 
     /// <summary>Gets immutable engineering demand and repair timing.</summary>
     public ShipEngineeringDefinition Engineering { get; }
+
+    /// <summary>Gets authored weapon tuning, absent for legacy definitions.</summary>
+    public DirectedEnergyWeaponDefinition? DirectedEnergyWeapon { get; }
 
     internal SimulationDuration SensorRepairDuration => Engineering.SensorRepairDuration;
 }

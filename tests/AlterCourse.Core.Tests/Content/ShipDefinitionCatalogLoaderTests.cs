@@ -1,8 +1,10 @@
 using System.Text;
+using System.Text.Json;
 using AlterCourse.Core.Content;
 using AlterCourse.Core.Quantities;
 using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
+using Json.Schema;
 
 namespace AlterCourse.Core.Tests.Content;
 
@@ -11,7 +13,7 @@ public sealed class ShipDefinitionCatalogLoaderTests
 {
     private const string ValidDefinition = """
         {
-          "schemaVersion": 4,
+          "schemaVersion": 5,
           "id": "pathfinder",
           "designDisplayName": "Pathfinder class",
           "maximumTacticalSpeedKilometersPerSecond": 10,
@@ -22,10 +24,71 @@ public sealed class ShipDefinitionCatalogLoaderTests
             "nominalSensorDemandPowerUnits": 70,
             "nominalImpulseDemandPowerUnits": 50,
             "sensorRepairDurationMilliseconds": 8000,
-            "impulseRepairDurationMilliseconds": 6000
-          }
+            "impulseRepairDurationMilliseconds": 6000, "nominalShieldDemandPowerUnits": 40, "nominalDirectedEnergyDemandPowerUnits": 30, "shieldRepairDurationMilliseconds": 8000, "directedEnergyRepairDurationMilliseconds": 6000
+          }, "directedEnergyWeapon": { "rangeKilometers": 20, "baseNormalizedDamage": 0.25, "cooldownMilliseconds": 2000 }
         }
         """;
+
+    /// <summary>Confirms combat authorship rejects absent, duplicated, unknown, and invalid fields.</summary>
+    [Theory]
+    [InlineData("\"nominalShieldDemandPowerUnits\": 40,", "")]
+    [InlineData("\"nominalDirectedEnergyDemandPowerUnits\": 30,", "")]
+    [InlineData("\"shieldRepairDurationMilliseconds\": 8000,", "")]
+    [InlineData("\"directedEnergyRepairDurationMilliseconds\": 6000", "\"unexpected\": 6000")]
+    [InlineData("\"rangeKilometers\": 20", "\"rangeKilometers\": 0")]
+    [InlineData("\"baseNormalizedDamage\": 0.25", "\"baseNormalizedDamage\": 0")]
+    [InlineData("\"baseNormalizedDamage\": 0.25", "\"baseNormalizedDamage\": 1.01")]
+    [InlineData("\"cooldownMilliseconds\": 2000", "\"cooldownMilliseconds\": 2050")]
+    [InlineData("\"cooldownMilliseconds\": 2000", "\"cooldownMilliseconds\": 0")]
+    [InlineData("\"nominalShieldDemandPowerUnits\": 40", "\"nominalShieldDemandPowerUnits\": 0")]
+    [InlineData("\"nominalDirectedEnergyDemandPowerUnits\": 30", "\"nominalDirectedEnergyDemandPowerUnits\": 1000001")]
+    [InlineData("\"shieldRepairDurationMilliseconds\": 8000", "\"shieldRepairDurationMilliseconds\": 8050")]
+    [InlineData(
+        "\"directedEnergyRepairDurationMilliseconds\": 6000",
+        "\"directedEnergyRepairDurationMilliseconds\": -1"
+    )]
+    [InlineData("\"rangeKilometers\": 20", "\"rangeKilometers\": 20, \"rangeKilometers\": 10")]
+    [InlineData("\"cooldownMilliseconds\": 2000", "\"cooldownMilliseconds\": 2000, \"unknown\": 1")]
+    public void RejectsInvalidCombatAuthorship(string original, string replacement)
+    {
+        Assert.Contains(original, ValidDefinition, StringComparison.Ordinal);
+        string invalid = ValidDefinition.Replace(original, replacement, StringComparison.Ordinal);
+        Assert.Throws<ShipContentValidationException>(() => CreateLoader().LoadText(invalid, "combat-invalid.json"));
+    }
+
+    /// <summary>Confirms valid historical content cannot bypass the current loader's explicit version guard.</summary>
+    [Fact]
+    public void CurrentLoaderRejectsHistoricalContentEvenWithHistoricalSchema()
+    {
+        const string historicalContent = """
+            {
+              "schemaVersion": 4,
+              "id": "pathfinder",
+              "designDisplayName": "Pathfinder class",
+              "maximumTacticalSpeedKilometersPerSecond": 10,
+              "passiveSensorRangeKilometers": 30.0,
+              "activeScanDurationMilliseconds": 2000,
+              "engineering": {
+                "nominalGenerationPowerUnits": 120,
+                "nominalSensorDemandPowerUnits": 70,
+                "nominalImpulseDemandPowerUnits": 50,
+                "sensorRepairDurationMilliseconds": 8000,
+                "impulseRepairDurationMilliseconds": 6000
+              }
+            }
+            """;
+        string schema = File.ReadAllText(
+            Path.Combine(FindRepositoryRoot(), "src/AlterCourse.Godot/content/schemas/ship-definition-v4.schema.json")
+        );
+        using var document = JsonDocument.Parse(historicalContent);
+        Assert.True(JsonSchema.FromText(schema).Evaluate(document.RootElement).IsValid);
+        ShipContentValidationException exception = Assert.Throws<ShipContentValidationException>(() =>
+            new ShipDefinitionCatalogLoader(schema).LoadText(historicalContent, "historical.json")
+        );
+        ShipContentDiagnostic diagnostic = Assert.Single(exception.Diagnostics);
+        Assert.Equal("schema.const", diagnostic.Code);
+        Assert.Equal("#/schemaVersion", diagnostic.InstanceLocation);
+    }
 
     /// <summary>Confirms text, UTF-8 bytes, and streams map to the existing domain definition.</summary>
     [Fact]
@@ -46,6 +109,14 @@ public sealed class ShipDefinitionCatalogLoaderTests
         Assert.Equal(30, fromText.PassiveSensorRange.Value);
         Assert.Equal(2000, fromText.ActiveScanDuration.Milliseconds);
         Assert.Equal(8000, fromText.SensorRepairDuration.Milliseconds);
+        Assert.Equal(40, fromText.Engineering.NominalShieldDemand.Value);
+        Assert.Equal(30, fromText.Engineering.NominalDirectedEnergyDemand.Value);
+        Assert.Equal(8000, fromText.Engineering.ShieldRepairDuration.Milliseconds);
+        Assert.Equal(6000, fromText.Engineering.DirectedEnergyRepairDuration.Milliseconds);
+        Assert.NotNull(fromText.DirectedEnergyWeapon);
+        Assert.Equal(20, fromText.DirectedEnergyWeapon.Range.Value);
+        Assert.Equal(0.25, fromText.DirectedEnergyWeapon.BaseNormalizedDamage);
+        Assert.Equal(2000, fromText.DirectedEnergyWeapon.Cooldown.Milliseconds);
     }
 
     /// <summary>Confirms schema-valid integral numeric forms map to the authored integer contract.</summary>
@@ -53,7 +124,7 @@ public sealed class ShipDefinitionCatalogLoaderTests
     public void LoadsSchemaValidIntegralNumericForms()
     {
         string json = ValidDefinition
-            .Replace("\"schemaVersion\": 4", "\"schemaVersion\": 4.0", StringComparison.Ordinal)
+            .Replace("\"schemaVersion\": 5", "\"schemaVersion\": 5.0", StringComparison.Ordinal)
             .Replace(
                 "\"activeScanDurationMilliseconds\": 2000",
                 "\"activeScanDurationMilliseconds\": 2e3",
@@ -92,7 +163,7 @@ public sealed class ShipDefinitionCatalogLoaderTests
     {
         string root = FindRepositoryRoot();
         string schema = File.ReadAllText(
-            Path.Combine(root, "src/AlterCourse.Godot/content/schemas/ship-definition-v4.schema.json")
+            Path.Combine(root, "src/AlterCourse.Godot/content/schemas/ship-definition-v5.schema.json")
         );
         string definition = File.ReadAllText(Path.Combine(root, "src/AlterCourse.Godot/content/ships/pathfinder.json"));
 
@@ -207,8 +278,8 @@ public sealed class ShipDefinitionCatalogLoaderTests
     public void RejectsUnknownMembers()
     {
         string json = ValidDefinition.Replace(
-            "\"schemaVersion\": 4,",
-            "\"schemaVersion\": 4,\n  \"unconsumed\": true,",
+            "\"schemaVersion\": 5,",
+            "\"schemaVersion\": 5,\n  \"unconsumed\": true,",
             StringComparison.Ordinal
         );
 
@@ -221,9 +292,9 @@ public sealed class ShipDefinitionCatalogLoaderTests
 
     /// <summary>Confirms missing and unsupported schema versions are structural failures.</summary>
     [Theory]
-    [InlineData("\"schemaVersion\": 4,", "")]
-    [InlineData("\"schemaVersion\": 4", "\"schemaVersion\": 3")]
-    [InlineData("\"schemaVersion\": 4", "\"schemaVersion\": 5")]
+    [InlineData("\"schemaVersion\": 5,", "")]
+    [InlineData("\"schemaVersion\": 5", "\"schemaVersion\": 3")]
+    [InlineData("\"schemaVersion\": 5", "\"schemaVersion\": 4")]
     public void RejectsWrongOrMissingSchemaVersion(string original, string replacement)
     {
         string json = ValidDefinition.Replace(original, replacement, StringComparison.Ordinal);
@@ -427,7 +498,7 @@ public sealed class ShipDefinitionCatalogLoaderTests
             File.ReadAllText(
                 Path.Combine(
                     FindRepositoryRoot(),
-                    "src/AlterCourse.Godot/content/schemas/ship-definition-v4.schema.json"
+                    "src/AlterCourse.Godot/content/schemas/ship-definition-v5.schema.json"
                 )
             )
         );

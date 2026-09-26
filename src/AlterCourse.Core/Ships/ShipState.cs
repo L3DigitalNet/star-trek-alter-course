@@ -22,7 +22,8 @@ internal sealed record ShipState
         ShipOrder? activeOrder = null,
         SensorKnowledge? sensorKnowledge = null,
         ShipAutonomousState? autonomousState = null,
-        FactionId? directControllerFactionId = null
+        FactionId? directControllerFactionId = null,
+        ShipCombatState? combat = null
     )
     {
         if (instanceId.Value <= 0)
@@ -61,6 +62,7 @@ internal sealed record ShipState
         SensorKnowledge = sensorKnowledge ?? SensorKnowledge.Empty;
         AutonomousState = autonomousState ?? ShipAutonomousState.Empty;
         DirectControllerFactionId = directControllerFactionId;
+        Combat = combat ?? ShipCombatState.Empty;
     }
 
     internal ShipInstanceId InstanceId { get; }
@@ -73,5 +75,6 @@ internal sealed record ShipState
     internal ShipOrder? ActiveOrder { get; init; }
     internal SensorKnowledge SensorKnowledge { get; init; }
     internal ShipAutonomousState AutonomousState { get; init; }
+    internal ShipCombatState Combat { get; init; }
     internal FactionId? DirectControllerFactionId { get; init; }
 }

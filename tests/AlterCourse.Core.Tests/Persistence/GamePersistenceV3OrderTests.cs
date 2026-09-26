@@ -15,11 +15,8 @@ public sealed class GamePersistenceV3OrderTests
         LoadedGameSave loaded = Load(CreateV3NoOrders());
         JsonObject normalized = Parse(GamePersistence.Serialize(loaded.Simulation, loaded.Metadata));
 
-        Assert.Equal(8, normalized["schemaVersion"]!.GetValue<int>());
-        Assert.Equal(
-            "observation-driven-faction-response-v1",
-            normalized["simulationRulesVersion"]!.GetValue<string>()
-        );
+        Assert.Equal(9, normalized["schemaVersion"]!.GetValue<int>());
+        Assert.Equal("first-combat-engagement-v1", normalized["simulationRulesVersion"]!.GetValue<string>());
         Assert.Equal(1, normalized["simulation"]!["orderAllocatorNextId"]!.GetValue<long>());
         Assert.Null(normalized["simulation"]!["ships"]![0]!["activeOrder"]);
         Assert.Equal(
@@ -240,8 +237,8 @@ public sealed class GamePersistenceV3OrderTests
         LoadedGameSave migrated = Load(CreateV2Travel());
         JsonObject current = Parse(GamePersistence.Serialize(migrated.Simulation, migrated.Metadata));
 
-        Assert.Equal(8, current["schemaVersion"]!.GetValue<int>());
-        Assert.Equal("observation-driven-faction-response-v1", current["simulationRulesVersion"]!.GetValue<string>());
+        Assert.Equal(9, current["schemaVersion"]!.GetValue<int>());
+        Assert.Equal("first-combat-engagement-v1", current["simulationRulesVersion"]!.GetValue<string>());
         Assert.Equal(1, current["simulation"]!["orderAllocatorNextId"]!.GetValue<long>());
         Assert.Null(current["simulation"]!["ships"]![0]!["activeOrder"]);
         Assert.Equal("traveling", current["simulation"]!["ships"]![0]!["strategicState"]!["kind"]!.GetValue<string>());
@@ -404,10 +401,10 @@ public sealed class GamePersistenceV3OrderTests
     private static ShipDefinitionCatalog CreateCatalog()
     {
         const string definition = """
-            { "schemaVersion": 4, "id": "pathfinder", "designDisplayName": "Pathfinder", "maximumTacticalSpeedKilometersPerSecond": 10, "passiveSensorRangeKilometers": 30.0, "activeScanDurationMilliseconds": 2000, "engineering": { "nominalGenerationPowerUnits": 120, "nominalSensorDemandPowerUnits": 70, "nominalImpulseDemandPowerUnits": 50, "sensorRepairDurationMilliseconds": 8000, "impulseRepairDurationMilliseconds": 6000 } }
+            { "schemaVersion": 5, "id": "pathfinder", "designDisplayName": "Pathfinder", "maximumTacticalSpeedKilometersPerSecond": 10, "passiveSensorRangeKilometers": 30.0, "activeScanDurationMilliseconds": 2000, "engineering": { "nominalGenerationPowerUnits": 120, "nominalSensorDemandPowerUnits": 70, "nominalImpulseDemandPowerUnits": 50, "sensorRepairDurationMilliseconds": 8000, "impulseRepairDurationMilliseconds": 6000, "nominalShieldDemandPowerUnits": 40, "nominalDirectedEnergyDemandPowerUnits": 30, "shieldRepairDurationMilliseconds": 8000, "directedEnergyRepairDurationMilliseconds": 6000 }, "directedEnergyWeapon": { "rangeKilometers": 20, "baseNormalizedDamage": 0.25, "cooldownMilliseconds": 2000 } }
             """;
         string schema = File.ReadAllText(
-            Path.Combine(FindRepositoryRoot(), "src/AlterCourse.Godot/content/schemas/ship-definition-v4.schema.json")
+            Path.Combine(FindRepositoryRoot(), "src/AlterCourse.Godot/content/schemas/ship-definition-v5.schema.json")
         );
         return new ShipDefinitionCatalogLoader(schema).LoadCatalog([
             ShipDefinitionContent.FromText("pathfinder.json", definition),

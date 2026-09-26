@@ -11,4 +11,10 @@ public enum PowerAllocationPreset
 
     /// <summary>Satisfies impulse propulsion before sensors.</summary>
     PrioritizePropulsion = 3,
+
+    /// <summary>Satisfies shields before remaining consumers in semantic order.</summary>
+    PrioritizeShields = 4,
+
+    /// <summary>Satisfies directed-energy weapons before remaining consumers in semantic order.</summary>
+    PrioritizeDirectedEnergyWeapons = 5,
 }

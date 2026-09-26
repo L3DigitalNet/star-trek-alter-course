@@ -6,7 +6,7 @@ description: 'Resolved and scoped decisions for the implemented faction-assignme
 doc_type: 'plan'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-08'
+updated: '2026-09-26'
 tags:
   - 'design'
 aliases: []
@@ -33,7 +33,7 @@ Resolve only what blocks the next governed vertical slice. These questions are n
 
 **Q-01 — Scope and sequence — RESOLVED September 6, 2026; subsequently refined.** [Strategic Contact Reporting](strategic-contact-reporting.md) was selected after v0.4.0 as a bounded bridge from local observer knowledge to durable, reference-frame-qualified strategic last-known contact information, before broader faction autonomy. It is implemented and released in v0.5.0. This historical sequencing decision remains valid.
 
-Strategic Contact Reporting is not canonically named `M3B`. It does not itself complete M3 or begin M5. The earlier proposed `M3B→M5→M6` label/sequence was not approved wholesale. The implemented faction-assignment slice followed it. Observation-Driven Faction Response is implemented; M6 Tactical Combat Foundation is the next major development family without requiring M3 or M5 to be declared complete first.
+Strategic Contact Reporting is not canonically named `M3B`. It does not itself complete M3 or begin M5. The earlier proposed `M3B→M5→M6` label/sequence was not approved wholesale. The implemented faction-assignment slice followed it. Observation-Driven Faction Response is implemented, and M6A First Combat Engagement is an unreleased implemented contribution toward partial M6; M3 and M5 remain incomplete.
 
 **Q-05 — Smallest political gameplay proof — RESOLVED for the first bounded slice, September 6, 2026.** Use two era-neutral root factions. A has an objective to establish ship presence at Vesper Reach and at least two directly controlled NPC candidates; B has a ship there. A's policy must select a different eligible ship when its preferred candidate is already committed. Existing order, travel, and sensor rules produce a legitimate offscreen NPC-NPC consequence without player interaction. This is a first M5 contribution, not the whole living-sector milestone. The canonical slice owns the complete proof and non-goals.
 
@@ -47,7 +47,7 @@ How a future faction refers to a vessel it has never locally observed also remai
 
 **Q-04 — Knowledge ownership and sharing — PARTIALLY RESOLVED for assignment and one direct report channel.** The implemented assignment policy may receive its objective, explicitly known proof-map topology, and assignment-relevant administrative facts of its own directly controlled assets: identity, current strategic state, and existing assignment/order status.
 
-The approved next slice adds exactly one sensor-information path: **directly controlled NPC ship → its direct controlling faction**. A new local observation episode may produce an immutable historical snapshot delivered after 2,000 ms of simulation time. The recipient stores explicit bounded received reports; it does not read a live union of ship sensor stores. The report preserves observer-local provenance and never gains hidden target identity/controller, affiliation, intent, or later target movement. The player is not part of this reporting path.
+The implemented response slice adds exactly one sensor-information path: **directly controlled NPC ship → its direct controlling faction**. A new local observation episode may produce an immutable historical snapshot delivered after 2,000 ms of simulation time. The recipient stores explicit bounded received reports; it does not read a live union of ship sensor stores. The report preserves observer-local provenance and never gains hidden target identity/controller, affiliation, intent, or later target movement. The player is not part of this reporting path.
 
 What propagates through political hierarchy, organizations, allies, treaty partners, other factions, or to the player remains open. Communications range/relays/jamming, intelligence fusion, confidence, cross-observer correlation, and broader report summarization remain open. This direct path is not an instantaneous sensor network or a general message bus.
 
@@ -55,7 +55,7 @@ What propagates through political hierarchy, organizations, allies, treaty partn
 
 ## When political presentation and government mechanics become consumers
 
-**Q-07 — Atypical hierarchy labels — OPEN.** Direct parentage, derived depth, three initial supported depths for the eventual hierarchy, and role/depth separation are settled. Exact UI wording for atypical branches must not turn Polity/Constituent/Internal into restrictive actor types. The current and next faction slices need roots only and add no political UI.
+**Q-07 — Atypical hierarchy labels — OPEN.** Direct parentage, derived depth, three initial supported depths for the eventual hierarchy, and role/depth separation are settled. Exact UI wording for atypical branches must not turn Polity/Constituent/Internal into restrictive actor types. The current implemented faction slices need roots only and add no political UI.
 
 **Q-08 — Minimal authority and consequence rules — PARTIALLY RESOLVED for direct assignment and investigation only.** A faction may assign only an idle, directly controlled NPC ship satisfying existing order/travel prerequisites. The observation-response slice may issue one bounded investigation assignment under the same authority, excluding the reporting observer for its own report and never preempting existing work. Existing presence intent is processed first; the player ship remains excluded.
 
@@ -65,9 +65,9 @@ Sanctioned versus unsanctioned political actions, inherited obligations, discove
 
 ## Before combat and durable incidents
 
-**Q-10 — Tactical scope — OPEN and next major refinement after observation response.** Select the smallest useful shield/weapon/damage model and disengagement rules. The first combat engagement should compose existing sensing, tactical motion, Engineering, AI, persistence, and withdrawal rather than creating a separate hit-point graph. A bounded directed-energy weapon family and shield model are the intended starting direction, not finalized mechanics.
+**Q-10 — Tactical scope — RESOLVED and implemented for M6A First Combat Engagement.** M6A composes one directed-energy family, one all-aspect shield system, tactical motion, local sensor knowledge, Engineering allocation/condition, deterministic defensive response, persistence, and withdrawal without a separate combat-state graph. It uses no RNG, hull pool, shield recharge, additional shield geometry/facings, or new weapon family. Firing requires a same-location Current and Identified local contact in inclusive range, positive weapon capability, and readiness. ReturnFire, Withdraw, and Hold are the complete defensive candidates; no policy uses faction/controller/affiliation facts or interrupts travel/orders.
 
-Before M6 implementation, explicitly resolve shield geometry/facings, firing cadence and eligibility, targeting/fire-control knowledge requirements, damage allocation into concrete systems, disengagement/non-engagement, and whether the first combat consumer needs deterministic randomness. Also define **involuntary degradation**: combat damage cannot simply be rejected because reduced generation or impulse capability makes the ship's previously legal allocation, speed, scan, or repair state invalid. Forced power shortfall, over-limit motion, active scans, and repairs need explicit reconciliation semantics.
+Damage first consumes bounded shield capacity, then applies penetration directly to a selected concrete subsystem. Brownout, speed clamp, active-scan interruption, and repair cancellation are forced deterministic reconciliation, not voluntary-command rejection. Positive damage to a system cancels its active repair, including shield absorption against Shields. M6A persists readiness, four-consumer Engineering state, bounded defensive stimulus, and exact wake correlation in V9; V8→V9 creates no historical combat capability, damage, aggression, or hidden knowledge. Broader shield geometry/facings, recharge, hull, broad combat rules, and later stochastic consumers remain open.
 
 Ship-system depth should grow through combat consumers. Detailed EPS networks, batteries, heat/coolant, advanced warp Engineering, life support, crew/repair teams, magazines, boarding, cloaking, and electronic warfare remain deferred until a concrete tactical decision needs them.
 
@@ -79,11 +79,11 @@ Ship-system depth should grow through combat consumers. Detailed EPS networks, b
 
 **Q-13 — Resources, officers, and trade — OPEN.** Define the first useful logistics or crew interaction before selecting economic catalogs, officer progression, markets, repair staffing, or fuel models. Preserve captain-without-levels and the existing concrete Engineering model. Current faction proofs use existing ship commitments, not a new political resource economy.
 
-**Q-14 — Compatibility and stochastic behavior — PARTIALLY RESOLVED through V8.** Released v0.6.0 preserves the adjacent V1→V2→V3→V4→V5→V6→V7→V8 chain. The implemented V6→V7 migration creates no factions, controller assignments, faction decision state, or faction wakes and preserves historical ship/world state and scheduler semantics under explicit ship targets.
+**Q-14 — Compatibility and stochastic behavior — PARTIALLY RESOLVED through V9.** Released v0.6.0 preserves the adjacent V1→V2→V3→V4→V5→V6→V7→V8 chain; current unreleased development extends it to V9. The implemented V6→V7 migration creates no factions, controller assignments, faction decision state, or faction wakes and preserves historical ship/world state and scheduler semantics under explicit ship targets.
 
 Observation-Driven Faction Response introduces V8 under rules identity `observation-driven-faction-response-v1`. Migration creates no reports, report-delivery work, investigation state, or location-response history and disables the new reporting/response posture for migrated factions. Existing contacts must not be mined to invent unsent history. Zero-faction worlds remain valid. New-game bootstrap enables the posture explicitly for the proof.
 
-Both implemented faction assignment and the approved observation-response policy consume no randomness. The eventual fixed/versioned RNG algorithm, supported random consumers, and later development-save compatibility promises remain open. M6 must revisit the RNG question only if its first combat rules actually need it.
+Both implemented faction policies and M6A combat consume no randomness. The eventual fixed/versioned RNG algorithm, supported random consumers, and later development-save compatibility promises remain open.
 
 ## Implementation choices versus approvals
 

@@ -32,6 +32,50 @@ public sealed record ShipEngineeringDefinition
         ImpulseRepairDuration = impulseRepairDuration;
     }
 
+    /// <summary>Initializes all four authored consumers and their repair timings.</summary>
+    public ShipEngineeringDefinition(
+        PowerUnits nominalGeneration,
+        PowerUnits nominalSensorDemand,
+        PowerUnits nominalImpulseDemand,
+        PowerUnits nominalShieldDemand,
+        PowerUnits nominalDirectedEnergyDemand,
+        SimulationDuration sensorRepairDuration,
+        SimulationDuration impulseRepairDuration,
+        SimulationDuration shieldRepairDuration,
+        SimulationDuration directedEnergyRepairDuration
+    )
+        : this(
+            nominalGeneration,
+            nominalSensorDemand,
+            nominalImpulseDemand,
+            sensorRepairDuration,
+            impulseRepairDuration
+        )
+    {
+        if (nominalShieldDemand.Value == 0 || nominalDirectedEnergyDemand.Value == 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(nominalShieldDemand), "Combat demands must be positive.");
+        }
+        ValidateDuration(shieldRepairDuration, nameof(shieldRepairDuration));
+        ValidateDuration(directedEnergyRepairDuration, nameof(directedEnergyRepairDuration));
+        NominalShieldDemand = nominalShieldDemand;
+        NominalDirectedEnergyDemand = nominalDirectedEnergyDemand;
+        ShieldRepairDuration = shieldRepairDuration;
+        DirectedEnergyRepairDuration = directedEnergyRepairDuration;
+    }
+
+    /// <summary>Gets nominal shield power demand; zero denotes absent legacy capacity.</summary>
+    public PowerUnits NominalShieldDemand { get; }
+
+    /// <summary>Gets nominal directed-energy power demand; zero denotes absent legacy capacity.</summary>
+    public PowerUnits NominalDirectedEnergyDemand { get; }
+
+    /// <summary>Gets full shield repair duration.</summary>
+    public SimulationDuration ShieldRepairDuration { get; }
+
+    /// <summary>Gets full directed-energy repair duration.</summary>
+    public SimulationDuration DirectedEnergyRepairDuration { get; }
+
     /// <summary>Gets nominal generated power.</summary>
     public PowerUnits NominalGeneration { get; }
 
@@ -51,7 +95,10 @@ public sealed record ShipEngineeringDefinition
     public SimulationDuration RepairDurationFor(ShipSystemId systemId) =>
         systemId == ShipSystemId.Sensors ? SensorRepairDuration
         : systemId == ShipSystemId.ImpulsePropulsion ? ImpulseRepairDuration
-        : throw new ArgumentException("Power generation repair is unsupported.", nameof(systemId));
+        : systemId == ShipSystemId.Shields && NominalShieldDemand.Value > 0 ? ShieldRepairDuration
+        : systemId == ShipSystemId.DirectedEnergyWeapons && NominalDirectedEnergyDemand.Value > 0
+            ? DirectedEnergyRepairDuration
+        : throw new ArgumentException("Absent systems and power generation repair is unsupported.", nameof(systemId));
 
     private static void ValidateDuration(SimulationDuration duration, string parameterName)
     {

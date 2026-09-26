@@ -26,4 +26,7 @@ internal enum ScheduledWorkKind
 
     /// <summary>Delivers one exactly correlated historical observation report to a faction.</summary>
     ObservationReportDelivery = 8,
+
+    /// <summary>Consumes one bounded observer-local defensive stimulus.</summary>
+    ShipCombatDecisionWake = 9,
 }

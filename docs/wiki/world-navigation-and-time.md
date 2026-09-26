@@ -6,7 +6,7 @@ description: 'Persistent ship identity, map scales, orders, deterministic time, 
 doc_type: 'concept'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-07'
+updated: '2026-09-26'
 tags:
   - 'simulation'
   - 'architecture'
@@ -52,7 +52,7 @@ Core time advances only through explicit operations. A pause submits no advancem
 
 The scheduler has finite known work kinds, stable work IDs, persisted same-time ordering, exact cancellation/correlation, and bounded processing. It has closed Ship/Faction targets: each item contains exactly one initialized identity matching its target kind, and each known work kind accepts only its intended target domain. Faction decision wakes require their exact faction identity and correlation, while existing work retains ship meaning. A malformed or mismatched target/kind fails validation rather than being reinterpreted.
 
-The persisted scheduler capacity is `MaximumShips * (MaximumShips - 1 + 5) + MaximumFactions`: at the current 256 ship and 256 faction bounds, that is 66,816 outstanding items. The five per-ship allowance covers independently correlated travel, repair, order, scan, and decision work in addition to one possible contact-loss item for every other ship; each faction may retain one decision wake. This is an admission bound for a valid aggregate, not a promise that normal play creates that population.
+The persisted scheduler capacity is `MaximumShips * (MaximumShips - 1 + 5) + MaximumFactions * (1 + MaximumInFlightReports)`: at the current 256 ship and 256 faction bounds, that is 68,864 outstanding items. The five per-ship allowance covers independently correlated travel, repair, order, scan, and decision work in addition to one possible contact-loss item for every other ship. Each faction may retain one decision wake and up to eight in-flight report-delivery items. This is an admission bound for a valid aggregate, not a promise that normal play creates that population.
 
 D-11's implementation preserves existing ship-work meaning, total same-time sequence, exact correlation, typed target validation, and budgets. Faction decisions wake initially, at arrival, report delivery, or a future hold/travel release boundary; they do not poll at tactical frequency. A pending objective or report response is dormant only when it has no eligible candidate and no release boundary. Typed bootstrap creates a complete valid aggregate, including faction state and initial work. It schedules the ship's existing work before the faction's decision work, so a wake observes the already-established order/travel state instead of a partially initialized world. Observation-Driven Faction Response coalesces same-time report delivery with one deterministic faction evaluation and retains finite execution guards.
 
@@ -60,7 +60,9 @@ D-11's implementation preserves existing ship-work meaning, total same-time sequ
 
 ## Randomness and future scale
 
-The present contact/order proofs do not need random decisions. D-13 explicitly keeps the first faction policy non-stochastic as well. ADR 0007 requires a versioned, restorable, injected random source and stable stream ownership when a real consumer appears; a seed alone is not a continuation contract. The eventual algorithm remains open.
+The present contact/order proofs do not need random decisions. D-13 explicitly keeps the first faction policy non-stochastic as well. M6A also uses deterministic firing, absorption, allocation, and defensive selection; it introduces no random source. ADR 0007 requires a versioned, restorable, injected random source and stable stream ownership when a real consumer appears; a seed alone is not a continuation contract. The eventual algorithm remains open.
+
+M6A has at most one delayed `ShipCombatDecisionWake` per eligible nonplayer ship. Its stimulus is due 100 ms after a legitimate accepted shot and retains exact correlation; the first pending stimulus wins and no cooldown wait creates another wake. Weapon readiness is an absolute persisted simulation time, not periodic scheduled work. Player-relevant advancement delivers actual player-owned hit and reconciliation events while keeping pending NPC intent private.
 
 Do not solve scale by simulating every offscreen actor at tactical frequency, inventing distributed services, or relaxing determinism. First identify the required behavior, choose the coarsest faithful update resolution, and measure representative scenarios.
 

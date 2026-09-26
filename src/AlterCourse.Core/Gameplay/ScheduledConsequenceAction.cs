@@ -14,4 +14,5 @@ internal enum ScheduledConsequenceAction
     WakeFactionDecision = 10,
     DeliverObservationReport = 11,
     IgnoreInvalidatedObservationReportDelivery = 12,
+    WakeShipCombatDecision = 13,
 }

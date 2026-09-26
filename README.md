@@ -8,7 +8,7 @@ The [project design wiki](docs/wiki/README.md) is the single source of truth for
 
 ## Project status
 
-The current source-only release is [v0.6.0 — Faction Observation and Response](https://github.com/L3DigitalNet/star-trek-alter-course/releases/tag/v0.6.0). It includes the bounded faction-assignment and observation-driven response slices and uses V8 saves under `observation-driven-faction-response-v1`; v0.5.0 remains the historical V6 release. M3 and M5 remain incomplete, and no packaged game artifact is published. See [implementation status](docs/wiki/implementation-status.md) for the reviewed behavior and save-version boundaries, and the [roadmap](ROADMAP.md) for development sequence.
+The current source-only release is [v0.6.2](https://github.com/L3DigitalNet/star-trek-alter-course/releases/tag/v0.6.2). Its latest released gameplay baseline remains [v0.6.0 — Faction Observation and Response](https://github.com/L3DigitalNet/star-trek-alter-course/releases/tag/v0.6.0), using V8 saves under `observation-driven-faction-response-v1`. Current `dev` also contains the unreleased M6A first-combat contribution with V5 ship content and V9 saves under `first-combat-engagement-v1`. v0.5.0 remains the historical V6 release. M3 and M5 remain incomplete, and no packaged game artifact is published. See [implementation status](docs/wiki/implementation-status.md) for reviewed behavior and save-version boundaries, and the [roadmap](ROADMAP.md) for development sequence.
 
 This README is an onboarding guide. The wiki owns game rules, controls, persistence contracts, and future design; [ADRs](docs/adr/) record architectural decisions.
 
@@ -58,7 +58,7 @@ dotnet run --project tools/AlterCourse.AssetCtl -- generate --asset-id tooling.a
 
 Configuration and catalog manifests live under [`config/assets/`](config/assets/). Runtime candidates, receipts, locks, logs, and local overrides stay under ignored `.assetctl/`. Approval and deprecation of approved assets require an explicit owner instruction and the high-friction confirmation flags documented by `assetctl --help`.
 
-Provider configuration stores environment-variable names only. The tracked launch or application boundary resolves OpenBao-backed credentials into those named variables before AssetCtl starts; credential values and `bao://` references never belong in tracked configuration, fixtures, tests, manifests, receipts, logs, or command output.
+Provider configuration stores environment-variable names only. Before AssetCtl starts, its caller must resolve any OpenBao-backed credential through its owning launch or application boundary and populate the named variable; the tracked AssetCtl scripts consume that environment and do not resolve OpenBao themselves. Credential values and `bao://` references never belong in tracked configuration, fixtures, tests, manifests, receipts, logs, or command output.
 
 ## Contributing
 
