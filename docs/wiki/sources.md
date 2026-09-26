@@ -114,6 +114,7 @@ M6A has V5 content, V9 saves, bounded correlated defensive continuation, and a 5
 - [0011 — Explicit physical quantities](../adr/0011-represent-physical-quantities-with-explicit-units.md): canonical units, bounded/fictional values, and conditional UnitsNet evaluation.
 - [0012 — Narrative subordinate to simulation](../adr/0012-keep-branching-narrative-subordinate-to-simulation.md): future Narrative boundary, typed consequences, and Ink prototype trigger.
 - [0013 — Dev development and main releases](../adr/0013-use-dev-for-development-and-main-for-releases.md): branch/merge policy, governed admission, tags, and immutable releases.
+- [0014 — Extensible bounded ship-system substrate](../adr/0014-use-an-extensible-bounded-ship-system-substrate.md): separates system kind, reusable system definition, and installed system instance; requires heterogeneous runtime loadouts and shared condition/damage/repair/power/persistence mechanics without a universal component framework.
 
 ## Canonical wiki decisions and future design
 
