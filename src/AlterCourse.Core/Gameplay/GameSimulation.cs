@@ -16,7 +16,7 @@ namespace AlterCourse.Core.Gameplay;
 /// <summary>Owns authoritative mutation and immutable definition content for the simulation.</summary>
 public sealed partial class GameSimulation
 {
-    // One boundary may begin with every reachable ship, faction, contact-wake, and report-delivery correlation, then
+    // One boundary may begin with every reachable ship, faction, contact/combat wake, and report-delivery correlation, then
     // generate one NPC contact-wake replacement before and after the coalesced faction pass. This conservative phase
     // composition is intentionally below the scheduler's looser shape allowance because one ship work slot covers
     // mutually exclusive travel/order correlations. The total policy adds a finite allowance for later-boundary
@@ -155,15 +155,9 @@ public sealed partial class GameSimulation
             return new SystemRepairResult(SystemRepairOutcome.RepairAlreadyActive);
         }
 
-        if (
-            targetSystem != ShipSystemId.Sensors
-            && targetSystem != ShipSystemId.ImpulsePropulsion
-            && targetSystem != ShipSystemId.Shields
-            && targetSystem != ShipSystemId.DirectedEnergyWeapons
-        )
-        {
+        ShipDefinition definition = _shipCatalog.GetRequired(player.DefinitionId);
+        if (!SupportsRepair(definition.Engineering, targetSystem))
             return new SystemRepairResult(SystemRepairOutcome.UnsupportedSystem);
-        }
 
         SystemCondition starting = player.Engineering.ConditionFor(targetSystem);
         if (targetCondition.Value <= starting.Value)
@@ -171,7 +165,6 @@ public sealed partial class GameSimulation
             return new SystemRepairResult(SystemRepairOutcome.TargetDoesNotImproveCondition);
         }
 
-        ShipDefinition definition = _shipCatalog.GetRequired(player.DefinitionId);
         SimulationTime completion = _state.Time.AdvanceBy(definition.Engineering.RepairDurationFor(targetSystem));
         (SimulationScheduler scheduler, ScheduledWork work) = _state.Scheduler.Schedule(
             completion,
@@ -434,6 +427,7 @@ public sealed partial class GameSimulation
     public AdvanceUntilResult AdvanceUntilNextPlayerRelevantEvent()
     {
         SimulationState candidate = _state;
+        List<ScheduledConsequenceTrace> lookaheadTraces = [];
         for (int attempts = 0; attempts < TotalConsequenceExecutionBudget; attempts++)
         {
             ScheduledWork? next = candidate
@@ -459,14 +453,17 @@ public sealed partial class GameSimulation
                 _factionCatalog,
                 true
             );
+            lookaheadTraces.AddRange(advance.Traces);
+            if (lookaheadTraces.Count > TotalConsequenceExecutionBudget)
+                throw new InvalidOperationException("Player-event lookahead exceeded its finite consequence budget.");
             candidate = advance.State;
             if (advance.PlayerEvents.Count == 0)
                 continue;
             Commit(candidate);
-            RememberLatestContactDecision(advance.Traces);
-            RememberLatestCombatDecision(advance.Traces);
-            RememberLatestFactionDecision(advance.Traces);
-            RememberLatestFactionInvestigationDecision(advance.Traces);
+            RememberLatestContactDecision(lookaheadTraces);
+            RememberLatestCombatDecision(lookaheadTraces);
+            RememberLatestFactionDecision(lookaheadTraces);
+            RememberLatestFactionInvestigationDecision(lookaheadTraces);
             return new AdvanceUntilResult(
                 AdvanceUntilOutcome.PlayerEventResolved,
                 _state.Time,
@@ -1185,29 +1182,11 @@ public sealed partial class GameSimulation
         return state.ReplaceShip(observer.InstanceId, updated) with { Scheduler = scheduler };
     }
 
-    private static double Distance(TacticalPosition left, TacticalPosition right)
-    {
-        double x = Math.Abs(left.XKilometers - right.XKilometers);
-        double y = Math.Abs(left.YKilometers - right.YKilometers);
-        if (x < y)
-        {
-            (x, y) = (y, x);
-        }
+    private static double Distance(TacticalPosition left, TacticalPosition right) =>
+        CombatLegality.Distance(left, right);
 
-        if (double.IsPositiveInfinity(x) || x == 0)
-        {
-            return x;
-        }
-
-        double ratio = y / x;
-        return x * Math.Sqrt(1 + (ratio * ratio));
-    }
-
-    private static bool IsWithinInclusiveRange(double distance, double range)
-    {
-        double tolerance = Math.Max(1, range) * 1e-12;
-        return double.IsFinite(distance) && (distance <= range || distance - range <= tolerance);
-    }
+    private static bool IsWithinInclusiveRange(double distance, double range) =>
+        CombatLegality.WithinRange(distance, range);
 
     private static void AddContactEvent(
         ShipInstanceId observerId,
@@ -2120,10 +2099,22 @@ public sealed partial class GameSimulation
             definition,
             PowerAllocationPreset.PrioritizeDirectedEnergyWeapons
         );
-        AddRepairAction(actions, EngineeringAction.BeginShieldRepair, ship, ShipSystemId.Shields);
-        AddRepairAction(actions, EngineeringAction.BeginDirectedEnergyRepair, ship, ShipSystemId.DirectedEnergyWeapons);
-        AddRepairAction(actions, EngineeringAction.BeginSensorRepair, ship, ShipSystemId.Sensors);
-        AddRepairAction(actions, EngineeringAction.BeginImpulseRepair, ship, ShipSystemId.ImpulsePropulsion);
+        AddRepairAction(actions, EngineeringAction.BeginShieldRepair, ship, definition, ShipSystemId.Shields);
+        AddRepairAction(
+            actions,
+            EngineeringAction.BeginDirectedEnergyRepair,
+            ship,
+            definition,
+            ShipSystemId.DirectedEnergyWeapons
+        );
+        AddRepairAction(actions, EngineeringAction.BeginSensorRepair, ship, definition, ShipSystemId.Sensors);
+        AddRepairAction(
+            actions,
+            EngineeringAction.BeginImpulseRepair,
+            ship,
+            definition,
+            ShipSystemId.ImpulsePropulsion
+        );
         actions.Add(new EngineeringActionProjection(EngineeringAction.ReturnToCommand, true));
         return [.. actions];
     }
@@ -2151,16 +2142,24 @@ public sealed partial class GameSimulation
         List<EngineeringActionProjection> actions,
         EngineeringAction action,
         ShipState ship,
+        ShipDefinition definition,
         ShipSystemId systemId
     )
     {
         EngineeringActionUnavailableReason? reason =
-            ship.Engineering.ActiveRepair is not null ? EngineeringActionUnavailableReason.RepairAlreadyActive
+            !SupportsRepair(definition.Engineering, systemId) ? EngineeringActionUnavailableReason.UnsupportedSystem
+            : ship.Engineering.ActiveRepair is not null ? EngineeringActionUnavailableReason.RepairAlreadyActive
             : ship.Engineering.ConditionFor(systemId).Value == 1
                 ? EngineeringActionUnavailableReason.SystemAlreadyNominal
             : null;
         actions.Add(new EngineeringActionProjection(action, reason is null, reason));
     }
+
+    private static bool SupportsRepair(ShipEngineeringDefinition definition, ShipSystemId system) =>
+        system == ShipSystemId.Sensors
+        || system == ShipSystemId.ImpulsePropulsion
+        || (system == ShipSystemId.Shields && definition.NominalShieldDemand.Value > 0)
+        || (system == ShipSystemId.DirectedEnergyWeapons && definition.NominalDirectedEnergyDemand.Value > 0);
 
     private static double? ActiveScanProgressAt(SimulationTime currentTime, ActiveSensorScanState? activeScan)
     {

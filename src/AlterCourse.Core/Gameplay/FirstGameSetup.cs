@@ -43,8 +43,8 @@ public static class FirstGameSetup
         starts =
         [
             .. starts,
-            CreateFactionShip(new ShipInstanceId(5), "Expedition Vessel Aurora", definition.Id, meridian, factionA),
-            CreateFactionShip(new ShipInstanceId(6), "Expedition Vessel Resolute", definition.Id, meridian, factionA),
+            CreateFactionShip(new ShipInstanceId(5), "Expedition Vessel Aurora", definition, meridian, factionA),
+            CreateFactionShip(new ShipInstanceId(6), "Expedition Vessel Resolute", definition, meridian, factionA),
         ];
         FactionStart[] factions =
         [
@@ -69,13 +69,13 @@ public static class FirstGameSetup
     private static ShipStart CreateFactionShip(
         ShipInstanceId id,
         string name,
-        ShipDefinitionId definitionId,
+        ShipDefinition definition,
         LocationId locationId,
         FactionId controller
     ) =>
         new(
             id,
-            definitionId,
+            definition.Id,
             name,
             default,
             default,
@@ -87,8 +87,9 @@ public static class FirstGameSetup
             directControllerFactionId: controller
         )
         {
-            ShieldCondition = new SystemCondition(1),
-            DirectedEnergyCondition = new SystemCondition(1),
+            ShieldCondition = definition.Engineering.NominalShieldDemand.Value > 0 ? new SystemCondition(1) : default,
+            DirectedEnergyCondition =
+                definition.Engineering.NominalDirectedEnergyDemand.Value > 0 ? new SystemCondition(1) : default,
         };
 
     private static ShipStart[] CreateShipStarts(
@@ -157,18 +158,24 @@ public static class FirstGameSetup
                 new AtLocationStart(dawn)
             ),
         ];
-        return InitializeCombat(starts, nominal);
+        return InitializeCombat(starts, nominal, definition.Engineering);
     }
 
-    private static ShipStart[] InitializeCombat(ShipStart[] starts, SystemCondition nominal) =>
+    private static ShipStart[] InitializeCombat(
+        ShipStart[] starts,
+        SystemCondition nominal,
+        ShipEngineeringDefinition engineering
+    ) =>
         starts
             .Select(start =>
                 start with
                 {
-                    ShieldCondition = nominal,
-                    DirectedEnergyCondition = nominal,
+                    ShieldCondition = engineering.NominalShieldDemand.Value > 0 ? nominal : default,
+                    DirectedEnergyCondition = engineering.NominalDirectedEnergyDemand.Value > 0 ? nominal : default,
                     Allocation =
                         start.InstanceId == new ShipInstanceId(4)
+                        && engineering.NominalShieldDemand.Value > 0
+                        && engineering.NominalDirectedEnergyDemand.Value > 0
                             ? new PowerAllocation(
                                 new PowerUnits(70),
                                 new PowerUnits(5),

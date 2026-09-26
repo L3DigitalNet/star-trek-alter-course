@@ -162,7 +162,6 @@ public sealed partial class GameSimulation
         {
             Scheduler = scheduler,
         };
-        candidate = AdmitCombatStimulus(candidate, hit, observedAttacker);
         ReportCombatImpact(
             state,
             attacker.InstanceId,
@@ -178,6 +177,7 @@ public sealed partial class GameSimulation
             events
         );
         candidate = ObserveAllShips(candidate, catalog, events, collector);
+        candidate = AdmitCombatStimulus(candidate, candidate.GetRequiredShip(victim.InstanceId), observedAttacker);
         return new CombatApplication(FireDirectedEnergyOutcome.Accepted, candidate);
     }
 

@@ -1,6 +1,8 @@
 using AlterCourse.Core.AI;
+using AlterCourse.Core.Content;
 using AlterCourse.Core.Gameplay;
 using AlterCourse.Core.Identity;
+using AlterCourse.Core.Player;
 using AlterCourse.Core.Quantities;
 using AlterCourse.Core.Sensors;
 using AlterCourse.Core.Ships;
@@ -416,5 +418,326 @@ public sealed class CombatRuntimeTests
         Assert.Equal(FireDirectedEnergyOutcome.TimeLimitExceeded, result.Outcome);
         Assert.Empty(result.ResolvedEvents);
         Assert.Same(state, game.CaptureState());
+    }
+
+    /// <summary>Absent historical capacity yields typed rejection rather than inventing a repair duration.</summary>
+    [Theory]
+    [InlineData("shields")]
+    [InlineData("directed-energy-weapons")]
+    public void HistoricalAbsentSystemRepairIsUnsupported(string systemName)
+    {
+        var engineering = new ShipEngineeringDefinition(
+            new PowerUnits(120),
+            new PowerUnits(70),
+            new PowerUnits(50),
+            new SimulationDuration(8000),
+            new SimulationDuration(6000)
+        );
+        var definition = new ShipDefinition(
+            new ShipDefinitionId("pathfinder"),
+            "Historical design",
+            new SpeedKilometersPerSecond(10),
+            new DistanceKilometers(30),
+            new SimulationDuration(2000),
+            engineering
+        );
+        var catalog = new ShipDefinitionCatalog(
+            new Dictionary<ShipDefinitionId, ShipDefinition> { [definition.Id] = definition }
+        );
+        var location = new LocationId("historical");
+        var map = new StrategicMap([new StrategicLocation(location, "Historical", default)], []);
+        var start = new ShipStart(
+            new ShipInstanceId(1),
+            definition.Id,
+            "Historical vessel",
+            default,
+            default,
+            new SystemCondition(1),
+            new SystemCondition(1),
+            new SystemCondition(1),
+            new PowerAllocation(new PowerUnits(70), new PowerUnits(50)),
+            new AtLocationStart(location)
+        );
+        GameSimulation game = new GameBootstrap(default, map, start.InstanceId, [start]).CreateSimulation(catalog);
+        var system = ShipSystemId.Parse(systemName);
+        SimulationState before = game.CaptureState();
+        Assert.Equal(
+            SystemRepairOutcome.UnsupportedSystem,
+            game.BeginSystemRepair(system, new SystemCondition(1)).Outcome
+        );
+        Assert.Same(before, game.CaptureState());
+        EngineeringAction action =
+            system == ShipSystemId.Shields
+                ? EngineeringAction.BeginShieldRepair
+                : EngineeringAction.BeginDirectedEnergyRepair;
+        Assert.False(
+            game.GetPlayerProjection()
+                .Ship.Engineering.Actions.Single(projected => projected.Action == action)
+                .IsAvailable
+        );
+    }
+
+    /// <summary>Forced generation reconciliation preserves heading and reports player-owned brownout and deceleration.</summary>
+    [Fact]
+    public void IncomingGenerationDamageReconcilesOwnPowerAndSpeed()
+    {
+        (GameSimulation game, Milestone3ProofFixture fixture, _) = Pair(0);
+        Assert.Equal(
+            SetTacticalCourseOutcome.Accepted,
+            game.SetTacticalCourse(new(new HeadingDegrees(90), new SpeedKilometersPerSecond(4))).Outcome
+        );
+        SimulationState state = game.CaptureState();
+        ShipState npc = state.GetRequiredShip(new ShipInstanceId(2));
+        SensorContactId localPlayer = npc.SensorKnowledge.Contacts.Single().Id;
+        ShipDirectedEnergyApplicationResult shot = GameSimulation.ApplyShipDirectedEnergy(
+            state,
+            fixture.Catalog,
+            npc.InstanceId,
+            new(localPlayer, ShipSystemId.PowerGeneration)
+        );
+        Assert.Equal(FireDirectedEnergyOutcome.Accepted, shot.Outcome);
+        game = GameSimulation.RestoreState(shot.CandidateState, fixture.Catalog);
+        ShipState player = game.CaptureState().GetRequiredShip(state.PlayerShipId);
+        Assert.Equal(0.75, player.Engineering.GenerationCondition.Value, 12);
+        Assert.Equal(90, player.Engineering.Allocation.Total);
+        Assert.Equal(90, player.TacticalMotion.Heading.Value);
+        Assert.Equal(3, player.TacticalMotion.Speed.Value, 12);
+        Assert.Contains(shot.ResolvedEvents, item => item.Kind == PlayerAdvanceEventKind.PowerBrownout);
+        Assert.Contains(shot.ResolvedEvents, item => item.Kind == PlayerAdvanceEventKind.ForcedDeceleration);
+        Assert.Contains(
+            shot.ResolvedEvents,
+            item => item.Kind == PlayerAdvanceEventKind.OwnSystemDamaged && item.SensorContactId is not null
+        );
+    }
+
+    /// <summary>Any positive applied penetration cancels repair even when condition was already zero.</summary>
+    [Fact]
+    public void PositiveDamageToAlreadyOfflineRepairCannotBeReconstituted()
+    {
+        (GameSimulation game, Milestone3ProofFixture fixture, _) = Pair(0);
+        game = WithPlayerRepair(game, fixture, ShipSystemId.DirectedEnergyWeapons, default);
+        SimulationState state = game.CaptureState();
+        ShipState npc = state.GetRequiredShip(new ShipInstanceId(2));
+        ShipDirectedEnergyApplicationResult shot = GameSimulation.ApplyShipDirectedEnergy(
+            state,
+            fixture.Catalog,
+            npc.InstanceId,
+            new(npc.SensorKnowledge.Contacts.Single().Id, ShipSystemId.DirectedEnergyWeapons)
+        );
+        game = GameSimulation.RestoreState(shot.CandidateState, fixture.Catalog);
+        ShipState player = game.CaptureState().GetRequiredShip(state.PlayerShipId);
+        Assert.Null(player.Engineering.ActiveRepair);
+        Assert.Equal(0, player.Engineering.DirectedEnergyCondition.Value);
+        Assert.DoesNotContain(
+            game.CaptureState().Scheduler.OutstandingWork,
+            work => work.Kind == ScheduledWorkKind.SystemRepairCompletion
+        );
+        game.AdvanceFixedSteps(1);
+        Assert.Equal(
+            0,
+            game.CaptureState().GetRequiredShip(state.PlayerShipId).Engineering.DirectedEnergyCondition.Value
+        );
+    }
+
+    /// <summary>Shield absorption damages and interrupts shield repair, while a protected different repair continues.</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void AbsorptionInterruptsOnlyDamagedRepair(bool repairShields)
+    {
+        (GameSimulation game, Milestone3ProofFixture fixture, _) = Pair(0);
+        ShipSystemId repaired = repairShields ? ShipSystemId.Shields : ShipSystemId.Sensors;
+        game = WithPlayerRepair(game, fixture, repaired, new SystemCondition(repairShields ? 0.4 : 0.8));
+        SimulationState state = game.CaptureState();
+        ShipState player = state.GetRequiredShip(state.PlayerShipId);
+        player = player with
+        {
+            Engineering = player.Engineering with
+            {
+                Allocation = new PowerAllocation(new PowerUnits(70), default, new PowerUnits(20), new PowerUnits(30)),
+            },
+        };
+        state = state.ReplaceShip(player.InstanceId, player);
+        ShipState npc = state.GetRequiredShip(new ShipInstanceId(2));
+        ShipDirectedEnergyApplicationResult shot = GameSimulation.ApplyShipDirectedEnergy(
+            state,
+            fixture.Catalog,
+            npc.InstanceId,
+            new(npc.SensorKnowledge.Contacts.Single().Id, ShipSystemId.Sensors)
+        );
+        game = GameSimulation.RestoreState(shot.CandidateState, fixture.Catalog);
+        player = game.CaptureState().GetRequiredShip(player.InstanceId);
+        Assert.Equal(repairShields, player.Engineering.ActiveRepair is null);
+        Assert.Equal(
+            !repairShields,
+            game.CaptureState()
+                .Scheduler.OutstandingWork.Any(work =>
+                    work.Id == state.GetRequiredShip(player.InstanceId).Engineering.ActiveRepair!.ScheduledCompletionId
+                )
+        );
+        Assert.Equal(
+            repairShields,
+            shot.ResolvedEvents.Any(item => item.Kind == PlayerAdvanceEventKind.SystemRepairInterrupted)
+        );
+    }
+
+    /// <summary>A pre-hit current contact admits one stimulus even when that hit disables its observations.</summary>
+    [Fact]
+    public void SensorDamageMakesAdmittedStimulusFailCurrentConstraint()
+    {
+        (GameSimulation game, Milestone3ProofFixture fixture, SensorContactId contact) = Pair(0);
+        SimulationState state = game.CaptureState();
+        ShipState npc = state.GetRequiredShip(new ShipInstanceId(2));
+        npc = npc with { Engineering = npc.Engineering with { SensorCondition = new SystemCondition(0.4) } };
+        game = GameSimulation.RestoreState(state.ReplaceShip(npc.InstanceId, npc), fixture.Catalog);
+        game.FireDirectedEnergy(new(contact, ShipSystemId.Sensors));
+        npc = game.CaptureState().GetRequiredShip(npc.InstanceId);
+        Assert.NotNull(npc.Combat.PendingStimulus);
+        Assert.Equal(SensorContactStatus.Stale, npc.SensorKnowledge.Contacts.Single().Status);
+        game.AdvanceFixedSteps(1);
+        Assert.Null(game.CaptureState().GetRequiredShip(npc.InstanceId).Combat.PendingStimulus);
+        Assert.Equal(DefensiveCombatDecisionAction.Hold, game.LastDefensiveCombatDecisionExplanation!.SelectedAction);
+        Assert.Contains(
+            game.LastDefensiveCombatDecisionExplanation.Candidates[0].Constraints,
+            constraint => constraint.Constraint == DefensiveCombatConstraint.CurrentContact && !constraint.Satisfied
+        );
+    }
+
+    /// <summary>Withdrawal is ordinary movement and naturally loses weapon range and contact without a combat lock.</summary>
+    [Fact]
+    public void OfflineDefenderWithdrawsUntilContactIsLost()
+    {
+        (GameSimulation game, Milestone3ProofFixture fixture, SensorContactId contact) = Pair(0);
+        SimulationState state = game.CaptureState();
+        ShipState npc = state.GetRequiredShip(new ShipInstanceId(2));
+        npc = npc with { Engineering = npc.Engineering with { DirectedEnergyCondition = default } };
+        game = GameSimulation.RestoreState(state.ReplaceShip(npc.InstanceId, npc), fixture.Catalog);
+        game.FireDirectedEnergy(new(contact, ShipSystemId.Shields));
+        game.AdvanceFixedSteps(1);
+        Assert.Equal(
+            DefensiveCombatDecisionAction.Withdraw,
+            game.LastDefensiveCombatDecisionExplanation!.SelectedAction
+        );
+        Assert.Equal(1, game.CaptureState().GetRequiredShip(npc.InstanceId).TacticalMotion.Speed.Value);
+        game.AdvanceFixedSteps(400);
+        Assert.True(
+            CombatLegality.Distance(
+                game.CaptureState().GetRequiredShip(state.PlayerShipId).TacticalPosition,
+                game.CaptureState().GetRequiredShip(npc.InstanceId).TacticalPosition
+            ) > 30
+        );
+        Assert.Equal(
+            SensorContactStatus.Lost,
+            game.CaptureState().GetRequiredShip(state.PlayerShipId).SensorKnowledge.Contacts.Single().Status
+        );
+    }
+
+    private static GameSimulation WithPlayerRepair(
+        GameSimulation game,
+        Milestone3ProofFixture fixture,
+        ShipSystemId system,
+        SystemCondition starting
+    )
+    {
+        SimulationState state = game.CaptureState();
+        ShipState player = state.GetRequiredShip(state.PlayerShipId);
+        SimulationTime due = state.Time.AdvanceBy(
+            fixture.Catalog.GetRequired(player.DefinitionId).Engineering.RepairDurationFor(system)
+        );
+        (SimulationScheduler scheduler, ScheduledWork work) = state.Scheduler.Schedule(
+            due,
+            player.InstanceId,
+            ScheduledWorkKind.SystemRepairCompletion
+        );
+        var repair = new SystemRepairState(system, starting, new SystemCondition(1), state.Time, due, work.Id);
+        player = player with
+        {
+            Engineering = player.Engineering.WithCondition(system, starting) with { ActiveRepair = repair },
+        };
+        return GameSimulation.RestoreState(
+            state.ReplaceShip(player.InstanceId, player) with
+            {
+                Scheduler = scheduler,
+            },
+            fixture.Catalog
+        );
+    }
+
+    /// <summary>Hidden target condition does not change targeting facts or disclose shield percentages.</summary>
+    [Fact]
+    public void TargetProjectionIgnoresHiddenEngineeringState()
+    {
+        (GameSimulation game, Milestone3ProofFixture fixture, _) = Pair(0);
+        PlayerProjection projected = game.GetPlayerProjection();
+        SimulationState state = game.CaptureState();
+        ShipState npc = state.GetRequiredShip(new ShipInstanceId(2));
+        npc = npc with
+        {
+            Engineering = npc.Engineering with
+            {
+                ShieldCondition = new SystemCondition(0.1),
+                DirectedEnergyCondition = new SystemCondition(0.2),
+            },
+        };
+        game = GameSimulation.RestoreState(state.ReplaceShip(npc.InstanceId, npc), fixture.Catalog);
+        Assert.Equal(projected, game.GetPlayerProjection());
+        Assert.DoesNotContain(
+            typeof(CombatTargetProjection).GetProperties(),
+            property =>
+                property.Name.Contains("ShipId", StringComparison.Ordinal)
+                || property.Name.Contains("Condition", StringComparison.Ordinal)
+                || property.Name.Contains("Faction", StringComparison.Ordinal)
+        );
+    }
+
+    /// <summary>A defensive wake with no actual player consequences leaves no-event advancement unchanged.</summary>
+    [Fact]
+    public void HiddenHoldDoesNotAdvancePlayerTimeOrExposePendingIntent()
+    {
+        (GameSimulation game, Milestone3ProofFixture fixture, SensorContactId contact) = Pair(0);
+        SimulationState state = game.CaptureState();
+        ShipState npc = state.GetRequiredShip(new ShipInstanceId(2));
+        npc = npc with
+        {
+            TacticalMotion = default,
+            Engineering = npc.Engineering with { DirectedEnergyCondition = default, ImpulseCondition = default },
+        };
+        game = GameSimulation.RestoreState(state.ReplaceShip(npc.InstanceId, npc), fixture.Catalog);
+        game.FireDirectedEnergy(new(contact, ShipSystemId.Shields));
+        SimulationState before = game.CaptureState();
+        AdvanceUntilResult result = game.AdvanceUntilNextPlayerRelevantEvent();
+        Assert.Equal(AdvanceUntilOutcome.NoPlayerEvent, result.Outcome);
+        Assert.Empty(result.ResolvedEvents);
+        Assert.Same(before, game.CaptureState());
+        Assert.Equal(before.Time, result.StoppedAt);
+    }
+
+    /// <summary>Historical definitions retain their authored absence rather than gaining bootstrap combat allocations.</summary>
+    [Fact]
+    public void FirstGameSupportsHistoricalDefinitionsWithoutInventedCombatCapacity()
+    {
+        var engineering = new ShipEngineeringDefinition(
+            new PowerUnits(120),
+            new PowerUnits(70),
+            new PowerUnits(50),
+            new SimulationDuration(8000),
+            new SimulationDuration(6000)
+        );
+        var definition = new ShipDefinition(
+            new ShipDefinitionId("pathfinder"),
+            "Historical design",
+            new SpeedKilometersPerSecond(10),
+            new DistanceKilometers(30),
+            new SimulationDuration(2000),
+            engineering
+        );
+        var catalog = new ShipDefinitionCatalog(
+            new Dictionary<ShipDefinitionId, ShipDefinition> { [definition.Id] = definition }
+        );
+        GameSimulation game = FirstGameSetup.Create(catalog);
+        ShipState kestrel = game.CaptureState().GetRequiredShip(new ShipInstanceId(4));
+        Assert.Equal(default, kestrel.Engineering.ShieldCondition);
+        Assert.Equal(default, kestrel.Engineering.DirectedEnergyCondition);
+        Assert.Equal(new PowerAllocation(new PowerUnits(70), new PowerUnits(50)), kestrel.Engineering.Allocation);
     }
 }
