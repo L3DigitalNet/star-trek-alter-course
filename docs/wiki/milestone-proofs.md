@@ -131,7 +131,7 @@ This is a **partial Milestone 3 outcome**. Strategic contacts, affiliation/inten
 
 **Implemented by Feature #62 / Final PR #63; included in v0.4.0.**
 
-Core owns bounded generation, four-consumer power allocation, five concrete system conditions, derived capability, and deterministic system repair. Those values affect real sensor reach, tactical speed, scan continuity, AI inputs, persistence, and the live Engineering workspace. V4 is the released ship-content baseline; M6A adds V5. Save V5 was introduced by this milestone; Strategic Contact Reporting added released V6, Faction Intent and Autonomous Assignment added V7, Observation-Driven Faction Response added released V8, and unreleased M6A adds V9.
+M4 introduced bounded generation, sensor/impulse allocation, three concrete system conditions, derived capability, and deterministic system repair. Those values affect real sensor reach, tactical speed, scan continuity, AI inputs, persistence, and the live Engineering workspace. M6A extends that model to four consumers and five conditions. V4 is the released ship-content baseline; M6A adds V5. Save V5 was introduced by M4; Strategic Contact Reporting added released V6, Faction Intent and Autonomous Assignment added V7, Observation-Driven Faction Response added released V8, and unreleased M6A adds V9.
 
 The milestone intentionally stops short of a universal component system, arbitrary combat damage, detailed EPS topology, batteries, warp power, fuel, heat/coolant, repair teams/queues, shields, weapons, or crew simulation.
 
