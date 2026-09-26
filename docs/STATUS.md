@@ -2,8 +2,8 @@
 
 ## Current snapshot
 
-- v0.6.0 is the current immutable source-only GitHub Release, published 2026-09-08T01:04:05Z; it has no assets.
-- Signed tag `v0.6.0` targets Final PR #97's release merge `d00460ea8b472c44ea2a8343d43e676efb96000b` and exactly tested tree `13bbe41`.
+- v0.6.1 is the current immutable source-only GitHub Release; it has no assets.
+- Signed annotated tag `v0.6.1` targets Final PR #103's release merge `f0af2653ca44f17b9f701f6271e199cda1429d16`.
 - Milestone 3A first observed contact, Milestone 4 Engineering Backbone, and Strategic Contact Reporting are released; Features #58, #62, and #77 are Done.
 - Strategic Contact Reporting merged into `dev` as `80c3084` (Final PR #78) and shipped in v0.5.0 through release Task #80 / Final PR #82 on 2026-09-06.
 - Current released rules are `observation-driven-faction-response-v1`, content schema V4, and save schema V8; V6/V7 migrations remain noninventive.
@@ -12,7 +12,7 @@
 - All sync hosted checks, including fresh Canonical verification #34175435539, passed.
 - v0.5.0 verification passed: Core 406, AssetCtl 324, Godot 1+2+63, smoke OK, and zero warnings or errors; later PRs record their own checks.
 - [Faction Intent and Autonomous Assignment](wiki/faction-intent-and-autonomous-assignment.md) merged into `dev` as `0217296` through Final PR #87.
-- Features #86 and #93 are released in v0.6.0.
+- Features #86 and #93 are released in v0.6.0; Issue #100's verification build-server repair is released in v0.6.1.
 - Q-05 is resolved and Q-04 is partial for the first bounded M5 slice. Q-02/Q-03/Q-06/Q-08/Q-14 remain future or partly scoped work.
 - The shell retains strategic travel, tactical movement, Engineering power and repair, deterministic time controls, quick save/load, and last-known contact reporting.
 - Core owns plural ordinary `ShipState`; Godot projects player-visible state and does not own authoritative simulation state.
@@ -25,3 +25,5 @@
 - Release tree verification passed: Core 598, AssetCtl 324, Godot 1+2+67, smoke, warning-free checks, all text gates, standards 38, and frontmatter/handoff 0.
 - Independent release review was confirmed, and all five hosted Final PR #97 checks passed. M6/Q-10 follows; M3/M5 remain incomplete.
 - Handoff `9ebee7b` used the ADR 0013 direct route; GitHub reported a configured PR/check bypass, contrary to Feature #93's no-bypass constraint.
+- PR #101 fixed verification build-server reuse. Release and Debug verification passed with Core 598, AssetCtl 324, Godot integration and smoke checks.
+- The verification process scan found no remaining `dotnet`, `MSBuild`, or `VBCSCompiler` processes. Issue #100 and Task #102 are Done.
