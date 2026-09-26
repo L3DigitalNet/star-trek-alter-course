@@ -365,7 +365,7 @@ public partial class GameScreen : Control
             _messageLabel.Text =
                 $"Quick load restored time {loaded.Simulation.GetPlayerProjection().SimulationTime.Milliseconds / 1000.0:0.0} s.";
             SetMeta("quick_save_status", "loaded");
-            CurrentWorkspaceButton().CallDeferred(Control.MethodName.GrabFocus);
+            DeferFocus(CurrentWorkspaceButton());
         }
         catch (Exception exception)
         {
@@ -774,7 +774,7 @@ public partial class GameScreen : Control
             Control fallback = !_engineeringWorkspaceActive
                 ? _commandDeck.GetVisibleFocusControls().FirstOrDefault() ?? _commandStationButton
                 : _engineeringStationButton;
-            fallback.CallDeferred(Control.MethodName.GrabFocus);
+            DeferFocus(fallback);
         }
     }
 
@@ -1521,6 +1521,25 @@ public partial class GameScreen : Control
     private Button CurrentWorkspaceButton() =>
         _engineeringWorkspaceActive ? _engineeringStationButton : _commandStationButton;
 
+    // Focus requests are deferred so they land after the whole synchronous presentation pass, yet a later
+    // call in that same frame can reconcile the captured target away: ShowPreview removes live action
+    // buttons that a preceding RefreshProjection chose as its fallback. Removed buttons are only
+    // QueueFree'd, so they are still valid objects outside the tree when the deferred call runs, and an
+    // unguarded GrabFocus then fails with the engine's "!is_inside_tree()" error. The target is therefore
+    // revalidated at flush time and a stale request is dropped; any later request queued in the same
+    // frame (FocusCurrentWorkspace after a view switch) still applies, matching
+    // EngineeringWorkspace.RestorePendingFocus.
+    private static void DeferFocus(Control target) =>
+        Callable
+            .From(() =>
+            {
+                if (GodotObject.IsInstanceValid(target) && target.IsInsideTree() && target.IsVisibleInTree())
+                {
+                    target.GrabFocus();
+                }
+            })
+            .CallDeferred();
+
     private void FocusCurrentWorkspace()
     {
         if (_engineeringWorkspaceActive)
@@ -1529,7 +1548,7 @@ public partial class GameScreen : Control
         }
         else
         {
-            _commandStationButton.CallDeferred(Control.MethodName.GrabFocus);
+            DeferFocus(_commandStationButton);
         }
     }
 

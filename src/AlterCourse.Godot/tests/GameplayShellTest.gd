@@ -1173,6 +1173,31 @@ func test_active_scan_and_hail_actions_translate_typed_contact_and_reconcile_but
 	assert_bool((_find_action_button(screen, "hail-target") as Button).disabled).is_true()
 
 
+func test_deferred_focus_skips_controls_that_left_the_tree_before_the_frame_flush() -> void:
+	# Pins the PR #117 `grab_focus` "!is_inside_tree()" diagnostic. Focus on the tactical-only target
+	# selector makes ShowStrategicView queue a fallback onto a live strategic action; the preview in the
+	# same frame then reconciles those action buttons out of the tree before the deferred focus runs.
+	var screen := _create_screen()
+	_prepare_detected_contact(screen)
+	screen.call("ShowTacticalView")
+	screen.call("SelectContact", 1)
+	var scan_button := _find_action_button(screen, "active-scan") as Button
+	scan_button.grab_focus()
+	scan_button.emit_signal("pressed")
+	await get_tree().process_frame
+	var selector := _command_deck(screen).get_node("%TargetSystemSelector") as Control
+	assert_object(get_viewport().gui_get_focus_owner()).is_same(selector)
+
+	screen.call("ShowStrategicView")
+	var strategic_actions: Array[Node] = _command_deck(screen).get_node("%ContextActions").get_children()
+	screen.call("ShowPreview", 2)
+	assert_bool(strategic_actions.any(func(action: Node) -> bool: return not action.is_inside_tree())).is_true()
+
+	await assert_error(func() -> void: await get_tree().process_frame).is_success()
+	# The workspace entry request queued by ShowPreview is still honoured after the stale one is dropped.
+	assert_object(get_viewport().gui_get_focus_owner()).is_same(screen.get_node("%CommandStationButton"))
+
+
 func test_space_pause_does_not_activate_the_focused_hail_action() -> void:
 	var screen := _create_screen()
 	_prepare_detected_contact(screen)
