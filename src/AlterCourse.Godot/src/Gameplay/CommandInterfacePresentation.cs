@@ -57,4 +57,7 @@ public sealed record CommandInterfacePresentation
 
     /// <summary>Gets engineering-only content, or null outside the engineering hierarchy.</summary>
     public CommandInterfaceEngineeringPresentation? Engineering { get; init; }
+
+    /// <summary>Gets the selected contact's Core-computed target choices and fire legality.</summary>
+    public CombatTargetProjection? CombatTarget { get; init; }
 }

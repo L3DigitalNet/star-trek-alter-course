@@ -43,6 +43,181 @@ func test_main_scene_constructs_gameplay_shell() -> void:
 	assert_str(screen.get_meta("load_error", "")).is_empty()
 
 
+func test_live_course_inputs_apply_stop_and_preserve_draft_on_refresh() -> void:
+	var screen := _create_screen()
+	screen.call("ShowTacticalView")
+	await get_tree().process_frame
+	var heading := screen.get_node_or_null("%CourseHeading") as SpinBox
+	var speed := screen.get_node_or_null("%CourseSpeed") as SpinBox
+	assert_object(heading).is_not_null()
+	assert_object(speed).is_not_null()
+	if heading == null or speed == null:
+		return
+	heading.value = 90
+	speed.value = 1
+	(screen.get_node("%CourseButton") as Button).emit_signal("pressed")
+	assert_float(screen.get_meta("tactical_heading", -1.0)).is_equal_approx(90.0, 0.0001)
+	assert_float(screen.get_meta("tactical_speed", -1.0)).is_equal_approx(1.0, 0.0001)
+	heading.value = 180
+	speed.value = 100
+	(screen.get_node("%CourseButton") as Button).emit_signal("pressed")
+	assert_str((screen.get_node("%Message") as Label).text).contains("exceeds")
+	assert_float(screen.get_meta("tactical_heading", -1.0)).is_equal_approx(90.0, 0.0001)
+	assert_float(screen.get_meta("tactical_speed", -1.0)).is_equal_approx(1.0, 0.0001)
+	heading.get_line_edit().grab_focus()
+	_advance_fixed_steps(screen, 1)
+	await get_tree().process_frame
+	assert_float(heading.value).is_equal(180.0)
+	assert_float(speed.value).is_equal(100.0)
+	assert_bool(heading.get_line_edit().has_focus()).is_true()
+	_send_action(screen, "view_strategic")
+	assert_str(screen.get_meta("active_view", "")).is_equal("tactical")
+	(screen.get_node("%StopCourseButton") as Button).emit_signal("pressed")
+	assert_float(screen.get_meta("tactical_heading", -1.0)).is_equal_approx(90.0, 0.0001)
+	assert_float(screen.get_meta("tactical_speed", -1.0)).is_equal(0.0)
+	screen.call("ShowPreview", 2)
+	assert_bool((screen.get_node("%CourseButton") as Button).disabled).is_true()
+	assert_bool((screen.get_node("%StopCourseButton") as Button).disabled).is_true()
+	assert_bool(heading.editable).is_false()
+	var clock: int = screen.get_meta("simulation_time_milliseconds", -1)
+	(screen.get_node("%StopCourseButton") as Button).emit_signal("pressed")
+	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(clock)
+
+
+func test_live_combat_exposes_core_refusal_and_four_consumer_engineering() -> void:
+	var screen := _create_screen()
+	_prepare_detected_contact(screen)
+	screen.call("ShowTacticalView")
+	screen.call("SelectContact", 1)
+	assert_str(_collect_control_text(_command_deck(screen))).contains("not identified")
+	assert_bool((_find_action_button(screen, "fire-phasers") as Button).disabled).is_true()
+	assert_object(_command_deck(screen).get_node_or_null("%TargetSystemSelector")).is_instanceof(OptionButton)
+	screen.call("ShowEngineeringWorkspace")
+	(_find_engineering_action_button(screen, "allocate-balanced") as Button).emit_signal("pressed")
+	assert_int(screen.get_meta("engineering_sensor_allocation", -1)).is_equal(28)
+	assert_int(screen.get_meta("engineering_impulse_allocation", -1)).is_equal(20)
+	assert_int(screen.get_meta("engineering_shield_allocation", -1)).is_equal(16)
+	assert_int(screen.get_meta("engineering_weapon_allocation", -1)).is_equal(11)
+	var text := _collect_control_text(_engineering_workspace(screen))
+	assert_str(text).contains("SHIELDS")
+	assert_str(text).contains("DIRECTED-ENERGY WEAPONS")
+
+
+func test_public_controls_approach_identify_stop_allocate_and_fire_with_stable_selection() -> void:
+	var screen := _create_screen()
+	_prepare_combat_encounter(screen)
+	await get_tree().process_frame
+	var workspace := _command_deck(screen)
+	var selector := workspace.get_node("%TargetSystemSelector") as OptionButton
+	var selector_id := selector.get_instance_id()
+	assert_int(selector.item_count).is_equal(5)
+	var selected_index := -1
+	for index in range(selector.item_count):
+		if selector.get_item_text(index) == "Sensors":
+			selected_index = index
+	assert_int(selected_index).is_greater_equal(0)
+	selector.select(selected_index)
+	selector.emit_signal("item_selected", selected_index)
+	selector.grab_focus()
+	_advance_fixed_steps(screen, 1)
+	await get_tree().process_frame
+	assert_int(selector.get_instance_id()).is_equal(selector_id)
+	assert_bool(selector.has_focus()).is_true()
+	assert_str(workspace.get_meta("selected_target_system", "")).is_equal("sensors")
+	assert_str(screen.get_meta("last_fire_outcome", "")).is_empty()
+	assert_bool(selector.focus_next.is_empty()).is_false()
+	var fire := _find_action_button(screen, "fire-phasers") as Button
+	assert_bool(fire.disabled).is_false()
+	fire.grab_focus()
+	fire.emit_signal("pressed")
+	await get_tree().process_frame
+	assert_str(screen.get_meta("last_fire_outcome", "")).is_equal("Accepted")
+	assert_int(screen.get_meta("combat_remaining_cooldown", -1)).is_equal(2000)
+	assert_bool(fire.disabled).is_true()
+	assert_bool(fire.has_focus()).is_false()
+	assert_object(get_viewport().gui_get_focus_owner()).is_not_null()
+	assert_str(_collect_control_text(workspace)).contains("cooldown is active")
+	var log_text := _collect_control_text(screen.get_node("%EventLogContent"))
+	assert_str(log_text).contains("shot fired")
+	assert_str(log_text).contains("shield impact")
+	var ready_at: int = screen.get_meta("combat_next_ready_at", -1)
+	fire.emit_signal("pressed")
+	assert_int(screen.get_meta("combat_next_ready_at", -1)).is_equal(ready_at)
+	_advance_fixed_steps(screen, 1)
+	assert_float(screen.get_meta("engineering_shield_condition", 1.0)).is_less(1.0)
+	assert_str(_collect_control_text(screen.get_node("%EventLogContent"))).contains("Own Shields damaged")
+	screen.call("ShowEngineeringWorkspace")
+	var repair := _find_engineering_action_button(screen, "repair-shields") as Button
+	assert_bool(repair.disabled).is_false()
+	repair.emit_signal("pressed")
+	assert_str(screen.get_meta("engineering_repair_target", "")).is_equal("shields")
+	screen.call("ShowTacticalView")
+	assert_str(workspace.get_meta("selected_target_system", "")).is_equal("sensors")
+	_advance_fixed_steps(screen, 19)
+	assert_int(screen.get_meta("combat_remaining_cooldown", -1)).is_equal(0)
+	assert_bool(fire.disabled).is_false()
+	var live_text := _collect_control_text(screen)
+	for forbidden in ["targetShipId", "controller", "target condition", "target capability", "Faction A", "pending stimulus"]:
+		assert_str(live_text).not_contains(forbidden)
+
+
+func _prepare_combat_encounter(screen: Node) -> void:
+	_prepare_detected_contact(screen)
+	screen.call("ShowTacticalView")
+	screen.call("SelectContact", 1)
+	(_find_action_button(screen, "active-scan") as Button).emit_signal("pressed")
+	screen.call("AdvanceUntilNextPlayerRelevantEvent")
+	assert_str(screen.get_meta("first_contact_identification", "")).is_equal("Identified")
+	assert_float(screen.get_meta("combat_known_range", -1.0)).is_greater(20.0)
+	assert_str(screen.get_meta("combat_target_outcome", "")).is_equal("WeaponUnpowered")
+	assert_bool((_find_action_button(screen, "fire-phasers") as Button).disabled).is_true()
+	(_find_action_button(screen, "hail") as Button).emit_signal("pressed")
+	(screen.get_node("%CourseHeading") as SpinBox).value = 90
+	(screen.get_node("%CourseSpeed") as SpinBox).value = 1
+	(screen.get_node("%CourseButton") as Button).emit_signal("pressed")
+	_advance_fixed_steps(screen, 120)
+	assert_str(screen.get_meta("combat_target_outcome", "")).is_equal("WeaponUnpowered")
+	(screen.get_node("%StopCourseButton") as Button).emit_signal("pressed")
+	assert_float(screen.get_meta("tactical_heading", -1.0)).is_equal(90.0)
+	assert_float(screen.get_meta("tactical_speed", -1.0)).is_equal(0.0)
+	screen.call("ShowEngineeringWorkspace")
+	(_find_engineering_action_button(screen, "allocate-balanced") as Button).emit_signal("pressed")
+	screen.call("ShowTacticalView")
+	assert_str(screen.get_meta("first_contact_status", "")).is_equal("Current")
+	assert_str(screen.get_meta("combat_target_outcome", "")).is_equal("Accepted")
+
+
+func test_public_combat_damage_disables_weapon_and_weapon_repair_restores_capability() -> void:
+	var screen := _create_screen()
+	_prepare_combat_encounter(screen)
+	var selector := _command_deck(screen).get_node("%TargetSystemSelector") as OptionButton
+	for index in range(selector.item_count):
+		if selector.get_item_text(index) == "Sensors":
+			selector.select(index)
+			selector.emit_signal("item_selected", index)
+	for shot in range(12):
+		var fire := _find_action_button(screen, "fire-phasers") as Button
+		if fire.disabled:
+			break
+		fire.emit_signal("pressed")
+		_advance_fixed_steps(screen, 20)
+	assert_float(screen.get_meta("engineering_weapon_condition", -1.0)).is_equal(0.0)
+	assert_str(screen.get_meta("combat_target_outcome", "")).is_equal("WeaponOffline")
+	assert_bool((_find_action_button(screen, "fire-phasers") as Button).disabled).is_true()
+	assert_str(_collect_control_text(_command_deck(screen))).contains("Weapon is offline")
+	screen.call("ShowEngineeringWorkspace")
+	(_find_engineering_action_button(screen, "repair-weapons") as Button).emit_signal("pressed")
+	assert_str(screen.get_meta("engineering_repair_target", "")).is_equal("directed-energy-weapons")
+	_advance_fixed_steps(screen, 60)
+	assert_float(screen.get_meta("engineering_weapon_condition", -1.0)).is_equal(1.0)
+	assert_str(screen.get_meta("engineering_repair_target", "")).is_empty()
+	(_find_engineering_action_button(screen, "prioritize-weapons") as Button).emit_signal("pressed")
+	assert_int(screen.get_meta("engineering_weapon_allocation", -1)).is_equal(30)
+	assert_int(screen.get_meta("engineering_impulse_allocation", -1)).is_equal(0)
+	(_find_engineering_action_button(screen, "prioritize-shields") as Button).emit_signal("pressed")
+	assert_int(screen.get_meta("engineering_shield_allocation", -1)).is_equal(40)
+
+
 func test_quick_save_and_load_controls_exist() -> void:
 	var screen := _create_screen()
 
@@ -524,8 +699,10 @@ func test_live_engineering_projects_authoritative_power_capability_and_repair_st
 		"ENGINEERING CAPABILITY"
 	)
 	var hierarchy_text := _collect_control_text(engineering.get_node("%EngineeringHierarchy"))
-	for unsupported in ["SHIELDS", "WEAPONS", "EPS", "BATTERIES", "WARP CORE", "LIFE SUPPORT"]:
+	for unsupported in ["EPS", "BATTERIES", "WARP CORE", "LIFE SUPPORT"]:
 		assert_str(hierarchy_text).not_contains(unsupported)
+	assert_str(hierarchy_text).contains("SHIELDS")
+	assert_str(hierarchy_text).contains("DIRECTED-ENERGY WEAPONS")
 
 	assert_int(screen.get_meta("engineering_nominal_power", -1)).is_equal(120)
 	assert_int(screen.get_meta("engineering_available_power", -1)).is_equal(75)
@@ -559,8 +736,10 @@ func test_live_engineering_allocation_presets_submit_core_choices_and_refresh_pr
 	)
 
 	(_find_engineering_action_button(screen, "allocate-balanced") as Button).emit_signal("pressed")
-	assert_int(screen.get_meta("engineering_sensor_allocation", -1)).is_equal(44)
-	assert_int(screen.get_meta("engineering_impulse_allocation", -1)).is_equal(31)
+	assert_int(screen.get_meta("engineering_sensor_allocation", -1)).is_equal(28)
+	assert_int(screen.get_meta("engineering_impulse_allocation", -1)).is_equal(20)
+	assert_int(screen.get_meta("engineering_shield_allocation", -1)).is_equal(16)
+	assert_int(screen.get_meta("engineering_weapon_allocation", -1)).is_equal(11)
 	assert_int(screen.get_meta("engineering_reserve", -1)).is_equal(0)
 	assert_str(screen.get_meta("last_engineering_command", "")).is_equal(
 		"allocation:Balanced:Accepted"
@@ -1021,8 +1200,8 @@ func test_live_unsupported_values_and_engineering_actions_are_explicitly_unavail
 	var hierarchy_text := _collect_control_text(
 		_engineering_workspace(screen).get_node("%EngineeringHierarchy")
 	)
-	assert_str(hierarchy_text).not_contains("SHIELDS")
-	assert_str(hierarchy_text).not_contains("WEAPONS")
+	assert_str(hierarchy_text).contains("SHIELDS")
+	assert_str(hierarchy_text).contains("DIRECTED-ENERGY WEAPONS")
 	assert_str(hierarchy_text).not_contains("EPS")
 	assert_bool((_find_engineering_action_button(screen, "allocate-balanced") as Button).disabled).is_false()
 	assert_bool(

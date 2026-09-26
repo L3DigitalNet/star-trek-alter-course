@@ -70,6 +70,7 @@ public static class CommandInterfacePresenter
             Strategic = projection.Strategic,
             Tactical = projection.Ship.Tactical,
             Engineering = BuildEngineering(projection),
+            CombatTarget = FindCombatTarget(projection, selectedContact),
         };
     }
 
@@ -90,7 +91,11 @@ public static class CommandInterfacePresenter
         return
         [
             SystemUnavailable("hull", "HULL"),
-            SystemUnavailable("shields", "SHIELDS"),
+            new(
+                "shields",
+                "SHIELDS",
+                Available("CONDITION", FormatCondition(projection.Ship.Engineering.ShieldCondition))
+            ),
             SystemUnavailable("power", "POWER"),
             new CommandInterfaceSystemRow(
                 "propulsion",
@@ -106,7 +111,11 @@ public static class CommandInterfacePresenter
                 "SENSORS",
                 Available("INTEGRITY", FormatPercent(projection.Ship.Sensors.Integrity), sensorTone)
             ),
-            SystemUnavailable("weapons", "WEAPONS"),
+            new(
+                "weapons",
+                "WEAPONS",
+                Available("CONDITION", FormatCondition(projection.Ship.Engineering.DirectedEnergyCondition))
+            ),
             SystemUnavailable("computer", "COMPUTER"),
             SystemUnavailable("life-support", "LIFE SUP"),
         ];
@@ -126,7 +135,11 @@ public static class CommandInterfacePresenter
 
         if (mode == CommandInterfaceMode.Combat)
         {
-            return BuildTacticalTelemetry(projection, selectedContact);
+            return
+            [
+                .. BuildTacticalTelemetry(projection, selectedContact),
+                BuildCombatTelemetry(projection, selectedContact),
+            ];
         }
 
         return BuildStrategicTelemetry(projection, selectedLocation);
@@ -318,7 +331,7 @@ public static class CommandInterfacePresenter
             ),
             LiveAction(
                 "set-tactical-course",
-                "Adjust tactical course…",
+                "Apply tactical course",
                 CommandInterfaceTone.Command,
                 CommandInterfaceIntent.SetTacticalCourse,
                 projection.AvailableActions.Contains(PlayerAction.SetTacticalCourse)
@@ -348,7 +361,7 @@ public static class CommandInterfacePresenter
                 selectedContact?.Id,
                 ContactActionTooltip(selectedContact, SensorContactAction.Hail, hailAvailable)
             ),
-            DisabledAction("fire-phasers", "Fire phasers", CommandInterfaceTone.Critical),
+            BuildFireAction(projection, selectedContact),
         ];
     }
 
@@ -396,10 +409,103 @@ public static class CommandInterfacePresenter
                         "did not respond.",
                         CommandInterfaceTone.Caution
                     ),
+                    ResolvedActivityEvent resolved => new CommandInterfaceEventRow(
+                        FormatClock(activity.SimulationTimeMilliseconds),
+                        "TACTICAL",
+                        CombatEventText(resolved.Event),
+                        CommandInterfaceTone.Caution
+                    ),
                     _ => throw new ArgumentOutOfRangeException(nameof(events), activity, "Unknown player activity."),
                 }
             ),
         ];
+
+    private static CombatTargetProjection? FindCombatTarget(
+        PlayerProjection projection,
+        SensorContactSnapshot? contact
+    ) =>
+        contact is null
+            ? null
+            : projection.Ship.Combat.Targets.SingleOrDefault(target => target.ContactId == contact.Id);
+
+    private static CommandInterfaceAction BuildFireAction(PlayerProjection projection, SensorContactSnapshot? contact)
+    {
+        CombatTargetProjection? target = FindCombatTarget(projection, contact);
+        bool available = target?.Outcome == FireDirectedEnergyOutcome.Accepted && target.SupportedSystems.Count > 0;
+        return new(
+            "fire-phasers",
+            "Fire directed energy",
+            CommandInterfaceTone.Critical,
+            available ? CommandInterfaceActionAvailability.Submittable : CommandInterfaceActionAvailability.Disabled,
+            CommandInterfaceIntent.FireDirectedEnergy,
+            contact?.Id,
+            FireReason(target?.Outcome ?? FireDirectedEnergyOutcome.ContactNotFound)
+        );
+    }
+
+    private static CommandInterfaceTelemetrySection BuildCombatTelemetry(
+        PlayerProjection projection,
+        SensorContactSnapshot? contact
+    )
+    {
+        CombatProjection combat = projection.Ship.Combat;
+        EngineeringProjection engineering = projection.Ship.Engineering;
+        CombatTargetProjection? target = FindCombatTarget(projection, contact);
+        return new(
+            "combat",
+            "FIRE CONTROL / OWN SYSTEMS",
+            CommandInterfaceTone.Critical,
+            [
+                Available("FIRE CONTROL", FireReason(target?.Outcome ?? FireDirectedEnergyOutcome.ContactNotFound)),
+                Available("KNOWN RANGE", target?.Range is { } range ? FormatKilometers(range.Value) : "UNKNOWN"),
+                Available(
+                    "WEAPON RANGE",
+                    combat.WeaponRange is { } weaponRange ? FormatKilometers(weaponRange.Value) : "UNAVAILABLE"
+                ),
+                Available("COOLDOWN REMAINING", FormatSeconds(combat.RemainingCooldown.Milliseconds)),
+                Available("SHIELD CONDITION", FormatCondition(engineering.ShieldCondition)),
+                Available("SHIELD POWER", FormatPower(engineering.ShieldAllocation)),
+                Available("SHIELD CAPABILITY", FormatPercent(engineering.ShieldCapability)),
+                Available("WEAPON CONDITION", FormatCondition(engineering.DirectedEnergyCondition)),
+                Available("WEAPON POWER", FormatPower(engineering.DirectedEnergyAllocation)),
+                Available("WEAPON CAPABILITY", FormatPercent(engineering.DirectedEnergyCapability)),
+            ]
+        );
+    }
+
+    /// <summary>Formats Core's typed fire outcome without recreating its legality checks.</summary>
+    public static string FireReason(FireDirectedEnergyOutcome outcome) =>
+        outcome switch
+        {
+            FireDirectedEnergyOutcome.Accepted => "Ready to fire at the selected subsystem.",
+            FireDirectedEnergyOutcome.ContactNotFound => "Select a live contact to fire.",
+            FireDirectedEnergyOutcome.ContactNotCurrent => "Contact is not current.",
+            FireDirectedEnergyOutcome.ContactNotIdentified => "Contact is not identified.",
+            FireDirectedEnergyOutcome.NotAtSameLocation => "No shared tactical location.",
+            FireDirectedEnergyOutcome.OutOfRange => "Contact is out of weapon range.",
+            FireDirectedEnergyOutcome.WeaponUnpowered => "Weapon is unpowered.",
+            FireDirectedEnergyOutcome.WeaponOffline => "Weapon is offline or absent.",
+            FireDirectedEnergyOutcome.CooldownActive => "Weapon cooldown is active.",
+            FireDirectedEnergyOutcome.UnsupportedSystem => "Target subsystem is unavailable.",
+            FireDirectedEnergyOutcome.TimeLimitExceeded => "Simulation time limit prevents firing.",
+            _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, "Unknown fire outcome."),
+        };
+
+    /// <summary>Describes only the qualitative or player-owned consequences admitted by Core.</summary>
+    public static string CombatEventText(PlayerAdvanceEvent @event) =>
+        @event.Kind switch
+        {
+            PlayerAdvanceEventKind.DirectedEnergyFired => "Directed-energy shot fired.",
+            PlayerAdvanceEventKind.ShieldImpact => "Observed shield impact.",
+            PlayerAdvanceEventKind.SubsystemPenetration =>
+                $"Observed penetration to {SystemLabel(@event.ShipSystemId)}.",
+            PlayerAdvanceEventKind.OwnSystemDamaged => $"Own {SystemLabel(@event.ShipSystemId)} damaged.",
+            PlayerAdvanceEventKind.SystemRepairInterrupted =>
+                $"Own {SystemLabel(@event.ShipSystemId)} repair interrupted.",
+            PlayerAdvanceEventKind.PowerBrownout => "Own power allocation reduced by brownout.",
+            PlayerAdvanceEventKind.ForcedDeceleration => "Own speed reduced by propulsion capability.",
+            _ => throw new ArgumentOutOfRangeException(nameof(@event), @event.Kind, "Unknown combat event."),
+        };
 
     private static CommandInterfaceEventRow HailEvent(
         HailActivityEvent hail,
@@ -657,6 +763,13 @@ public static class CommandInterfacePresenter
                 Hierarchy("power", "POWER", false, powerTone),
                 Hierarchy("sensors", "SENSORS", false, sensorTone),
                 Hierarchy("propulsion", "PROPULSION", false, impulseTone),
+                Hierarchy("shields", "SHIELDS", false, ConditionTone(engineering.ShieldCondition)),
+                Hierarchy(
+                    "directed-energy-weapons",
+                    "DIRECTED-ENERGY WEAPONS",
+                    false,
+                    ConditionTone(engineering.DirectedEnergyCondition)
+                ),
                 Hierarchy(
                     "repairs",
                     "REPAIRS",
@@ -682,6 +795,28 @@ public static class CommandInterfacePresenter
             EngineeringPower(engineering, powerTone),
             EngineeringSensors(engineering, sensorTone),
             EngineeringPropulsion(engineering, impulseTone),
+            new(
+                "shields",
+                "SHIELDS",
+                ConditionTone(engineering.ShieldCondition),
+                [
+                    Available("CONDITION", FormatCondition(engineering.ShieldCondition)),
+                    Available("ALLOCATION", FormatPower(engineering.ShieldAllocation)),
+                    Available("DEMAND", FormatPower(engineering.NominalShieldDemand)),
+                    Available("CAPABILITY", FormatPercent(engineering.ShieldCapability)),
+                ]
+            ),
+            new(
+                "directed-energy-weapons",
+                "DIRECTED-ENERGY WEAPONS",
+                ConditionTone(engineering.DirectedEnergyCondition),
+                [
+                    Available("CONDITION", FormatCondition(engineering.DirectedEnergyCondition)),
+                    Available("ALLOCATION", FormatPower(engineering.DirectedEnergyAllocation)),
+                    Available("DEMAND", FormatPower(engineering.NominalDirectedEnergyDemand)),
+                    Available("CAPABILITY", FormatPercent(engineering.DirectedEnergyCapability)),
+                ]
+            ),
             EngineeringRepair(engineering),
         ];
 
@@ -780,6 +915,8 @@ public static class CommandInterfacePresenter
                 [
                     Available("SENSORS", FormatPower(engineering.SensorAllocation)),
                     Available("IMPULSE PROPULSION", FormatPower(engineering.ImpulseAllocation)),
+                    Available("SHIELDS", FormatPower(engineering.ShieldAllocation)),
+                    Available("DIRECTED-ENERGY WEAPONS", FormatPower(engineering.DirectedEnergyAllocation)),
                 ]
             ),
             new CommandInterfaceTelemetrySection(
@@ -791,6 +928,8 @@ public static class CommandInterfacePresenter
                     Available("AVAILABLE POWER", FormatPower(engineering.AvailablePower)),
                     Available("SENSORS", FormatPower(engineering.SensorAllocation)),
                     Available("PROPULSION", FormatPower(engineering.ImpulseAllocation)),
+                    Available("SHIELDS", FormatPower(engineering.ShieldAllocation)),
+                    Available("DIRECTED-ENERGY WEAPONS", FormatPower(engineering.DirectedEnergyAllocation)),
                     Available("RESERVE", FormatPower(engineering.Reserve)),
                 ]
             ),
@@ -805,6 +944,10 @@ public static class CommandInterfacePresenter
             EngineeringAction.PrioritizePropulsion => ("prioritize-propulsion", "Prioritize propulsion"),
             EngineeringAction.BeginSensorRepair => ("repair-sensors", "Begin sensor repair"),
             EngineeringAction.BeginImpulseRepair => ("repair-propulsion", "Begin impulse repair"),
+            EngineeringAction.PrioritizeShields => ("prioritize-shields", "Prioritize shields"),
+            EngineeringAction.PrioritizeDirectedEnergyWeapons => ("prioritize-weapons", "Prioritize weapons"),
+            EngineeringAction.BeginShieldRepair => ("repair-shields", "Begin shield repair"),
+            EngineeringAction.BeginDirectedEnergyRepair => ("repair-weapons", "Begin weapon repair"),
             EngineeringAction.ReturnToCommand => ("return-command", "Return to Command Deck"),
             _ => throw new ArgumentOutOfRangeException(nameof(action), action.Action, "Unknown Engineering action."),
         };
@@ -823,7 +966,7 @@ public static class CommandInterfacePresenter
     private static string EngineeringActionTooltip(EngineeringActionProjection action) =>
         (action.IsAvailable, action.UnavailableReason) switch
         {
-            (true, _) => "Submit this Engineering intent for authoritative Core validation.",
+            (true, _) => "Apply this Engineering command.",
             (false, EngineeringActionUnavailableReason.CurrentSpeedTooHigh) =>
                 "Unavailable: current speed exceeds the resulting propulsion margin.",
             (false, EngineeringActionUnavailableReason.RepairAlreadyActive) =>
@@ -856,6 +999,8 @@ public static class CommandInterfacePresenter
             ShipSystemId id when id == ShipSystemId.PowerGeneration => "Power generation",
             ShipSystemId id when id == ShipSystemId.Sensors => "Sensors",
             ShipSystemId id when id == ShipSystemId.ImpulsePropulsion => "Impulse propulsion",
+            ShipSystemId id when id == ShipSystemId.Shields => "Shields",
+            ShipSystemId id when id == ShipSystemId.DirectedEnergyWeapons => "Directed-energy weapons",
             _ => "System",
         };
 

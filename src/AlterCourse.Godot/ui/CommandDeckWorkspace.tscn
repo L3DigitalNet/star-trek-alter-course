@@ -151,6 +151,18 @@ layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 10
 
+[node name="TargetSystemLabel" type="Label" parent="WorkspaceColumns/ContextInspector/InspectorLayout"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "TARGET SUBSYSTEM"
+
+[node name="TargetSystemSelector" type="OptionButton" parent="WorkspaceColumns/ContextInspector/InspectorLayout"]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 2
+disabled = true
+tooltip_text = "Choose a supported subsystem. Selection never fires."
+
 [node name="ActionsHeading" type="Label" parent="WorkspaceColumns/ContextInspector/InspectorLayout"]
 layout_mode = 2
 theme_type_variation = &"PanelHeading"

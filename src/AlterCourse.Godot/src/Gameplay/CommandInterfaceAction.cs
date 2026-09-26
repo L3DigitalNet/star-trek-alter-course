@@ -2,6 +2,7 @@ namespace AlterCourse.Godot.Gameplay;
 
 using AlterCourse.Core.Player;
 using AlterCourse.Core.Sensors;
+using AlterCourse.Core.Ships;
 
 /// <summary>Describes one visible action and its safe submission classification.</summary>
 public sealed record CommandInterfaceAction(
@@ -12,5 +13,6 @@ public sealed record CommandInterfaceAction(
     CommandInterfaceIntent? Intent = null,
     SensorContactId? FocusedContactId = null,
     string? Tooltip = null,
-    EngineeringAction? EngineeringCommand = null
+    EngineeringAction? EngineeringCommand = null,
+    ShipSystemId? FocusedSystemId = null
 );

@@ -56,6 +56,11 @@ public partial class GameScreen : Control
     private CommandInterfaceDataMode _dataMode = CommandInterfaceDataMode.Live;
     private CommandDeckWorkspace _commandDeck = null!;
     private EngineeringWorkspace _engineering = null!;
+    private SpinBox _courseHeading = null!;
+    private SpinBox _courseSpeed = null!;
+    private Button _stopCourseButton = null!;
+    private HBoxContainer _courseInputs = null!;
+    private Label _courseCapability = null!;
     private Label _eventLogHeading = null!;
     private VBoxContainer _eventLog = null!;
     private VBoxContainer _captainActions = null!;
@@ -155,6 +160,8 @@ public partial class GameScreen : Control
     /// <inheritdoc />
     public override void _Input(InputEvent @event)
     {
+        if (GetViewport().GuiGetFocusOwner() is LineEdit)
+            return;
         if (!@event.IsAction(ActionTogglePause))
         {
             return;
@@ -171,6 +178,8 @@ public partial class GameScreen : Control
     /// <inheritdoc />
     public override void _UnhandledInput(InputEvent @event)
     {
+        if (GetViewport().GuiGetFocusOwner() is LineEdit)
+            return;
         if (@event.IsActionPressed(ActionViewStrategic))
         {
             ShowStrategicView();
@@ -482,8 +491,19 @@ public partial class GameScreen : Control
         }
     }
 
-    /// <summary>Submits a visible north-east tactical course through the typed Core command.</summary>
+    /// <summary>Submits the visible course draft through the typed Core command.</summary>
     public void SetDemonstrationCourse()
+    {
+        SubmitCourse(_courseHeading.Value, _courseSpeed.Value);
+    }
+
+    private void StopCourse()
+    {
+        if (_projection is not null && !_stopCourseButton.Disabled)
+            SubmitCourse(_projection.Ship.Tactical.HeadingDegrees, 0);
+    }
+
+    private void SubmitCourse(double heading, double speed)
     {
         if (_simulation is null || _courseButton.Disabled || _dataMode != CommandInterfaceDataMode.Live)
         {
@@ -493,11 +513,12 @@ public partial class GameScreen : Control
         try
         {
             SetTacticalCourseResult result = _simulation.SetTacticalCourse(
-                new SetTacticalCourseIntent(new HeadingDegrees(45), new SpeedKilometersPerSecond(2))
+                new SetTacticalCourseIntent(new HeadingDegrees(heading), new SpeedKilometersPerSecond(speed))
             );
             _messageLabel.Text = result.Outcome switch
             {
-                SetTacticalCourseOutcome.Accepted => "Tactical course set: heading 045°, speed 2 km/s.",
+                SetTacticalCourseOutcome.Accepted =>
+                    $"Tactical course set: heading {heading:0.0}°, speed {speed:0.0} km/s.",
                 SetTacticalCourseOutcome.UnavailableWhileTraveling =>
                     "Course unavailable while strategic travel is active.",
                 SetTacticalCourseOutcome.PropulsionOffline => "Course unavailable: impulse propulsion is offline.",
@@ -599,6 +620,7 @@ public partial class GameScreen : Control
         _engineering.EngineeringCommandRequested += OnEngineeringCommandRequested;
         _travelButton.Pressed += RequestSelectedTravel;
         _courseButton.Pressed += SetDemonstrationCourse;
+        _stopCourseButton.Pressed += StopCourse;
         _advanceUntilButton.Pressed += AdvanceUntilNextPlayerRelevantEvent;
         _strategicButton.Pressed += ShowStrategicView;
         _tacticalButton.Pressed += ShowTacticalView;
@@ -619,6 +641,11 @@ public partial class GameScreen : Control
     {
         _travelButton = GetNode<Button>("%TravelButton");
         _courseButton = GetNode<Button>("%CourseButton");
+        _courseHeading = GetNode<SpinBox>("%CourseHeading");
+        _courseSpeed = GetNode<SpinBox>("%CourseSpeed");
+        _stopCourseButton = GetNode<Button>("%StopCourseButton");
+        _courseInputs = GetNode<HBoxContainer>("%CourseInputs");
+        _courseCapability = GetNode<Label>("%CourseCapability");
         _advanceUntilButton = GetNode<Button>("%AdvanceUntilButton");
         _strategicButton = GetNode<Button>("%StrategicButton");
         _tacticalButton = GetNode<Button>("%TacticalButton");
@@ -728,6 +755,7 @@ public partial class GameScreen : Control
 
     private void RefreshProjection()
     {
+        Control? priorFocus = GetViewport().GuiGetFocusOwner();
         _projection = _simulation!.GetPlayerProjection();
         RevalidateSelectedContact();
         CommandInterfaceMode mode = _engineeringWorkspaceActive ? CommandInterfaceMode.Engineering : _commandMode;
@@ -741,6 +769,13 @@ public partial class GameScreen : Control
         PresentWorkspace(presentation);
         PresentShell(presentation);
         SetProjectionMetadata(_projection);
+        if (priorFocus is not null && !IsFocusable(priorFocus))
+        {
+            Control fallback = !_engineeringWorkspaceActive
+                ? _commandDeck.GetVisibleFocusControls().FirstOrDefault() ?? _commandStationButton
+                : _engineeringStationButton;
+            fallback.CallDeferred(Control.MethodName.GrabFocus);
+        }
     }
 
     private void PresentWorkspace(CommandInterfacePresentation presentation)
@@ -921,8 +956,20 @@ public partial class GameScreen : Control
         _tacticalButton.Disabled = !workspaceNavigationAvailable;
         _travelButton.Visible = travel;
         _courseButton.Visible = combat;
+        _courseInputs.Visible = combat;
+        _courseCapability.Visible = combat;
         _travelButton.Disabled = !live || !IsSubmittable(presentation, "travel");
         _courseButton.Disabled = !live || !IsSubmittable(presentation, "set-tactical-course");
+        _stopCourseButton.Disabled = _courseButton.Disabled;
+        if (_courseHeading.Editable != !_courseButton.Disabled)
+            _courseHeading.Editable = !_courseButton.Disabled;
+        if (_courseSpeed.Editable != !_courseButton.Disabled)
+            _courseSpeed.Editable = !_courseButton.Disabled;
+        _courseHeading.GetLineEdit().FocusMode = _courseButton.Disabled ? FocusModeEnum.None : FocusModeEnum.All;
+        _courseSpeed.GetLineEdit().FocusMode = _courseButton.Disabled ? FocusModeEnum.None : FocusModeEnum.All;
+        _courseCapability.Text = live
+            ? $"CURRENT MAXIMUM: {_projection!.Ship.Engineering.EffectiveMaximumTacticalSpeed.Value:0.0} km/s"
+            : "ILLUSTRATIVE PREVIEW / COURSE UNAVAILABLE";
         bool canAdvance =
             live
             && (
@@ -943,7 +990,7 @@ public partial class GameScreen : Control
             : $"Submit travel intent to {FindLocationName(_selectedDestination!.Value)}. Shortcut: E.";
         _courseButton.TooltipText = _courseButton.Disabled
             ? "Course changes are unavailable during strategic travel or preview."
-            : "Submit heading 045° and speed 2 km/s. Shortcut: C.";
+            : "Apply the entered heading and speed. Shortcut: C.";
     }
 
     private void OnWorkspaceDestinationSelected(object? sender, CommandDeckWorkspace.DestinationEventArgs args)
@@ -1046,6 +1093,21 @@ public partial class GameScreen : Control
                 case EngineeringAction.BeginImpulseRepair:
                     BeginSystemRepair(ShipSystemId.ImpulsePropulsion);
                     break;
+                case EngineeringAction.PrioritizeShields:
+                    ApplyPowerAllocationPreset(PowerAllocationPreset.PrioritizeShields, "Shield-priority allocation");
+                    break;
+                case EngineeringAction.PrioritizeDirectedEnergyWeapons:
+                    ApplyPowerAllocationPreset(
+                        PowerAllocationPreset.PrioritizeDirectedEnergyWeapons,
+                        "Weapon-priority allocation"
+                    );
+                    break;
+                case EngineeringAction.BeginShieldRepair:
+                    BeginSystemRepair(ShipSystemId.Shields);
+                    break;
+                case EngineeringAction.BeginDirectedEnergyRepair:
+                    BeginSystemRepair(ShipSystemId.DirectedEnergyWeapons);
+                    break;
                 case EngineeringAction.ReturnToCommand:
                     ShowCommandWorkspace();
                     _messageLabel.Text = "Returned to Command Deck.";
@@ -1121,6 +1183,12 @@ public partial class GameScreen : Control
 
     private void SubmitAction(CommandInterfaceAction action, CommandInterfaceIntent intent)
     {
+        if (intent == CommandInterfaceIntent.FireDirectedEnergy)
+        {
+            if (action.FocusedContactId is { } contact && action.FocusedSystemId is { } system)
+                RequestDirectedEnergy(contact, system);
+            return;
+        }
         if (intent is CommandInterfaceIntent.ActiveScan or CommandInterfaceIntent.Hail)
         {
             if (action.FocusedContactId is not SensorContactId contactId)
@@ -1172,6 +1240,29 @@ public partial class GameScreen : Control
         }
     }
 
+    private void RequestDirectedEnergy(SensorContactId contactId, ShipSystemId system)
+    {
+        if (_simulation is null || _dataMode != CommandInterfaceDataMode.Live)
+            return;
+        try
+        {
+            FireDirectedEnergyResult result = _simulation.FireDirectedEnergy(
+                new FireDirectedEnergyIntent(contactId, system)
+            );
+            SetMeta("last_fire_outcome", result.Outcome.ToString());
+            PresentResolvedEvents(result.ResolvedEvents, false);
+            RefreshProjection();
+            _messageLabel.Text =
+                result.Outcome == FireDirectedEnergyOutcome.Accepted
+                    ? "Directed-energy shot fired."
+                    : CommandInterfacePresenter.FireReason(result.Outcome);
+        }
+        catch (Exception exception)
+        {
+            ReportCommandFailure("Fire command failed safely.", exception);
+        }
+    }
+
     private void RequestHail(SensorContactId contactId)
     {
         if (_simulation is null || _dataMode != CommandInterfaceDataMode.Live)
@@ -1213,6 +1304,13 @@ public partial class GameScreen : Control
         SetMeta("sensor_repair_progress", projection.Ship.Sensors.RepairProgress);
         SetMeta("sensor_repairing", projection.Ship.Sensors.IsRepairing);
         SetEngineeringMetadata(projection.Ship.Engineering);
+        SetMeta("combat_remaining_cooldown", projection.Ship.Combat.RemainingCooldown.Milliseconds);
+        SetMeta("combat_next_ready_at", projection.Ship.Combat.NextDirectedEnergyReadyAt.Milliseconds);
+        CombatTargetProjection? combatTarget = projection.Ship.Combat.Targets.SingleOrDefault(target =>
+            target.ContactId == _selectedContact
+        );
+        SetMeta("combat_target_outcome", combatTarget?.Outcome.ToString() ?? string.Empty);
+        SetMeta("combat_known_range", combatTarget?.Range?.Value ?? -1);
         SetMeta("map_location_count", projection.Strategic.Locations.Count);
         SetMeta("map_route_count", projection.Strategic.Routes.Count);
         SetMeta("travel_active", projection.Strategic.Travel is not null);
@@ -1232,6 +1330,10 @@ public partial class GameScreen : Control
         SetMeta("engineering_available_power", engineering.AvailablePower.Value);
         SetMeta("engineering_sensor_allocation", engineering.SensorAllocation.Value);
         SetMeta("engineering_impulse_allocation", engineering.ImpulseAllocation.Value);
+        SetMeta("engineering_shield_allocation", engineering.ShieldAllocation.Value);
+        SetMeta("engineering_weapon_allocation", engineering.DirectedEnergyAllocation.Value);
+        SetMeta("engineering_shield_condition", engineering.ShieldCondition.Value);
+        SetMeta("engineering_weapon_condition", engineering.DirectedEnergyCondition.Value);
         SetMeta("engineering_reserve", engineering.Reserve.Value);
         SetMeta("engineering_sensor_capability", engineering.SensorCapability);
         SetMeta("engineering_impulse_capability", engineering.ImpulseCapability);
@@ -1311,6 +1413,7 @@ public partial class GameScreen : Control
             {
                 _travelButton,
                 _courseButton,
+                _stopCourseButton,
                 _advanceUntilButton,
                 _quickSaveButton,
                 _quickLoadButton,
@@ -1366,6 +1469,7 @@ public partial class GameScreen : Control
             }
 
             controls.AddRange(_commandDeck.GetVisibleFocusControls());
+            controls.AddRange(GetCourseFocusControls());
             controls.AddRange(
                 new Button[]
                 {
@@ -1408,6 +1512,11 @@ public partial class GameScreen : Control
         control.IsVisibleInTree()
         && control.FocusMode != FocusModeEnum.None
         && (control is not BaseButton button || !button.Disabled);
+
+    private IEnumerable<Control> GetCourseFocusControls() =>
+        _courseInputs.IsVisibleInTree()
+            ? [_courseHeading.GetLineEdit(), _courseSpeed.GetLineEdit(), _stopCourseButton]
+            : [];
 
     private Button CurrentWorkspaceButton() =>
         _engineeringWorkspaceActive ? _engineeringStationButton : _commandStationButton;
@@ -1534,6 +1643,13 @@ public partial class GameScreen : Control
             PlayerAdvanceEventKind.SensorContactLost => $"{DescribeContact(@event)} lost",
             PlayerAdvanceEventKind.ActiveSensorScanCompleted => $"{DescribeContact(@event)} scan complete",
             PlayerAdvanceEventKind.ActiveSensorScanInterrupted => $"{DescribeContact(@event)} scan interrupted",
+            PlayerAdvanceEventKind.DirectedEnergyFired
+            or PlayerAdvanceEventKind.ShieldImpact
+            or PlayerAdvanceEventKind.SubsystemPenetration
+            or PlayerAdvanceEventKind.OwnSystemDamaged
+            or PlayerAdvanceEventKind.SystemRepairInterrupted
+            or PlayerAdvanceEventKind.PowerBrownout
+            or PlayerAdvanceEventKind.ForcedDeceleration => CommandInterfacePresenter.CombatEventText(@event),
             _ => "player event complete",
         };
 
@@ -1556,6 +1672,8 @@ public partial class GameScreen : Control
             ShipSystemId id when id == ShipSystemId.Sensors => "Sensor",
             ShipSystemId id when id == ShipSystemId.ImpulsePropulsion => "Impulse propulsion",
             ShipSystemId id when id == ShipSystemId.PowerGeneration => "Power generation",
+            ShipSystemId id when id == ShipSystemId.Shields => "Shield",
+            ShipSystemId id when id == ShipSystemId.DirectedEnergyWeapons => "Directed-energy weapon",
             _ => "System",
         };
 

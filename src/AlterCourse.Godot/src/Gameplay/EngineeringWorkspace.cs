@@ -20,6 +20,9 @@ public partial class EngineeringWorkspace : Control
         "assign-repair",
         "isolate-eps",
         "prioritize-shields",
+        "prioritize-weapons",
+        "repair-shields",
+        "repair-weapons",
         "reduce-impulse",
         "reroute-eps",
     };
