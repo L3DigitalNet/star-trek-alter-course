@@ -12,3 +12,9 @@
 - GitHub Actions runs canonical C# and Godot verification, structured-text formatting, Markdown lint, and standards validation on pull requests and `main`.
 - `main` branch protection strictly requires the GitHub Actions `Canonical verification` check for all actors, including administrators.
 - Force pushes and branch deletion are disabled for `main`; pull request #3 and its post-merge workflows are the initial green deployment evidence.
+
+## Local agent tooling
+
+- 2026-09-26: Codex C# hover, documentation, and diagnostics succeeded.
+- 2026-09-26: Codex Godot definition and diagnostics succeeded; see [agent setup](../development-agent-skills.md).
+- 2026-09-26: Claude reported both MCP entries Connected at Project scope; Codex Figma `whoami` authenticated.
