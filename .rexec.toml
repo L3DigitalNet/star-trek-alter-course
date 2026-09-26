@@ -91,6 +91,7 @@ host = "rexec"
 # Never put a secret here: this file is committed.
 
 [sync]
+exclude = [".tools/agent-lsp/"]
 
 # exclude: extra rsync exclude patterns, applied after the mandatory .git and .rexec/
 # rules and the built-in defaults. This is the only configured exclusion authority.

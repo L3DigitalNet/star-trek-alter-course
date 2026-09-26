@@ -9,6 +9,18 @@ statusMessage = "Loading agent handoff state..."
 [mcp_servers.figma]
 url = "https://mcp.figma.com/mcp"
 
+[mcp_servers.csharp-lsp]
+command = "bash"
+args = ["-c", "exec node \"$(git rev-parse --show-toplevel)/scripts/agent-lsp.mjs\" csharp"]
+startup_timeout_sec = 90
+tool_timeout_sec = 120
+
+[mcp_servers.godot-lsp]
+command = "bash"
+args = ["-c", "exec node \"$(git rev-parse --show-toplevel)/scripts/agent-lsp.mjs\" godot"]
+startup_timeout_sec = 90
+tool_timeout_sec = 120
+
 [[skills.config]]
 path = ".codex/skills/godot-csharp/SKILL.md"
 enabled = true

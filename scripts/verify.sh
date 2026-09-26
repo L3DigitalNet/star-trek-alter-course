@@ -34,6 +34,7 @@ export MSBUILDDISABLENODEREUSE=1
 
 ./scripts/check-agent-skill-parity.sh
 ./scripts/test-launch-game.sh
+node --test scripts/test-agent-lsp.mjs scripts/test-godot-lsp-stdio.mjs
 
 mapfile -d '' structured_files < <(
   git ls-files -z -- \
