@@ -1,7 +1,9 @@
 using AlterCourse.Core.AI;
 using AlterCourse.Core.Content;
+using AlterCourse.Core.Factions;
 using AlterCourse.Core.Gameplay;
 using AlterCourse.Core.Identity;
+using AlterCourse.Core.Persistence;
 using AlterCourse.Core.Quantities;
 using AlterCourse.Core.Sensors;
 using AlterCourse.Core.Ships;
@@ -15,16 +17,146 @@ namespace AlterCourse.Core.Tests.Gameplay;
 internal sealed class M6CombatProofFixture
 {
     private readonly Milestone3ProofFixture _production = new();
-    internal ShipDefinitionCatalog Catalog => _production.Catalog;
+
+    internal M6CombatProofFixture(bool lowDamage = false)
+    {
+        Catalog = _production.Catalog;
+        if (lowDamage)
+        {
+            ShipDefinition source = Catalog.GetRequired(new ShipDefinitionId("pathfinder"));
+            DirectedEnergyWeaponDefinition weapon = source.DirectedEnergyWeapon!;
+            // Small authored output keeps the finite horizon active without recharge or fixture health resets.
+            var alternate = new ShipDefinition(
+                source.Id,
+                source.DesignDisplayName,
+                source.MaximumTacticalSpeed,
+                source.PassiveSensorRange,
+                source.ActiveScanDuration,
+                source.Engineering,
+                new DirectedEnergyWeaponDefinition(weapon.Range, 0.0001, weapon.Cooldown)
+            );
+            Catalog = new ShipDefinitionCatalog(
+                new Dictionary<ShipDefinitionId, ShipDefinition> { [alternate.Id] = alternate }
+            );
+        }
+    }
+
+    internal ShipDefinitionCatalog Catalog { get; }
+    internal FactionDefinitionCatalog ProductionFactions { get; } = new FactionAssignmentProofFixture().FactionCatalog;
     internal static readonly ShipInstanceId Defender = new(2);
     internal static readonly ShipInstanceId ScanTarget = new(3);
 
-    internal GameSimulation Production() => _production.CreateDefault();
+    internal GameSimulation FourShipFirstGame() => FirstGameSetup.Create(Catalog);
 
-    internal GameSimulation Restore(SimulationState state) => GameSimulation.RestoreState(state, Catalog);
+    internal GameSimulation Production() => FirstGameSetup.Create(Catalog, ProductionFactions);
+
+    internal GameSimulation RoundTrip(GameSimulation game) =>
+        GamePersistence
+            .Deserialize(
+                GamePersistence.Serialize(game, Milestone3ProofFixture.Metadata),
+                Catalog,
+                game.FactionCatalog,
+                "m6-combat-v9.json"
+            )
+            .Simulation;
+
+    internal GameSimulation Restore(SimulationState state) =>
+        GameSimulation.RestoreState(
+            state,
+            Catalog,
+            state.Factions.IsEmpty ? FactionDefinitionCatalog.Empty : ProductionFactions
+        );
 
     internal GameSimulation AdvanceTo(GameSimulation game, SimulationTime time) =>
-        Restore(GameSimulation.AdvanceTo(game.CaptureState(), time, Catalog).State);
+        Restore(AdvanceTrace(game, time).State);
+
+    internal SimulationAdvanceTraceResult AdvanceTrace(GameSimulation game, SimulationTime time) =>
+        GameSimulation.AdvanceTo(game.CaptureState(), time, Catalog, game.FactionCatalog);
+
+    internal SensorContactId EnterCombatRange(GameSimulation game)
+    {
+        Assert.Equal(
+            PowerAllocationOutcome.Accepted,
+            game.ApplyPowerAllocationPreset(PowerAllocationPreset.PrioritizeSensors).Outcome
+        );
+        game.AdvanceUntilNextPlayerRelevantEvent();
+        SensorContactId contact = Assert.Single(game.GetPlayerProjection().Ship.Sensors.Contacts).Id;
+        IdentifyAndHail(game, contact);
+        SimulationTime completion = Player(game).Engineering.ActiveRepair!.ExpectedCompletion;
+        game.AdvanceFixedSteps(
+            checked(
+                (int)(
+                    (completion.Milliseconds - game.CaptureState().Time.Milliseconds)
+                    / SimulationFixedStep.Duration.Milliseconds
+                )
+            )
+        );
+        PowerAllocationResult power = game.SetPowerAllocation(Allocation(20, 5, 20, 30));
+        Assert.Equal(PowerAllocationOutcome.Accepted, power.Outcome);
+        Assert.Contains(power.ResolvedEvents, item => item.Kind == PlayerAdvanceEventKind.SensorContactStale);
+        Assert.Equal(
+            SetTacticalCourseOutcome.Accepted,
+            game.SetTacticalCourse(new(new HeadingDegrees(90), new SpeedKilometersPerSecond(1))).Outcome
+        );
+        SimulationAdvanceResult approach = game.AdvanceFixedSteps(140);
+        Assert.Contains(approach.ResolvedEvents, item => item.Kind == PlayerAdvanceEventKind.SensorContactReacquired);
+        Assert.Equal(
+            SetTacticalCourseOutcome.Accepted,
+            game.SetTacticalCourse(new(new HeadingDegrees(90), default)).Outcome
+        );
+        return contact;
+    }
+
+    internal void AssertEquivalent(GameSimulation expected, GameSimulation actual)
+    {
+        SimulationState first = expected.CaptureState();
+        SimulationState second = actual.CaptureState();
+        first.Validate(Catalog, expected.FactionCatalog);
+        second.Validate(Catalog, actual.FactionCatalog);
+        Assert.Equal(expected.GetPlayerProjection(), actual.GetPlayerProjection());
+        Assert.Equal(first.Time, second.Time);
+        Assert.Equal(first.PlayerShipId, second.PlayerShipId);
+        Assert.Equal(first.ShipIdAllocator.NextId, second.ShipIdAllocator.NextId);
+        Assert.Equal(first.OrderIdAllocator.NextId, second.OrderIdAllocator.NextId);
+        Assert.Equal(first.ObservationReportIdAllocator.NextId, second.ObservationReportIdAllocator.NextId);
+        Assert.Equal(first.Scheduler.NextWorkId, second.Scheduler.NextWorkId);
+        Assert.Equal(first.Scheduler.NextSequence, second.Scheduler.NextSequence);
+        Assert.Equal(first.Scheduler.OutstandingWork.ToArray(), second.Scheduler.OutstandingWork.ToArray());
+        Assert.Equal(first.Ships.Length, second.Ships.Length);
+        foreach (ShipState ship in first.Ships)
+        {
+            ShipState other = second.GetRequiredShip(ship.InstanceId);
+            Assert.Equal(ship.DefinitionId, other.DefinitionId);
+            Assert.Equal(ship.VesselDisplayName, other.VesselDisplayName);
+            Assert.Equal(ship.Engineering, other.Engineering);
+            Assert.Equal(ship.Combat, other.Combat);
+            Assert.Equal(ship.TacticalPosition, other.TacticalPosition);
+            Assert.Equal(ship.TacticalMotion, other.TacticalMotion);
+            Assert.Equal(ship.StrategicState, other.StrategicState);
+            Assert.Equal(ship.ActiveOrder, other.ActiveOrder);
+            Assert.Equal(ship.AutonomousState, other.AutonomousState);
+            Assert.Equal(ship.DirectControllerFactionId, other.DirectControllerFactionId);
+            Assert.Equal(ship.SensorKnowledge.NextContactId, other.SensorKnowledge.NextContactId);
+            Assert.Equal(ship.SensorKnowledge.Contacts.ToArray(), other.SensorKnowledge.Contacts.ToArray());
+            Assert.Equal(ship.SensorKnowledge.ActiveScan, other.SensorKnowledge.ActiveScan);
+        }
+        Assert.Equal(first.Factions.Length, second.Factions.Length);
+        foreach (FactionState faction in first.Factions)
+        {
+            FactionState other = second.Factions.Single(item => item.Id == faction.Id);
+            Assert.Equal(faction.DefinitionId, other.DefinitionId);
+            Assert.Equal(faction.PresenceObjective, other.PresenceObjective);
+            Assert.Equal(faction.PendingDecisionWake, other.PendingDecisionWake);
+            Assert.Equal(faction.Observation!.Posture, other.Observation!.Posture);
+            Assert.Equal(faction.Observation.ActiveInvestigation, other.Observation.ActiveInvestigation);
+            Assert.Equal(faction.Observation.InFlightReports.ToArray(), other.Observation.InFlightReports.ToArray());
+            Assert.Equal(faction.Observation.ReceivedReports.ToArray(), other.Observation.ReceivedReports.ToArray());
+            Assert.Equal(
+                faction.Observation.CompletionWatermarks.ToArray(),
+                other.Observation.CompletionWatermarks.ToArray()
+            );
+        }
+    }
 
     internal GameSimulation Pair()
     {

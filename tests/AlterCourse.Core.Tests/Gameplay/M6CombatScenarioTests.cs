@@ -13,33 +13,12 @@ public sealed class M6CombatScenarioTests
 {
     private readonly M6CombatProofFixture _fixture = new();
 
-    /// <summary>Proves the production contact chain leads to absorption and operational penetration.</summary>
+    /// <summary>Proves the four-ship first-game contact chain and its V9 combat checkpoint.</summary>
     [Fact]
-    public void ProductionEncounterAcquiresIdentifiesManeuversAndPenetrates()
+    public void FourShipFirstGameAcquiresIdentifiesManeuversPenetratesAndRoundTrips()
     {
-        GameSimulation game = _fixture.Production();
-        Assert.Equal(
-            PowerAllocationOutcome.Accepted,
-            game.ApplyPowerAllocationPreset(PowerAllocationPreset.PrioritizeSensors).Outcome
-        );
-        game.AdvanceUntilNextPlayerRelevantEvent();
-        SensorContactId contact = Assert.Single(game.GetPlayerProjection().Ship.Sensors.Contacts).Id;
-        _fixture.IdentifyAndHail(game, contact);
-        SimulationTime repairedAt = M6CombatProofFixture.Player(game).Engineering.ActiveRepair!.ExpectedCompletion;
-        game = _fixture.AdvanceTo(game, repairedAt);
-        PowerAllocationResult combatPower = game.SetPowerAllocation(M6CombatProofFixture.Allocation(20, 5, 20, 30));
-        Assert.Equal(PowerAllocationOutcome.Accepted, combatPower.Outcome);
-        Assert.Contains(combatPower.ResolvedEvents, item => item.Kind == PlayerAdvanceEventKind.SensorContactStale);
-        Assert.Equal(
-            SetTacticalCourseOutcome.Accepted,
-            game.SetTacticalCourse(new(new HeadingDegrees(90), new SpeedKilometersPerSecond(1))).Outcome
-        );
-        SimulationAdvanceResult approach = game.AdvanceFixedSteps(140);
-        Assert.Contains(approach.ResolvedEvents, item => item.Kind == PlayerAdvanceEventKind.SensorContactReacquired);
-        Assert.Equal(
-            SetTacticalCourseOutcome.Accepted,
-            game.SetTacticalCourse(new(new HeadingDegrees(90), default)).Outcome
-        );
+        GameSimulation game = _fixture.FourShipFirstGame();
+        SensorContactId contact = _fixture.EnterCombatRange(game);
         ShipInstanceId kestrel = Milestone3ProofFixture.Kestrel(game).InstanceId;
         Assert.Equal(
             SensorContactStatus.Current,
@@ -64,6 +43,85 @@ public sealed class M6CombatScenarioTests
             victim.Engineering.ImpulseCapability(_fixture.Catalog.GetRequired(victim.DefinitionId).Engineering) < 0.1
         );
         game.CaptureState().Validate(_fixture.Catalog);
+        _fixture.AssertEquivalent(game, _fixture.RoundTrip(game));
+    }
+
+    /// <summary>Proves populated V9 combat continues with the current six-ship faction composition.</summary>
+    [Fact]
+    public void ProductionCombatCheckpointPreservesExactFutureBoundariesAndFactionWork()
+    {
+        (GameSimulation game, SensorContactId contact, ShipInstanceId kestrel) = ProductionCheckpoint();
+        SimulationState checkpoint = game.CaptureState();
+        Assert.Equal(6, checkpoint.Ships.Length);
+        Assert.Equal(2, checkpoint.Factions.Length);
+        Assert.True(checkpoint.ObservationReportIdAllocator.NextId > 1);
+        Assert.True(checkpoint.Factions.Any(item => item.Observation!.ReceivedReports.Length > 0));
+        ShipState victim = checkpoint.GetRequiredShip(kestrel);
+        Assert.InRange(victim.Engineering.ShieldCondition.Value, double.Epsilon, 0.999);
+        Assert.True(victim.Engineering.ImpulseCondition.Value < 1);
+        Assert.Equal(
+            M6CombatProofFixture.Allocation(20, 5, 20, 30),
+            M6CombatProofFixture.Player(game).Engineering.Allocation
+        );
+        CombatStimulus stimulus = Assert.IsType<CombatStimulus>(victim.Combat.PendingStimulus);
+        SimulationTime ready = M6CombatProofFixture.Player(game).Combat.NextDirectedEnergyReadyAt;
+        Assert.True(ready.Milliseconds > checkpoint.Time.Milliseconds);
+        GameSimulation resumed = _fixture.RoundTrip(game);
+        _fixture.AssertEquivalent(game, resumed);
+        FireDirectedEnergyIntent intent = new(contact, ShipSystemId.Sensors);
+        Assert.Equal(FireDirectedEnergyOutcome.CooldownActive, game.FireDirectedEnergy(intent).Outcome);
+        Assert.Equal(FireDirectedEnergyOutcome.CooldownActive, resumed.FireDirectedEnergy(intent).Outcome);
+        Assert.Same(checkpoint, game.CaptureState());
+        foreach (
+            SimulationTime boundary in new[]
+            {
+                stimulus.DueTime,
+                new SimulationTime(ready.Milliseconds - SimulationFixedStep.Duration.Milliseconds),
+                ready,
+            }
+        )
+        {
+            SimulationAdvanceTraceResult first = _fixture.AdvanceTrace(game, boundary);
+            SimulationAdvanceTraceResult second = _fixture.AdvanceTrace(resumed, boundary);
+            Assert.Equal(first.PlayerEvents.ToArray(), second.PlayerEvents.ToArray());
+            Assert.Equal(first.Traces.ToArray(), second.Traces.ToArray());
+            game = _fixture.Restore(first.State);
+            resumed = _fixture.Restore(second.State);
+            _fixture.AssertEquivalent(game, resumed);
+            if (boundary.Milliseconds < ready.Milliseconds)
+            {
+                Assert.Equal(FireDirectedEnergyOutcome.CooldownActive, game.FireDirectedEnergy(intent).Outcome);
+                Assert.Equal(FireDirectedEnergyOutcome.CooldownActive, resumed.FireDirectedEnergy(intent).Outcome);
+            }
+        }
+        FireDirectedEnergyResult fired = game.FireDirectedEnergy(intent);
+        Assert.Equal(FireDirectedEnergyOutcome.Accepted, fired.Outcome);
+        Assert.Equal(fired, resumed.FireDirectedEnergy(intent));
+        _fixture.AssertEquivalent(game, resumed);
+        SimulationTime future = game.CaptureState().Time.AdvanceBy(new SimulationDuration(60_000));
+        SimulationAdvanceTraceResult uninterruptedFuture = _fixture.AdvanceTrace(game, future);
+        SimulationAdvanceTraceResult resumedFuture = _fixture.AdvanceTrace(resumed, future);
+        Assert.Equal(uninterruptedFuture.Traces.ToArray(), resumedFuture.Traces.ToArray());
+        Assert.Equal(uninterruptedFuture.PlayerEvents.ToArray(), resumedFuture.PlayerEvents.ToArray());
+        _fixture.AssertEquivalent(_fixture.Restore(uninterruptedFuture.State), _fixture.Restore(resumedFuture.State));
+    }
+
+    private (GameSimulation Game, SensorContactId Contact, ShipInstanceId Victim) ProductionCheckpoint()
+    {
+        GameSimulation game = _fixture.Production();
+        SensorContactId contact = _fixture.EnterCombatRange(game);
+        ShipInstanceId kestrel = Milestone3ProofFixture.Kestrel(game).InstanceId;
+        bool penetrated = false;
+        for (int shot = 0; shot < 16 && !penetrated; shot++)
+        {
+            if (shot > 0)
+                game = _fixture.AdvanceTo(game, M6CombatProofFixture.Player(game).Combat.NextDirectedEnergyReadyAt);
+            FireDirectedEnergyResult result = game.FireDirectedEnergy(new(contact, ShipSystemId.ImpulsePropulsion));
+            Assert.Equal(FireDirectedEnergyOutcome.Accepted, result.Outcome);
+            penetrated = result.ResolvedEvents.Any(item => item.Kind == PlayerAdvanceEventKind.SubsystemPenetration);
+        }
+        Assert.True(penetrated);
+        return (game, contact, kestrel);
     }
 
     /// <summary>Distinguishes reserve consumption from deterministic four-consumer brownout.</summary>
