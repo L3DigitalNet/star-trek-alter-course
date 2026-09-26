@@ -6,7 +6,7 @@ description: 'Simulation authority, project boundaries, dependency policy, and a
 doc_type: 'reference'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-08'
+updated: '2026-09-26'
 tags:
   - 'architecture'
 aliases: []
@@ -14,6 +14,7 @@ related:
   - 'docs/adr/0001-separate-simulation-from-godot.md'
   - 'docs/adr/0003-prefer-native-capabilities-and-demand-driven-dependencies.md'
   - 'docs/wiki/faction-intent-and-autonomous-assignment.md'
+  - 'docs/wiki/engineering-and-combat.md'
   - 'Directory.Packages.props'
 ---
 
@@ -23,7 +24,7 @@ related:
 
 ## Current project boundaries
 
-`AlterCourse.Core` owns the deterministic world, commands, rule evaluation, navigation, observations, engineering, orders, scheduling, authored-definition interpretation, and snapshot mapping. It has no Godot dependency. `AlterCourse.Godot` references Core and owns scenes, input, rendering, selection, presentation timing, coordinate conversion, and UI state. Player-facing projections are deliberately narrower than world truth.
+`AlterCourse.Core` owns the deterministic world, commands, rule evaluation, navigation, observations, Engineering, combat, orders, factions, scheduling, authored-definition interpretation, and snapshot mapping. It has no Godot dependency. `AlterCourse.Godot` references Core and owns scenes, input, rendering, selection, presentation timing, coordinate conversion, and UI state. Player-facing projections are deliberately narrower than world truth.
 
 `AlterCourse.AssetCtl` is standalone development infrastructure. It references neither game project, and neither game project references it. It exchanges selected visual assets and provenance manifests through files, not runtime game authority.
 
@@ -31,7 +32,7 @@ A future `AlterCourse.Narrative` assembly is an ADR-defined integration directio
 
 ## Domain boundaries and transactions
 
-Model responsibilities according to systems, not UI screens. Existing `ShipState` composes strategic, tactical, engineering, order, sensor-knowledge, and autonomous state. `SimulationState` owns plural ships, scheduler, map, allocators, and player identity. Commands validate and construct candidate state before committing consequential changes where required; failed loading never partially replaces the live game.
+Model responsibilities according to systems, not UI screens. Existing `ShipState` composes strategic, tactical, Engineering, order, sensor-knowledge, autonomous-contact, and combat state, plus an optional direct faction controller. `SimulationState` owns plural ships and factions, scheduler, map, allocators, and player identity. Commands validate and construct candidate state before committing consequential changes where required; failed loading never partially replaces the live game.
 
 Avoid parallel mechanisms. New strategic decisions should consume established information projections and issue established domain commands where those fit. The political design does not authorize an entity framework, a universal faction/organization base class, or a generalized rules engine.
 
@@ -43,7 +44,17 @@ The policy input is a narrow own-asset administrative projection, not unrestrict
 
 Faction Intent and Autonomous Assignment introduced V7 with a non-inventive V6→V7 migration and zero-faction validity. Observation-Driven Faction Response advances the released format to V8 without inventing report or investigation history. v0.5.0 remains the historical V6 release. No organization/controller abstraction, hierarchy runtime, random policy, new dependency/framework, or political UI is part of these slices. These choices implement existing ADRs 0005-0007 and 0010; no ADR changes.
 
-The Godot adapter loads faction content only to build a valid Core aggregate and preserve V8 save compatibility. It does not project hidden controller, faction, objective, report, investigation, or scheduled-work state; ordinary observed vessels remain available through existing player-safe contact projections. Malformed faction or response data fails without corrupting the live shell.
+The Godot adapter privately loads faction content to construct and restore a valid Core aggregate. Current development uses V9 saves and retains the supported migration chain; V8 remains the released format. The adapter does not project hidden controller, faction, objective, report, investigation, or scheduled-work state; ordinary observed vessels remain available through player-safe contact projections. Malformed faction or response data fails without corrupting the live shell.
+
+## Implemented first combat engagement
+
+[M6A](engineering-and-combat.md#implemented-m6a-first-engagement), implemented by [PR #112](https://github.com/L3DigitalNet/star-trek-alter-course/pull/112), extends the existing ship aggregate rather than creating a second combat world. Engineering owns five system conditions, four power allocations, and the one repair slot. Ship-owned combat state adds absolute directed-energy readiness and at most one correlated defensive stimulus. Tactical position, local sensor knowledge, system condition, and power are not duplicated in an encounter object.
+
+The shared Core shot transition validates an observer-local contact, applies shield absorption and subsystem penetration, reconciles involuntary power/speed changes, cancels an affected repair by exact work identity, and reconciles observations before committing a valid candidate. Voluntary allocation/course rejection remains distinct from forced damage reconciliation. Godot never repairs an invalid Core aggregate.
+
+The separate defensive policy receives only the acting ship's own facts and local contact knowledge. One delayed ship-targeted decision wake consumes a bounded stimulus and proposes Return Fire, Withdraw, or Hold through existing command paths. It does not introduce political hostility, autonomous strategic preemption, periodic weapon scheduling, or an external AI dependency. The Combat workspace is a presentation mode, not a Core encounter state.
+
+The detailed rules belong to [Engineering and combat](engineering-and-combat.md); [content and persistence](content-assets-and-persistence.md) owns V5 ship definitions and V9 continuation. M6A is unreleased development, M6 remains partial, and these implementation boundaries do not approve later combat refinements.
 
 ## Dependency choices
 
@@ -72,4 +83,4 @@ ADR 0008 selects Serilog configured at a composition boundary through Microsoft 
 
 ## Sources
 
-[Core/Godot separation](../adr/0001-separate-simulation-from-godot.md), [dependency policy](../adr/0003-prefer-native-capabilities-and-demand-driven-dependencies.md), [testing](../adr/0009-use-layered-testing-and-architecture-conformance.md), [narrative](../adr/0012-keep-branching-narrative-subordinate-to-simulation.md), [package declarations](../../Directory.Packages.props), and [development quality](../development-quality.md).
+[Core/Godot separation](../adr/0001-separate-simulation-from-godot.md), [dependency policy](../adr/0003-prefer-native-capabilities-and-demand-driven-dependencies.md), [testing](../adr/0009-use-layered-testing-and-architecture-conformance.md), [narrative](../adr/0012-keep-branching-narrative-subordinate-to-simulation.md), [package declarations](../../Directory.Packages.props), [combat transition](../../src/AlterCourse.Core/Gameplay/GameSimulation.Combat.cs), [defensive policy](../../src/AlterCourse.Core/AI/DefensiveCombatDecisionPolicy.cs), and [development quality](../development-quality.md).
