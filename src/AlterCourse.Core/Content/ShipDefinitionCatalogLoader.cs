@@ -1,53 +1,69 @@
 using System.Globalization;
 using System.Text.Json;
-using AlterCourse.Core.Quantities;
 using AlterCourse.Core.Ships;
-using AlterCourse.Core.Simulation;
 using Json.Schema;
 
 namespace AlterCourse.Core.Content;
 
-/// <summary>Strictly validates version-five authored ship JSON and constructs domain definitions.</summary>
+/// <summary>
+/// Loads strict ship-definition V6 documents against an already loaded system-definition catalog.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Order is load-bearing: the system catalog is complete before any ship document is read, so every
+/// <c>initialLoadout</c> reference resolves against a fixed set and a missing definition is a diagnostic rather
+/// than a partially materialized design. Earlier ship versions (V3–V5) keep their historical schemas but are not
+/// accepted here; V5 is rejected with <c>schema.const</c> at <c>#/schemaVersion</c>.
+/// </para>
+/// <para>
+/// Storage validation (identity range, duplicates, allocator continuation) runs first; per-kind cardinality is a
+/// separate typed-admission step reported as <c>semantic.unsupported-cardinality</c>, matching the runtime split
+/// between <see cref="InstalledSystemCollection"/> and <see cref="ShipSystemAdmission"/>.
+/// </para>
+/// </remarks>
 public sealed class ShipDefinitionCatalogLoader
 {
-    /// <summary>Gets the maximum number of authored definitions admitted into one development catalog.</summary>
+    /// <summary>Maximum ship definitions in one catalog.</summary>
     public const int MaximumDefinitions = 256;
 
+    /// <summary>Maximum JSON nesting depth accepted in one ship document.</summary>
+    public const int MaximumDepth = 8;
+
+    private const int SchemaVersion = 6;
+
     private static readonly Uri SchemaBaseUri = new(
-        "https://l3digital.net/star-trek-alter-course/schemas/ship-definition-v5.schema.json"
+        "https://l3digital.net/star-trek-alter-course/schemas/ship-definition-v6.schema.json"
     );
-    private static readonly EvaluationOptions SchemaEvaluationOptions = new()
-    {
-        OutputFormat = OutputFormat.List,
-        Culture = CultureInfo.InvariantCulture,
-    };
 
     private readonly JsonSchema _schema;
+    private readonly SystemDefinitionCatalog _systems;
 
-    /// <summary>Initializes the loader from the canonical version-five JSON Schema text.</summary>
-    public ShipDefinitionCatalogLoader(string schemaText)
+    /// <summary>Initializes the loader from the V6 schema text and the resolved system-definition catalog.</summary>
+    public ShipDefinitionCatalogLoader(string schemaText, SystemDefinitionCatalog systems)
     {
         ArgumentNullException.ThrowIfNull(schemaText);
+        ArgumentNullException.ThrowIfNull(systems);
         _schema = JsonSchema.FromText(
             schemaText,
             new BuildOptions { SchemaRegistry = new SchemaRegistry() },
             SchemaBaseUri
         );
+        _systems = systems;
     }
 
-    /// <summary>Loads and validates one definition supplied as JSON text.</summary>
+    /// <summary>Loads one definition from UTF-16 text.</summary>
     public ShipDefinition LoadText(string json, string sourceIdentity) =>
         Load(ShipDefinitionContent.FromText(sourceIdentity, json));
 
-    /// <summary>Loads and validates one definition supplied as UTF-8 JSON bytes.</summary>
+    /// <summary>Loads one definition from UTF-8 bytes.</summary>
     public ShipDefinition LoadUtf8(ReadOnlySpan<byte> utf8Json, string sourceIdentity) =>
         Load(ShipDefinitionContent.FromUtf8(sourceIdentity, utf8Json));
 
-    /// <summary>Loads and validates one definition from the stream's current position.</summary>
+    /// <summary>Loads one definition from a bounded stream.</summary>
     public ShipDefinition Load(Stream stream, string sourceIdentity) =>
         Load(ShipDefinitionContent.FromStream(sourceIdentity, stream));
 
-    /// <summary>Loads a complete catalog and rejects identities repeated across source documents.</summary>
+    /// <summary>Loads a catalog of uniquely identified designs resolved against the system catalog.</summary>
     public ShipDefinitionCatalog LoadCatalog(IEnumerable<ShipDefinitionContent> content)
     {
         ArgumentNullException.ThrowIfNull(content);
@@ -62,17 +78,15 @@ public sealed class ShipDefinitionCatalogLoader
 
         var definitions = new Dictionary<ShipDefinitionId, ShipDefinition>();
         var identities = new Dictionary<ShipDefinitionId, string>();
-
         foreach (ShipDefinitionContent source in materialized)
         {
             ShipDefinition definition = Load(source);
             if (identities.TryGetValue(definition.Id, out string? earlierSource))
             {
-                throw Failure(
+                throw StrictContentJson.Failure(
                     "catalog.duplicate-id",
                     source.SourceIdentity,
                     "#/id",
-                    string.Empty,
                     $"Ship definition identity '{definition.Id.Value}' duplicates the definition in '{earlierSource}'."
                 );
             }
@@ -81,349 +95,85 @@ public sealed class ShipDefinitionCatalogLoader
             definitions.Add(definition.Id, definition);
         }
 
-        return new ShipDefinitionCatalog(definitions);
+        return new ShipDefinitionCatalog(definitions, _systems);
     }
 
     private ShipDefinition Load(ShipDefinitionContent content)
     {
-        JsonDocument document = ParseStrict(content);
-        using (document)
-        {
-            ValidateSchema(document.RootElement, content.SourceIdentity);
-            AuthoredShipDefinitionV5 authored = ReadAuthoredModel(document.RootElement, content.SourceIdentity);
-            return ValidateSemantics(authored, content.SourceIdentity);
-        }
-    }
-
-    private static JsonDocument ParseStrict(ShipDefinitionContent content)
-    {
-        try
-        {
-            // Duplicate detection precedes JsonDocument construction because System.Text.Json otherwise keeps
-            // duplicate object members, allowing schema evaluation and typed mapping to observe different values.
-            DetectDuplicateMembers(content.Utf8Json.Span, content.SourceIdentity);
-            return JsonDocument.Parse(content.Utf8Json);
-        }
-        catch (JsonException exception)
-        {
-            string location = exception.BytePositionInLine is long position
-                ? $"byte:{position.ToString(CultureInfo.InvariantCulture)}"
-                : "#";
-            throw Failure(
-                "json.invalid",
-                content.SourceIdentity,
-                location,
-                string.Empty,
-                $"Invalid UTF-8 JSON: {exception.Message}"
-            );
-        }
-    }
-
-    private static void DetectDuplicateMembers(ReadOnlySpan<byte> utf8Json, string sourceIdentity)
-    {
-        var reader = new Utf8JsonReader(
-            utf8Json,
-            new JsonReaderOptions { AllowTrailingCommas = false, CommentHandling = JsonCommentHandling.Disallow }
+        using JsonDocument document = StrictContentJson.Parse(content.Utf8Json, content.SourceIdentity, MaximumDepth);
+        JsonElement root = document.RootElement;
+        IReadOnlyList<ShipContentDiagnostic> schemaDiagnostics = StrictContentJson.EvaluateSchema(
+            _schema,
+            root,
+            content.SourceIdentity
         );
-        var objectMembers = new Stack<HashSet<string>>();
-
-        while (reader.Read())
+        if (schemaDiagnostics.Count > 0)
         {
-            switch (reader.TokenType)
-            {
-                case JsonTokenType.StartObject:
-                    objectMembers.Push(new HashSet<string>(StringComparer.Ordinal));
-                    break;
-                case JsonTokenType.EndObject:
-                    objectMembers.Pop();
-                    break;
-                case JsonTokenType.PropertyName:
-                    string member = reader.GetString()!;
-                    if (!objectMembers.Peek().Add(member))
-                    {
-                        throw Failure(
-                            "json.duplicate-member",
-                            sourceIdentity,
-                            $"byte:{reader.TokenStartIndex.ToString(CultureInfo.InvariantCulture)}",
-                            string.Empty,
-                            $"Found duplicate JSON member '{member}'."
-                        );
-                    }
-
-                    break;
-            }
-        }
-    }
-
-    private void ValidateSchema(JsonElement instance, string sourceIdentity)
-    {
-        EvaluationResults results = _schema.Evaluate(instance, SchemaEvaluationOptions);
-        if (results.IsValid)
-        {
-            return;
+            throw new ShipContentValidationException(schemaDiagnostics);
         }
 
-        ShipContentDiagnostic[] diagnostics = Flatten(results)
-            .Where(result => !result.IsValid && result.Errors is { Count: > 0 })
-            .SelectMany(result =>
-                result
-                    .Errors!.OrderBy(error => error.Key, StringComparer.Ordinal)
-                    .Select(error => new ShipContentDiagnostic(
-                        "schema." + error.Key,
-                        sourceIdentity,
-                        Location(result.InstanceLocation.ToString()),
-                        result.SchemaLocation.ToString(),
-                        error.Value
-                    ))
-            )
-            .OrderBy(diagnostic => diagnostic.InstanceLocation, StringComparer.Ordinal)
-            .ThenBy(diagnostic => diagnostic.SchemaLocation, StringComparer.Ordinal)
-            .ThenBy(diagnostic => diagnostic.Message, StringComparer.Ordinal)
-            .ToArray();
-
-        throw new ShipContentValidationException(diagnostics);
-    }
-
-    private static IEnumerable<EvaluationResults> Flatten(EvaluationResults result)
-    {
-        yield return result;
-        foreach (EvaluationResults detail in result.Details ?? [])
+        // The schema const already pins the version; this guard keeps a relaxed schema from admitting V5 input.
+        if (root.GetProperty("schemaVersion").GetInt32() != SchemaVersion)
         {
-            foreach (EvaluationResults descendant in Flatten(detail))
-            {
-                yield return descendant;
-            }
-        }
-    }
-
-    private static string Location(string pointer) => string.IsNullOrEmpty(pointer) ? "#" : "#" + pointer;
-
-    private static AuthoredShipDefinitionV5 ReadAuthoredModel(JsonElement root, string sourceIdentity)
-    {
-        if (ReadInt32(root, "schemaVersion", sourceIdentity) != 5)
-        {
-            throw Failure(
+            throw StrictContentJson.Failure(
                 "schema.const",
-                sourceIdentity,
+                content.SourceIdentity,
                 "#/schemaVersion",
-                string.Empty,
-                "Only ship definition version five is supported."
+                "Only ship definition version six is supported."
             );
         }
-        JsonElement engineering = root.GetProperty("engineering");
-        return new AuthoredShipDefinitionV5(
-            ReadInt32(root, "schemaVersion", sourceIdentity),
-            root.GetProperty("id").GetString()!,
-            root.GetProperty("designDisplayName").GetString()!,
-            root.GetProperty("maximumTacticalSpeedKilometersPerSecond").GetDouble(),
-            root.GetProperty("passiveSensorRangeKilometers").GetDouble(),
-            ReadInt64(root, "activeScanDurationMilliseconds", sourceIdentity),
-            ReadInt32(engineering, "nominalGenerationPowerUnits", sourceIdentity),
-            ReadInt32(engineering, "nominalSensorDemandPowerUnits", sourceIdentity),
-            ReadInt32(engineering, "nominalImpulseDemandPowerUnits", sourceIdentity),
-            ReadInt64(engineering, "sensorRepairDurationMilliseconds", sourceIdentity),
-            ReadInt64(engineering, "impulseRepairDurationMilliseconds", sourceIdentity),
-            ReadInt32(engineering, "nominalShieldDemandPowerUnits", sourceIdentity),
-            ReadInt32(engineering, "nominalDirectedEnergyDemandPowerUnits", sourceIdentity),
-            ReadInt64(engineering, "shieldRepairDurationMilliseconds", sourceIdentity),
-            ReadInt64(engineering, "directedEnergyRepairDurationMilliseconds", sourceIdentity),
-            root.GetProperty("directedEnergyWeapon").GetProperty("rangeKilometers").GetDouble(),
-            root.GetProperty("directedEnergyWeapon").GetProperty("baseNormalizedDamage").GetDouble(),
-            ReadInt64(root.GetProperty("directedEnergyWeapon"), "cooldownMilliseconds", sourceIdentity)
+
+        var diagnostics = new List<ShipContentDiagnostic>();
+        string source = content.SourceIdentity;
+        string authoredId = root.GetProperty("id").GetString()!;
+        string displayName = root.GetProperty("designDisplayName").GetString()!;
+        ShipDefinitionId id = ValidateIdentity(authoredId, source, diagnostics);
+        ValidateDesignDisplayName(displayName, source, diagnostics);
+        ShipLoadoutDefinition? loadout = SystemDefinitionLoadoutReader.Read(
+            root.GetProperty("initialLoadout"),
+            "#/initialLoadout",
+            _systems,
+            source,
+            diagnostics
         );
+        if (diagnostics.Count > 0 || loadout is null)
+        {
+            throw new ShipContentValidationException(StrictContentJson.Sort(diagnostics));
+        }
+
+        ValidateCardinality(loadout, source);
+        return new ShipDefinition(id, displayName, loadout);
     }
 
-    private static int ReadInt32(JsonElement root, string propertyName, string sourceIdentity)
-    {
-        JsonElement value = root.GetProperty(propertyName);
-        if (value.TryGetInt32(out int integer))
-        {
-            return integer;
-        }
-
-        if (
-            value.TryGetDecimal(out decimal numeric)
-            && decimal.Truncate(numeric) == numeric
-            && numeric is >= int.MinValue and <= int.MaxValue
-        )
-        {
-            return decimal.ToInt32(numeric);
-        }
-
-        throw UnmappableInteger(propertyName, sourceIdentity, "a 32-bit integer");
-    }
-
-    private static long ReadInt64(JsonElement root, string propertyName, string sourceIdentity)
-    {
-        JsonElement value = root.GetProperty(propertyName);
-        if (value.TryGetInt64(out long integer))
-        {
-            return integer;
-        }
-
-        if (
-            value.TryGetDecimal(out decimal numeric)
-            && decimal.Truncate(numeric) == numeric
-            && numeric is >= long.MinValue and <= long.MaxValue
-        )
-        {
-            return decimal.ToInt64(numeric);
-        }
-
-        throw UnmappableInteger(propertyName, sourceIdentity, "a 64-bit integer");
-    }
-
-    private static ShipContentValidationException UnmappableInteger(
-        string propertyName,
-        string sourceIdentity,
-        string expectedType
-    ) =>
-        Failure(
-            "semantic.invalid-value",
-            sourceIdentity,
-            $"#/{propertyName}",
-            string.Empty,
-            $"'{propertyName}' must be representable as {expectedType}."
-        );
-
-    private static ShipDefinition ValidateSemantics(AuthoredShipDefinitionV5 authored, string sourceIdentity)
+    private void ValidateCardinality(ShipLoadoutDefinition loadout, string source)
     {
         var diagnostics = new List<ShipContentDiagnostic>();
-        ShipDefinitionId id = ValidateIdentity(authored.Id, sourceIdentity, diagnostics);
-        ValidateDesignDisplayName(authored.DesignDisplayName, sourceIdentity, diagnostics);
-        ValidateSpeed(authored.MaximumTacticalSpeedKilometersPerSecond, sourceIdentity, diagnostics);
-        ValidatePassiveSensorRange(authored.PassiveSensorRangeKilometers, sourceIdentity, diagnostics);
-        ValidateDuration(
-            authored.ActiveScanDurationMilliseconds,
-            "activeScanDurationMilliseconds",
-            "Active scan duration",
-            sourceIdentity,
-            diagnostics
-        );
-        ValidatePower(authored.NominalGenerationPowerUnits, "nominalGenerationPowerUnits", sourceIdentity, diagnostics);
-        ValidatePower(
-            authored.NominalSensorDemandPowerUnits,
-            "nominalSensorDemandPowerUnits",
-            sourceIdentity,
-            diagnostics
-        );
-        ValidatePower(
-            authored.NominalImpulseDemandPowerUnits,
-            "nominalImpulseDemandPowerUnits",
-            sourceIdentity,
-            diagnostics
-        );
-        ValidateEngineeringDuration(
-            authored.SensorRepairDurationMilliseconds,
-            "sensorRepairDurationMilliseconds",
-            "Sensor repair duration",
-            sourceIdentity,
-            diagnostics
-        );
-        ValidateEngineeringDuration(
-            authored.ImpulseRepairDurationMilliseconds,
-            "impulseRepairDurationMilliseconds",
-            "Impulse repair duration",
-            sourceIdentity,
-            diagnostics
-        );
-
-        ValidateCombat(authored, sourceIdentity, diagnostics);
+        foreach (
+            IGrouping<ShipSystemKind, (InitialInstalledSystem System, int Index)> group in loadout
+                .Systems.Select((system, index) => (System: system, Index: index))
+                .GroupBy(entry => _systems.GetRequired(entry.System.DefinitionId).Kind)
+        )
+        {
+            (InitialInstalledSystem System, int Index)[] members = [.. group];
+            foreach ((InitialInstalledSystem system, int index) in members.Skip(1))
+            {
+                diagnostics.Add(
+                    new ShipContentDiagnostic(
+                        "semantic.unsupported-cardinality",
+                        source,
+                        $"#/initialLoadout/systems/{index.ToString(CultureInfo.InvariantCulture)}",
+                        string.Empty,
+                        $"The current simulation admits at most one installed '{group.Key.Value}' system; installed "
+                            + $"system {system.Id.Value.ToString(CultureInfo.InvariantCulture)} is another."
+                    )
+                );
+            }
+        }
 
         if (diagnostics.Count > 0)
         {
-            throw new ShipContentValidationException(diagnostics);
+            throw new ShipContentValidationException(StrictContentJson.Sort(diagnostics));
         }
-
-        return CreateDefinition(authored, id);
-    }
-
-    private static ShipDefinition CreateDefinition(AuthoredShipDefinitionV5 authored, ShipDefinitionId id)
-    {
-        return new ShipDefinition(
-            id,
-            authored.DesignDisplayName,
-            new SpeedKilometersPerSecond(authored.MaximumTacticalSpeedKilometersPerSecond),
-            new DistanceKilometers(authored.PassiveSensorRangeKilometers),
-            new SimulationDuration(authored.ActiveScanDurationMilliseconds),
-            new ShipEngineeringDefinition(
-                new PowerUnits(authored.NominalGenerationPowerUnits),
-                new PowerUnits(authored.NominalSensorDemandPowerUnits),
-                new PowerUnits(authored.NominalImpulseDemandPowerUnits),
-                new PowerUnits(authored.NominalShieldDemandPowerUnits),
-                new PowerUnits(authored.NominalDirectedEnergyDemandPowerUnits),
-                new SimulationDuration(authored.SensorRepairDurationMilliseconds),
-                new SimulationDuration(authored.ImpulseRepairDurationMilliseconds),
-                new SimulationDuration(authored.ShieldRepairDurationMilliseconds),
-                new SimulationDuration(authored.DirectedEnergyRepairDurationMilliseconds)
-            ),
-            new DirectedEnergyWeaponDefinition(
-                new DistanceKilometers(authored.RangeKilometers),
-                authored.BaseNormalizedDamage,
-                new SimulationDuration(authored.CooldownMilliseconds)
-            )
-        );
-    }
-
-    private static void ValidateCombat(
-        AuthoredShipDefinitionV5 authored,
-        string sourceIdentity,
-        List<ShipContentDiagnostic> diagnostics
-    )
-    {
-        ValidatePower(
-            authored.NominalShieldDemandPowerUnits,
-            "nominalShieldDemandPowerUnits",
-            sourceIdentity,
-            diagnostics
-        );
-        ValidatePower(
-            authored.NominalDirectedEnergyDemandPowerUnits,
-            "nominalDirectedEnergyDemandPowerUnits",
-            sourceIdentity,
-            diagnostics
-        );
-        ValidateEngineeringDuration(
-            authored.ShieldRepairDurationMilliseconds,
-            "shieldRepairDurationMilliseconds",
-            "Shield repair duration",
-            sourceIdentity,
-            diagnostics
-        );
-        ValidateEngineeringDuration(
-            authored.DirectedEnergyRepairDurationMilliseconds,
-            "directedEnergyRepairDurationMilliseconds",
-            "Directed-energy repair duration",
-            sourceIdentity,
-            diagnostics
-        );
-        ValidateDuration(
-            authored.CooldownMilliseconds,
-            "directedEnergyWeapon/cooldownMilliseconds",
-            "Weapon cooldown",
-            sourceIdentity,
-            diagnostics
-        );
-        if (!double.IsFinite(authored.RangeKilometers) || authored.RangeKilometers <= 0)
-            diagnostics.Add(
-                Semantic(
-                    sourceIdentity,
-                    "#/directedEnergyWeapon/rangeKilometers",
-                    "Weapon range must be positive and bounded."
-                )
-            );
-        if (
-            !double.IsFinite(authored.BaseNormalizedDamage)
-            || authored.BaseNormalizedDamage <= 0
-            || authored.BaseNormalizedDamage > 1
-        )
-            diagnostics.Add(
-                Semantic(
-                    sourceIdentity,
-                    "#/directedEnergyWeapon/baseNormalizedDamage",
-                    "Weapon damage must be positive and normalized."
-                )
-            );
     }
 
     private static ShipDefinitionId ValidateIdentity(
@@ -432,15 +182,15 @@ public sealed class ShipDefinitionCatalogLoader
         List<ShipContentDiagnostic> diagnostics
     )
     {
-        if (string.IsNullOrWhiteSpace(authoredId))
+        try
         {
-            diagnostics.Add(
-                Semantic(sourceIdentity, "#/id", "Ship definition identity must contain non-whitespace text.")
-            );
+            return new ShipDefinitionId(authoredId);
+        }
+        catch (ArgumentException exception)
+        {
+            diagnostics.Add(StrictContentJson.Semantic(sourceIdentity, "#/id", exception.Message));
             return default;
         }
-
-        return new ShipDefinitionId(authoredId);
     }
 
     private static void ValidateDesignDisplayName(
@@ -452,141 +202,12 @@ public sealed class ShipDefinitionCatalogLoader
         if (string.IsNullOrWhiteSpace(designDisplayName))
         {
             diagnostics.Add(
-                Semantic(sourceIdentity, "#/designDisplayName", "Design display name must contain non-whitespace text.")
-            );
-        }
-        else if (designDisplayName.Length > ShipDefinition.MaximumDesignDisplayNameLength)
-        {
-            diagnostics.Add(
-                Semantic(
+                StrictContentJson.Semantic(
                     sourceIdentity,
                     "#/designDisplayName",
-                    $"Design display name cannot exceed {ShipDefinition.MaximumDesignDisplayNameLength} characters."
+                    "Design display name must contain non-whitespace text."
                 )
             );
         }
     }
-
-    private static void ValidateSpeed(double speed, string sourceIdentity, List<ShipContentDiagnostic> diagnostics)
-    {
-        if (!double.IsFinite(speed) || speed < 0)
-        {
-            diagnostics.Add(
-                Semantic(
-                    sourceIdentity,
-                    "#/maximumTacticalSpeedKilometersPerSecond",
-                    "Maximum tactical speed must be finite and nonnegative."
-                )
-            );
-        }
-    }
-
-    private static void ValidatePassiveSensorRange(
-        double range,
-        string sourceIdentity,
-        List<ShipContentDiagnostic> diagnostics
-    )
-    {
-        if (!double.IsFinite(range) || range < 0)
-        {
-            diagnostics.Add(
-                Semantic(
-                    sourceIdentity,
-                    "#/passiveSensorRangeKilometers",
-                    "Passive sensor range must be finite and nonnegative."
-                )
-            );
-        }
-    }
-
-    private static void ValidateDuration(
-        long milliseconds,
-        string propertyName,
-        string displayName,
-        string sourceIdentity,
-        List<ShipContentDiagnostic> diagnostics
-    )
-    {
-        if (milliseconds <= 0 || milliseconds % SimulationFixedStep.Duration.Milliseconds != 0)
-        {
-            diagnostics.Add(
-                Semantic(
-                    sourceIdentity,
-                    $"#/{propertyName}",
-                    $"{displayName} must be positive and align to the 100 millisecond simulation step."
-                )
-            );
-        }
-    }
-
-    private static void ValidatePower(
-        int value,
-        string propertyName,
-        string sourceIdentity,
-        List<ShipContentDiagnostic> diagnostics
-    )
-    {
-        if (value is <= 0 or > PowerUnits.MaximumValue)
-        {
-            diagnostics.Add(
-                Semantic(
-                    sourceIdentity,
-                    $"#/engineering/{propertyName}",
-                    $"Engineering power must be positive and no greater than {PowerUnits.MaximumValue}."
-                )
-            );
-        }
-    }
-
-    private static void ValidateEngineeringDuration(
-        long milliseconds,
-        string propertyName,
-        string displayName,
-        string sourceIdentity,
-        List<ShipContentDiagnostic> diagnostics
-    )
-    {
-        if (milliseconds <= 0 || milliseconds % SimulationFixedStep.Duration.Milliseconds != 0)
-        {
-            diagnostics.Add(
-                Semantic(
-                    sourceIdentity,
-                    $"#/engineering/{propertyName}",
-                    $"{displayName} must be positive and align to the 100 millisecond simulation step."
-                )
-            );
-        }
-    }
-
-    private static ShipContentDiagnostic Semantic(string sourceIdentity, string location, string message) =>
-        new("semantic.invalid-value", sourceIdentity, location, string.Empty, message);
-
-    private static ShipContentValidationException Failure(
-        string code,
-        string sourceIdentity,
-        string instanceLocation,
-        string schemaLocation,
-        string message
-    ) => new([new ShipContentDiagnostic(code, sourceIdentity, instanceLocation, schemaLocation, message)]);
-
-    private sealed record AuthoredShipDefinitionV5(
-        int SchemaVersion,
-        string Id,
-        string DesignDisplayName,
-        double MaximumTacticalSpeedKilometersPerSecond,
-        double PassiveSensorRangeKilometers,
-        long ActiveScanDurationMilliseconds,
-        int NominalGenerationPowerUnits,
-        int NominalSensorDemandPowerUnits,
-        int NominalImpulseDemandPowerUnits,
-        long SensorRepairDurationMilliseconds,
-        long ImpulseRepairDurationMilliseconds,
-        int NominalShieldDemandPowerUnits,
-        int NominalDirectedEnergyDemandPowerUnits,
-        long ShieldRepairDurationMilliseconds,
-        long DirectedEnergyRepairDurationMilliseconds,
-        double RangeKilometers,
-        double BaseNormalizedDamage,
-        long CooldownMilliseconds
-    );
 }

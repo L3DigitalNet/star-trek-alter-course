@@ -1,24 +1,20 @@
-using AlterCourse.Core.Quantities;
-using AlterCourse.Core.Simulation;
-
 namespace AlterCourse.Core.Ships;
 
-/// <summary>Defines the immutable ship values consumed by the first gameplay slice.</summary>
+/// <summary>
+/// An immutable ship design: identity, design label, and the default initial loadout for new ships.
+/// </summary>
+/// <remarks>
+/// Equipment tuning (speed, sensing, generation, demands, repair timing, weapon facts) lives on the referenced
+/// system definitions, not here. The loadout is only a new-ship default: a live ship owns its actual installations,
+/// and loading a save never reads, overlays, or replenishes this loadout.
+/// </remarks>
 public sealed record ShipDefinition
 {
-    /// <summary>Gets the maximum persisted design display-name length.</summary>
+    /// <summary>Maximum design display-name length.</summary>
     public const int MaximumDesignDisplayNameLength = 64;
 
-    /// <summary>Initializes a minimal ship definition.</summary>
-    public ShipDefinition(
-        ShipDefinitionId id,
-        string designDisplayName,
-        SpeedKilometersPerSecond maximumTacticalSpeed,
-        DistanceKilometers passiveSensorRange,
-        SimulationDuration activeScanDuration,
-        ShipEngineeringDefinition engineering,
-        DirectedEnergyWeaponDefinition? directedEnergyWeapon = null
-    )
+    /// <summary>Initializes a validated design.</summary>
+    public ShipDefinition(ShipDefinitionId id, string designDisplayName, ShipLoadoutDefinition initialLoadout)
     {
         if (string.IsNullOrWhiteSpace(id.Value))
         {
@@ -34,73 +30,18 @@ public sealed record ShipDefinition
             );
         }
 
-        if (activeScanDuration.Milliseconds <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(activeScanDuration), "Active scan duration must be positive.");
-        }
-
-        if (activeScanDuration.Milliseconds % SimulationFixedStep.Duration.Milliseconds != 0)
-        {
-            throw new ArgumentException(
-                "Active scan duration must align to the fixed simulation step.",
-                nameof(activeScanDuration)
-            );
-        }
-
-        ArgumentNullException.ThrowIfNull(engineering);
-
+        ArgumentNullException.ThrowIfNull(initialLoadout);
         Id = id;
         DesignDisplayName = designDisplayName;
-        MaximumTacticalSpeed = maximumTacticalSpeed;
-        PassiveSensorRange = passiveSensorRange;
-        ActiveScanDuration = activeScanDuration;
-        Engineering = engineering;
-        DirectedEnergyWeapon = directedEnergyWeapon;
+        InitialLoadout = initialLoadout;
     }
 
-    internal ShipDefinition(
-        ShipDefinitionId id,
-        string designDisplayName,
-        SpeedKilometersPerSecond maximumTacticalSpeed,
-        DistanceKilometers passiveSensorRange,
-        SimulationDuration activeScanDuration,
-        SimulationDuration sensorRepairDuration
-    )
-        : this(
-            id,
-            designDisplayName,
-            maximumTacticalSpeed,
-            passiveSensorRange,
-            activeScanDuration,
-            new ShipEngineeringDefinition(
-                new PowerUnits(120),
-                new PowerUnits(70),
-                new PowerUnits(50),
-                sensorRepairDuration,
-                sensorRepairDuration
-            )
-        ) { }
-
-    /// <summary>Gets the stable definition identity.</summary>
+    /// <summary>Gets the stable design identity.</summary>
     public ShipDefinitionId Id { get; }
 
-    /// <summary>Gets the reusable player-facing ship design label.</summary>
+    /// <summary>Gets the design display label.</summary>
     public string DesignDisplayName { get; }
 
-    /// <summary>Gets the maximum tactical speed.</summary>
-    public SpeedKilometersPerSecond MaximumTacticalSpeed { get; }
-
-    /// <summary>Gets the maximum distance at which passive sensors can maintain a contact.</summary>
-    public DistanceKilometers PassiveSensorRange { get; }
-
-    /// <summary>Gets the simulation duration required to complete an active scan.</summary>
-    public SimulationDuration ActiveScanDuration { get; }
-
-    /// <summary>Gets immutable engineering demand and repair timing.</summary>
-    public ShipEngineeringDefinition Engineering { get; }
-
-    /// <summary>Gets authored weapon tuning, absent for legacy definitions.</summary>
-    public DirectedEnergyWeaponDefinition? DirectedEnergyWeapon { get; }
-
-    internal SimulationDuration SensorRepairDuration => Engineering.SensorRepairDuration;
+    /// <summary>Gets the default initial loadout used when a start omits an explicit loadout.</summary>
+    public ShipLoadoutDefinition InitialLoadout { get; }
 }

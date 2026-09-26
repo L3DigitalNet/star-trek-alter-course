@@ -3,9 +3,9 @@ using AlterCourse.Core.Simulation;
 
 namespace AlterCourse.Core.Gameplay;
 
-/// <summary>Declares one active repair whose completion derives from immutable ship content.</summary>
+/// <summary>Declares an in-progress repair of one installation on the declaring ship.</summary>
 public sealed record SystemRepairStart(
-    ShipSystemKind TargetSystem,
+    InstalledSystemId Target,
     SystemCondition StartingCondition,
     SystemCondition TargetCondition,
     SimulationTime StartedAt

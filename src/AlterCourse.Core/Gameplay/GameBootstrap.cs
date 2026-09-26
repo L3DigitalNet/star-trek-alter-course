@@ -223,19 +223,11 @@ public sealed class GameBootstrap
     )
     {
         ShipDefinition definition = catalog.GetRequired(start.DefinitionId);
-        SystemRepairState? repair = CreateRepair(start, definition, ref scheduler);
-        var engineering = new ShipEngineeringState(
-            start.GenerationCondition,
-            start.SensorCondition,
-            start.ImpulseCondition,
-            start.ShieldCondition,
-            start.DirectedEnergyCondition,
-            start.Allocation,
-            repair
-        );
-        engineering.Validate(definition.Engineering);
-        double maximumSpeed =
-            definition.MaximumTacticalSpeed.Value * engineering.ImpulseCapability(definition.Engineering);
+        ShipEngineeringState installed = CreateEngineering(start, definition, catalog.SystemDefinitions);
+        SystemRepairState? repair = CreateRepair(start, installed, ref scheduler);
+        ShipEngineeringState engineering = installed.WithRepair(repair);
+        engineering.Validate();
+        double maximumSpeed = GameSimulation.EffectiveMaximumTacticalSpeed(engineering).Value;
         if (start.TacticalMotion.Speed.Value > maximumSpeed)
         {
             throw new ArgumentException("Tactical speed exceeds current effective propulsion.", nameof(catalog));
@@ -248,6 +240,14 @@ public sealed class GameBootstrap
             _ => throw new ArgumentException("Ship strategic start kind is unsupported.", nameof(catalog)),
         };
         ShipOrder? order = CreateOrder(start, strategic, ref scheduler, ref orderIdAllocator);
+
+        // Every installed weapon starts ready at time zero, which is what the pre-substrate single readiness time
+        // meant; a ship without a weapon has no readiness entry at all.
+        var combat = new ShipCombatState(
+            engineering
+                .Systems.ByIdentity.Where(system => system.Definition is DirectedEnergyWeaponSystemDefinition)
+                .Select(system => new DirectedEnergyReadiness(system.Id, new SimulationTime(0)))
+        );
         return new ShipState(
             start.InstanceId,
             start.DefinitionId,
@@ -257,8 +257,121 @@ public sealed class GameBootstrap
             engineering,
             strategic,
             order,
-            directControllerFactionId: start.DirectControllerFactionId
+            directControllerFactionId: start.DirectControllerFactionId,
+            combat: combat
         );
+    }
+
+    /// <summary>
+    /// Builds a ship's installations from its start: the design default loadout for an omitted loadout, or the
+    /// start's own installations for an explicit one (never consulting the design default).
+    /// </summary>
+    private static ShipEngineeringState CreateEngineering(
+        ShipStart start,
+        ShipDefinition definition,
+        SystemDefinitionCatalog systems
+    )
+    {
+        if (start.Systems is null)
+        {
+            throw new ArgumentException("Ship start must declare its installed systems.", nameof(start));
+        }
+
+        (InstalledSystem[] installations, long nextId) =
+            start.Systems.Source == ShipLoadoutSource.DesignDefault
+                ? DefaultInstallations(start, definition, systems)
+                : ExplicitInstallations(start, systems);
+        var engineering = new ShipEngineeringState(
+            InstalledSystemCollection.Create(installations),
+            InstalledSystemIdAllocator.Restore(nextId)
+        );
+
+        // Storage validation above admits several installations of one kind; the typed world boundary refuses
+        // them here, as a separate and distinctly reported rule.
+        ShipSystemAdmission.ValidateSupportedCardinality(engineering.Systems);
+        return engineering;
+    }
+
+    private static (InstalledSystem[] Installations, long NextId) DefaultInstallations(
+        ShipStart start,
+        ShipDefinition definition,
+        SystemDefinitionCatalog systems
+    )
+    {
+        // Exact key-set match: a design-default start states every default installation and nothing else, so a
+        // production content change that renumbers installations fails loudly instead of being guessed at.
+        IReadOnlyList<InitialInstalledSystem> defaults = definition.InitialLoadout.Systems;
+        IReadOnlyList<InstalledSystemStateStart> states = start.Systems.DefaultStates;
+        if (!defaults.Select(system => system.Id).SequenceEqual(states.Select(state => state.Id)))
+        {
+            throw new ArgumentException(
+                $"Ship {start.InstanceId.Value} must declare state for exactly the default installations of "
+                    + $"'{definition.Id.Value}'.",
+                nameof(start)
+            );
+        }
+
+        InstalledSystem[] installations =
+        [
+            .. defaults.Select(
+                (system, index) =>
+                    Install(
+                        system.Id,
+                        systems.GetRequired(system.DefinitionId),
+                        states[index].Condition,
+                        states[index].Allocation,
+                        start
+                    )
+            ),
+        ];
+        return (installations, definition.InitialLoadout.NextInstalledSystemId);
+    }
+
+    private static (InstalledSystem[] Installations, long NextId) ExplicitInstallations(
+        ShipStart start,
+        SystemDefinitionCatalog systems
+    )
+    {
+        var installations = new List<InstalledSystem>();
+        foreach (InstalledSystemStart installation in start.Systems.Installations)
+        {
+            if (!systems.TryGet(installation.DefinitionId, out SystemDefinition? resolved))
+            {
+                throw new ArgumentException(
+                    $"Ship {start.InstanceId.Value} references unknown system definition "
+                        + $"'{installation.DefinitionId.Value}'.",
+                    nameof(start)
+                );
+            }
+
+            installations.Add(
+                Install(installation.Id, resolved, installation.Condition, installation.Allocation, start)
+            );
+        }
+
+        return ([.. installations], start.Systems.NextInstalledSystemId);
+    }
+
+    private static InstalledSystem Install(
+        InstalledSystemId id,
+        SystemDefinition definition,
+        SystemCondition condition,
+        Quantities.PowerUnits? allocation,
+        ShipStart start
+    )
+    {
+        try
+        {
+            return new InstalledSystem(id, definition, condition, allocation);
+        }
+        catch (ArgumentException exception)
+        {
+            throw new ArgumentException(
+                $"Ship {start.InstanceId.Value} installation {id.Value} is invalid: {exception.Message}",
+                nameof(start),
+                exception
+            );
+        }
     }
 
     private FactionState[] CreateFactions(FactionDefinitionCatalog catalog, ref SimulationScheduler scheduler)
@@ -296,7 +409,7 @@ public sealed class GameBootstrap
 
     private SystemRepairState? CreateRepair(
         ShipStart ship,
-        ShipDefinition definition,
+        ShipEngineeringState engineering,
         ref SimulationScheduler scheduler
     )
     {
@@ -305,17 +418,16 @@ public sealed class GameBootstrap
             return null;
         }
 
-        SimulationDuration duration;
-        try
+        // Resolved only on the declaring ship; repairability is presence of the definition's repair capability.
+        if (
+            !engineering.Systems.TryGet(start.Target, out InstalledSystem? target)
+            || target.Definition.Repair is not { } capability
+        )
         {
-            duration = definition.Engineering.RepairDurationFor(start.TargetSystem);
-        }
-        catch (ArgumentException exception)
-        {
-            throw new ArgumentException("Active system repair target is unsupported.", nameof(ship), exception);
+            throw new ArgumentException("Active system repair target is unsupported.", nameof(ship));
         }
 
-        SimulationTime completion = start.StartedAt.AdvanceBy(duration);
+        SimulationTime completion = start.StartedAt.AdvanceBy(capability.FullRepairDuration);
         if (
             start.TargetCondition.Value <= start.StartingCondition.Value
             || start.StartedAt.Milliseconds > InitialTime.Milliseconds
@@ -334,19 +446,14 @@ public sealed class GameBootstrap
             ScheduledWorkKind.SystemRepairCompletion
         );
         var repair = new SystemRepairState(
-            start.TargetSystem,
+            start.Target,
             start.StartingCondition,
             start.TargetCondition,
             start.StartedAt,
             completion,
             work.Id
         );
-        SystemCondition declared =
-            start.TargetSystem == ShipSystemKind.Sensors ? ship.SensorCondition
-            : start.TargetSystem == ShipSystemKind.ImpulsePropulsion ? ship.ImpulseCondition
-            : start.TargetSystem == ShipSystemKind.Shields ? ship.ShieldCondition
-            : ship.DirectedEnergyCondition;
-        if (declared != repair.ConditionAt(InitialTime))
+        if (target.Condition != repair.ConditionAt(InitialTime))
         {
             throw new ArgumentException("System condition must match active repair progress.", nameof(ship));
         }

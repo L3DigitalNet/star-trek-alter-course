@@ -17,7 +17,9 @@ namespace AlterCourse.Godot.Gameplay;
 /// </summary>
 public partial class GameScreen : Control
 {
-    private const string SchemaPath = "res://content/schemas/ship-definition-v5.schema.json";
+    private const string SystemSchemaPath = "res://content/schemas/system-definition-v1.schema.json";
+    private const string SystemsPath = "res://content/systems/pathfinder-systems.json";
+    private const string SchemaPath = "res://content/schemas/ship-definition-v6.schema.json";
     private const string ShipPath = "res://content/ships/pathfinder.json";
     private const string FactionSchemaPath = "res://content/schemas/faction-definition-v1.schema.json";
     private const string FactionAPath = "res://content/factions/faction-a.json";
@@ -98,6 +100,14 @@ public partial class GameScreen : Control
     /// <summary>Gets or sets the Godot user-data path for the one quick-save slot.</summary>
     [Export]
     public string QuickSaveUserPath { get; set; } = DefaultQuickSaveUserPath;
+
+    /// <summary>Gets or sets the canonical system-definition schema resource, loaded before any ship content.</summary>
+    [Export]
+    public string SystemDefinitionSchemaResourcePath { get; set; } = SystemSchemaPath;
+
+    /// <summary>Gets or sets the canonical system-definition resource that ship loadouts reference.</summary>
+    [Export]
+    public string SystemDefinitionResourcePath { get; set; } = SystemsPath;
 
     /// <summary>Gets or sets the canonical ship schema resource used during bootstrap.</summary>
     [Export]
@@ -667,7 +677,16 @@ public partial class GameScreen : Control
         GameSimulation Simulation
     ) CreateSimulationFromCanonicalContent()
     {
-        var shipLoader = new ShipDefinitionCatalogLoader(ReadRequiredText(ShipSchemaResourcePath));
+        // Explicit paths, no directory discovery. System definitions load first because ship loadouts are resolved
+        // against the complete system catalog.
+        var systemLoader = new SystemDefinitionCatalogLoader(ReadRequiredText(SystemDefinitionSchemaResourcePath));
+        SystemDefinitionCatalog systemCatalog = systemLoader.LoadCatalog([
+            SystemDefinitionContent.FromText(
+                SystemDefinitionResourcePath,
+                ReadRequiredText(SystemDefinitionResourcePath)
+            ),
+        ]);
+        var shipLoader = new ShipDefinitionCatalogLoader(ReadRequiredText(ShipSchemaResourcePath), systemCatalog);
         ShipDefinitionCatalog shipCatalog = shipLoader.LoadCatalog([
             ShipDefinitionContent.FromText(ShipDefinitionResourcePath, ReadRequiredText(ShipDefinitionResourcePath)),
         ]);
@@ -1132,9 +1151,8 @@ public partial class GameScreen : Control
             PowerAllocationOutcome.Accepted => $"{label} applied.",
             PowerAllocationOutcome.CurrentSpeedExceedsResultingMaximum =>
                 "Allocation unavailable: reduce current speed before lowering propulsion power.",
-            PowerAllocationOutcome.SensorDemandExceeded => "Allocation unavailable: sensor demand would be exceeded.",
-            PowerAllocationOutcome.ImpulseDemandExceeded =>
-                "Allocation unavailable: propulsion demand would be exceeded.",
+            PowerAllocationOutcome.ConsumerDemandExceeded =>
+                "Allocation unavailable: a consumer demand would be exceeded.",
             PowerAllocationOutcome.AvailablePowerExceeded =>
                 "Allocation unavailable: requested load exceeds available power.",
             _ => "Power allocation was not accepted.",
@@ -1152,7 +1170,7 @@ public partial class GameScreen : Control
         {
             SystemRepairOutcome.Accepted => $"{EngineeringSystemLabel(targetSystem)} repair started.",
             SystemRepairOutcome.RepairAlreadyActive => "Repair unavailable: another system repair is active.",
-            SystemRepairOutcome.UnsupportedSystem => "Repair unavailable: that system is unsupported.",
+            SystemRepairOutcome.NotRepairable => "Repair unavailable: that system is unsupported.",
             SystemRepairOutcome.TargetDoesNotImproveCondition =>
                 "Repair unavailable: the selected system is already nominal.",
             _ => "System repair was not accepted.",
@@ -1655,7 +1673,7 @@ public partial class GameScreen : Control
         {
             PlayerAdvanceEventKind.TravelArrived => "arrival complete",
             PlayerAdvanceEventKind.SystemRepairCompleted =>
-                $"{EngineeringSystemLabel(@event.ShipSystemId).ToLowerInvariant()} repair complete",
+                $"{EngineeringSystemLabel(@event.SystemKind).ToLowerInvariant()} repair complete",
             PlayerAdvanceEventKind.SensorContactDetected => $"{DescribeContact(@event)} detected",
             PlayerAdvanceEventKind.SensorContactStale => $"{DescribeContact(@event)} stale",
             PlayerAdvanceEventKind.SensorContactReacquired => $"{DescribeContact(@event)} reacquired",

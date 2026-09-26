@@ -384,7 +384,7 @@ public static class CommandInterfacePresenter
                         new CommandInterfaceEventRow(
                             FormatClock(activity.SimulationTimeMilliseconds),
                             "ENGINEER",
-                            $"{SystemLabel(resolved.Event.ShipSystemId)} repair completed.",
+                            $"{SystemLabel(resolved.Event.SystemKind)} repair completed.",
                             CommandInterfaceTone.Nominal
                         ),
                     ResolvedActivityEvent { Event.Kind: PlayerAdvanceEventKind.SensorContactDetected } resolved =>
@@ -497,11 +497,10 @@ public static class CommandInterfacePresenter
         {
             PlayerAdvanceEventKind.DirectedEnergyFired => "Directed-energy shot fired.",
             PlayerAdvanceEventKind.ShieldImpact => "Observed shield impact.",
-            PlayerAdvanceEventKind.SubsystemPenetration =>
-                $"Observed penetration to {SystemLabel(@event.ShipSystemId)}.",
-            PlayerAdvanceEventKind.OwnSystemDamaged => $"Own {SystemLabel(@event.ShipSystemId)} damaged.",
+            PlayerAdvanceEventKind.SubsystemPenetration => $"Observed penetration to {SystemLabel(@event.SystemKind)}.",
+            PlayerAdvanceEventKind.OwnSystemDamaged => $"Own {SystemLabel(@event.SystemKind)} damaged.",
             PlayerAdvanceEventKind.SystemRepairInterrupted =>
-                $"Own {SystemLabel(@event.ShipSystemId)} repair interrupted.",
+                $"Own {SystemLabel(@event.SystemKind)} repair interrupted.",
             PlayerAdvanceEventKind.PowerBrownout => "Own power allocation reduced by brownout.",
             PlayerAdvanceEventKind.ForcedDeceleration => "Own speed reduced by propulsion capability.",
             _ => throw new ArgumentOutOfRangeException(nameof(@event), @event.Kind, "Unknown combat event."),

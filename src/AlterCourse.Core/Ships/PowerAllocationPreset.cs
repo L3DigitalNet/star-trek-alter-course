@@ -1,5 +1,9 @@
 namespace AlterCourse.Core.Ships;
 
+// TEMPORARY BRIDGE (removed by leg L5): per-kind presets survive only so the unchanged Godot Engineering handlers
+// keep compiling. Core power commands are generic (Balance, Prioritize installed consumer); the adapter in
+// GameSimulation.EngineeringAdapter.cs maps each preset onto them. Nothing in Core mechanics reads this enum.
+
 /// <summary>Identifies a deterministic Core-owned power allocation choice.</summary>
 public enum PowerAllocationPreset
 {

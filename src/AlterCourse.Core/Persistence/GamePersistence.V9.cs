@@ -6,8 +6,10 @@ using AlterCourse.Core.Quantities;
 using AlterCourse.Core.Sensors;
 using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
+using AlterCourse.Core.Tactical;
 using SaveEnvelopeV8 = AlterCourse.Core.Persistence.SaveModelsV8.SaveEnvelopeV8;
 using SaveEnvelopeV9 = AlterCourse.Core.Persistence.SaveModelsV9.SaveEnvelopeV9;
+using SaveMetadataV2 = AlterCourse.Core.Persistence.SaveModelsV2.SaveMetadataV2;
 using ShipSnapshotV7 = AlterCourse.Core.Persistence.SaveModelsV7.ShipSnapshotV7;
 using ShipSnapshotV9 = AlterCourse.Core.Persistence.SaveModelsV9.ShipSnapshotV9;
 
@@ -15,61 +17,140 @@ namespace AlterCourse.Core.Persistence;
 
 public static partial class GamePersistence
 {
+    private const string GenerationKind = "power-generation";
+    private const string SensorsKind = "sensors";
+    private const string ImpulseKind = "impulse-propulsion";
+    private const string ShieldsKind = "shields";
+    private const string WeaponsKind = "directed-energy-weapons";
+
+    // TEMPORARY BRIDGE (removed by leg L4): until V10 persistence exists, the current runtime is written in the V9
+    // wire format. That is lossless only for a ship whose installations are exactly the five installations the V9
+    // map defines (HistoricalShipSystemsV9), so any other loadout is refused rather than flattened into fixed
+    // fields. L4 replaces this capture with CaptureV10, which reads installed state directly.
     private static SaveEnvelopeV9 CaptureV9(SimulationState state, GameSaveMetadata metadata)
     {
-        SaveEnvelopeV8 legacy = CaptureV8(state, metadata);
-        SaveEnvelopeV9 current = MigrateV8ToV9(legacy);
+        if (
+            state.Ships.Length > SimulationState.MaximumShips
+            || state.Factions.Length > SimulationState.MaximumFactions
+        )
+        {
+            throw new InvalidOperationException(
+                "V9 persistence supports at most the simulation ship and faction limits."
+            );
+        }
+
         return new SaveEnvelopeV9
         {
-            SchemaVersion = current.SchemaVersion,
-            SimulationRulesVersion = current.SimulationRulesVersion,
-            Metadata = current.Metadata,
-            Simulation = CopySnapshotV9(
-                current.Simulation,
-                [
-                    .. state
-                        .Ships.OrderBy(ship => ship.InstanceId.Value)
-                        .Select(ship =>
-                        {
-                            ShipSnapshotV9 snapshot = UpgradeShipV8(CaptureShipV7(ship));
-                            return CopyShipV9(
-                                snapshot,
-                                CaptureEngineeringV9(ship),
-                                new SaveModelsV9.ShipCombatSnapshotV9
-                                {
-                                    NextDirectedEnergyReadyAtMilliseconds = ship.Combat
-                                        .NextDirectedEnergyReadyAt
-                                        .Milliseconds,
-                                    PendingStimulus = ship.Combat.PendingStimulus is not { } stimulus
-                                        ? null
-                                        : new SaveModelsV9.CombatStimulusSnapshotV9
-                                        {
-                                            ContactId = stimulus.ContactId.Value,
-                                            ObservedAtMilliseconds = stimulus.ObservedAt.Milliseconds,
-                                            DueTimeMilliseconds = stimulus.DueTime.Milliseconds,
-                                            ScheduledWorkId = stimulus.ScheduledWorkId.Value,
-                                        },
-                                }
-                            );
-                        }),
-                ]
-            ),
+            SchemaVersion = CurrentSchemaVersion,
+            SimulationRulesVersion = CurrentSimulationRulesVersion,
+            Metadata = new SaveMetadataV2
+            {
+                SaveId = metadata.SaveId,
+                DisplayName = metadata.DisplayName,
+                CreatedAtUtc = metadata.CreatedAtUtc,
+                SavedAtUtc = metadata.SavedAtUtc,
+            },
+            Simulation = new SaveModelsV9.SimulationSnapshotV9
+            {
+                TimeMilliseconds = state.Time.Milliseconds,
+                ShipAllocatorNextId = state.ShipIdAllocator.NextId,
+                OrderAllocatorNextId = state.OrderIdAllocator.NextId,
+                ObservationReportAllocatorNextId = state.ObservationReportIdAllocator.NextId,
+                PlayerShipId = state.PlayerShipId.Value,
+                Scheduler = CaptureSchedulerV7(state.Scheduler),
+                StrategicMap = CaptureStrategicMapV2(state.StrategicMap),
+                Ships = [.. state.Ships.OrderBy(ship => ship.InstanceId.Value).Select(CaptureShipV9)],
+                Factions = [.. state.Factions.OrderBy(faction => faction.Id.Value).Select(CaptureFactionV8)],
+            },
         };
     }
 
-    private static SaveModelsV9.EngineeringSnapshotV9 CaptureEngineeringV9(ShipState ship) =>
+    private static ShipSnapshotV9 CaptureShipV9(ShipState ship)
+    {
+        SaveModelsV9.EngineeringSnapshotV9 engineering = CaptureEngineeringV9(ship);
+        return CopyShipV9(
+            UpgradeShipV8(CaptureShipV7(ship, LegacyEngineeringV9(engineering))),
+            engineering,
+            new SaveModelsV9.ShipCombatSnapshotV9
+            {
+                NextDirectedEnergyReadyAtMilliseconds = ship
+                    .Combat.ReadinessOf(HistoricalShipSystemsV9.InstalledIdFor(ship.DefinitionId.Value, WeaponsKind))!
+                    .ReadyAt.Milliseconds,
+                PendingStimulus = ship.Combat.PendingStimulus is not { } stimulus
+                    ? null
+                    : new SaveModelsV9.CombatStimulusSnapshotV9
+                    {
+                        ContactId = stimulus.ContactId.Value,
+                        ObservedAtMilliseconds = stimulus.ObservedAt.Milliseconds,
+                        DueTimeMilliseconds = stimulus.DueTime.Milliseconds,
+                        ScheduledWorkId = stimulus.ScheduledWorkId.Value,
+                    },
+            }
+        );
+    }
+
+    private static SaveModelsV9.EngineeringSnapshotV9 CaptureEngineeringV9(ShipState ship)
+    {
+        ShipEngineeringState engineering = ship.Engineering;
+        string design = ship.DefinitionId.Value;
+        InstalledSystem Mapped(string kind) =>
+            engineering.Systems.TryGet(
+                HistoricalShipSystemsV9.InstalledIdFor(design, kind),
+                out InstalledSystem? system
+            ) && string.Equals(system.Kind.Value, kind, StringComparison.Ordinal)
+                ? system
+                : throw new InvalidOperationException("Heterogeneous loadouts require V10 persistence");
+
+        InstalledSystem generation = Mapped(GenerationKind);
+        InstalledSystem sensors = Mapped(SensorsKind);
+        InstalledSystem impulse = Mapped(ImpulseKind);
+        InstalledSystem shields = Mapped(ShieldsKind);
+        InstalledSystem weapons = Mapped(WeaponsKind);
+        if (
+            engineering.Systems.Count != 5
+            || engineering.InstallationIds.NextId != HistoricalShipSystemsV9.NextInstalledSystemId
+        )
+        {
+            throw new InvalidOperationException("Heterogeneous loadouts require V10 persistence");
+        }
+
+        SystemRepairState? repair = engineering.ActiveRepair;
+        return new()
+        {
+            GenerationCondition = generation.Condition.Value,
+            SensorCondition = sensors.Condition.Value,
+            ImpulseCondition = impulse.Condition.Value,
+            ShieldCondition = shields.Condition.Value,
+            DirectedEnergyCondition = weapons.Condition.Value,
+            SensorAllocation = sensors.Allocation!.Value.Value,
+            ImpulseAllocation = impulse.Allocation!.Value.Value,
+            ShieldAllocation = shields.Allocation!.Value.Value,
+            DirectedEnergyAllocation = weapons.Allocation!.Value.Value,
+            ActiveRepair = repair is null
+                ? null
+                : new SaveModelsV5.SystemRepairSnapshotV5
+                {
+                    TargetSystem = engineering.Systems.GetRequired(repair.Target).Kind.Value,
+                    StartingCondition = repair.StartingCondition.Value,
+                    TargetCondition = repair.TargetCondition.Value,
+                    StartedAtMilliseconds = repair.StartedAt.Milliseconds,
+                    ExpectedCompletionMilliseconds = repair.ExpectedCompletion.Milliseconds,
+                    ScheduledCompletionId = repair.ScheduledCompletionId.Value,
+                },
+        };
+    }
+
+    private static SaveModelsV5.EngineeringSnapshotV5 LegacyEngineeringV9(
+        SaveModelsV9.EngineeringSnapshotV9 engineering
+    ) =>
         new()
         {
-            GenerationCondition = ship.Engineering.GenerationCondition.Value,
-            SensorCondition = ship.Engineering.SensorCondition.Value,
-            ImpulseCondition = ship.Engineering.ImpulseCondition.Value,
-            ShieldCondition = ship.Engineering.ShieldCondition.Value,
-            DirectedEnergyCondition = ship.Engineering.DirectedEnergyCondition.Value,
-            SensorAllocation = ship.Engineering.Allocation.Sensors.Value,
-            ImpulseAllocation = ship.Engineering.Allocation.ImpulsePropulsion.Value,
-            ShieldAllocation = ship.Engineering.Allocation.Shields.Value,
-            DirectedEnergyAllocation = ship.Engineering.Allocation.DirectedEnergyWeapons.Value,
-            ActiveRepair = CaptureShipV7(ship).Engineering.ActiveRepair,
+            GenerationCondition = engineering.GenerationCondition,
+            SensorCondition = engineering.SensorCondition,
+            ImpulseCondition = engineering.ImpulseCondition,
+            SensorAllocation = engineering.SensorAllocation,
+            ImpulseAllocation = engineering.ImpulseAllocation,
+            ActiveRepair = engineering.ActiveRepair,
         };
 
     private static SaveEnvelopeV9 MigrateV8ToV9(SaveEnvelopeV8 envelope) =>
@@ -210,7 +291,7 @@ public static partial class GamePersistence
             ShipInstanceIdAllocator.Restore(snapshot.ShipAllocatorNextId),
             RestoreMapV2(snapshot.StrategicMap),
             new ShipInstanceId(snapshot.PlayerShipId),
-            snapshot.Ships.Select(RestoreShipV9),
+            snapshot.Ships.Select(ship => RestoreShipV9(ship, catalog)),
             ShipOrderIdAllocator.Restore(snapshot.OrderAllocatorNextId),
             snapshot.Factions.Select(RestoreFactionV8),
             ObservationReportIdAllocator.Restore(snapshot.ObservationReportAllocatorNextId)
@@ -224,29 +305,61 @@ public static partial class GamePersistence
         return new LoadedGameSave(metadata, GameSimulation.RestoreState(state, catalog, factionCatalog));
     }
 
-    private static ShipState RestoreShipV9(ShipSnapshotV9 snapshot)
+    // TEMPORARY BRIDGE (removed by leg L4): restores a V9 ship through the explicit version-qualified map
+    // (HistoricalShipSystemsV9): five installations with ids 1–5 and continuation 6, the V9 conditions and
+    // allocations verbatim (zero condition stays an installed-but-offline system, never absence), the repair target
+    // and scan source mapped by kind, and the single readiness time attached to the mapped weapon. Each mapped
+    // definition is verified against its pinned semantics. No class default is read. L4 keeps the map and moves
+    // this translation into MigrateV9ToV10.
+    private static ShipState RestoreShipV9(ShipSnapshotV9 snapshot, ShipDefinitionCatalog catalog)
     {
-        ShipState legacy = RestoreShipV7(LegacyShipShapeV9(snapshot));
         SaveModelsV9.EngineeringSnapshotV9 engineering = snapshot.Engineering;
         SaveModelsV9.CombatStimulusSnapshotV9? stimulus = snapshot.Combat.PendingStimulus;
-        return legacy with
-        {
-            Engineering = new ShipEngineeringState(
-                new SystemCondition(engineering.GenerationCondition),
-                new SystemCondition(engineering.SensorCondition),
-                new SystemCondition(engineering.ImpulseCondition),
-                new SystemCondition(engineering.ShieldCondition),
-                new SystemCondition(engineering.DirectedEnergyCondition),
-                new PowerAllocation(
-                    new PowerUnits(engineering.SensorAllocation),
-                    new PowerUnits(engineering.ImpulseAllocation),
-                    new PowerUnits(engineering.ShieldAllocation),
-                    new PowerUnits(engineering.DirectedEnergyAllocation)
-                ),
-                RestoreSystemRepairV5(engineering.ActiveRepair)
+        string design = snapshot.DefinitionId;
+        InstalledSystem Install(string kind, double condition, int? allocation) =>
+            new(
+                HistoricalShipSystemsV9.InstalledIdFor(design, kind),
+                HistoricalShipSystemsV9.ResolveDefinition(design, kind, catalog.SystemDefinitions),
+                new SystemCondition(condition),
+                allocation is null ? null : new PowerUnits(allocation.Value)
+            );
+
+        var installations = InstalledSystemCollection.Create([
+            Install(GenerationKind, engineering.GenerationCondition, null),
+            Install(SensorsKind, engineering.SensorCondition, engineering.SensorAllocation),
+            Install(ImpulseKind, engineering.ImpulseCondition, engineering.ImpulseAllocation),
+            Install(ShieldsKind, engineering.ShieldCondition, engineering.ShieldAllocation),
+            Install(WeaponsKind, engineering.DirectedEnergyCondition, engineering.DirectedEnergyAllocation),
+        ]);
+        return new ShipState(
+            new ShipInstanceId(snapshot.InstanceId),
+            new ShipDefinitionId(snapshot.DefinitionId),
+            snapshot.DisplayName,
+            new TacticalPosition(snapshot.TacticalPosition.XKilometers, snapshot.TacticalPosition.YKilometers),
+            new TacticalMotion(
+                new HeadingDegrees(snapshot.TacticalMotion.HeadingDegrees),
+                new SpeedKilometersPerSecond(snapshot.TacticalMotion.SpeedKilometersPerSecond)
             ),
-            Combat = new ShipCombatState(
-                new SimulationTime(snapshot.Combat.NextDirectedEnergyReadyAtMilliseconds),
+            new ShipEngineeringState(
+                installations,
+                InstalledSystemIdAllocator.Restore(HistoricalShipSystemsV9.NextInstalledSystemId),
+                RestoreSystemRepairV5(engineering.ActiveRepair, design)
+            ),
+            RestoreStrategicStateV2(snapshot.StrategicState),
+            RestoreOrderV3(snapshot.ActiveOrder),
+            RestoreSensorKnowledgeV6(
+                snapshot.SensorKnowledge,
+                HistoricalShipSystemsV9.InstalledIdFor(design, SensorsKind)
+            ),
+            RestoreAutonomousStateV4(snapshot.AutonomousState),
+            snapshot.DirectControllerFactionId is null ? null : new FactionId(snapshot.DirectControllerFactionId.Value),
+            new ShipCombatState(
+                [
+                    new DirectedEnergyReadiness(
+                        HistoricalShipSystemsV9.InstalledIdFor(design, WeaponsKind),
+                        new SimulationTime(snapshot.Combat.NextDirectedEnergyReadyAtMilliseconds)
+                    ),
+                ],
                 stimulus is null
                     ? null
                     : new CombatStimulus(
@@ -255,8 +368,8 @@ public static partial class GamePersistence
                         new SimulationTime(stimulus.DueTimeMilliseconds),
                         new ScheduledWorkId(stimulus.ScheduledWorkId)
                     )
-            ),
-        };
+            )
+        );
     }
 
     private static void ValidateCandidateV9(SaveEnvelopeV9 envelope, ShipDefinitionCatalog catalog)

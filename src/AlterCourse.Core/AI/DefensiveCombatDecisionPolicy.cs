@@ -10,11 +10,10 @@ internal static class DefensiveCombatDecisionPolicy
 {
     internal static DefensiveCombatDecisionExplanation Evaluate(DefensiveCombatDecisionInput input)
     {
-        FireDirectedEnergyOutcome fire = CombatLegality.Evaluate(
+        FireDirectedEnergyOutcome fire = CombatLegality.EvaluatePrerequisites(
             input.Own,
             input.Contact,
-            input.SameContext,
-            ShipSystemKind.DirectedEnergyWeapons
+            input.SameContext
         );
         IReadOnlyList<DefensiveCombatConstraintEvaluation> fireConstraints = FireConstraints(input, fire);
         IReadOnlyList<DefensiveCombatConstraintEvaluation> withdrawConstraints = WithdrawConstraints(input);
