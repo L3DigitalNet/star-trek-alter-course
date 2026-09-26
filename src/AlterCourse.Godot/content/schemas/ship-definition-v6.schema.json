@@ -1,0 +1,53 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://l3digital.net/star-trek-alter-course/schemas/ship-definition-v6.schema.json",
+	"title": "Ship Definition Version 6",
+	"description": "A ship design and its default initial loadout of installed systems that reference system-definition V1 content. Equipment tuning lives on the referenced system definitions.",
+	"type": "object",
+	"required": ["schemaVersion", "id", "designDisplayName", "initialLoadout"],
+	"properties": {
+		"schemaVersion": { "const": 6 },
+		"id": {
+			"type": "string",
+			"minLength": 1,
+			"maxLength": 128,
+			"pattern": "^[A-Za-z0-9._-]+$"
+		},
+		"designDisplayName": { "type": "string", "minLength": 1, "maxLength": 64 },
+		"initialLoadout": {
+			"type": "object",
+			"required": ["nextInstalledSystemId", "systems"],
+			"properties": {
+				"nextInstalledSystemId": {
+					"type": "integer",
+					"minimum": 1,
+					"maximum": 1000001
+				},
+				"systems": {
+					"type": "array",
+					"maxItems": 16,
+					"items": {
+						"type": "object",
+						"required": ["installedSystemId", "definitionId"],
+						"properties": {
+							"installedSystemId": {
+								"type": "integer",
+								"minimum": 1,
+								"maximum": 1000000
+							},
+							"definitionId": {
+								"type": "string",
+								"minLength": 1,
+								"maxLength": 64,
+								"pattern": "^[A-Za-z0-9._-]+$"
+							}
+						},
+						"additionalProperties": false
+					}
+				}
+			},
+			"additionalProperties": false
+		}
+	},
+	"additionalProperties": false
+}

@@ -1,0 +1,184 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://l3digital.net/star-trek-alter-course/schemas/system-definition-v1.schema.json",
+	"title": "System Definition Catalog Version 1",
+	"description": "Reusable ship-system definitions. Capability combinations (generator without power or repair, consumers with power) and condition participation are enforced by the Core semantic loader so they report specific diagnostics.",
+	"type": "object",
+	"required": ["schemaVersion", "definitions"],
+	"properties": {
+		"schemaVersion": { "const": 1 },
+		"definitions": {
+			"type": "array",
+			"minItems": 1,
+			"maxItems": 256,
+			"items": { "$ref": "#/$defs/definition" }
+		}
+	},
+	"additionalProperties": false,
+	"$defs": {
+		"duration": { "type": "integer", "minimum": 1, "multipleOf": 100 },
+		"power": { "type": "integer", "minimum": 1, "maximum": 1000000 },
+		"definition": {
+			"type": "object",
+			"required": [
+				"id",
+				"kind",
+				"componentLabel",
+				"commonOrder",
+				"conditionParticipation"
+			],
+			"properties": {
+				"id": {
+					"type": "string",
+					"minLength": 1,
+					"maxLength": 64,
+					"pattern": "^[A-Za-z0-9._-]+$"
+				},
+				"kind": {
+					"enum": [
+						"power-generation",
+						"sensors",
+						"impulse-propulsion",
+						"shields",
+						"directed-energy-weapons"
+					]
+				},
+				"componentLabel": { "type": "string", "minLength": 1, "maxLength": 64 },
+				"commonOrder": { "type": "integer", "minimum": 0, "maximum": 1000000 },
+				"conditionParticipation": { "type": "boolean" },
+				"repair": {
+					"type": "object",
+					"required": ["fullRepairDurationMilliseconds", "actionOrder"],
+					"properties": {
+						"fullRepairDurationMilliseconds": { "$ref": "#/$defs/duration" },
+						"actionOrder": { "type": "integer", "minimum": 0, "maximum": 1000000 }
+					},
+					"additionalProperties": false
+				},
+				"power": {
+					"type": "object",
+					"required": ["nominalDemandPowerUnits"],
+					"properties": { "nominalDemandPowerUnits": { "$ref": "#/$defs/power" } },
+					"additionalProperties": false
+				},
+				"powerGeneration": {
+					"type": "object",
+					"required": ["nominalOutputPowerUnits"],
+					"properties": { "nominalOutputPowerUnits": { "$ref": "#/$defs/power" } },
+					"additionalProperties": false
+				},
+				"sensors": {
+					"type": "object",
+					"required": ["passiveRangeKilometers", "activeScanDurationMilliseconds"],
+					"properties": {
+						"passiveRangeKilometers": { "type": "number", "minimum": 0 },
+						"activeScanDurationMilliseconds": { "$ref": "#/$defs/duration" }
+					},
+					"additionalProperties": false
+				},
+				"impulsePropulsion": {
+					"type": "object",
+					"required": ["maximumTacticalSpeedKilometersPerSecond"],
+					"properties": {
+						"maximumTacticalSpeedKilometersPerSecond": {
+							"type": "number",
+							"minimum": 0
+						}
+					},
+					"additionalProperties": false
+				},
+				"directedEnergyWeapons": {
+					"type": "object",
+					"required": [
+						"rangeKilometers",
+						"baseNormalizedDamage",
+						"cooldownMilliseconds"
+					],
+					"properties": {
+						"rangeKilometers": { "type": "number", "exclusiveMinimum": 0 },
+						"baseNormalizedDamage": {
+							"type": "number",
+							"exclusiveMinimum": 0,
+							"maximum": 1
+						},
+						"cooldownMilliseconds": { "$ref": "#/$defs/duration" }
+					},
+					"additionalProperties": false
+				}
+			},
+			"additionalProperties": false,
+			"allOf": [
+				{
+					"if": {
+						"required": ["kind"],
+						"properties": { "kind": { "const": "power-generation" } }
+					},
+					"then": {
+						"required": ["powerGeneration"],
+						"properties": {
+							"sensors": false,
+							"impulsePropulsion": false,
+							"directedEnergyWeapons": false
+						}
+					}
+				},
+				{
+					"if": {
+						"required": ["kind"],
+						"properties": { "kind": { "const": "sensors" } }
+					},
+					"then": {
+						"required": ["sensors"],
+						"properties": {
+							"powerGeneration": false,
+							"impulsePropulsion": false,
+							"directedEnergyWeapons": false
+						}
+					}
+				},
+				{
+					"if": {
+						"required": ["kind"],
+						"properties": { "kind": { "const": "impulse-propulsion" } }
+					},
+					"then": {
+						"required": ["impulsePropulsion"],
+						"properties": {
+							"powerGeneration": false,
+							"sensors": false,
+							"directedEnergyWeapons": false
+						}
+					}
+				},
+				{
+					"if": {
+						"required": ["kind"],
+						"properties": { "kind": { "const": "shields" } }
+					},
+					"then": {
+						"properties": {
+							"powerGeneration": false,
+							"sensors": false,
+							"impulsePropulsion": false,
+							"directedEnergyWeapons": false
+						}
+					}
+				},
+				{
+					"if": {
+						"required": ["kind"],
+						"properties": { "kind": { "const": "directed-energy-weapons" } }
+					},
+					"then": {
+						"required": ["directedEnergyWeapons"],
+						"properties": {
+							"powerGeneration": false,
+							"sensors": false,
+							"impulsePropulsion": false
+						}
+					}
+				}
+			]
+		}
+	}
+}

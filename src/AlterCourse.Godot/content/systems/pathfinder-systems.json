@@ -1,0 +1,59 @@
+{
+	"schemaVersion": 1,
+	"definitions": [
+		{
+			"id": "pathfinder.power-generation",
+			"kind": "power-generation",
+			"componentLabel": "Power generation",
+			"commonOrder": 100,
+			"conditionParticipation": true,
+			"powerGeneration": { "nominalOutputPowerUnits": 120 }
+		},
+		{
+			"id": "pathfinder.sensors",
+			"kind": "sensors",
+			"componentLabel": "Sensors",
+			"commonOrder": 200,
+			"conditionParticipation": true,
+			"repair": { "fullRepairDurationMilliseconds": 8000, "actionOrder": 300 },
+			"power": { "nominalDemandPowerUnits": 70 },
+			"sensors": {
+				"passiveRangeKilometers": 30,
+				"activeScanDurationMilliseconds": 2000
+			}
+		},
+		{
+			"id": "pathfinder.impulse-propulsion",
+			"kind": "impulse-propulsion",
+			"componentLabel": "Impulse propulsion",
+			"commonOrder": 300,
+			"conditionParticipation": true,
+			"repair": { "fullRepairDurationMilliseconds": 6000, "actionOrder": 400 },
+			"power": { "nominalDemandPowerUnits": 50 },
+			"impulsePropulsion": { "maximumTacticalSpeedKilometersPerSecond": 10 }
+		},
+		{
+			"id": "pathfinder.shields",
+			"kind": "shields",
+			"componentLabel": "Shields",
+			"commonOrder": 400,
+			"conditionParticipation": true,
+			"repair": { "fullRepairDurationMilliseconds": 8000, "actionOrder": 100 },
+			"power": { "nominalDemandPowerUnits": 40 }
+		},
+		{
+			"id": "pathfinder.directed-energy-weapons",
+			"kind": "directed-energy-weapons",
+			"componentLabel": "Directed-energy weapons",
+			"commonOrder": 500,
+			"conditionParticipation": true,
+			"repair": { "fullRepairDurationMilliseconds": 6000, "actionOrder": 200 },
+			"power": { "nominalDemandPowerUnits": 30 },
+			"directedEnergyWeapons": {
+				"rangeKilometers": 20,
+				"baseNormalizedDamage": 0.25,
+				"cooldownMilliseconds": 2000
+			}
+		}
+	]
+}
