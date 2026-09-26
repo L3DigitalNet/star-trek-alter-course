@@ -176,7 +176,7 @@ There is no direct mutable-list escape hatch that presentation or AI may use to 
 
 A refit may replace an installation's definition, remove it, add another installation, or later apply a bounded typed modification model admitted by a concrete consumer. Immutable authored definitions are never edited in place to represent one ship's upgrade. Per-instance modifications, when introduced, use explicit typed/versioned state or content references rather than an arbitrary property bag.
 
-The first ADR-conformance refactor need not expose player refit gameplay. It **must** establish a runtime model that can represent heterogeneous current loadouts and preserve them through save/load so later refit gameplay does not require another state-model replacement.
+The first ADR-conformance refactor need not expose player refit gameplay. It **must** establish a runtime model and typed bootstrap that can represent heterogeneous current loadouts—including two ships of the same design with different installed systems—and preserve them through save/load so later refit gameplay does not require another state-model replacement.
 
 ### Deterministic ordering
 
@@ -321,6 +321,8 @@ A code review that finds the same set of system kinds independently repeated acr
 - Bad, because it conflicts with the project's demand-driven architecture and preference for strong domain boundaries.
 
 ## More Information
+
+This ADR does not select physical mount/slot topology, refit facilities, installation time/cost, or compatibility restrictions between hulls and components; those rules require a concrete refit consumer. The identity/loadout model must leave room for such constraints without requiring the live-loadout authority to move back into the ship-class definition.
 
 This ADR does not select the gameplay semantics of post-M6A Damage Control and Recovery. Repair meaning, repair rate, reprioritization consequences, autonomous damage-control doctrine, and operational recovery goals still require their own bounded design refinement.
 
