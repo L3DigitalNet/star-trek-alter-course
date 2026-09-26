@@ -26,9 +26,9 @@ related:
 
 ## Architectural decisions already adopted
 
-ADRs 0001-0013 remain active architectural constraints. Their complete titles, links, and topic coverage are in [Sources](sources.md). Adoption of an ADR is not proof that every future component or preferred package it discusses has been installed.
+ADRs 0001-0014 remain active architectural constraints. Their complete titles, links, and topic coverage are in [Sources](sources.md). Adoption of an ADR is not proof that every future component or preferred package it discusses has been installed.
 
-The governing themes are pure Core authority; one canonical gate; native-first, demand-driven dependencies; semantic spatial scales; strict ordinary JSON content; explicit versioned snapshot saves; deterministic time/scheduling/randomness; structured nonauthoritative diagnostics; layered tests; explainable information-limited AI; explicit units; subordinate narrative; and development/release branch separation.
+The governing themes are pure Core authority; one canonical gate; native-first, demand-driven dependencies; semantic spatial scales; strict ordinary JSON content; explicit versioned snapshot saves; deterministic time/scheduling/randomness; structured nonauthoritative diagnostics; layered tests; explainable information-limited AI; explicit units; subordinate narrative; development/release branch separation; and an extensible bounded ship-system substrate that separates system kind, reusable definition, and installed instance while keeping system-specific behavior typed.
 
 ## Existing implementation and presentation decisions
 
@@ -38,7 +38,7 @@ The governing themes are pure Core authority; one canonical gate; native-first, 
 
 **D-03 — Information-limited local contact.** M3A establishes observer-local contacts, hidden target correlation, scan, hail, and cautious AI. It does not complete all of M3. See [Sensors, knowledge, and AI](sensors-knowledge-and-ai.md).
 
-**D-04 — Concrete Engineering, not a universal component framework.** M4 introduced power, condition, sensor/impulse capability, and one repair. D-19 extends that existing model for M6A rather than replacing its authority. See [Engineering](engineering-and-combat.md).
+**D-04 — Concrete Engineering, not a universal component framework.** M4 introduced power, condition, sensor/impulse capability, and one repair. D-19 extends that behavior for M6A. ADR 0014 subsequently requires the shared ship-system substrate to become extensible before additional ship-system depth while preserving typed domain behavior and rejecting a universal component/ECS framework. See [Engineering](engineering-and-combat.md).
 
 **D-05 — Persistent native Command Deck and Engineering workspace.** Godot adapts Core projections; the runtime Theme owns visual styling; preview fixtures never become production truth. [Interface](interface-and-player-commands.md) owns the consolidated UI decision, references, and interaction contract.
 
