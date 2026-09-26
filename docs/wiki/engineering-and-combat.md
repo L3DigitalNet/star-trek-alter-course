@@ -13,6 +13,7 @@ tags:
 aliases: []
 related:
   - 'docs/adr/0011-represent-physical-quantities-with-explicit-units.md'
+  - 'docs/adr/0014-use-an-extensible-bounded-ship-system-substrate.md'
   - 'docs/wiki/content-assets-and-persistence.md'
   - 'docs/wiki/observation-driven-faction-response.md'
   - 'ROADMAP.md'
@@ -28,7 +29,9 @@ Engineering is a deliberately small connected Core model: generated power constr
 
 [M6A First Combat Engagement](https://github.com/L3DigitalNet/star-trek-alter-course/pull/112) is implemented on `dev`, but remains unreleased and does not complete M6. Current development uses V5 ship definitions and V9 saves; the latest source release is v0.6.2, whose gameplay baseline remains v0.6.0 with V4 ship definitions and V8 saves. [Content, assets, and persistence](content-assets-and-persistence.md) owns compatibility and migration details.
 
-`ShipSystemId` is a closed semantic identity with explicit JSON names `power-generation`, `sensors`, `impulse-propulsion`, `shields`, and `directed-energy-weapons`. All five are legal damage targets. The four consumers—sensors, impulse, shields, and directed-energy weapons—are allocatable and repairable. Generation is not repairable in M6A. Numeric enum ordinals never cross content, save, projection, or event boundaries; display labels cannot identify a system.
+`ShipSystemId` currently carries the semantic kind names `power-generation`, `sensors`, `impulse-propulsion`, `shields`, and `directed-energy-weapons`. All five are legal M6A damage targets. The four consumers—sensors, impulse, shields, and directed-energy weapons—are allocatable and repairable; generation is not repairable in M6A. Numeric enum ordinals never cross content, save, projection, or event boundaries; display labels cannot identify a system.
+
+[ADR 0014](../adr/0014-use-an-extensible-bounded-ship-system-substrate.md) identifies the current one-field-per-kind structure as interim. The existing semantic names remain valid **system kinds**, but future-conformant state distinguishes kind, reusable system definition, and persistent installed system instance. A ship class provides an initial loadout while each live ship owns its actual bounded installed systems. Ships of one class may therefore have different current systems, and a kind may have zero, one, or multiple installations when its typed domain rules allow it. The correction must preserve M6A behavior while moving shared condition, damage, repair, allocation, persistence, generic projection, and Engineering presentation onto that substrate before deeper damage-control work or a sixth system is added.
 
 `SystemCondition` is finite and bounded from zero through one; its Offline, Degraded, and Nominal labels are presentation states. `PowerUnits` is a non-negative abstract integer quantity bounded at 1,000,000. Construction rejects negative or out-of-range values, addition is checked, comparison is deterministic, and JSON uses an invariant integer. It is neither watts nor stored energy, fuel, heat, or a physical-precision claim.
 
@@ -146,7 +149,7 @@ If effective impulse capability falls below current speed, forced reconciliation
 
 ## Combat-driven Engineering depth
 
-After the first combat proof, add ship systems because a concrete tactical or command decision requires them. A new system should create a meaningful choice, failure mode, or interaction rather than exist only for fidelity bookkeeping.
+After the first combat proof, add ship systems because a concrete tactical or command decision requires them. A new system should create a meaningful choice, failure mode, or interaction rather than exist only for fidelity bookkeeping. ADR 0014 now additionally requires that new systems or ship-specific loadout variation reuse the bounded installed-system substrate rather than extending the current parallel-field pattern.
 
 M6A's recovery limits are intentional scope boundaries, not claims of a complete damage-control loop: generation can be damaged but not repaired, shield protection has no automatic recharge, and the reactive combat policy does not manage Engineering recovery. Selecting follow-on recovery behavior requires explicit refinement; this audit does not approve it merely by documenting the gap.
 
