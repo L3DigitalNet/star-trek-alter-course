@@ -7,8 +7,10 @@
 - Milestone 3A first observed contact, Milestone 4 Engineering Backbone, and Strategic Contact Reporting are released; Features #58, #62, and #77 are Done.
 - Strategic Contact Reporting merged into `dev` as `80c3084` (Final PR #78) and shipped in v0.5.0 through release Task #80 / Final PR #82 on 2026-09-06.
 - Released v0.6.0 rules remain `observation-driven-faction-response-v1`, content schema V4, and save schema V8; V6/V7 migrations remain noninventive.
-- Current `dev` has unreleased M6A first combat engagement: V5 ship content and V9 saves under `first-combat-engagement-v1`.
-- The source-complete M6A canonical gate passed at `3996fbd`: 779 Core, 324 AssetCtl, and 76 Godot tests; no warnings.
+- M6A first combat engagement merged into `dev` as `c2edae1` through Final PR #112; Feature #111 is Done.
+- M6A is unreleased: V5 ship content and V9 saves use `first-combat-engagement-v1`; no release, tag, or `main` mutation occurred.
+- Final M6A canonical verification passed at `42fba73`: 789 Core, 324 AssetCtl, 76 Godot, smoke, and zero warnings or errors.
+- All five hosted checks passed on `42fba73`; native and Claude reviews confirmed the current-context correction and found no source defect.
 - Historically, Final PR #97 released v0.6.0 and Supporting PR #98 synchronized it to `dev`; their recorded checks remain release evidence.
 - Current `dev` contains the v0.6.2 release through PR #107's synchronization merge `1778634bd192ed393f40b30708fa88e049714a8a`.
 - v0.5.0 verification passed: Core 406, AssetCtl 324, Godot 1+2+63, smoke OK, and zero warnings or errors; later PRs record their own checks.
