@@ -42,8 +42,8 @@ public sealed class GamePersistenceV4SensorTests
         JsonArray ships = root["simulation"]!["ships"]!.AsArray();
 
         Assert.Equal(first, second);
-        Assert.Equal(8, root["schemaVersion"]!.GetValue<int>());
-        Assert.Equal("observation-driven-faction-response-v1", root["simulationRulesVersion"]!.GetValue<string>());
+        Assert.Equal(9, root["schemaVersion"]!.GetValue<int>());
+        Assert.Equal("first-combat-engagement-v1", root["simulationRulesVersion"]!.GetValue<string>());
         Assert.Equal(
             "identified",
             ships[0]!["sensorKnowledge"]!["contacts"]![0]!["identification"]!.GetValue<string>()
@@ -67,7 +67,7 @@ public sealed class GamePersistenceV4SensorTests
         JsonNode simulation = current["simulation"]!;
         JsonNode npc = simulation["ships"]![1]!;
 
-        Assert.Equal(8, current["schemaVersion"]!.GetValue<int>());
+        Assert.Equal(9, current["schemaVersion"]!.GetValue<int>());
         Assert.Equal("holdUntil", npc["activeOrder"]!["kind"]!.GetValue<string>());
         Assert.Equal("orderWake", simulation["scheduler"]!["outstandingWork"]![0]!["kind"]!.GetValue<string>());
         Assert.Equal(1, npc["sensorKnowledge"]!["nextContactId"]!.GetValue<long>());
@@ -147,7 +147,7 @@ public sealed class GamePersistenceV4SensorTests
     private static void AssertCurrentOrdering(byte[] migratedCurrent)
     {
         JsonObject current = Parse(migratedCurrent);
-        Assert.Equal(8, current["schemaVersion"]!.GetValue<int>());
+        Assert.Equal(9, current["schemaVersion"]!.GetValue<int>());
         Assert.Equal(
             [1L, 2L, 3L],
             current["simulation"]!["ships"]!.AsArray().Select(ship => ship!["instanceId"]!.GetValue<long>())
@@ -246,19 +246,25 @@ public sealed class GamePersistenceV4SensorTests
     [Fact]
     public void ContactCapRespectsSchedulerMaximumAndScanCardinality()
     {
-        const int maximumShips = 256;
-        const int independentlyCorrelatedWorkKindsPerShip = 5;
+        int maximumShips = SimulationState.MaximumShips;
+        int independentlyCorrelatedWorkKindsPerShip = Enum.GetValues<ScheduledWorkKind>()
+            .Count(kind =>
+                kind
+                    is not ScheduledWorkKind.SensorContactLoss
+                        and not ScheduledWorkKind.FactionDecisionWake
+                        and not ScheduledWorkKind.ObservationReportDelivery
+            );
         int contactLossMaximum = SensorKnowledge.MaximumContactsPerObserver * maximumShips;
         int conservativeMaximum = contactLossMaximum + (maximumShips * independentlyCorrelatedWorkKindsPerShip);
 
         Assert.Equal(255, SensorKnowledge.MaximumContactsPerObserver);
         Assert.Equal(65_280, contactLossMaximum);
-        Assert.Equal(66_560, conservativeMaximum);
+        Assert.Equal(66_816, conservativeMaximum);
         int factionWorkMaximum = SimulationState.MaximumFactions * (1 + FactionObservationState.MaximumInFlightReports);
         Assert.Equal(SimulationScheduler.MaximumOutstandingWork, conservativeMaximum + factionWorkMaximum);
     }
 
-    /// <summary>Confirms the V8 empty-observation maximum faction baseline remains within the envelope.</summary>
+    /// <summary>Confirms the V9 empty-observation maximum faction baseline remains within the envelope.</summary>
     /// <remarks>
     /// Every ship carries the full directed contact graph, an active scan and repair; every eligible
     /// non-player ship also carries an order, autonomous wake, and controller. This retains the
@@ -280,7 +286,7 @@ public sealed class GamePersistenceV4SensorTests
         );
 
         Assert.InRange(saved.Length, 1, 128 * 1024 * 1024);
-        Assert.Equal(88_092_638, saved.Length);
+        Assert.Equal(88_137_170, saved.Length);
         Assert.Equal(256, loaded.Simulation.CaptureState().Ships.Length);
         Assert.Equal(256, loaded.Simulation.CaptureState().Factions.Length);
         Assert.Equal(66_302, loaded.Simulation.CaptureState().Scheduler.OutstandingWork.Length);
@@ -340,13 +346,173 @@ public sealed class GamePersistenceV4SensorTests
         var metadata = new GameSaveMetadata(new string('\u0080', 128), new string('\u0080', 128), Timestamp, Timestamp);
 
         byte[] saved = GamePersistence.Serialize(simulation, metadata);
-        LoadedGameSave loaded = GamePersistence.Deserialize(saved, catalog, factionCatalog, "maximum-width-v8.json");
-        long conservativeSupportedShapeCeiling = CompactV8SizeBound.FromMeasuredReportVertex(saved.Length);
+        LoadedGameSave loaded = GamePersistence.Deserialize(saved, catalog, factionCatalog, "maximum-width-v9.json");
+        long conservativeSupportedShapeCeiling = CompactV9SizeBound.FromMeasuredReportVertex(
+            saved.Length,
+            populated.Scheduler.OutstandingWork.Length
+        );
 
-        Assert.Equal(108_890_984, saved.Length);
-        Assert.Equal(113_024_376, conservativeSupportedShapeCeiling);
+        Assert.Equal(108_935_516, saved.Length);
+        Assert.Equal(113_292_140, conservativeSupportedShapeCeiling);
         Assert.InRange(conservativeSupportedShapeCeiling, 1, 128L * 1024 * 1024);
         Assert.Equal(saved, GamePersistence.Serialize(loaded.Simulation, loaded.Metadata));
+    }
+
+    /// <summary>Every eligible NPC retains a bounded correlated stimulus alongside nineteen-digit readiness.</summary>
+    [Fact]
+    public void MaximumEligibleCombatContinuationsRoundTripWithinSaveEnvelope()
+    {
+        (GameSimulation game, ShipDefinitionCatalog catalog) = CreateMaximumCombatWorld();
+        ShipDefinition definition = catalog.GetRequired(DefinitionId);
+        SimulationState state = ArmMaximumCombatContinuations(game.CaptureState(), definition);
+        game = GameSimulation.RestoreState(state, catalog);
+        byte[] saved = GamePersistence.Serialize(game, Metadata());
+        GameSimulation restored = GamePersistence.Deserialize(saved, catalog, "maximum-combat-v9.json").Simulation;
+        SimulationState loaded = restored.CaptureState();
+        int eligibleShips = SimulationState.MaximumShips - 1;
+        Assert.Equal(SimulationState.MaximumShips, loaded.Ships.Length);
+        Assert.Equal(eligibleShips, loaded.Ships.Count(ship => ship.Combat.PendingStimulus is not null));
+        Assert.Equal(eligibleShips, loaded.Scheduler.OutstandingWork.Length);
+        Assert.Null(loaded.GetRequiredShip(loaded.PlayerShipId).Combat.PendingStimulus);
+        AssertMaximumCombatContinuations(loaded, state, definition);
+        Assert.InRange(saved.Length, 1, 128 * 1024 * 1024);
+        Assert.Equal(saved, GamePersistence.Serialize(restored, Metadata()));
+        AssertCombatSizeAlternative(game, catalog, saved.Length);
+        restored.AdvanceFixedSteps(1);
+        Assert.All(restored.CaptureState().Ships, ship => Assert.Null(ship.Combat.PendingStimulus));
+        Assert.Empty(restored.CaptureState().Scheduler.OutstandingWork);
+    }
+
+    private static void AssertMaximumCombatContinuations(
+        SimulationState loaded,
+        SimulationState state,
+        ShipDefinition definition
+    )
+    {
+        Assert.All(
+            loaded.Ships,
+            ship =>
+            {
+                Assert.Equal(
+                    state.Time.AdvanceBy(definition.DirectedEnergyWeapon!.Cooldown),
+                    ship.Combat.NextDirectedEnergyReadyAt
+                );
+                Assert.True(ship.Combat.NextDirectedEnergyReadyAt.Milliseconds >= HighTime);
+                Assert.Equal(SensorKnowledge.MaximumContactsPerObserver, ship.SensorKnowledge.Contacts.Length);
+                if (ship.Combat.PendingStimulus is { } stimulus)
+                {
+                    SensorContactTrack contact = ship.SensorKnowledge.Contacts.Single(track =>
+                        track.Id == stimulus.ContactId
+                    );
+                    Assert.Equal(SensorContactStatus.Current, contact.Status);
+                    Assert.Equal(state.Time, stimulus.ObservedAt);
+                    Assert.True(
+                        loaded.Scheduler.ContainsExact(
+                            stimulus.ScheduledWorkId,
+                            ship.InstanceId,
+                            stimulus.DueTime,
+                            ScheduledWorkKind.ShipCombatDecisionWake
+                        )
+                    );
+                }
+            }
+        );
+    }
+
+    private static void AssertCombatSizeAlternative(GameSimulation game, ShipDefinitionCatalog catalog, int savedBytes)
+    {
+        SimulationState state = game.CaptureState();
+        SimulationState empty = state.ReplaceShips([
+            .. state.Ships.Select(ship => ship with { Combat = ShipCombatState.Empty }),
+        ]) with
+        {
+            Scheduler = SimulationScheduler.Restore(state.Scheduler.NextWorkId, state.Scheduler.NextSequence, []),
+        };
+        int emptyBytes = GamePersistence.Serialize(GameSimulation.RestoreState(empty, catalog), Metadata()).Length;
+        Assert.InRange(savedBytes - emptyBytes, 1, CompactV9SizeBound.MaximumCombatAlternativesBytes());
+    }
+
+    private static (GameSimulation Game, ShipDefinitionCatalog Catalog) CreateMaximumCombatWorld()
+    {
+        var fixture = new AlterCourse.Core.Tests.Gameplay.Milestone3ProofFixture();
+        ShipDefinition definition = fixture.Catalog.GetRequired(DefinitionId);
+        var nominal = new SystemCondition(1);
+        var engineering = new ShipEngineeringState(nominal, nominal, nominal, nominal, nominal, default);
+        PowerAllocation allocation = engineering.AllocationFor(definition.Engineering, PowerAllocationPreset.Balanced);
+        ShipStart[] starts =
+        [
+            .. Enumerable
+                .Range(0, SimulationState.MaximumShips)
+                .Select(index => new ShipStart(
+                    new ShipInstanceId(HighShipId + index),
+                    DefinitionId,
+                    new string('\u0080', ShipState.MaximumVesselDisplayNameLength),
+                    default,
+                    default,
+                    nominal,
+                    nominal,
+                    nominal,
+                    allocation,
+                    new AtLocationStart(Location)
+                )
+                {
+                    ShieldCondition = nominal,
+                    DirectedEnergyCondition = nominal,
+                }),
+        ];
+        var map = new StrategicMap([new StrategicLocation(Location, "Combat bounds", default)], []);
+        GameSimulation game = new GameBootstrap(
+            new SimulationTime(HighTime),
+            map,
+            starts[0].InstanceId,
+            starts
+        ).CreateSimulation(fixture.Catalog);
+        // Contacts come from ordinary observation; only their allocator widths and continuation
+        // alternatives are expanded to the maximum representable snapshot shape below.
+        game.AdvanceFixedSteps(1);
+        return (game, fixture.Catalog);
+    }
+
+    private static SimulationState ArmMaximumCombatContinuations(SimulationState state, ShipDefinition definition)
+    {
+        state = state with { Scheduler = SimulationScheduler.Restore(HighWorkId, HighWorkId, []) };
+        foreach (ShipState original in state.Ships)
+        {
+            SensorContactTrack[] contacts =
+            [
+                .. original.SensorKnowledge.Contacts.Select(contact =>
+                    contact with
+                    {
+                        Id = new SensorContactId(HighContactId + contact.Id.Value),
+                    }
+                ),
+            ];
+            var knowledge = new SensorKnowledge(HighContactId + original.SensorKnowledge.NextContactId, contacts, null);
+            CombatStimulus? stimulus = null;
+            if (original.InstanceId != state.PlayerShipId)
+            {
+                SimulationTime due = state.Time.AdvanceBy(SimulationFixedStep.Duration);
+                (SimulationScheduler scheduler, ScheduledWork work) = state.Scheduler.Schedule(
+                    due,
+                    original.InstanceId,
+                    ScheduledWorkKind.ShipCombatDecisionWake
+                );
+                state = state with { Scheduler = scheduler };
+                stimulus = new CombatStimulus(
+                    contacts.Single(contact => contact.TargetShipId == state.PlayerShipId).Id,
+                    state.Time,
+                    due,
+                    work.Id
+                );
+            }
+            ShipState ship = original with
+            {
+                SensorKnowledge = knowledge,
+                Combat = new ShipCombatState(state.Time.AdvanceBy(definition.DirectedEnergyWeapon!.Cooldown), stimulus),
+            };
+            state = state.ReplaceShip(ship.InstanceId, ship);
+        }
+        return state;
     }
 
     private static SimulationState PopulateMaximumReports(SimulationState state, bool highWidth = false)
@@ -1166,21 +1332,25 @@ public sealed class GamePersistenceV4SensorTests
     private static string ShipJson(long id, string name, string order) =>
         $$"""{ "instanceId": {{id}}, "definitionId": "pathfinder", "displayName": "{{name}}", "tacticalPosition": { "xKilometers": 0, "yKilometers": 0 }, "tacticalMotion": { "headingDegrees": 0, "speedKilometersPerSecond": 0 }, "sensorIntegrity": 1, "sensorRepair": null, "strategicState": { "kind": "atLocation", "locationId": "alpha", "travel": null }, "activeOrder": {{order}} }""";
 
-    private static class CompactV8SizeBound
+    private static class CompactV9SizeBound
     {
         private const int MaximumLongBytes = 19;
         private const int MaximumFiniteDoubleBytes = 24;
         private const int MaximumAsciiIdentityTokenBytes = LocationId.MaximumLength + 2;
 
-        internal static long FromMeasuredReportVertex(int measuredBytes)
+        internal static long FromMeasuredReportVertex(int measuredBytes, int occupiedWorkSlots)
         {
-            int unoccupiedWorkSlots = SimulationScheduler.MaximumOutstandingWork - 68_343;
+            int unoccupiedWorkSlots = SimulationScheduler.MaximumOutstandingWork - occupiedWorkSlots;
             return measuredBytes
                 + MaximumStrategicMapBytes()
                 + (SimulationState.MaximumShips * MaximumPerShipAlternativeBytes())
                 + (SimulationState.MaximumFactions * MaximumPerFactionAlternativeBytes())
                 + (unoccupiedWorkSlots * MaximumScheduledWorkBytes());
         }
+
+        internal static long MaximumCombatAlternativesBytes() =>
+            (SimulationState.MaximumShips * MaximumCombatStateBytes())
+            + ((SimulationState.MaximumShips - 1) * MaximumScheduledWorkBytes());
 
         private static int MaximumStrategicMapBytes()
         {
@@ -1215,8 +1385,12 @@ public sealed class GamePersistenceV4SensorTests
                 ("generationCondition", MaximumFiniteDoubleBytes),
                 ("sensorCondition", MaximumFiniteDoubleBytes),
                 ("impulseCondition", MaximumFiniteDoubleBytes),
+                ("shieldCondition", MaximumFiniteDoubleBytes),
+                ("directedEnergyCondition", MaximumFiniteDoubleBytes),
                 ("sensorAllocation", MaximumLongBytes),
                 ("impulseAllocation", MaximumLongBytes),
+                ("shieldAllocation", MaximumLongBytes),
+                ("directedEnergyAllocation", MaximumLongBytes),
                 ("activeRepair", repair)
             );
             return MaximumMotionBytes()
@@ -1225,6 +1399,7 @@ public sealed class GamePersistenceV4SensorTests
                 + MaximumPatrolOrderBytes()
                 + MaximumActiveScanBytes()
                 + MaximumAutonomousStateBytes()
+                + MaximumCombatStateBytes()
                 + MaximumLongBytes;
         }
 
@@ -1320,6 +1495,20 @@ public sealed class GamePersistenceV4SensorTests
             int wake = Object(("scheduledWorkId", MaximumLongBytes), ("dueTimeMilliseconds", MaximumLongBytes));
             return Object(("contactPosture", MaximumAsciiIdentityTokenBytes), ("pendingContactDecisionWake", wake));
         }
+
+        private static int MaximumCombatStateBytes() =>
+            Object(
+                ("nextDirectedEnergyReadyAtMilliseconds", MaximumLongBytes),
+                (
+                    "pendingStimulus",
+                    Object(
+                        ("contactId", MaximumLongBytes),
+                        ("observedAtMilliseconds", MaximumLongBytes),
+                        ("dueTimeMilliseconds", MaximumLongBytes),
+                        ("scheduledWorkId", MaximumLongBytes)
+                    )
+                )
+            );
 
         private static int MaximumScheduledWorkBytes() =>
             Object(

@@ -26,8 +26,8 @@ public sealed class GamePersistenceTests
         JsonArray ships = simulation["ships"]!.AsArray();
         JsonArray work = simulation["scheduler"]!["outstandingWork"]!.AsArray();
 
-        Assert.Equal(8, root["schemaVersion"]!.GetValue<int>());
-        Assert.Equal("observation-driven-faction-response-v1", root["simulationRulesVersion"]!.GetValue<string>());
+        Assert.Equal(9, root["schemaVersion"]!.GetValue<int>());
+        Assert.Equal("first-combat-engagement-v1", root["simulationRulesVersion"]!.GetValue<string>());
         Assert.Equal(1, simulation["orderAllocatorNextId"]!.GetValue<long>());
         Assert.Equal(2, simulation["playerShipId"]!.GetValue<long>());
         Assert.Equal([1L, 2L, 3L], ships.Select(ship => ship!["instanceId"]!.GetValue<long>()));
@@ -571,8 +571,8 @@ public sealed class GamePersistenceTests
         JsonObject simulation = v4["simulation"]!.AsObject();
         JsonObject ship = simulation["ships"]![0]!.AsObject();
 
-        Assert.Equal(8, v4["schemaVersion"]!.GetValue<int>());
-        Assert.Equal("observation-driven-faction-response-v1", v4["simulationRulesVersion"]!.GetValue<string>());
+        Assert.Equal(9, v4["schemaVersion"]!.GetValue<int>());
+        Assert.Equal("first-combat-engagement-v1", v4["simulationRulesVersion"]!.GetValue<string>());
         Assert.Equal(1, simulation["orderAllocatorNextId"]!.GetValue<long>());
         Assert.All(simulation["ships"]!.AsArray(), candidate => Assert.Null(candidate!["activeOrder"]));
         Assert.Equal(7, simulation["playerShipId"]!.GetValue<long>());
@@ -665,7 +665,7 @@ public sealed class GamePersistenceTests
     public void RejectsUnsupportedDuplicateOversizedDeepAndUnknownInput()
     {
         AssertFailure(
-            MutateV2(root => root["schemaVersion"] = 9),
+            MutateV2(root => root["schemaVersion"] = 10),
             "future.json",
             "unsupported",
             GamePersistenceFailure.UnsupportedVersion
@@ -682,13 +682,13 @@ public sealed class GamePersistenceTests
 
     /// <summary>Confirms ordinary live plural construction serializes only schema V8.</summary>
     [Fact]
-    public void SerializeEmitsOnlyV8()
+    public void SerializeEmitsOnlyV9()
     {
         GameSimulation game = FirstGameSetup.Create(CreateCatalog());
         JsonObject root = Parse(GamePersistence.Serialize(game, CreateMetadata()));
 
-        Assert.Equal(8, root["schemaVersion"]!.GetValue<int>());
-        Assert.Equal("observation-driven-faction-response-v1", root["simulationRulesVersion"]!.GetValue<string>());
+        Assert.Equal(9, root["schemaVersion"]!.GetValue<int>());
+        Assert.Equal("first-combat-engagement-v1", root["simulationRulesVersion"]!.GetValue<string>());
         Assert.Equal(1, root["simulation"]!["orderAllocatorNextId"]!.GetValue<long>());
         Assert.NotNull(root["simulation"]!["ships"]);
         Assert.Null(root["simulation"]!["playerShip"]);
@@ -697,7 +697,7 @@ public sealed class GamePersistenceTests
 
     /// <summary>Confirms atomic replacement still preserves metadata and removes staging files.</summary>
     [Fact]
-    public void AtomicPathSaveReplacesPriorSaveWithV8AndCleansTemporaryFiles()
+    public void AtomicPathSaveReplacesPriorSaveWithV9AndCleansTemporaryFiles()
     {
         string directory = CreateTemporaryDirectory();
         string path = Path.Combine(directory, "slot-one.json");

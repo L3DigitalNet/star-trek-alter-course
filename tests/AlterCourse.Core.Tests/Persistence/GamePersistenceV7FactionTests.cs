@@ -115,8 +115,8 @@ public sealed class GamePersistenceV7FactionTests
             "assigned-v8.json"
         );
 
-        Assert.Equal(8, root["schemaVersion"]!.GetValue<int>());
-        Assert.Equal("observation-driven-faction-response-v1", root["simulationRulesVersion"]!.GetValue<string>());
+        Assert.Equal(9, root["schemaVersion"]!.GetValue<int>());
+        Assert.Equal("first-combat-engagement-v1", root["simulationRulesVersion"]!.GetValue<string>());
         Assert.Equal(2, root["simulation"]!["factions"]!.AsArray().Count);
         Assert.Contains(
             root["simulation"]!["scheduler"]!["outstandingWork"]!.AsArray(),
@@ -376,6 +376,7 @@ public sealed class GamePersistenceV7FactionTests
             current,
             root =>
             {
+                GamePersistenceV9CombatTests.StripCombat(root);
                 root["schemaVersion"] = 6;
                 root["simulationRulesVersion"] = "strategic-contact-reporting-v1";
                 JsonObject simulation = root["simulation"]!.AsObject();
