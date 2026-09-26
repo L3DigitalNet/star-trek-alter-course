@@ -3,13 +3,14 @@
 ## Current environments
 
 - The current immutable source-only GitHub Release is available at <https://github.com/L3DigitalNet/star-trek-alter-course/releases/latest>.
-- v0.6.1 is the historical build-process correction release: `Star Trek: Alter Course v0.6.1`.
-- Its signed annotated tag targets Final PR #103's release merge `f0af2653ca44f17b9f701f6271e199cda1429d16`.
-- The v0.6.1 release is non-draft, non-prerelease, and has zero assets. Source launch uses `./scripts/launch-game.sh`.
+- v0.6.2 is the current source-only documentation release at `255eaedc8e27b483b0fd4e2fe0bccf050486b3bf`.
+- v0.6.1 is the historical build-process correction release; its tag targets Final PR #103 merge `f0af2653ca44f17b9f701f6271e199cda1429d16`.
+- v0.6.2 is non-draft, non-prerelease, and has zero assets. Source launch uses `./scripts/launch-game.sh`.
 - PR #104 synchronized the v0.6.1 release ancestry to `dev` as `5ad16bb`; Canonical verification passed.
+- PR #107 synchronized v0.6.2 ancestry to `dev` as `1778634`; M6A later merged only to `dev` and is unreleased.
 - PR #101 fixed verification build-server reuse. Release and Debug verification passed with Core 598, AssetCtl 324, Godot integration and smoke checks.
 - A post-verification scan found no remaining `dotnet`, `MSBuild`, or `VBCSCompiler` processes.
-- GitHub Actions runs canonical C# and Godot verification, structured-text formatting, Markdown lint, and standards validation on pull requests and `main`.
+- GitHub Actions runs canonical C# and Godot verification on pull requests and `dev`/`main` pushes; text checks run on pull requests and `main`.
 - `main` branch protection strictly requires the GitHub Actions `Canonical verification` check for all actors, including administrators.
 - Force pushes and branch deletion are disabled for `main`; pull request #3 and its post-merge workflows are the initial green deployment evidence.
 
