@@ -25,12 +25,14 @@ const args = process.argv.slice(2);
 const project = args[args.indexOf('--path') + 1];
 const port = Number(args[args.indexOf('--lsp-port') + 1]);
 const mode = fs.readFileSync(project + '/mode', 'utf8');
-const helper = mode === 'stubborn' ? spawn(process.execPath, ['-e', "process.on('SIGTERM',()=>{});setInterval(()=>{},1000)"], {stdio:'ignore'}) : null;
+const stubborn = mode === 'stubborn' || mode === 'noisy-stubborn';
+const helper = stubborn ? spawn(process.execPath, ['-e', "process.on('SIGTERM',()=>{});setInterval(()=>{},1000)"], {stdio:'ignore'}) : null;
 fs.writeFileSync(project + '/editor.json', JSON.stringify({pid:process.pid,helper:helper?.pid,config:process.env.XDG_CONFIG_HOME}));
 console.log('EDITOR CONSOLE MUST NOT REACH STDOUT');
 console.error('EDITOR STDERR');
 if (mode === 'early') process.exit(7);
-if (mode === 'stubborn') process.on('SIGTERM', () => {});
+if (stubborn) process.on('SIGTERM', () => {});
+if (mode === 'noisy-stubborn') setInterval(() => console.log('editor still running'), 50);
 if (mode === 'waiting') setInterval(() => {}, 1000);
 else net.createServer(socket => {
   if (mode === 'disconnect') socket.destroy();
@@ -53,6 +55,14 @@ async function start(t, mode = 'echo', executable) {
   const finished = new Promise((resolve) => child.once('exit', (code, signal) => resolve({ code, signal })));
   t.after(async () => {
     if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    // A deliberately failing lifecycle regression must not leave its detached
+    // fixture behind after the assertions have recorded the production defect.
+    const owned = await readFile(path.join(dir, 'editor.json'), 'utf8').then(JSON.parse).catch(() => null);
+    if (owned) {
+      try { process.kill(-owned.pid, 'SIGKILL'); }
+      catch (error) { if (error.code !== 'ESRCH') throw error; }
+      await rm(owned.config, { recursive: true, force: true });
+    }
     await rm(dir, { recursive: true, force: true });
   });
   return { dir, child, finished, output: () => Buffer.concat(stdout), errors: () => stderr };
@@ -104,6 +114,16 @@ test('forwards byte-exact traffic and keeps console output on stderr; EOF cleans
   assert.match(run.errors(), /EDITOR STDERR/);
   run.child.stdin.end();
   await closed(run, 0, owned);
+});
+
+test('disconnected stderr cleans editor and helpers without recursive diagnostics', async (t) => {
+  const run = await start(t, 'noisy-stubborn');
+  const owned = await editor(run);
+  const bytes = frame({ method: 'initialized', params: {} });
+  run.child.stdin.write(bytes);
+  await until(() => run.output().equals(bytes));
+  run.child.stderr.destroy();
+  await closed(run, 1, owned);
 });
 
 for (const [signal, code] of [['SIGINT', 130], ['SIGTERM', 143]]) {

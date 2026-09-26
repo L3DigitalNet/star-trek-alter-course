@@ -28,6 +28,7 @@ let settings;
 let stopping = false;
 let exited = false;
 let exitCode = 0;
+let stderrFailed = false;
 // cclsp identifies unknown extensions as plaintext, but Godot ignores didOpen
 // unless its language ID is gdscript. Keep this compatibility adapter at the
 // transport boundary instead of modifying either installed upstream server.
@@ -94,14 +95,14 @@ async function ownsListener(port) {
 function killGroup(signal) {
   if (!child?.pid) return;
   try { process.kill(-child.pid, signal); }
-  catch (error) { if (error.code !== 'ESRCH') console.error(error.message); }
+  catch (error) { if (error.code !== 'ESRCH' && !stderrFailed) console.error(error.message); }
 }
 
 async function stop(code, message) {
   if (stopping) return;
   stopping = true;
   exitCode = code;
-  if (message) console.error(`godot-lsp-stdio: ${message}`);
+  if (message && !stderrFailed) console.error(`godot-lsp-stdio: ${message}`);
   process.stdin.unpipe(input);
   input.destroy();
   process.stdin.pause();
@@ -129,6 +130,18 @@ input.on('error', (error) => void stop(1, `LSP input: ${error.message}`));
 process.stdin.pipe(input);
 process.stdin.on('error', (error) => void stop(1, `stdin: ${error.message}`));
 process.stdout.on('error', (error) => void stop(1, `stdout: ${error.message}`));
+// Console forwarding makes stderr a lifecycle dependency too. Reporting its
+// EPIPE back to the same stream can recurse; drain editor output silently while
+// the ordinary bounded process-group cleanup completes.
+process.stderr.on('error', () => {
+  stderrFailed = true;
+  exitCode = 1;
+  child?.stdout.unpipe(process.stderr);
+  child?.stderr.unpipe(process.stderr);
+  child?.stdout.resume();
+  child?.stderr.resume();
+  void stop(1);
+});
 
 try {
   settings = await mkdtemp(path.join(os.tmpdir(), 'godot-lsp-'));
