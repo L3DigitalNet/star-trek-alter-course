@@ -2,11 +2,11 @@
 schema_version: '1.1'
 id: 'spec-ber4ie-observation-driven-faction-response'
 title: 'Observation-Driven Faction Response'
-description: 'Approved bounded design for delayed ship-to-faction observation reporting and deterministic investigation assignments.'
+description: 'Implemented bounded contract for delayed ship-to-faction observation reporting and deterministic investigation assignments.'
 doc_type: 'spec'
 status: 'active'
 created: '2026-09-07'
-updated: '2026-09-08'
+updated: '2026-09-26'
 tags:
   - 'design'
   - 'simulation'
@@ -27,7 +27,7 @@ related:
 
 ## Status and purpose
 
-**Implemented by Feature #93 / Final PR #94 and released in v0.6.0 with V8.** This bounded gameplay slice follows Faction Intent and Autonomous Assignment. It connects existing local sensor knowledge to existing faction decision and ship-order machinery without introducing a general intelligence service, political hierarchy, affiliation inference, combat, or communications-network simulation. v0.5.0 remains the historical V6 release and V7 is the preceding development schema.
+**Implemented by Feature #93 / Final PR #94 and released in v0.6.0 with V8.** This bounded gameplay slice follows Faction Intent and Autonomous Assignment. It connects existing local sensor knowledge to existing faction decision and ship-order machinery without introducing a general intelligence service, political hierarchy, affiliation inference, combat, or communications-network simulation. These are this slice's boundaries, not a claim that later M6A combat is absent. Current development uses V9 through M6A; [content and persistence](content-assets-and-persistence.md) owns the complete compatibility contract. v0.5.0 remains the historical V6 release and V7 is the intervening development schema.
 
 The required causal proof is:
 
@@ -39,7 +39,7 @@ This work resolves only the direct ship-to-direct-faction reporting portion of Q
 
 ## Approved decision mapping
 
-The [decision register](decision-register.md) is the stable SSOT for D-14 through D-18; this map links each approved decision to its governing contract.
+The [decision register](decision-register.md) indexes D-14 through D-18; this map links each approved decision to its governing contract.
 
 | Decision | Owning contract |
 | --- | --- |
@@ -103,7 +103,7 @@ When received retention would exceed 16 after expired/handled entries are remove
 
 The implementation must derive scheduler capacity conservatively from the maximum allowed work shape, including all per-faction report-delivery slots. It must derive both the total consequence-execution budget and the same-boundary execution budget from the maximum reachable work and bounded consequences that can execute in one advancement or become due together. All three limits retain explicit finite-cycle guards; they must not be weakened merely to make a maximum-shape test pass. The maximum-shape proof must combine same-time report deliveries with the existing scheduled-work maximum and must obey real source-authority, player-exclusion, ship, and faction limits rather than constructing an unreachable fixture.
 
-The implemented V8 bounds are **68,864** outstanding work items, **68,853** same-boundary consequence executions, and **78,853** total consequence executions. The resulting V8 shape remains within the unchanged 128 MiB save envelope. It does not enlarge that envelope or introduce a database/event log to avoid the bound.
+The implemented V8 bounds were **68,864** outstanding work items, **68,853** same-boundary consequence executions, and **78,853** total consequence executions. The V8 shape remains within the unchanged 128 MiB save envelope. These are historical V8 bounds, not current V9 scheduler limits; [world and time](world-navigation-and-time.md#one-timeline-several-update-rates) and [persistence](content-assets-and-persistence.md) own the current limits and their distinct proof measurements.
 
 ## Investigation policy
 
@@ -152,7 +152,7 @@ If the selected responder was already at the destination, Core performs the same
 
 ## Persistence and migration
 
-The implementation advances saves to released **V8** under rules identity `observation-driven-faction-response-v1`. V7 remains the historical development schema and v0.5.0 remains the historical V6 release.
+This slice introduced released **V8** under rules identity `observation-driven-faction-response-v1`. V7 remains its historical input schema and v0.5.0 remains the historical V6 release. M6A subsequently extends development saves to V9 without redefining the V7→V8 migration below.
 
 Persist only consequential authoritative state needed for deterministic continuation:
 
@@ -164,17 +164,17 @@ Persist only consequential authoritative state needed for deterministic continua
 
 Derived projections, UI formatting, candidate lists, and reconstructible indexes are not persisted.
 
-The adjacent migration from the current development schema is deliberately non-inventive: existing factions receive the response posture **disabled**, empty in-flight/received report state, no active investigation, no report-delivery work, and no invented location-response history. Existing faction objectives, controllers, ship orders, contacts, simulation time, scheduler ordering, and identity continuation remain unchanged. Zero-faction worlds remain valid. Typed new-game bootstrap explicitly enables the response posture for both factions participating in the proof.
+The adjacent **V7→V8** migration is deliberately non-inventive: existing factions receive the response posture **disabled**, empty in-flight/received report state, no active investigation, no report-delivery work, and no invented location-response history. Existing faction objectives, controllers, ship orders, contacts, simulation time, scheduler ordering, and identity continuation remain unchanged. Zero-faction worlds remain valid. Typed new-game bootstrap explicitly enables the response posture for both factions participating in the proof.
 
 Candidate/load validation is atomic and rejects duplicate report identities, missing/unauthorized source or recipient factions, report/source-controller contradictions at publication, impossible observation/receipt times, malformed locations/positions/identification, orphaned or wrong-domain delivery work, active investigation/order mismatches, missing responder/controller relationships, duplicate work, invalid counters, and unjustified missing continuation.
 
 ## Implemented evidence and boundaries
 
-The reviewed implementation supplies the complete causal contract in Core: observation publication and same-boundary coalescing in `GameSimulation.Observation.cs`; bounded report, investigation, and watermark state in `FactionObservationState.cs`; deterministic investigation input and policy in the faction AI; and V8 serialization, migration, and candidate validation in `GamePersistence.cs`. The six new scenario and horizon tests divide into three production proofs and three long-horizon proofs. They cover both factions as reporter and recipient, the no-delivery counterfactual, ordinary responder travel, hidden-truth invariance, finite release/dormancy, feedback suppression, and save/load continuation. The Godot suite is **67/67** and keeps the added runtime state private to Core rather than turning it into player intelligence UI.
+The reviewed implementation supplies the complete causal contract in Core: observation publication and same-boundary coalescing in `GameSimulation.Observation.cs`; bounded report, investigation, and watermark state in `FactionObservationState.cs`; deterministic investigation input and policy in the faction AI; and V8 serialization, migration, and candidate validation in `GamePersistence.cs`. The six scenario and horizon tests introduced by the slice divide into three production proofs and three long-horizon proofs. They cover both factions as reporter and recipient, the no-delivery counterfactual, ordinary responder travel, hidden-truth invariance, finite release/dormancy, feedback suppression, and save/load continuation. Its historical Godot gameplay/UI suite passed **67/67**, keeping the added runtime state private to Core rather than turning it into player intelligence UI. [Implementation status](implementation-status.md#verification-evidence-not-a-fresh-execution-claim) records later M6A admission evidence separately.
 
 V8 persists compact JSON after measurement under ADR 0006's explicit measured-benefit allowance. The fully populated high-width fixture is **108,890,984 bytes** compact. Its earlier pretty-printed form was **134,478,451 bytes**, so compact output saves **25,587,467 bytes**. The fixture exercises the strongest combined report/ship graph; the tested conservative universal ceiling is **113,024,376 bytes**, leaving **21,193,352 bytes** below 128 MiB. That ceiling deliberately adds full maximum encodings for omitted legal alternatives—256 locations, 1,024 routes, 256 patrol/travel/motion/Engineering/scan/autonomous variants, 256 faction objective/handling/active-investigation variants, and 521 unused scheduler slots—rather than treating the fixture itself as a universal maximum. It is a source-derived upper bound for the supported V8 shape, not a promise that every future schema revision fits unchanged.
 
-The implementation does not add combat, `KnownShipId`, a canonical M3B, affiliation inference, a political UI, or broad M3/M5 completion. Q-03 remains open. Q-10 must still refine exact first-combat mechanics and forced degradation before M6 implementation.
+This slice did not add combat, `KnownShipId`, a canonical M3B, affiliation inference, a political UI, or broad M3/M5 completion. Q-03 remains open. The later D-19 decision resolves Q-10 for implemented M6A; its exact combat and forced-degradation rules belong to [Engineering and combat](engineering-and-combat.md), not this report contract.
 
 ## Player-visible and NPC-only proofs
 
@@ -225,10 +225,8 @@ This slice does not implement:
 
 ## Next development sequence
 
-After this bounded information-to-action loop, **M6A First Combat Engagement is implemented on `dev` as an unreleased contribution toward partial M6**. M3 and M5 do not need to be declared complete first.
+This bounded information-to-action loop is complete. **M6A First Combat Engagement is subsequently implemented on `dev` as an unreleased contribution toward partial M6** through [Feature #111 / PR #112](https://github.com/L3DigitalNet/star-trek-alter-course/pull/112). Full M3 or M5 completion was not a prerequisite.
 
-The first M6 slice should be a **first combat engagement** that composes existing movement, sensing, Engineering, AI, persistence, and withdrawal. The intended narrow direction is one directed-energy weapon family, a bounded shield model, sensor-constrained targeting/fire control, meaningful power competition, maneuver/range, operational damage to concrete systems, explainable combat AI, and withdrawal/non-engagement.
+D-19 resolves Q-10 for that first engagement: one directed-energy family, all-aspect shields, actor-local targeting, power competition, concrete subsystem damage, explicit forced reconciliation, deterministic defensive response, and ordinary withdrawal. Those rules and their remaining limitations are owned by [Engineering and combat](engineering-and-combat.md).
 
-Ship-system depth should then grow through **combat-driven Engineering depth**: add a system when it creates or materially changes a command decision, not by building an exhaustive starship subsystem catalog in advance. Detailed EPS topology, batteries, heat/coolant, advanced warp Engineering, life support, crew/repair teams, magazines, boarding, cloaking, and electronic warfare remain deferred until concrete consumers justify them.
-
-Q-10 remains the admission gate for exact combat rules, including shield geometry/facings, firing cadence/eligibility, damage allocation, disengagement, any first random consumer, and involuntary degradation semantics. Combat damage cannot simply reuse voluntary power-allocation rejection when damage forces generation or propulsion below a previously legal operating state; that reconciliation must be explicitly designed before M6 implementation.
+The next direction remains **combat-driven Engineering depth**: add or extend a system when it creates or materially changes a command decision, not by building an exhaustive subsystem catalog. Detailed EPS topology, batteries, heat/coolant, advanced warp Engineering, life support, crew/repair teams, magazines, boarding, cloaking, and electronic warfare remain deferred until concrete consumers justify them. Later refinements need their own bounded contract; Q-10 is no longer an unresolved admission blocker for the already implemented M6A.

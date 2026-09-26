@@ -30,11 +30,11 @@ related:
 
 ## Status, authority, and provenance
 
-**Implemented in Feature #86 / Final PR #87, merged into `dev` as `0217296`.** That slice introduced save V7; the v0.6.0 release uses V8, while v0.5.0 remains the historical V6 release. This page records both the September 6 approval and the merged source-level implementation truth. It does not claim that a V7 release exists.
+**Implemented in Feature #86 / Final PR #87, merged into `dev` as `0217296`, and included in v0.6.0.** This slice introduced save V7 with V4 ship content; the v0.6.0 release uses V8, while v0.5.0 remains the historical V6 release. Current development uses V5 ship content and V9 saves through the separate M6A contribution. [Content and persistence](content-assets-and-persistence.md) owns the complete current compatibility contract. This page records the September 6 approval and its implementation; it does not claim that a V7 release exists.
 
-This is the first implemented contribution toward **Milestone 5 — Living Sector and Faction Autonomy** after Strategic Contact Reporting. It is not all of M5, does not complete M3, and does not rename the earlier contact-reporting slice to M3B. Ship-definition content remains V4. This slice introduced V7; v0.6.0 uses V8 while v0.5.0 remains the historical V6 release.
+This is the first implemented contribution toward **Milestone 5 — Living Sector and Faction Autonomy** after Strategic Contact Reporting. It is not all of M5, does not complete M3, and does not rename the earlier contact-reporting slice to M3B.
 
-The implementation adds no faction, affiliation, political hierarchy, or intelligence UI; it does not publish a release. Organizations, hierarchy traversal, information sharing, RNG, and a generic actor framework remain outside this slice.
+The slice itself added no faction, affiliation, political hierarchy, or intelligence UI and did not publish a release. Organizations, hierarchy traversal, information sharing, RNG, and a generic actor framework remain outside this original slice. Later approved observation response and M6A do not alter those historical feature boundaries.
 
 This page owns the bounded slice. The broader political framework remains authoritative for the principles it touches; the roadmap owns sequence, not additional design. Decisions D-08 through D-13 index the six approvals in the decision register. Existing ADRs already permit these choices; no new or amended ADR is required because no architectural boundary changes.
 
@@ -44,7 +44,7 @@ This page owns the bounded slice. The broader political framework remains author
 
 The faction policy is pure Core code. It receives only its explicitly allowed information, evaluates candidates, returns a typed order proposal or deliberate no-action result with an explanation, and uses the existing validated ship-order/application path. It does not mutate the world during evaluation or create a parallel faction movement simulation.
 
-Strategic Contact Reporting established a useful information boundary before this work. This first faction slice does **not** consume or distribute external contact reports merely to exercise that boundary. It starts with narrowly defined own-asset administrative knowledge; intelligence sharing remains a later consumer.
+Strategic Contact Reporting established a useful information boundary before this work. This first faction slice does **not** consume or distribute external contact reports merely to exercise that boundary. It starts with narrowly defined own-asset administrative knowledge; the subsequent direct reporting consumer is owned by [Observation-Driven Faction Response](observation-driven-faction-response.md).
 
 ## D-08 — The approved proof and milestone boundary
 
@@ -98,11 +98,11 @@ This implements ADR 0007's existing typed-target requirements; it does not super
 
 ## D-12 — Content, durable state, and the planned V7 migration
 
-This preserved historical heading now describes the implemented V7 migration in `dev`.
+This preserved historical heading describes the implemented V6→V7 migration, not a pending migration from today's development schema.
 
 Reusable production faction definitions use strict JSON, schema validation, stable content identity, reference resolution, and semantic validation under ADR 0005. Keep immutable authored definition data separate from mutable faction state, objectives/commitments that affect continuation, direct ship control, and scheduler correlations. Do not put changing direct control into a reusable ship-class definition.
 
-The implementation introduces **save V7**, retaining the adjacent V1 → V2 → V3 → V4 → V5 → V6 → V7 chain. v0.5.0 remains the historical V6 release; v0.6.0 advances the released line to V8. Persist the consequential faction state, direct controller relationships, and exact typed scheduled work needed for deterministic continuation; derive rosters, projections, and caches rather than making them parallel durable authorities.
+The implementation introduced **save V7**, retaining the adjacent V1 → V2 → V3 → V4 → V5 → V6 → V7 chain. v0.5.0 remains the historical V6 release; v0.6.0 advances the released line to V8. Persist the consequential faction state, direct controller relationships, and exact typed scheduled work needed for deterministic continuation; derive rosters, projections, and caches rather than making them parallel durable authorities.
 
 The V6 → V7 migration must produce an empty faction collection, null direct-controller references for all historical ships, and no faction decision state or faction-targeted work. Existing scheduled work becomes explicitly ship-targeted while retaining its identities, due times, sequence, correlations, and allocator continuation. Preserve all existing ship/world/knowledge state. Do not assign historical vessels to new-game factions or invent political history, objectives, reports, or affiliations.
 
@@ -110,19 +110,19 @@ A valid world must support **zero factions**. New-game/bootstrap content may int
 
 Load a complete validated candidate before replacing live state; failure leaves the running simulation unchanged. Validate bounds, schema/rules identity, missing or wrong-domain references, duplicate identities, work ownership, counters, and compatible definitions. Recheck maximum-shape save/work bounds when adding faction data; do not assume the existing 128 MiB envelope has unlimited room or silently increase it.
 
-This approval preserves development-save compatibility through the new adjacent migration. It does not promise indefinite support for all later pre-1.0 formats or prescribe speculative faction, organization, or intelligence schemas.
+This approval preserved development-save compatibility through its adjacent migration. It does not promise indefinite support for all later pre-1.0 formats or prescribe speculative faction, organization, or intelligence schemas.
 
 ## D-13 — No randomness in the first faction policy
 
 Use explicit candidates, hard constraints, deterministic scoring or priority, stable tie-breaking, and a structured explanation under ADR 0010. The policy consumes no randomness. No random source, stream state, algorithm choice, or probabilistic intelligence is required by this slice.
 
-Q-14 is therefore scoped in two ways: the next save migration is selected, and this policy is non-stochastic. The eventual fixed/versioned random algorithm remains open until a real random consumer requires it under ADR 0007. Do not introduce randomness merely to break a candidate tie.
+Q-14 was therefore scoped in two ways: that next save migration was selected, and this policy is non-stochastic. The eventual fixed/versioned random algorithm remains open until a real random consumer requires it under ADR 0007. Do not introduce randomness merely to break a candidate tie.
 
 ## Presentation and non-goals
 
 No faction, affiliation, political hierarchy, or intelligence UI is added. Existing player-safe maps, contacts, Engineering controls, save/load, and event advancement remain available. Godot loads the current V9 save contract and both content catalogs, but it receives no faction diagnostic view or hidden NPC decision stream. A new offscreen consequence is not automatically a player-relevant event.
 
-Do not implement global known-vessel identity, cross-observer correlation, report sharing, affiliation/intent learning, political attitudes, treaties, combat, diplomacy, organizations, governments, parent/child factions, layered jurisdiction, territory ownership, political resources/economy, canonical campaign generation, RNG, or a generic actor/rules framework. Do not select a complete organization taxonomy or complete M3 merely to label this slice finished.
+The original assignment slice does not implement global known-vessel identity, cross-observer correlation, report sharing, affiliation/intent learning, political attitudes, treaties, combat, diplomacy, organizations, governments, parent/child factions, layered jurisdiction, territory ownership, political resources/economy, canonical campaign generation, RNG, or a generic actor/rules framework. Do not select a complete organization taxonomy or complete M3 merely to label this slice finished. Separately approved observation response and combat retain their own owning contracts.
 
 ## Implementation evidence and remaining acceptance evidence
 
