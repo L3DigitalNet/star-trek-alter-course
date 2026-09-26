@@ -19,6 +19,7 @@ related:
   - 'docs/wiki/faction-intent-and-autonomous-assignment.md'
   - 'docs/wiki/observation-driven-faction-response.md'
   - 'docs/wiki/engineering-and-combat.md'
+  - 'docs/wiki/ship-system-substrate.md'
 ---
 
 # Implementation status
@@ -30,6 +31,12 @@ related:
 [v0.6.2](https://github.com/L3DigitalNet/star-trek-alter-course/releases/tag/v0.6.2) is the current immutable source-only release. Its latest gameplay-changing release is v0.6.0, which uses V4 ship content and V8 saves under `observation-driven-faction-response-v1` and contains Feature #86 / Final PR #87's bounded faction slice and Feature #93 / Final PR #94's observation response.
 
 Current `dev` additionally has **unreleased M6A First Combat Engagement**, implemented by [Feature #111 / Final PR #112](https://github.com/L3DigitalNet/star-trek-alter-course/pull/112) and merged as `c2edae1f6357dbe8cd60aa5040646e48b9c23aee`. It uses V5 ship content and V9 saves under `first-combat-engagement-v1`. [PR #113](https://github.com/L3DigitalNet/star-trek-alter-course/pull/113) records its handoff closeout at `dc3a7cebd6b765b7a16d573f76bf4414fabb00b3`. Later tooling or documentation commits do not by themselves publish this gameplay. v0.5.0 remains the historical V6 release. Consult [STATUS](../STATUS.md) for current operational work and [Sources](sources.md#review-record) for subsequent review coverage.
+
+## Selected next work, not implemented
+
+[ADR 0014](../adr/0014-use-an-extensible-bounded-ship-system-substrate.md) was adopted through [PR #120](https://github.com/L3DigitalNet/star-trek-alter-course/pull/120) at `e16e1a8`. The current fixed-field implementation only partially conforms. The owner selected [Issue #121](https://github.com/L3DigitalNet/star-trek-alter-course/issues/121) to migrate all five existing systems through the [installed-system substrate contract](ship-system-substrate.md) before further systems or Damage Control gameplay.
+
+The migration must establish independently owned heterogeneous live loadouts and common installed-ID mechanics, not a facade over named fields. Expected ship V6/system-definition V1/save V10 formats and new conformance tests are admission targets, not present runtime evidence. Neither the ADR nor this documentation completes #121, M3, M5, or M6. Recovery mechanics and player refits remain outside the selected implementation.
 
 ## Implemented gameplay
 
@@ -51,7 +58,7 @@ Implementation evidence: [FirstGameSetup](../../src/AlterCourse.Core/Gameplay/Fi
 
 Milestone 1 world/bootstrap and Milestone 2 active-world orders are implemented. Milestone 3A first observed contact and [Strategic Contact Reporting](strategic-contact-reporting.md) are implemented, but the roadmap explicitly does not declare all of Milestone 3 complete. Milestone 4 Engineering Backbone is implemented. M3A and M4 are included in v0.4.0; Strategic Contact Reporting was delivered in Feature #77 / Final PR #78, merged into `dev` as `80c3084`, and included in v0.5.0.
 
-Feature #86 is the first implemented M5 contribution, not evidence that M5 or M3 is complete. Observation-Driven Faction Response is the implemented second bounded M5 contribution. M6A first combat engagement is an unreleased, implemented contribution toward partial M6; M3 and M5 do not need to be declared complete first. Later M6 refinement and M7-M9 runtime remain future work. No canonical M3B milestone is admitted. Combat-driven Engineering is the next development direction, not an already-approved detailed follow-on specification.
+Feature #86 is the first implemented M5 contribution, not evidence that M5 or M3 is complete. Observation-Driven Faction Response is the implemented second bounded M5 contribution. M6A first combat engagement is an unreleased, implemented contribution toward partial M6; M3 and M5 do not need to be declared complete first. Later M6 refinement and M7-M9 runtime remain future work. No canonical M3B milestone is admitted. Combat-driven Engineering remains the development direction, now preceded by the selected ADR 0014 conformance migration; detailed recovery gameplay is not approved by that selection.
 
 ## Implemented bounded faction slice
 
@@ -89,7 +96,7 @@ Strategic long-range sensor simulation, affiliation/intent knowledge, organizati
 
 The admission evidence includes the corrected Current-contact context validation, 255 simultaneous correlated NPC stimuli, populated V9 continuation, and a 512-attack long-horizon proof with 512 accepted defensive return fires. The [scenario](../../tests/AlterCourse.Core.Tests/Gameplay/M6CombatScenarioTests.cs), [horizon](../../tests/AlterCourse.Core.Tests/Gameplay/M6CombatLongHorizonTests.cs), and [V9](../../tests/AlterCourse.Core.Tests/Persistence/GamePersistenceV9CombatTests.cs) sources define the actual assertions. Native and cross-agent reviews recorded by the PR were static inspections, not additional test runs. Headless Godot checks establish input and focus behavior; manual device testing is not claimed.
 
-These are inherited admission results. A later documentation audit must record its own scope and checks rather than present these numbers as newly executed tests.
+These are inherited admission results. A later documentation audit must record its own scope and checks rather than present these numbers as newly executed tests. [PR #117](https://github.com/L3DigitalNet/star-trek-alter-course/pull/117) records the subsequent nonfatal `grab_focus` diagnostic; a green suite does not establish an error-free engine log.
 
 ### Historical release and consolidation evidence
 

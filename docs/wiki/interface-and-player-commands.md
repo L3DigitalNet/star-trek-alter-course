@@ -16,6 +16,7 @@ related:
   - 'docs/wiki/engineering-and-combat.md'
   - 'docs/wiki/strategic-contact-reporting.md'
   - 'docs/wiki/faction-intent-and-autonomous-assignment.md'
+  - 'docs/wiki/ship-system-substrate.md'
 ---
 
 # Interface and player commands
@@ -42,15 +43,21 @@ The 1920×1080 reference composition uses a 122 px Systems Spine, expanding map,
 
 M3A made actor-local tactical contacts, identification, and hail live. M4 made generation, allocation, sensor/impulse condition/capability, and one repair live. Strategic Contact Reporting added a minimal **LAST KNOWN CONTACTS** section to the strategic inspector. M6A adds the minimal live Combat workspace, shield/weapon power and repair controls, and native heading/speed Apply and Stop through existing typed Core course rules. Combat uses only local contact selection and actor-safe feedback; it does not show target health, affiliation, controller, faction, condition, capability, or pending NPC intent. Detailed EPS topology, unsupported component telemetry, and repair-team queues remain unavailable or absent; reference imagery is not an implementation commitment.
 
-The live Engineering hierarchy is Overview, Power, Sensors, Propulsion, Shields, Weapons, and Repairs. It presents Core values and Core-supplied action availability/reasons; it does not simulate allocation preview or optimistically mutate a ship. The strategic map selects connected destinations and engages scheduled travel. Tactical view shows the local frame, actor-known contact markers, selected-contact facts, scan, hail, heading and speed fields, Apply, and Stop. Course controls remain subject to the effective impulse limit; they are not a complete navigation console.
+The live M6A Engineering hierarchy is Overview, Power, Sensors, Propulsion, Shields, Weapons, and Repairs. It presents Core values and Core-supplied action availability/reasons; it does not simulate allocation preview or optimistically mutate a ship. The strategic map selects connected destinations and engages scheduled travel. Tactical view shows the local frame, actor-known contact markers, selected-contact facts, scan, hail, heading and speed fields, Apply, and Stop. Course controls remain subject to the effective impulse limit; they are not a complete navigation console.
 
-Live Engineering actions include **Balance power allocation**, priorities for Sensors, Propulsion, Shields, and Directed Energy, repairs for all repairable systems, and **Return to Command Deck**. Combat provides stable target selection and **Fire directed energy**. Actions remain visible when disabled and provide Core-supplied reasons, including no selected/Current/Identified contact, out of range, unpowered or offline weapons, cooldown, unsupported target system, and unavailable repair/allocation/course state. A display label is not an authoritative system or command identity.
+Live Engineering actions include **Balance power allocation**, priorities for Sensors, Propulsion, Shields, and Directed Energy, repairs for all repairable systems, and **Return to Command Deck**. Combat provides stable target selection and **Fire directed energy**. Actions remain visible when disabled and provide Core-supplied reasons, including no selected/Current/Identified contact, out of range, unpowered or offline weapons, cooldown, unsupported target kind, and unavailable repair/allocation/course state. A display label is not an authoritative system or command identity.
 
-A fire control submits local contact and selected subsystem identities; it does not calculate range, capability, readiness, damage, or hit outcome. Actor-safe attacker feedback may state shot fired, shield hit, or penetration to the selected system, never target identity/controller/faction/condition/capability/percentages. The player victim may receive its own damage, brownout, forced-speed, and repair-interruption consequences. Pending NPC intent is never displayed.
+An M6A fire control submits an observer-local contact and semantic target-system kind; it does not calculate range, capability, readiness, damage, or hit outcome. Actor-safe attacker feedback may state shot fired, shield hit, or beam penetration toward the selected kind, never target identity/controller/faction/condition/capability/percentages. It does not authorize disclosure of hidden installed inventory. The player victim may receive its own damage, brownout, forced-speed, and repair-interruption consequences. Pending NPC intent is never displayed.
 
 The inspector's own `KnownContactReports` section lists retained reports: learned vessel or tactical label, last-seen location/time, Current/Stale/Lost status, and learned design name. It is capped/summarized when necessary, not a strategic-map marker or intelligence dashboard. Observation-Driven Faction Response keeps received NPC-faction reports, investigations, report IDs, and controller facts out of Godot/player projection; player visibility still depends on the player's own legitimate sensing.
 
 Shortcuts are 1 strategic, 2 tactical, Space pause/resume, R cycle rate, U advance to player-relevant event, Ctrl+S/Ctrl+L quick save/load, E engage selected travel, and C submit the current course fields. Engineering and Combat workspaces are selected through their visible controls. Running rates are 0.5x, 1x, 2x, and 4x; pause is separate. The quick-save slot and its failure-preservation boundary are owned by [content, assets, and persistence](content-assets-and-persistence.md).
+
+## Selected installed-system interface migration
+
+Issue #121's [substrate contract](ship-system-substrate.md#generic-presentation-and-refit-readiness) requires generic own-ship rows and Repair/Prioritize actions addressed to installed identities, not another action enum member per kind. It is selected work, not current UI behavior. Absent installations have no fake Engineering row; specialized views may explicitly report unavailable capability. Stable operation/installation keys preserve selection and focus, and activation resolves the current payload rather than a stale captured ID.
+
+Remote aim remains different from own-ship component selection. Neither target inventory nor an absence-specific fire refusal may become an implicit scan. Follow the [remote-targeting contract](ship-system-substrate.md#remote-targeting-must-not-become-an-inventory-probe), including non-confirming feedback for newly representable absent-kind targets. Do not build player refit controls in this migration.
 
 ## Interaction and precision
 
@@ -62,4 +69,4 @@ Future station workspaces need a concrete domain consumer and later decision; th
 
 ## Sources and evidence
 
-See [GameScreen](../../src/AlterCourse.Godot/src/Gameplay/GameScreen.cs), [EngineeringWorkspace](../../src/AlterCourse.Godot/src/Gameplay/EngineeringWorkspace.cs), [shell scene](../../src/AlterCourse.Godot/Main.tscn), and [Godot shell tests](../../src/AlterCourse.Godot/tests/GameplayShellTest.gd). The [root README](../../README.md) owns setup and launch instructions; this page owns player controls.
+See [GameScreen](../../src/AlterCourse.Godot/src/Gameplay/GameScreen.cs), [EngineeringWorkspace](../../src/AlterCourse.Godot/src/Gameplay/EngineeringWorkspace.cs), [shell scene](../../src/AlterCourse.Godot/Main.tscn), and [Godot shell tests](../../src/AlterCourse.Godot/tests/GameplayShellTest.gd). The [root README](../../README.md) owns setup and launch instructions; this page owns player controls. Issue #121 must supply fresh conformance evidence before its selected interface migration is marked implemented.

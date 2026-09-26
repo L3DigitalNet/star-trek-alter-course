@@ -16,6 +16,7 @@ related:
   - 'docs/adr/0014-use-an-extensible-bounded-ship-system-substrate.md'
   - 'docs/wiki/faction-intent-and-autonomous-assignment.md'
   - 'docs/wiki/engineering-and-combat.md'
+  - 'docs/wiki/ship-system-substrate.md'
   - 'Directory.Packages.props'
 ---
 
@@ -63,6 +64,10 @@ The detailed rules belong to [Engineering and combat](engineering-and-combat.md)
 
 The substrate supports zero, one, or multiple installed instances of a kind when that kind's typed domain rules permit it. Common mechanics—condition, damage, repair, power allocation, persistence, generic projection, and Engineering presentation—must operate over the bounded installed-system set rather than repeated named fields/switches. System-specific effects remain explicit typed domain behavior; ADR 0014 does not admit an ECS, generic behavior engine, or arbitrary component framework.
 
+[Issue #121](https://github.com/L3DigitalNet/star-trek-alter-course/issues/121) is the selected implementation, governed by the [ship-system substrate contract](ship-system-substrate.md). This is a complete vertical migration, not a collection facade over legacy mutable fields. Current runtime has not yet migrated. Historical DTOs and isolated migration adapters may retain old field names; current capture and generic mechanics may not depend on a lossy historical shape.
+
+Common cardinality support is separate from current typed zero-or-one gameplay restrictions. Generic own-ship operations address installations; external targeting uses actor knowledge and semantic aim, not hidden installed inventory. The owning contract defines these distinctions and the evidence required before conformance can be claimed. It deliberately does not select recovery gameplay or refit costs, slots, or aggregation mechanics.
+
 ## Dependency choices
 
 Start with existing domain code and the .NET standard library for Core, and native Godot capabilities for presentation. Admit focused packages for demonstrated needs, with compatibility, licensing, transitive/native dependency, headless determinism, and replacement-boundary evidence. Central versions and lock files remain authoritative; the wiki is not a competing version catalog.
@@ -90,4 +95,4 @@ ADR 0008 selects Serilog configured at a composition boundary through Microsoft 
 
 ## Sources
 
-[Core/Godot separation](../adr/0001-separate-simulation-from-godot.md), [dependency policy](../adr/0003-prefer-native-capabilities-and-demand-driven-dependencies.md), [testing](../adr/0009-use-layered-testing-and-architecture-conformance.md), [ship-system substrate](../adr/0014-use-an-extensible-bounded-ship-system-substrate.md), [narrative](../adr/0012-keep-branching-narrative-subordinate-to-simulation.md), [package declarations](../../Directory.Packages.props), [combat transition](../../src/AlterCourse.Core/Gameplay/GameSimulation.Combat.cs), [defensive policy](../../src/AlterCourse.Core/AI/DefensiveCombatDecisionPolicy.cs), and [development quality](../development-quality.md).
+[Core/Godot separation](../adr/0001-separate-simulation-from-godot.md), [dependency policy](../adr/0003-prefer-native-capabilities-and-demand-driven-dependencies.md), [testing](../adr/0009-use-layered-testing-and-architecture-conformance.md), [ship-system ADR](../adr/0014-use-an-extensible-bounded-ship-system-substrate.md), [migration contract](ship-system-substrate.md), [narrative](../adr/0012-keep-branching-narrative-subordinate-to-simulation.md), [package declarations](../../Directory.Packages.props), [combat transition](../../src/AlterCourse.Core/Gameplay/GameSimulation.Combat.cs), [defensive policy](../../src/AlterCourse.Core/AI/DefensiveCombatDecisionPolicy.cs), and [development quality](../development-quality.md).

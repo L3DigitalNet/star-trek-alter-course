@@ -2,6 +2,8 @@
 
 ## Current snapshot
 
+- The selected next implementation is [Issue #121](https://github.com/L3DigitalNet/star-trek-alter-course/issues/121), the [ship-system substrate migration](wiki/ship-system-substrate.md), before further systems or Damage Control gameplay.
+- ADR 0014 was adopted through PR #120 at `e16e1a8`; the runtime substrate migration is not yet implemented. Expected V6/system-definition V1/V10 formats are targets, not current runtime formats.
 - The current immutable source-only GitHub Release is v0.6.2 (`255eaed`); see <https://github.com/L3DigitalNet/star-trek-alter-course/releases/latest>.
 - v0.6.2 is a source-only documentation release. v0.6.1 remains the historical build-process correction release at `f0af2653ca44f17b9f701f6271e199cda1429d16`.
 - Milestone 3A first observed contact, Milestone 4 Engineering Backbone, and Strategic Contact Reporting are released; Features #58, #62, and #77 are Done.
@@ -9,11 +11,11 @@
 - Released v0.6.0 rules remain `observation-driven-faction-response-v1`, content schema V4, and save schema V8; V6/V7 migrations remain noninventive.
 - M6A first combat engagement merged into `dev` as `c2edae1` through Final PR #112; Feature #111 is Done.
 - M6A is unreleased: V5 ship content and V9 saves use `first-combat-engagement-v1`; no release, tag, or `main` mutation occurred.
-- Final M6A canonical verification passed at `42fba73`: 789 Core, 324 AssetCtl, 76 Godot, smoke, and zero warnings or errors.
-- All five hosted checks passed on `42fba73`; native and Claude reviews confirmed the current-context correction and found no source defect.
+- Final M6A canonical verification passed at `42fba73`: 789 Core, 324 AssetCtl, 76 Godot, smoke, and zero C# build warnings or errors.
+- All five hosted checks passed on `42fba73`; native and Claude reviews confirmed the current-context correction. PR #117 later recorded a nonfatal Godot `grab_focus` diagnostic requiring investigation; passing tests are not an error-free runtime claim.
 - Historically, Final PR #97 released v0.6.0 and Supporting PR #98 synchronized it to `dev`; their recorded checks remain release evidence.
 - Current `dev` contains the v0.6.2 release through PR #107's synchronization merge `1778634bd192ed393f40b30708fa88e049714a8a`.
-- v0.5.0 verification passed: Core 406, AssetCtl 324, Godot 1+2+63, smoke OK, and zero warnings or errors; later PRs record their own checks.
+- v0.5.0 verification passed: Core 406, AssetCtl 324, Godot 1+2+63, smoke OK, and zero C# build warnings or errors; later PRs record their own checks.
 - [Faction Intent and Autonomous Assignment](wiki/faction-intent-and-autonomous-assignment.md) merged into `dev` as `0217296` through Final PR #87.
 - Features #86 and #93 are released in v0.6.0; Issue #100's verification build-server repair is released in v0.6.1.
 - Q-05 is resolved and Q-04 is partial for the first bounded M5 slice. Q-02/Q-03/Q-06/Q-08/Q-14 remain future or partly scoped work.
@@ -25,7 +27,7 @@
 - Design phase Final PR #92 merged as `ad73862`; Task #91 is Done and invalid staging PR #90 was closed unmerged; its branch was deleted.
 - PR #92 passed all five final-head checks, Branch policy, and post-merge Verify; design docs and ROADMAP changed without runtime code.
 - Feature #93's V8 observation response is released in v0.6.0; M6A remains unreleased development toward partial M6.
-- Release tree verification passed: Core 598, AssetCtl 324, Godot 1+2+67, smoke, warning-free checks, all text gates, standards 38, and frontmatter/handoff 0.
+- Release tree verification passed: Core 598, AssetCtl 324, Godot 1+2+67, smoke, warning-free builds, all text gates, standards 38, and frontmatter/handoff 0.
 - Independent release review was confirmed, and all five hosted Final PR #97 checks passed. M3/M5 remain incomplete.
 - Handoff `9ebee7b` used the ADR 0013 direct route; GitHub reported a configured PR/check bypass, contrary to Feature #93's no-bypass constraint.
 - PR #101 fixed verification build-server reuse. Release and Debug verification passed with Core 598, AssetCtl 324, Godot integration and smoke checks.

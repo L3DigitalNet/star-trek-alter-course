@@ -19,6 +19,7 @@ related:
   - 'docs/wiki/faction-intent-and-autonomous-assignment.md'
   - 'docs/wiki/observation-driven-faction-response.md'
   - 'docs/wiki/open-questions.md'
+  - 'docs/wiki/ship-system-substrate.md'
 ---
 
 # Star Trek: Alter Course design wiki
@@ -34,6 +35,10 @@ The initial implementation review is against `dev` commit `42481ca7fbc6c5c9da969
 [Observation-Driven Faction Response](observation-driven-faction-response.md) is implemented by Feature #93 / Final PR #94 and released in v0.6.0. V8 uses `observation-driven-faction-response-v1`; v0.5.0 remains the historical V6 release. It connects legitimate NPC sensor observations to delayed direct-faction reports and deterministic investigation assignments while preserving observer-local identity, information limits, existing orders, and bounded persistence. Its reviewed evidence includes Core scenario/horizon coverage, actor-safe Godot coverage, and the V8 persistence bound. M6A First Combat Engagement is now implemented on `dev` as an unreleased contribution using V5 content and V9 saves; full M3 or M5 completion was not a prerequisite.
 
 The [recurring design-reconciliation procedure](development-and-governance.md#recurring-design-reconciliation) governs review of these claims. The [source catalog review record](sources.md#review-record) identifies the latest full and targeted reviews.
+
+## Selected next implementation
+
+[Issue #121](https://github.com/L3DigitalNet/star-trek-alter-course/issues/121) implements the [ship-system substrate migration](ship-system-substrate.md) required by [ADR 0014](../adr/0014-use-an-extensible-bounded-ship-system-substrate.md). The ADR is adopted; the runtime migration is not yet implemented. Read the owning contract before changing ship systems. Complete it before adding systems or Damage Control gameplay; it is not M6B or a release. Earlier recovery prompts are superseded, and detailed recovery semantics remain open.
 
 ## Start here
 
@@ -53,6 +58,7 @@ The [recurring design-reconciliation procedure](development-and-governance.md#re
 
 ## Implemented response and future design
 
+- [Ship-system substrate](ship-system-substrate.md): selected, not yet implemented migration of existing systems; heterogeneous live loadouts, compatibility, information safety, and conformance evidence.
 - [Observation-Driven Faction Response](observation-driven-faction-response.md): implemented delayed direct ship-to-faction reporting and bounded investigation response with bounded V8 persistence proof.
 - [Factions and organizations](factions-and-organizations.md): owner-approved political framework; the root-faction/direct-control subset is implemented while broader political runtime remains future work.
 - [Diplomacy, economy, and campaigns](diplomacy-economy-and-campaigns.md): political consequences, history, trade, canon, and later campaign work.
@@ -66,7 +72,7 @@ The [recurring design-reconciliation procedure](development-and-governance.md#re
 - [Asset pipeline tool](asset-pipeline-tool.md): the full development-tool contract, separately labeled from gameplay and implementation status.
 - [Source catalog](sources.md): implementation evidence, consolidation map, historical provenance, and dated review coverage.
 
-Read the system page first and follow its specialized contract links when needed. Strategic Contact Reporting owns last-known-report rules; Faction Intent and Autonomous Assignment owns first-slice assignment rules; Observation-Driven Faction Response owns the implemented direct report-delivery/investigation extension. Their summary links elsewhere do not redefine those contracts.
+Read the system page first and follow its specialized contract links when needed. Strategic Contact Reporting owns last-known-report rules; Faction Intent and Autonomous Assignment owns first-slice assignment rules; Observation-Driven Faction Response owns the implemented direct report-delivery/investigation extension. The ship-system substrate page owns Issue #121's migration contract without duplicating M6A's Engineering formulas. Their summary links elsewhere do not redefine those contracts.
 
 ## Status vocabulary
 

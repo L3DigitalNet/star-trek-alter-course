@@ -16,6 +16,7 @@ related:
   - 'docs/adr/0014-use-an-extensible-bounded-ship-system-substrate.md'
   - 'docs/wiki/content-assets-and-persistence.md'
   - 'docs/wiki/observation-driven-faction-response.md'
+  - 'docs/wiki/ship-system-substrate.md'
   - 'ROADMAP.md'
 ---
 
@@ -31,7 +32,7 @@ Engineering is a deliberately small connected Core model: generated power constr
 
 `ShipSystemId` currently carries the semantic kind names `power-generation`, `sensors`, `impulse-propulsion`, `shields`, and `directed-energy-weapons`. All five are legal M6A damage targets. The four consumers—sensors, impulse, shields, and directed-energy weapons—are allocatable and repairable; generation is not repairable in M6A. Numeric enum ordinals never cross content, save, projection, or event boundaries; display labels cannot identify a system.
 
-[ADR 0014](../adr/0014-use-an-extensible-bounded-ship-system-substrate.md) identifies the current one-field-per-kind structure as interim. The existing semantic names remain valid **system kinds**, but future-conformant state distinguishes kind, reusable system definition, and persistent installed system instance. A ship class provides an initial loadout while each live ship owns its actual bounded installed systems. Ships of one class may therefore have different current systems, and a kind may have zero, one, or multiple installations when its typed domain rules allow it. The correction must preserve M6A behavior while moving shared condition, damage, repair, allocation, persistence, generic projection, and Engineering presentation onto that substrate before deeper damage-control work or a sixth system is added.
+[ADR 0014](../adr/0014-use-an-extensible-bounded-ship-system-substrate.md) identifies the current one-field-per-kind structure as interim. Kind, reusable definition, and persistent installed instance are distinct. A class provides an initial loadout; a live ship owns its actual installations. [Issue #121's substrate contract](ship-system-substrate.md) owns the selected complete migration, including heterogeneity, absence, identity, compatibility, actor-safe targeting, and conformance evidence. It is not implemented yet. The M6A formulas below remain the numerical baseline; they are not instructions to retain fixed-field common state or universal five-system assumptions.
 
 `SystemCondition` is finite and bounded from zero through one; its Offline, Degraded, and Nominal labels are presentation states. `PowerUnits` is a non-negative abstract integer quantity bounded at 1,000,000. Construction rejects negative or out-of-range values, addition is checked, comparison is deterministic, and JSON uses an invariant integer. It is neither watts nor stored energy, fuel, heat, or a physical-precision claim.
 
@@ -63,15 +64,15 @@ A rejected voluntary allocation is atomic: it changes no Engineering, contact, s
 
 Pathfinder V5 is a proof configuration, not a permanent balance commitment:
 
-| Authored quantity                                   | Value                         |
-| --------------------------------------------------- | ----------------------------- |
-| Nominal generation                                  | 120 power units               |
+| Authored quantity | Value |
+| --- | --- |
+| Nominal generation | 120 power units |
 | Sensor / impulse / shield / directed-energy demands | 70 / 50 / 40 / 30 power units |
-| Passive range / maximum tactical speed              | 30 km / 10 km/s               |
-| Active scan duration / weapon cooldown              | 2,000 ms / 2,000 ms           |
-| Directed-energy range / base shot damage            | 20 km / 0.25                  |
-| Sensor / shield repair duration                     | 8,000 ms each                 |
-| Impulse / directed-energy repair duration           | 6,000 ms each                 |
+| Passive range / maximum tactical speed | 30 km / 10 km/s |
+| Active scan duration / weapon cooldown | 2,000 ms / 2,000 ms |
+| Directed-energy range / base shot damage | 20 km / 0.25 |
+| Sensor / shield repair duration | 8,000 ms each |
+| Impulse / directed-energy repair duration | 6,000 ms each |
 
 The player's generator condition of 0.625 yields 75 units. In consumer order, Balanced is 28/20/16/11, Sensors-first is 70/5/0/0, and Propulsion-first is 25/50/0/0. The new-game player retains the historical travel allocation 44/31/0/0 rather than applying the expanded Balanced preset automatically.
 
@@ -91,7 +92,7 @@ Any positive shield absorption cancels a shield repair, regardless of the select
 
 ## Presentation and first combat engagement
 
-Live Engineering shows only the player's nominal/available power, allocations, reserve, own conditions/statuses, effective capability/range/speed, active repair, and Core-supplied action reasons. The hierarchy is Overview, Power, Sensors, Propulsion, Shields, Weapons, and Repairs. It does not expose NPC Engineering, scheduler entries, persistence DTOs, AI diagnostics, hidden target IDs, affiliation, or intent. The [interface page](interface-and-player-commands.md) owns interaction and preview rules.
+Live Engineering shows only the player's nominal/available power, allocations, reserve, own conditions/statuses, effective capability/range/speed, active repair, and Core-supplied action reasons. The M6A hierarchy is Overview, Power, Sensors, Propulsion, Shields, Weapons, and Repairs. It does not expose NPC Engineering, scheduler entries, persistence DTOs, AI diagnostics, hidden target IDs, affiliation, or intent. The [interface page](interface-and-player-commands.md) owns interaction and preview rules.
 
 This is a bounded operational-damage model, not a general one. EPS topology, batteries, warp, life support, computers, structural systems, fuel, heat/coolant, crews, repair queues, inventory, generalized components, dynamic strategic travel, a hull pool, ship destruction, shield facings, automatic recharge, additional weapon families, and random outcomes are absent or deferred.
 
@@ -99,7 +100,7 @@ This is a bounded operational-damage model, not a general one. EPS topology, bat
 
 ### Targeting and firing cadence
 
-A fire intent carries a local `SensorContactId` and a target `ShipSystemId`. It requires the same strategic location, a Current and Identified local contact, inclusive range under the existing spatial tolerance, positive weapon capability, and `now >= nextReady`. Core resolves hidden target correlation internally; it does not expose the true target identity through the command or actor-safe projection.
+An M6A fire intent carries a local `SensorContactId` and a semantic target `ShipSystemId`. It requires the same strategic location, a Current and Identified local contact, inclusive range under the existing spatial tolerance, positive weapon capability, and `now >= nextReady`. Core resolves hidden target correlation internally; it does not expose the true target identity through the command or actor-safe projection.
 
 Every rejection is atomic: it changes no cooldown, scheduler, contacts, or events. A successful shot sets persisted per-ship absolute `nextReady` to checked `now + cooldown`; readiness defaults to zero and is nonnegative, fixed-step aligned, and bounded. There is no periodic weapon scheduler. When the addition is not representable, Core returns a typed time-limit rejection without partial mutation. Unrepresentable finite-position separation rejects as out of range without a projection failure.
 
@@ -137,7 +138,9 @@ The policy does not wait or reschedule for cooldown, start repair, change power 
 
 There is no global encounter object, combat lock, or separate combat clock. Ordinary motion, range, contact lifecycle, and strategic location determine whether another shot is legal. Withdrawal and non-engagement remain valid choices; the Combat workspace does not create an authoritative engagement.
 
-An attacker may learn only that a shot fired, shields were hit, or penetration reached the selected system. It receives no hidden target identity, controller, faction, condition, capability, or percentage. A player victim may see its own damage, brownout, forced speed, and repair interruption. These events do not establish political hostility, faction knowledge, or durable diplomatic incidents.
+M6A attacker events report a fired shot, shield interaction, or penetration directed at the selected kind, without target identity, controller, faction, condition, capability, or percentage. A player victim may see its own damage, brownout, forced speed, and repair interruption. These events do not establish political hostility, faction knowledge, or durable diplomatic incidents.
+
+The [selected heterogeneous-target contract](ship-system-substrate.md#remote-targeting-must-not-become-an-inventory-probe) refines feedback for Issue #121 so an absent hidden installation cannot be inferred from a pre-shot choice, free refusal, or confirmed-damage message. It defines normal discharge, shield resolution, no fallback receiver, and unconfirmed subsystem damage for that newly representable case. This requirement is not yet implemented and does not change the canonical M6A damage formulas above.
 
 ### Involuntary degradation is a required design decision
 
@@ -149,12 +152,12 @@ If effective impulse capability falls below current speed, forced reconciliation
 
 ## Combat-driven Engineering depth
 
-After the first combat proof, add ship systems because a concrete tactical or command decision requires them. A new system should create a meaningful choice, failure mode, or interaction rather than exist only for fidelity bookkeeping. ADR 0014 now additionally requires that new systems or ship-specific loadout variation reuse the bounded installed-system substrate rather than extending the current parallel-field pattern.
+After the first combat proof, add ship systems because a concrete tactical or command decision requires them. A new system should create a meaningful choice, failure mode, or interaction rather than exist only for fidelity bookkeeping. The selected next work is now [Issue #121's substrate migration](ship-system-substrate.md), required by ADR 0014 before additional systems or recovery gameplay.
 
-M6A's recovery limits are intentional scope boundaries, not claims of a complete damage-control loop: generation can be damaged but not repaired, shield protection has no automatic recharge, and the reactive combat policy does not manage Engineering recovery. Selecting follow-on recovery behavior requires explicit refinement; this audit does not approve it merely by documenting the gap.
+M6A's recovery limits are intentional scope boundaries, not claims of a complete damage-control loop: generation can be damaged but not repaired, shield protection has no automatic recharge, and the reactive combat policy does not manage Engineering recovery. Repair meaning, rates, reprioritization, and autonomous recovery require later refinement; #121 deliberately preserves existing repair behavior rather than deciding them.
 
 Detailed EPS topology, batteries, heat/coolant, advanced warp Engineering, life support, crews, repair teams/queues, magazines, boarding, cloaking, electronic warfare, torpedoes, tractor beams, and other specialized systems remain deferred until a real consumer demonstrates need. Do not build an exhaustive subsystem catalog before a concrete gameplay consumer exists.
 
 ## Sources
 
-[Engineering state](../../src/AlterCourse.Core/Ships/ShipEngineeringState.cs), [repair correlation](../../src/AlterCourse.Core/Ships/SystemRepairState.cs), [combat transition](../../src/AlterCourse.Core/Gameplay/GameSimulation.Combat.cs), [defensive policy](../../src/AlterCourse.Core/AI/DefensiveCombatDecisionPolicy.cs), [Pathfinder content](../../src/AlterCourse.Godot/content/ships/pathfinder.json), [Engineering tests](../../tests/AlterCourse.Core.Tests/Ships/EngineeringBackboneTests.cs), [M4 scenarios](../../tests/AlterCourse.Core.Tests/Gameplay/Milestone4EngineeringScenarioTests.cs), [combat scenarios](../../tests/AlterCourse.Core.Tests/Gameplay/M6CombatScenarioTests.cs), [combat horizon](../../tests/AlterCourse.Core.Tests/Gameplay/M6CombatLongHorizonTests.cs), and [V9 persistence tests](../../tests/AlterCourse.Core.Tests/Persistence/GamePersistenceV9CombatTests.cs). Final admission and verification evidence is indexed in [Implementation status](implementation-status.md#verification-evidence-not-a-fresh-execution-claim).
+[Engineering state](../../src/AlterCourse.Core/Ships/ShipEngineeringState.cs), [repair correlation](../../src/AlterCourse.Core/Ships/SystemRepairState.cs), [combat transition](../../src/AlterCourse.Core/Gameplay/GameSimulation.Combat.cs), [defensive policy](../../src/AlterCourse.Core/AI/DefensiveCombatDecisionPolicy.cs), [Pathfinder content](../../src/AlterCourse.Godot/content/ships/pathfinder.json), [Engineering tests](../../tests/AlterCourse.Core.Tests/Ships/EngineeringBackboneTests.cs), [M4 scenarios](../../tests/AlterCourse.Core.Tests/Gameplay/Milestone4EngineeringScenarioTests.cs), [combat scenarios](../../tests/AlterCourse.Core.Tests/Gameplay/M6CombatScenarioTests.cs), [combat horizon](../../tests/AlterCourse.Core.Tests/Gameplay/M6CombatLongHorizonTests.cs), and [V9 persistence tests](../../tests/AlterCourse.Core.Tests/Persistence/GamePersistenceV9CombatTests.cs). Final admission and verification evidence is indexed in [Implementation status](implementation-status.md#verification-evidence-not-a-fresh-execution-claim). [Ship-system substrate](ship-system-substrate.md) separately defines the selected migration and its future conformance evidence.
