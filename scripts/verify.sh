@@ -28,6 +28,9 @@ readonly godot_bin
 readonly godot_project='src/AlterCourse.Godot'
 
 export PATH="${dotnet_dir}:${tool_bin}:${PATH}"
+# Verification runs under rexec's workspace hold. MSBuild nodes left alive by a
+# finished command would inherit that hold and prevent workspace reclamation.
+export MSBUILDDISABLENODEREUSE=1
 
 ./scripts/check-agent-skill-parity.sh
 ./scripts/test-launch-game.sh
@@ -50,7 +53,7 @@ mapfile -d '' markdown_files < <(
 )
 
 dotnet tool restore
-dotnet restore AlterCourse.sln --locked-mode
+dotnet restore AlterCourse.sln --locked-mode --disable-build-servers
 dotnet csharpier check .
 npx --yes prettier@3.9.6 --check -- "${structured_files[@]}"
 npx --yes markdownlint-cli2@0.23.2 "${markdown_files[@]}"
@@ -61,16 +64,16 @@ gitleaks git --config .gitleaks.toml --redact --no-banner
 gitleaks dir . --config .gitleaks.toml --redact --no-banner
 ./scripts/check-policy.sh
 ./scripts/test-branch-policy.sh
-dotnet build AlterCourse.sln -c Release --no-restore --warnaserror
-dotnet test tests/AlterCourse.Core.Tests/AlterCourse.Core.Tests.csproj -c Release --no-build --no-restore
-dotnet test tests/AlterCourse.AssetCtl.Tests/AlterCourse.AssetCtl.Tests.csproj -c Release --no-build --no-restore
+dotnet build AlterCourse.sln -c Release --no-restore --warnaserror --disable-build-servers
+dotnet test tests/AlterCourse.Core.Tests/AlterCourse.Core.Tests.csproj -c Release --no-build --no-restore --disable-build-servers
+dotnet test tests/AlterCourse.AssetCtl.Tests/AlterCourse.AssetCtl.Tests.csproj -c Release --no-build --no-restore --disable-build-servers
 dotnet run --project tools/AlterCourse.AssetCtl/AlterCourse.AssetCtl.csproj \
   -c Release --no-build --no-restore -- validate-config --offline --output json
 
 # Godot's editor runtime loads its Debug managed assembly. This explicit build
 # follows the solution-wide Release proof so the two configuration contracts
 # cannot be confused or silently remapped in AlterCourse.sln.
-dotnet build src/AlterCourse.Godot/AlterCourse.Godot.csproj -c Debug --no-restore --warnaserror
+dotnet build src/AlterCourse.Godot/AlterCourse.Godot.csproj -c Debug --no-restore --warnaserror --disable-build-servers
 "${godot_bin}" --headless --path "${godot_project}" --import
 "${godot_bin}" \
   --headless \
