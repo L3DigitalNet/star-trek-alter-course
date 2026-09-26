@@ -1,1 +1,9 @@
-{ "sdk": { "version": "10.0.111", "rollForward": "disable", "allowPrerelease": false } }
+{
+	"sdk": {
+		"version": "10.0.111",
+		"rollForward": "disable",
+		"allowPrerelease": false,
+		"paths": [".dotnet", "$host$"],
+		"errorMessage": "The pinned .NET SDK was not found. Run ./scripts/resolve-dotnet.sh from the repository root, then reload the workspace."
+	}
+}

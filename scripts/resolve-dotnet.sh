@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 # Resolve the exact repository SDK without changing system-wide .NET installations.
+# Also maintains the repository-root .dotnet link that global.json lists in
+# sdk.paths, so editors and shells that start a system dotnet host of a different
+# patch level still resolve this pinned SDK instead of failing SDK resolution.
 
 set -euo pipefail
+
+root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+readonly root
 
 readonly sdk_version='10.0.111'
 readonly sdk_sha256='6d1aa7e62438957580a5e0bc4a1598439abe54b3855c1b88db8b702de2eca5cf'
@@ -16,7 +22,7 @@ has_expected_runtime() {
 }
 
 if command -v dotnet > /dev/null 2>&1 &&
-  [[ "$(dotnet --version)" == "${sdk_version}" ]] &&
+  [[ "$(dotnet --version 2> /dev/null)" == "${sdk_version}" ]] &&
   has_expected_runtime "$(command -v dotnet)"; then
   dirname "$(command -v dotnet)"
   exit 0
@@ -64,5 +70,16 @@ if ! has_expected_runtime "${dotnet_bin}"; then
   printf 'Resolved dotnet does not provide Microsoft.NETCore.App %s.\n' "${runtime_version}" >&2
   exit 1
 fi
+
+# A symlink rather than a per-checkout install keeps one verified download shared
+# by every worktree. A real directory here is someone else's SDK layout, so it is
+# reported instead of replaced.
+readonly sdk_link="${root}/.dotnet"
+if [[ -e "${sdk_link}" && ! -L "${sdk_link}" ]]; then
+  printf '%s exists and is not a symlink; remove it so the pinned SDK can be linked.\n' \
+    "${sdk_link}" >&2
+  exit 1
+fi
+ln -sfn -- "${install_dir}" "${sdk_link}"
 
 printf '%s\n' "${install_dir}"

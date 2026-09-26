@@ -24,6 +24,9 @@ mono_crash.*.json
 /tools/*/bin/
 /tools/*/obj/
 TestResults/
+# Per-machine link to the pinned SDK cache (scripts/resolve-dotnet.sh). No trailing
+# slash: a directory-only pattern does not match a symlink.
+/.dotnet
 StrykerOutput/
 .assetctl/
 .tools/agent-lsp/

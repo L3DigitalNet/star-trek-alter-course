@@ -91,7 +91,9 @@ host = "rexec"
 # Never put a secret here: this file is committed.
 
 [sync]
-exclude = [".tools/agent-lsp/"]
+# /.dotnet is a per-machine symlink into the local SDK cache; the worker's resolver
+# links its own. A slash-terminated pattern would not match the symlink.
+exclude = [".tools/agent-lsp/", "/.dotnet"]
 
 # exclude: extra rsync exclude patterns, applied after the mandatory .git and .rexec/
 # rules and the built-in defaults. This is the only configured exclusion authority.
