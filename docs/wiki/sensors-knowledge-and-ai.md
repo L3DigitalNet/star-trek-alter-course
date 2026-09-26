@@ -6,7 +6,7 @@ description: 'Actor-local sensor knowledge, contact operations, and the determin
 doc_type: 'concept'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-08'
+updated: '2026-09-26'
 tags:
   - 'ai'
   - 'sensors'
@@ -48,6 +48,8 @@ Contact-sensitive local work uses the fixed 100 ms grid only when motion or chan
 
 ## Deferrals and evidence
 
-There is no confidence/error model, estimated stale position, long-range strategic sensor simulation, cloaking, emissions, electronic warfare, false contact, NPC scan, additional doctrine, dialogue tree, or Science/Communications workspace. Durable last-known strategic reports are implemented and owned by [Strategic Contact Reporting](strategic-contact-reporting.md). Observation-Driven Faction Response does not add global or live shared sensors, identity correlation, affiliation inference, or a player intelligence feed. Combat, shields, weapons, damage, and advanced Engineering remain outside this slice.
+There is no confidence/error model, estimated stale position, long-range strategic sensor simulation, cloaking, emissions, electronic warfare, false contact, NPC scan, additional doctrine, dialogue tree, or Science/Communications workspace. Durable last-known strategic reports are implemented and owned by [Strategic Contact Reporting](strategic-contact-reporting.md). Observation-Driven Faction Response does not add global or live shared sensors, identity correlation, affiliation inference, or a player intelligence feed.
+
+M6A implementation is in progress. Its fire control may use only the acting ship's same-location Current and Identified local contact, and it never upgrades an unknown attacker to identified. Mutual identification for its defensive proof must arise through existing scan and hail behavior; M6A adds no NPC scan rule. Its defensive policy receives local contact snapshot, own tactical/capability/readiness/time facts, and no aggregate state or hidden target truth. Combat, shields, weapons, damage, and advanced Engineering otherwise remain outside the implemented slice.
 
 See [sensor knowledge](../../src/AlterCourse.Core/Sensors/SensorKnowledge.cs), [cautious policy](../../src/AlterCourse.Core/AI/CautiousContactDecisionPolicy.cs), [contact scenario tests](../../tests/AlterCourse.Core.Tests/Gameplay/Milestone3ProofScenarioTests.cs), [hail tests](../../tests/AlterCourse.Core.Tests/Gameplay/HailAndContactDecisionTests.cs), and [policy tests](../../tests/AlterCourse.Core.Tests/AI/CautiousContactDecisionPolicyTests.cs).

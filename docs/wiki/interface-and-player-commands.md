@@ -6,7 +6,7 @@ description: 'Command Deck design, live Engineering, actor-safe presentation, an
 doc_type: 'reference'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-07'
+updated: '2026-09-26'
 tags:
   - 'godot'
   - 'ui'
@@ -40,11 +40,13 @@ The 1920×1080 reference composition uses a 122 px Systems Spine, expanding map,
 
 ## Live surface and commands
 
-M3A made actor-local tactical contacts, identification, and hail live. M4 made generation, allocation, sensor/impulse condition/capability, and one sensor or impulse repair live. Strategic Contact Reporting added a minimal **LAST KNOWN CONTACTS** section to the strategic inspector. Combat fire solutions, shields/weapons, detailed EPS topology, unsupported component telemetry, and repair-team queues remain preview-only, unavailable, or absent; reference imagery is not an implementation commitment.
+M3A made actor-local tactical contacts, identification, and hail live. M4 made generation, allocation, sensor/impulse condition/capability, and one sensor or impulse repair live. Strategic Contact Reporting added a minimal **LAST KNOWN CONTACTS** section to the strategic inspector. M6A combat implementation is in progress. Until implementation evidence lands, combat fire solutions, shields/weapons, detailed EPS topology, unsupported component telemetry, and repair-team queues remain preview-only, unavailable, or absent; reference imagery is not an implementation commitment.
 
 The live Engineering hierarchy is Overview, Power, Sensors, Propulsion, and Repairs. It presents Core values and Core-supplied action availability/reasons; it does not simulate allocation preview or optimistically mutate a ship. The strategic map selects connected destinations and engages scheduled travel. Tactical view shows the local frame, actor-known contact markers, selected-contact facts, scan, and hail. The demonstration course is 045 degrees at 2 km/s, subject to effective impulse limit; it is not a complete navigation console.
 
 Live Engineering actions are **Balance power allocation**, **Prioritize sensors**, **Prioritize propulsion**, **Begin sensor repair**, **Begin impulse repair**, and **Return to Command Deck**. They use stable presentation identities and Core-supplied legality; a display label is not an authoritative system or command identity.
+
+M6A will add only Core-backed fire, shield/weapon allocation, and repair actions that implementation admits. A fire control submits local contact and selected subsystem identities; it does not calculate range, capability, readiness, damage, or hit outcome. Actor-safe attacker feedback may state shot fired, shield hit, or penetration to the selected system, never target identity/controller/faction/condition/capability/percentages. The player victim may receive its own damage, brownout, forced-speed, and repair-interruption consequences. Pending NPC intent is never displayed.
 
 The inspector's own `KnownContactReports` section lists retained reports: learned vessel or tactical label, last-seen location/time, Current/Stale/Lost status, and learned design name. It is capped/summarized when necessary, not a strategic-map marker or intelligence dashboard. Observation-Driven Faction Response keeps received NPC-faction reports, investigations, report IDs, and controller facts out of Godot/player projection; player visibility still depends on the player's own legitimate sensing.
 

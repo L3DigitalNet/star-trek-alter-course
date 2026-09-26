@@ -67,6 +67,12 @@ Godot compatibility evidence is complete: the shell loads both catalogs, accepts
 
 V8's source-derived scheduler limits are 68,864 outstanding work items, 68,853 same-instant consequence executions, and 78,853 total consequence executions. The existing 128 MiB save envelope remains unchanged. A fully graph-validated high-width V8 fixture measured 134,478,451 bytes in pretty JSON; compact JSON under ADR 0006's measured-benefit allowance preserves the logical DTO and saves 25,587,467 bytes, producing 108,890,984 bytes. The V8 persistence proof derives a conservative universal ceiling of 113,024,376 bytes by adding complete maximum encodings for legal shapes omitted by that combined fixture; it leaves 21,193,352 bytes below 128 MiB. Fixture values remain measurements, while the deliberately overcounting ceiling is the tested bound for the supported V8 schema.
 
+## Approved V9 combat persistence
+
+M6A implementation is in progress; V8 remains the released format. The approved V9 rules identity is `first-combat-engagement-v1`. V9 will persist the new shield and directed-energy conditions, four allocations, absolute readiness, and one bounded pending defensive stimulus with its exact wake correlation. It adds no combat target telemetry/history or hidden attacker identity to that stimulus; existing authoritative ship/world snapshots remain persisted under their established contracts.
+
+V8→V9 initializes new system conditions and allocations to zero, readiness to zero, and no stimulus/combat work. It preserves existing conditions, allocation, repair, order, contact, faction, time, and scheduler identities. Migration creates no historical combat capability, damage, aggression, target identification, or new content-derived state. A migrated player may later repair and allocate the new systems through ordinary commands. Frozen V1–V8 DTOs and work-kind validation retain their strict historical meanings; malformed V9 state, work, timing, or correlation must fail candidate validation. Updated scheduler and save-size bounds require implementation evidence before this page states them.
+
 ## AssetCtl pipeline
 
 AssetCtl is standalone .NET 10 development infrastructure, separate from both game assemblies. It searches the tracked catalog, plans routes, obtains candidates, mechanically validates untrusted bytes, selects/publishes assets with manifests, and retains provenance. The full [asset pipeline contract](asset-pipeline-tool.md) remains the detailed contract; this summary is not its replacement.

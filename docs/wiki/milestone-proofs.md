@@ -245,7 +245,7 @@ Do not create three faction classes for Polity/Constituent/Internal, infer power
 
 ### Sequencing and first slice
 
-After Observation-Driven Faction Response, **M6 first combat engagement is the next major development family**. Full completion of M3 or M5 is not a prerequisite. This is a sequencing decision, not permission to implement unresolved Q-10 mechanics without refinement.
+After Observation-Driven Faction Response, **M6 first combat engagement is the next major development family**. Full completion of M3 or M5 is not a prerequisite. Q-10 is now resolved for M6A First Combat Engagement, whose implementation is in progress; this approval is not evidence that combat behavior is complete.
 
 The first engagement should start narrow: one directed-energy weapon family, a bounded shield model, sensor-constrained targeting/fire control, meaningful power competition, tactical maneuver/range, damage to concrete systems, deterministic/explainable combat AI, persistence of consequences, and withdrawal/non-engagement. The purpose is to stress the existing joints between sensing, motion, Engineering, AI, and persistence rather than to build a broad weapon catalog.
 
@@ -264,7 +264,7 @@ Add the smallest combat model that proves existing systems compose under pressur
 - Withdrawal, disengagement, and non-engagement remain valid outcomes.
 - Tactical AI issues validated Core commands and remains deterministic/explainable at the consequence boundary.
 
-Before admission, resolve **Q-10 — Tactical scope**: shield geometry/facings, firing cadence and eligibility, targeting knowledge, damage allocation, disengagement, and any first RNG consumer. Also define involuntary degradation. Damage cannot simply fail because reduced generation or impulse capability makes a previously legal allocation, speed, active scan, or repair state invalid; forced reconciliation must have explicit deterministic semantics.
+M6A admits one non-facing directed-energy/shield model, local Current/Identified targeting, direct subsystem condition loss, deterministic ReturnFire/Withdraw/Hold response, and planned V9 continuation. Its acceptance evidence must demonstrate atomic rejection, absorption/penetration, brownout remainder order, forced speed/scan/repair reconciliation, actor-safe projection, bounded delayed defense, V8→V9 non-inventive migration, and persistence continuation. It must not claim facings, recharge, hull, periodic weapon work, RNG, political combat policy, or broader combat behavior without a later approved contract and evidence.
 
 ---
 

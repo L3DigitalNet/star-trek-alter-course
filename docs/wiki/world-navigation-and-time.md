@@ -60,7 +60,9 @@ D-11's implementation preserves existing ship-work meaning, total same-time sequ
 
 ## Randomness and future scale
 
-The present contact/order proofs do not need random decisions. D-13 explicitly keeps the first faction policy non-stochastic as well. ADR 0007 requires a versioned, restorable, injected random source and stable stream ownership when a real consumer appears; a seed alone is not a continuation contract. The eventual algorithm remains open.
+The present contact/order proofs do not need random decisions. D-13 explicitly keeps the first faction policy non-stochastic as well. M6A also uses deterministic firing, absorption, allocation, and defensive selection; it introduces no random source. ADR 0007 requires a versioned, restorable, injected random source and stable stream ownership when a real consumer appears; a seed alone is not a continuation contract. The eventual algorithm remains open.
+
+M6A will add at most one delayed `ShipCombatDecisionWake` per eligible nonplayer ship. Its stimulus is due 100 ms after a legitimate accepted shot and retains exact correlation; the first pending stimulus wins and no cooldown wait creates another wake. Weapon readiness is an absolute persisted simulation time, not periodic scheduled work. Player-relevant advancement must still deliver actual player-owned hit and reconciliation events while keeping pending NPC intent private.
 
 Do not solve scale by simulating every offscreen actor at tactical frequency, inventing distributed services, or relaxing determinism. First identify the required behavior, choose the coarsest faithful update resolution, and measure representative scenarios.
 

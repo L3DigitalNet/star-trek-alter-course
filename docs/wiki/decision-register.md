@@ -82,6 +82,8 @@ The owner selected [Observation-Driven Faction Response](observation-driven-fact
 
 **D-18 — Tactical combat follows this slice; Engineering grows through combat consumers.** M6 first combat engagement is the next major development family. Full M3 or M5 completion is not a prerequisite. The first M6 refinement should compose one bounded directed-energy/shield/targeting/damage/withdrawal interaction with existing sensing, motion, Engineering, AI, and persistence; exact Q-10 mechanics remain open until that refinement. Ship-system depth is added when it creates or materially changes a command decision rather than through an exhaustive pre-combat subsystem catalog.
 
+**D-19 — Bounded M6A first engagement.** The owner resolves Q-10 for implementation in progress: one non-facing directed-energy/shield interaction uses Current, Identified local contacts; four-consumer power allocation; direct concrete-system condition loss after shield absorption; deterministic brownout/reconciliation; one delayed defensive ship wake; and planned adjacent V8→V9 persistence. M6A has no RNG, hull pool, recharge, facings, periodic weapon work, faction-driven combat policy, or travel/order preemption. Its detailed contract belongs to [Engineering and combat](engineering-and-combat.md); this approval is not implementation evidence.
+
 ## Political decisions approved September 6, 2026
 
 The following identifiers provide stable references to the approved political design. The broader model remains future work; the bounded root-faction and direct-control subset is implemented through D-08–D-13. [Factions and organizations](factions-and-organizations.md) owns their full meaning and implementation limits; these summaries do not introduce additional mechanics.

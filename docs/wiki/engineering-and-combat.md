@@ -6,7 +6,7 @@ description: 'Implemented Engineering rules and the approved sequencing principl
 doc_type: 'concept'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-08'
+updated: '2026-09-26'
 tags:
   - 'engineering'
   - 'simulation'
@@ -73,7 +73,7 @@ Live Engineering shows only the player's nominal/available power, allocations, r
 
 This is degraded operation and repair, not a general damage model. Shields, weapons, EPS topology, batteries, warp, life support, computers, structural systems, fuel, heat/coolant, crews, repair queues, inventory, generalized components, and dynamic strategic travel are absent or unavailable.
 
-Combat is not implemented. [Observation-Driven Faction Response](observation-driven-faction-response.md) is implemented. **M6 Tactical Combat Foundation is the next major development family.** Full M3 or M5 completion is not a prerequisite for that first combat refinement.
+Combat remains unimplemented. [Observation-Driven Faction Response](observation-driven-faction-response.md) is implemented. **M6A First Combat Engagement is owner-approved and implementation is in progress.** Full M3 or M5 completion is not a prerequisite; this approval is not evidence that any M6A behavior has landed.
 
 ## First combat engagement direction
 
@@ -89,15 +89,35 @@ M6 should compose existing movement, knowledge, power, condition, AI, persistenc
 - persistence of combat consequences; and
 - withdrawal, disengagement, and non-engagement as valid outcomes.
 
-These are sequencing and refinement constraints, not complete weapon/shield rules. Before M6 implementation, Q-10 must settle shield geometry/facings, firing cadence and eligibility, targeting knowledge, damage allocation, disengagement, and whether the first combat consumer needs a versioned random source.
+The M6A contract below settles the bounded first engagement. Facings, a hull pool, recharge, additional weapon families, and broader combat remain deferred.
+
+## Approved M6A first engagement
+
+Pathfinder V5 preserves its existing generation 120, sensor demand 70, impulse demand 50, passive range 30 km, maximum tactical speed 10 km/s, scan 2,000 ms, sensor repair 8,000 ms, and impulse repair 6,000 ms. It adds shield demand 40, directed-energy demand 30, shield repair 8,000 ms, weapon repair 6,000 ms, directed-energy range 20 km, base shot damage 0.25, and cooldown 2,000 ms. Authored combat values are positive, damage is at most one, times align to the fixed step, and strict content validation admits no fallback proof values.
+
+The closed subsystem identities are `power-generation`, `sensors`, `impulse-propulsion`, `shields`, and `directed-energy-weapons`. All five are legal damage targets because each has an operational effect. Generation remains unrepairable; shields and directed-energy weapons share the existing one-repair slot with sensors and impulse.
+
+For every powered consumer, capability is `condition × min(1, allocation / positive demand)`, bounded to `[0, 1]`. A shot's output is `baseDamage × weaponCapability`. Shield effective capacity is `shieldCondition × shieldPowerSatisfaction`; absorption is `min(output, capacity)`, shield condition becomes `clamp(oldCondition - absorption, 0, 1)`, and penetration is `output - absorption`. Penetration directly reduces the selected subsystem condition. A shot targeted at Shields applies its penetration after absorption to that already reduced shield condition. Shield capacity ceases at zero condition; offline or unpowered shields also absorb zero. Nominal fully powered shields initially absorb a full bounded shot. There are no facings, recharge, hull pool, or random outcomes.
+
+Allocation validates all four consumers against their authored demands and available power `floor(nominalGeneration × generationCondition)`. Brownout first preserves allocations if their total fits. Otherwise each allocation becomes `floor(oldAllocation × available / oldTotal)`, then each remaining unit goes in fixed order Sensors, Impulse, Shields, DirectedEnergy to a consumer with an unexhausted prior share. No allocation increases above its prior value. Balanced allocation uses proportional demands and the same one-unit remainder order; priority allocation satisfies its selected consumer then the remaining consumers in that order, except propulsion priority keeps Sensors next. The 75-unit Balanced result of 28/20/16/11 and the historical 44/31 travel allocation are proof/balance fixtures, not permanent balance commitments.
+
+New-game bootstrap initializes shield and directed-energy conditions as nominal. The player starts with both allocations at zero so the existing travel/repair demonstration remains valid. Kestrel may explicitly use 70 Sensors, 5 Impulse, 15 Shields, and 30 DirectedEnergy from 120 available power, preserving 30 km sensing and its 0.5 km/s cautious course while enabling defense. Other ordinary NPC content may remain unpowered unless a proof requires otherwise; no hostile allegiance is added. Hail legitimately identifies reciprocal contacts before defensive proof. Damage can disable concrete systems but M6A has no hull system or ship destruction.
+
+A fire intent carries a local `SensorContactId` and a target `ShipSystemId`. It requires the same strategic location, a Current and Identified local contact, inclusive range under the existing spatial tolerance, positive weapon capability, and `now >= nextReady`. Every rejection is atomic: it changes no cooldown, scheduler, contacts, or events. A successful shot sets the persisted per-ship absolute `nextReady` to checked `now + cooldown`; readiness defaults to zero and is nonnegative, fixed-step aligned, and bounded. There is no periodic weapon scheduler. At a time where that addition is not representable, Core returns a typed time-limit rejection without partial mutation.
+
+Damage commits one complete candidate in this order: derive shot damage; apply shields; apply selected-system penetration; cancel an active repair whose system receives any positive damage, including shield absorption against Shields, with its exact completion work; reconcile allocation and speed; reuse observation and invalid-scan interruption; admit defensive stimulus; validate; then commit. The forced transition preserves heading on a speed clamp. A generator brownout may also interrupt a scan. Due work already dequeued in the same batch must tolerate this exact invalidation without weakening ordinary orphan validation.
+
+Defensive response is a separate deterministic policy. A nonplayer ship receives at most one pending stimulus when its local contact for the observed attacker is Current at attack time; identification is never invented. The stimulus stores only local contact ID, observed time, due time `observed + 100 ms`, and exact work ID. The first eligible stimulus wins in accepted-shot order; later shots neither grow nor postpone it. One `ShipCombatDecisionWake` consumes the stimulus before evaluating once. From own tactical, capability, readiness, time, and local-contact facts only, it explains all three candidates with hard constraints and rejection reasons, then selects contact/system in fixed ReturnFire → Withdraw → Hold order: ReturnFire at directed-energy weapons when legal, otherwise Withdraw when a known-current displacement and legal speed exist, otherwise Hold. Hold creates no course; Withdraw issues an ordinary legal course. It does not wait or reschedule for cooldown, alter travel/orders, use faction/controller/affiliation facts, or replace the cautious-contact policy. A return shot may schedule a later stimulus but never recurses inline.
+
+Results and events remain actor-safe. An attacker may learn only that a shot fired, shield hit, or penetration reached the selected system; it receives no target identity, controller, faction, condition, capability, or percentage. A player victim may see its own damage, brownout, forced speed, and repair interruption. Unrepresentable finite-position separation rejects as out of range without a projection failure.
 
 ### Involuntary degradation is a required design decision
 
 The existing allocation/course rules govern **voluntary commands** and may reject a requested state that would exceed current capability. Combat damage is different: the simulation cannot reject physical damage merely because the resulting generator or impulse capability makes the ship's existing allocation, speed, scan, or repair state illegal under voluntary-command rules.
 
-Before the first damage implementation, explicitly define deterministic reconciliation for at least:
+M6A defines deterministic reconciliation for:
 
-- generation falling below already committed sensor/impulse allocations;
+- generation falling below already committed sensor, impulse, shield, or directed-energy allocations;
 - impulse capability falling below current tactical speed;
 - sensor capability becoming insufficient for an active scan; and
 - damage/condition changes interacting with an active repair.
