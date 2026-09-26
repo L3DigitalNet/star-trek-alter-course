@@ -13,6 +13,9 @@ public sealed class M6CombatLongHorizonTests
     private const int ShotCount = 512;
     private readonly M6CombatProofFixture _fixture = new(lowDamage: true);
 
+    private static SimulationTime ReadyAt(GameSimulation game) =>
+        M6CombatProofFixture.Player(game).Combat.ReadinessOf(TestShipContent.Weapons)!.ReadyAt;
+
     /// <summary>Proves recurring defense stays active without cooldown work, damage resets or save divergence.</summary>
     [Fact]
     public void RepeatedLegitimateDefenseRemainsBoundedAndConvergesAcrossMidStimulusSave()
@@ -30,11 +33,7 @@ public sealed class M6CombatLongHorizonTests
         {
             if (shot > 0)
             {
-                SimulationTime ready = M6CombatProofFixture
-                    .Player(game)
-                    .Combat.ReadinessOf(TestShipContent.Weapons)!
-                    .ReadyAt;
-                (game, resumed) = AdvanceTogether(game, resumed, ready, responding: false);
+                (game, resumed) = AdvanceTogether(game, resumed, ReadyAt(game), responding: false);
             }
             FireDirectedEnergyResult fired = game.FireDirectedEnergy(
                 new(contact, ShipSystemKind.DirectedEnergyWeapons)
