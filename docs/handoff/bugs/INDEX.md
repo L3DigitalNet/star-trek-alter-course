@@ -9,3 +9,4 @@
 | [005](005-command-context-actions-recreated.md) | Live projection refreshes replaced active Command Deck action controls. | Fixed |
 | [006](006-paused-shell-ignores-manual-input.md) | A paused simulation does not re-present manual proof input until the next tick. | Fixed |
 | [007](007-hosted-gdunit-teardown-segfault.md) | Hosted gdUnit process segfaulted at teardown after all suites passed. | Open |
+| [008](008-editor-sdk-drift.md) | System SDK patch drift left editors unable to resolve the pinned .NET SDK. | Fixed |
