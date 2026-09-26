@@ -43,7 +43,7 @@ public sealed record SensorSystemDefinition : SystemDefinition
     }
 
     /// <inheritdoc />
-    public override ShipSystemId Kind => ShipSystemId.Sensors;
+    public override ShipSystemKind Kind => ShipSystemKind.Sensors;
 
     /// <summary>Gets the passive detection range at full capability.</summary>
     public DistanceKilometers PassiveRange { get; }

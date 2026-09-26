@@ -33,11 +33,11 @@ public partial class CommandDeckWorkspace : Control
 
     private readonly Dictionary<string, Button> _actionButtons = new(StringComparer.Ordinal);
     private readonly Dictionary<string, CommandInterfaceAction> _presentedActions = new(StringComparer.Ordinal);
-    private readonly Dictionary<int, ShipSystemId> _targetSystems = [];
+    private readonly Dictionary<int, ShipSystemKind> _targetSystems = [];
     private readonly Dictionary<string, int> _targetItemIds = new(StringComparer.Ordinal);
     private OptionButton _targetSelector = null!;
     private Label _targetSystemLabel = null!;
-    private ShipSystemId? _selectedTargetSystem;
+    private ShipSystemKind? _selectedTargetSystem;
     private VBoxContainer _systemRows = null!;
     private Label _systemsSummary = null!;
     private Label _mapTitle = null!;
@@ -149,14 +149,14 @@ public partial class CommandDeckWorkspace : Control
             presentation.DataMode == CommandInterfaceDataMode.Live && presentation.Mode == CommandInterfaceMode.Combat;
         _targetSelector.Visible = liveCombat;
         _targetSystemLabel.Visible = liveCombat;
-        ShipSystemId[] choices = liveCombat ? [.. presentation.CombatTarget?.SupportedSystems ?? []] : [];
+        ShipSystemKind[] choices = liveCombat ? [.. presentation.CombatTarget?.SupportedSystems ?? []] : [];
         bool retainedFocus = _targetSelector.HasFocus();
         bool changed = !_targetSystems.Values.SequenceEqual(choices);
         if (changed)
         {
             _targetSelector.Clear();
             _targetSystems.Clear();
-            foreach (ShipSystemId system in choices)
+            foreach (ShipSystemKind system in choices)
             {
                 // Item IDs are presentation-local handles, never domain enum ordinals or list positions.
                 if (!_targetItemIds.TryGetValue(system.Value, out int itemId))
@@ -188,14 +188,14 @@ public partial class CommandDeckWorkspace : Control
         )
             return;
         int itemId = _targetSelector.GetItemId((int)index);
-        if (_targetSystems.TryGetValue(itemId, out ShipSystemId system))
+        if (_targetSystems.TryGetValue(itemId, out ShipSystemKind system))
         {
             _selectedTargetSystem = system;
             SetMeta("selected_target_system", system.Value);
         }
     }
 
-    private static string TargetSystemLabel(ShipSystemId system) =>
+    private static string TargetSystemLabel(ShipSystemKind system) =>
         system.Value switch
         {
             "power-generation" => "Power generation",

@@ -7,7 +7,7 @@ namespace AlterCourse.Core.Ships;
 public sealed record SystemRepairState
 {
     internal SystemRepairState(
-        ShipSystemId targetSystem,
+        ShipSystemKind targetSystem,
         SystemCondition startingCondition,
         SystemCondition targetCondition,
         SimulationTime startedAt,
@@ -16,10 +16,10 @@ public sealed record SystemRepairState
     )
     {
         if (
-            targetSystem != ShipSystemId.Sensors
-            && targetSystem != ShipSystemId.ImpulsePropulsion
-            && targetSystem != ShipSystemId.Shields
-            && targetSystem != ShipSystemId.DirectedEnergyWeapons
+            targetSystem != ShipSystemKind.Sensors
+            && targetSystem != ShipSystemKind.ImpulsePropulsion
+            && targetSystem != ShipSystemKind.Shields
+            && targetSystem != ShipSystemKind.DirectedEnergyWeapons
         )
         {
             throw new ArgumentException("Only concrete consumer systems are repairable.", nameof(targetSystem));
@@ -49,7 +49,7 @@ public sealed record SystemRepairState
     }
 
     /// <summary>Gets the repaired system identity.</summary>
-    public ShipSystemId TargetSystem { get; }
+    public ShipSystemKind TargetSystem { get; }
 
     /// <summary>Gets condition at repair start.</summary>
     public SystemCondition StartingCondition { get; }

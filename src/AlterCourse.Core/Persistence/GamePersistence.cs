@@ -1283,7 +1283,7 @@ public static partial class GamePersistence
                     ? null
                     : new SaveModelsV5.SystemRepairSnapshotV5
                     {
-                        TargetSystem = ShipSystemId.Sensors.Value,
+                        TargetSystem = ShipSystemKind.Sensors.Value,
                         StartingCondition = ship.SensorRepair.StartingIntegrity,
                         TargetCondition = ship.SensorRepair.TargetIntegrity,
                         StartedAtMilliseconds = ship.SensorRepair.StartedAtMilliseconds,
@@ -2606,8 +2606,8 @@ public static partial class GamePersistence
         }
 
         SaveModelsV5.SystemRepairSnapshotV5 repair = engineering.ActiveRepair;
-        var targetSystem = ShipSystemId.Parse(repair.TargetSystem);
-        if (targetSystem != ShipSystemId.Sensors && targetSystem != ShipSystemId.ImpulsePropulsion)
+        var targetSystem = ShipSystemKind.Parse(repair.TargetSystem);
+        if (targetSystem != ShipSystemKind.Sensors && targetSystem != ShipSystemKind.ImpulsePropulsion)
         {
             throw new InvalidOperationException("Only sensors and impulse propulsion are repairable.");
         }
@@ -2628,7 +2628,7 @@ public static partial class GamePersistence
         double expectedCondition =
             repair.StartingCondition + ((repair.TargetCondition - repair.StartingCondition) * progress);
         double actualCondition =
-            targetSystem == ShipSystemId.Sensors ? engineering.SensorCondition : engineering.ImpulseCondition;
+            targetSystem == ShipSystemKind.Sensors ? engineering.SensorCondition : engineering.ImpulseCondition;
         if (actualCondition != expectedCondition)
         {
             throw new InvalidOperationException("System condition does not match the active repair at current time.");
@@ -3602,7 +3602,7 @@ public static partial class GamePersistence
         snapshot is null
             ? null
             : new SystemRepairState(
-                ShipSystemId.Parse(snapshot.TargetSystem),
+                ShipSystemKind.Parse(snapshot.TargetSystem),
                 new SystemCondition(snapshot.StartingCondition),
                 new SystemCondition(snapshot.TargetCondition),
                 new SimulationTime(snapshot.StartedAtMilliseconds),

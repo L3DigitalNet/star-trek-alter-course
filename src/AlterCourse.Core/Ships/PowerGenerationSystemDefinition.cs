@@ -29,7 +29,7 @@ public sealed record PowerGenerationSystemDefinition : SystemDefinition
     }
 
     /// <inheritdoc />
-    public override ShipSystemId Kind => ShipSystemId.PowerGeneration;
+    public override ShipSystemKind Kind => ShipSystemKind.PowerGeneration;
 
     /// <summary>Gets the output at full condition, before condition scaling.</summary>
     public PowerUnits NominalOutput { get; }

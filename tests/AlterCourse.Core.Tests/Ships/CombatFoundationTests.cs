@@ -29,7 +29,7 @@ public sealed class CombatFoundationTests
     [InlineData("directed-energy-weapons")]
     public void CombatSystemIdentitiesAreSupported(string name)
     {
-        var system = ShipSystemId.Parse(name);
+        var system = ShipSystemKind.Parse(name);
         Assert.Equal(name, system.Value);
         ShipEngineeringState changed = State(1, Allocation(0, 0, 0, 0)).WithCondition(system, new SystemCondition(0.3));
         Assert.Equal(new SystemCondition(0.3), changed.ConditionFor(system));
@@ -211,7 +211,7 @@ public sealed class CombatFoundationTests
     [InlineData("directed-energy-weapons", 6000)]
     public void ConcreteConsumersAreRepairable(string name, long duration)
     {
-        var system = ShipSystemId.Parse(name);
+        var system = ShipSystemKind.Parse(name);
         Assert.Equal(duration, Definition.RepairDurationFor(system).Milliseconds);
         var repair = new SystemRepairState(
             system,
@@ -222,7 +222,7 @@ public sealed class CombatFoundationTests
             new ScheduledWorkId(1)
         );
         Assert.Equal(system, repair.TargetSystem);
-        Assert.Throws<ArgumentException>(() => Definition.RepairDurationFor(ShipSystemId.PowerGeneration));
+        Assert.Throws<ArgumentException>(() => Definition.RepairDurationFor(ShipSystemKind.PowerGeneration));
     }
 
     /// <summary>Confirms legacy definitions and state gain no combat capability implicitly.</summary>
@@ -246,7 +246,7 @@ public sealed class CombatFoundationTests
         Assert.Equal(0, state.DirectedEnergyCondition.Value);
         Assert.Equal(0, state.ShieldCapability(definition));
         Assert.Equal(0, state.DirectedEnergyCapability(definition));
-        Assert.Throws<ArgumentException>(() => definition.RepairDurationFor(ShipSystemId.Shields));
+        Assert.Throws<ArgumentException>(() => definition.RepairDurationFor(ShipSystemKind.Shields));
     }
 
     /// <summary>Confirms weapon tuning has positive finite output and aligned timing.</summary>

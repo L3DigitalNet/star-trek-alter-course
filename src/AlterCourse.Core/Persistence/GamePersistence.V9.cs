@@ -286,8 +286,8 @@ public static partial class GamePersistence
             if (ship.Engineering.ActiveRepair is { } repair)
             {
                 ValidateRepairTimingV5(repair, snapshot.TimeMilliseconds);
-                var target = ShipSystemId.Parse(repair.TargetSystem);
-                if (target == ShipSystemId.PowerGeneration)
+                var target = ShipSystemKind.Parse(repair.TargetSystem);
+                if (target == ShipSystemKind.PowerGeneration)
                     throw new InvalidOperationException("Power generation is not repairable.");
             }
         }
@@ -309,8 +309,8 @@ public static partial class GamePersistence
     private static bool IsCombatRepair(SaveModelsV5.SystemRepairSnapshotV5? repair) =>
         repair is not null
         && (
-            string.Equals(repair.TargetSystem, ShipSystemId.Shields.Value, StringComparison.Ordinal)
-            || string.Equals(repair.TargetSystem, ShipSystemId.DirectedEnergyWeapons.Value, StringComparison.Ordinal)
+            string.Equals(repair.TargetSystem, ShipSystemKind.Shields.Value, StringComparison.Ordinal)
+            || string.Equals(repair.TargetSystem, ShipSystemKind.DirectedEnergyWeapons.Value, StringComparison.Ordinal)
         );
 
     private static ShipSnapshotV7 LegacyShipShapeV9(ShipSnapshotV9 ship) =>

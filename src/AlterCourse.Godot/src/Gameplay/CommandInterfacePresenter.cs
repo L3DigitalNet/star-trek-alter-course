@@ -995,14 +995,14 @@ public static class CommandInterfacePresenter
     private static string FormatPower(PowerUnits power) =>
         $"{power.Value.ToString(CultureInfo.InvariantCulture)} units";
 
-    private static string SystemLabel(ShipSystemId? system) =>
+    private static string SystemLabel(ShipSystemKind? system) =>
         system switch
         {
-            ShipSystemId id when id == ShipSystemId.PowerGeneration => "Power generation",
-            ShipSystemId id when id == ShipSystemId.Sensors => "Sensors",
-            ShipSystemId id when id == ShipSystemId.ImpulsePropulsion => "Impulse propulsion",
-            ShipSystemId id when id == ShipSystemId.Shields => "Shields",
-            ShipSystemId id when id == ShipSystemId.DirectedEnergyWeapons => "Directed-energy weapons",
+            ShipSystemKind id when id == ShipSystemKind.PowerGeneration => "Power generation",
+            ShipSystemKind id when id == ShipSystemKind.Sensors => "Sensors",
+            ShipSystemKind id when id == ShipSystemKind.ImpulsePropulsion => "Impulse propulsion",
+            ShipSystemKind id when id == ShipSystemKind.Shields => "Shields",
+            ShipSystemKind id when id == ShipSystemKind.DirectedEnergyWeapons => "Directed-energy weapons",
             _ => "System",
         };
 

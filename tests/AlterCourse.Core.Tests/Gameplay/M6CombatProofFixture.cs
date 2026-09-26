@@ -236,7 +236,7 @@ internal sealed class M6CombatProofFixture
     }
 
     /// <summary>Submits a trusted NPC intent to the shared Core transition, preserving local fire legality.</summary>
-    internal ShipDirectedEnergyApplicationResult Incoming(GameSimulation game, ShipSystemId system)
+    internal ShipDirectedEnergyApplicationResult Incoming(GameSimulation game, ShipSystemKind system)
     {
         SimulationState state = game.CaptureState();
         SensorContactId contact = state

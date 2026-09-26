@@ -513,7 +513,7 @@ public sealed class SensorObservationCommandTests
                 default,
                 integrity: 0.5,
                 repair: new SystemRepairStart(
-                    ShipSystemId.Sensors,
+                    ShipSystemKind.Sensors,
                     new SystemCondition(0.5),
                     new SystemCondition(1),
                     new SimulationTime(0)
@@ -600,7 +600,7 @@ public sealed class SensorObservationCommandTests
                 default,
                 integrity: 0.5,
                 repair: new SystemRepairStart(
-                    ShipSystemId.Sensors,
+                    ShipSystemKind.Sensors,
                     new SystemCondition(0.5),
                     new SystemCondition(1),
                     new SimulationTime(0)

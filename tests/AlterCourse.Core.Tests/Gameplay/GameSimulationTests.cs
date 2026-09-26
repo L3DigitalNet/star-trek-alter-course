@@ -288,7 +288,7 @@ public sealed class GameSimulationTests
         var repairCompleted = new PlayerAdvanceEvent(
             PlayerAdvanceEventKind.SystemRepairCompleted,
             new SimulationTime(8000),
-            ShipSystemId: ShipSystemId.Sensors
+            ShipSystemId: ShipSystemKind.Sensors
         );
         Assert.Equal([repairCompleted], repair.ResolvedEvents);
         Assert.NotNull(repair.Projection.Strategic.Travel);
@@ -450,7 +450,7 @@ public sealed class GameSimulationTests
                         new AtLocationStart(location.Id),
                         isRepairing
                             ? new SystemRepairStart(
-                                ShipSystemId.Sensors,
+                                ShipSystemKind.Sensors,
                                 new SystemCondition(0.4),
                                 new SystemCondition(1),
                                 new SimulationTime(0)

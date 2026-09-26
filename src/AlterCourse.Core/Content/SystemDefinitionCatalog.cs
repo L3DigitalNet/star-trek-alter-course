@@ -43,7 +43,7 @@ public sealed class SystemDefinitionCatalog
         // Aim kinds are derived from public content only (never from any ship's installations), ordered by the
         // earliest participating definition of each kind. With production content this reproduces the fixed
         // five-kind combat list: generation, sensors, impulse, shields, directed-energy weapons.
-        ShipSystemId[] damageTargetKinds = ordered
+        ShipSystemKind[] damageTargetKinds = ordered
             .Where(definition => definition.ConditionParticipation)
             .GroupBy(definition => definition.Kind)
             .Select(group => (Kind: group.Key, Order: group.Min(definition => definition.CommonOrder)))
@@ -61,7 +61,7 @@ public sealed class SystemDefinitionCatalog
     /// Gets the distinct kinds of condition-participating definitions, ordered by each kind's lowest common order
     /// and then ordinal kind value. This is the admitted aim vocabulary for remote fire.
     /// </summary>
-    public IReadOnlyList<ShipSystemId> DamageTargetKinds { get; }
+    public IReadOnlyList<ShipSystemKind> DamageTargetKinds { get; }
 
     /// <summary>Gets the definition with the required identity.</summary>
     /// <exception cref="KeyNotFoundException">No definition has the identity.</exception>

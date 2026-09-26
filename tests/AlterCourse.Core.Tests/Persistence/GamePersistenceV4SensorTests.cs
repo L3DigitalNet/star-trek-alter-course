@@ -123,7 +123,7 @@ public sealed class GamePersistenceV4SensorTests
         Assert.Equal(new SimulationTime(100), scan.StartedAt);
         Assert.Equal(new SimulationTime(2_100), scan.ExpectedCompletion);
         Assert.Equal(new ScheduledWorkId(2), scan.ScheduledCompletionId);
-        Assert.Equal(ShipSystemId.Sensors, repair.TargetSystem);
+        Assert.Equal(ShipSystemKind.Sensors, repair.TargetSystem);
         Assert.Equal(new SystemCondition(0.5), repair.StartingCondition);
         Assert.Equal(new SystemCondition(1), repair.TargetCondition);
         Assert.Equal(new SimulationTime(100), repair.StartedAt);
@@ -180,7 +180,7 @@ public sealed class GamePersistenceV4SensorTests
             repairCompletion.ResolvedEvents,
             item =>
                 item.Kind == PlayerAdvanceEventKind.SystemRepairCompleted
-                && item.ShipSystemId == ShipSystemId.Sensors
+                && item.ShipSystemId == ShipSystemKind.Sensors
                 && item.OccurredAt == new SimulationTime(8_100)
         );
         Assert.Equal(
@@ -959,7 +959,7 @@ public sealed class GamePersistenceV4SensorTests
 
         return (
             new SystemRepairState(
-                ShipSystemId.Sensors,
+                ShipSystemKind.Sensors,
                 new SystemCondition(0.5),
                 new SystemCondition(1),
                 currentTime,

@@ -64,11 +64,11 @@ public sealed class EngineeringBackboneTests
     [Fact]
     public void SystemIdentitiesUseOnlyStableSemanticNames()
     {
-        Assert.Equal("power-generation", ShipSystemId.PowerGeneration.Value);
-        Assert.Equal("sensors", ShipSystemId.Sensors.Value);
-        Assert.Equal("impulse-propulsion", ShipSystemId.ImpulsePropulsion.Value);
-        Assert.Equal(ShipSystemId.Sensors, ShipSystemId.Parse("sensors"));
-        Assert.Throws<ArgumentException>(() => ShipSystemId.Parse("Sensors"));
+        Assert.Equal("power-generation", ShipSystemKind.PowerGeneration.Value);
+        Assert.Equal("sensors", ShipSystemKind.Sensors.Value);
+        Assert.Equal("impulse-propulsion", ShipSystemKind.ImpulsePropulsion.Value);
+        Assert.Equal(ShipSystemKind.Sensors, ShipSystemKind.Parse("sensors"));
+        Assert.Throws<ArgumentException>(() => ShipSystemKind.Parse("Sensors"));
     }
 
     /// <summary>Confirms every constrained Pathfinder preset has its exact deterministic result.</summary>
@@ -303,7 +303,7 @@ public sealed class EngineeringBackboneTests
             completion.ResolvedEvents,
             item => item.Kind == PlayerAdvanceEventKind.SystemRepairCompleted
         );
-        Assert.Equal(ShipSystemId.Sensors, resolved.ShipSystemId);
+        Assert.Equal(ShipSystemKind.Sensors, resolved.ShipSystemId);
         Assert.Equal(1, completion.Projection.Ship.Engineering.SensorCondition.Value);
         Assert.Null(completion.Projection.Ship.Engineering.ActiveRepair);
     }
@@ -315,7 +315,7 @@ public sealed class EngineeringBackboneTests
         GameSimulation uninterrupted = CreateSingleShip(new SystemCondition(0.5), new SystemCondition(0.5));
         Assert.Equal(
             SystemRepairOutcome.Accepted,
-            uninterrupted.BeginSystemRepair(ShipSystemId.ImpulsePropulsion, new SystemCondition(1)).Outcome
+            uninterrupted.BeginSystemRepair(ShipSystemKind.ImpulsePropulsion, new SystemCondition(1)).Outcome
         );
         SystemRepairState started = Assert.IsType<SystemRepairState>(
             uninterrupted.CaptureState().GetRequiredShip(new ShipInstanceId(1)).Engineering.ActiveRepair
@@ -350,7 +350,7 @@ public sealed class EngineeringBackboneTests
         PlayerAdvanceEvent resolved = Assert.Single(completion.ResolvedEvents);
         Assert.Equal(PlayerAdvanceEventKind.SystemRepairCompleted, resolved.Kind);
         Assert.Equal(new SimulationTime(6_000), resolved.OccurredAt);
-        Assert.Equal(ShipSystemId.ImpulsePropulsion, resolved.ShipSystemId);
+        Assert.Equal(ShipSystemKind.ImpulsePropulsion, resolved.ShipSystemId);
         Assert.Equal(0.5, completion.Projection.Ship.Engineering.SensorCondition.Value, 12);
         Assert.Equal(1, completion.Projection.Ship.Engineering.ImpulseCondition.Value);
         Assert.Null(completion.Projection.Ship.Engineering.ActiveRepair);
@@ -384,15 +384,15 @@ public sealed class EngineeringBackboneTests
         );
         Assert.Equal(
             SystemRepairOutcome.UnsupportedSystem,
-            game.BeginSystemRepair(ShipSystemId.PowerGeneration, new SystemCondition(1)).Outcome
+            game.BeginSystemRepair(ShipSystemKind.PowerGeneration, new SystemCondition(1)).Outcome
         );
         Assert.Equal(
             SystemRepairOutcome.Accepted,
-            game.BeginSystemRepair(ShipSystemId.ImpulsePropulsion, new SystemCondition(1)).Outcome
+            game.BeginSystemRepair(ShipSystemKind.ImpulsePropulsion, new SystemCondition(1)).Outcome
         );
         Assert.Equal(
             SystemRepairOutcome.RepairAlreadyActive,
-            game.BeginSystemRepair(ShipSystemId.Sensors, new SystemCondition(1)).Outcome
+            game.BeginSystemRepair(ShipSystemKind.Sensors, new SystemCondition(1)).Outcome
         );
     }
 
@@ -403,7 +403,7 @@ public sealed class EngineeringBackboneTests
         GameSimulation game = CreateSingleShip(new SystemCondition(1), new SystemCondition(1));
         PlayerProjection before = game.GetPlayerProjection();
 
-        SystemRepairResult result = game.BeginSystemRepair(ShipSystemId.Sensors, new SystemCondition(1));
+        SystemRepairResult result = game.BeginSystemRepair(ShipSystemKind.Sensors, new SystemCondition(1));
 
         Assert.Equal(SystemRepairOutcome.TargetDoesNotImproveCondition, result.Outcome);
         Assert.Equal(before, game.GetPlayerProjection());
@@ -416,14 +416,14 @@ public sealed class EngineeringBackboneTests
         GameSimulation game = CreateSingleShip(new SystemCondition(0.5), new SystemCondition(0.5));
         Assert.Equal(
             SystemRepairOutcome.Accepted,
-            game.BeginSystemRepair(ShipSystemId.ImpulsePropulsion, new SystemCondition(1)).Outcome
+            game.BeginSystemRepair(ShipSystemKind.ImpulsePropulsion, new SystemCondition(1)).Outcome
         );
 
         PlayerShipProjection projection = game.GetPlayerProjection().Ship;
 
         Assert.False(projection.Sensors.IsRepairing);
         Assert.Equal(1, projection.Sensors.RepairProgress);
-        Assert.Equal(ShipSystemId.ImpulsePropulsion, projection.Engineering.ActiveRepair!.TargetSystem);
+        Assert.Equal(ShipSystemKind.ImpulsePropulsion, projection.Engineering.ActiveRepair!.TargetSystem);
     }
 
     /// <summary>Confirms tactical commands use current effective propulsion rather than design maximum.</summary>

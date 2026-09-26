@@ -60,7 +60,7 @@ public sealed class DefensiveCombatDecisionPolicyTests
         Assert.Equal(action, result.SelectedAction);
         Assert.Equal(3, result.Candidates.Count);
         Assert.Equal(rejection, result.Candidates[0].FireRejection);
-        Assert.Equal(ShipSystemId.DirectedEnergyWeapons, result.TargetSystem);
+        Assert.Equal(ShipSystemKind.DirectedEnergyWeapons, result.TargetSystem);
         Assert.Equal(DefensiveCombatDecisionTieRule.ReturnFireThenWithdrawThenHold, result.TieRule);
         if (action == DefensiveCombatDecisionAction.ReturnFire)
             Assert.All(result.Candidates[0].Constraints, constraint => Assert.True(constraint.Satisfied));

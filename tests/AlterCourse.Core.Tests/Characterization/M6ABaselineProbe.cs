@@ -150,19 +150,19 @@ internal sealed class M6ABaselineProbe(ShipDefinitionCatalog catalog, bool exact
             choice.Priority switch
             {
                 null => PowerAllocationPreset.Balanced,
-                { } kind when kind == ShipSystemId.Sensors => PowerAllocationPreset.PrioritizeSensors,
-                { } kind when kind == ShipSystemId.ImpulsePropulsion => PowerAllocationPreset.PrioritizePropulsion,
-                { } kind when kind == ShipSystemId.Shields => PowerAllocationPreset.PrioritizeShields,
-                { } kind when kind == ShipSystemId.DirectedEnergyWeapons =>
+                { } kind when kind == ShipSystemKind.Sensors => PowerAllocationPreset.PrioritizeSensors,
+                { } kind when kind == ShipSystemKind.ImpulsePropulsion => PowerAllocationPreset.PrioritizePropulsion,
+                { } kind when kind == ShipSystemKind.Shields => PowerAllocationPreset.PrioritizeShields,
+                { } kind when kind == ShipSystemKind.DirectedEnergyWeapons =>
                     PowerAllocationPreset.PrioritizeDirectedEnergyWeapons,
                 { } kind => throw new ArgumentOutOfRangeException(nameof(choice), kind, "Kind is not a consumer."),
             }
         );
 
-    internal static SystemRepairResult BeginRepair(GameSimulation game, ShipSystemId system, double target) =>
+    internal static SystemRepairResult BeginRepair(GameSimulation game, ShipSystemKind system, double target) =>
         game.BeginSystemRepair(system, new SystemCondition(target));
 
-    internal static FireDirectedEnergyResult Fire(GameSimulation game, long contactId, ShipSystemId system) =>
+    internal static FireDirectedEnergyResult Fire(GameSimulation game, long contactId, ShipSystemKind system) =>
         game.FireDirectedEnergy(new(new SensorContactId(contactId), system));
 
     /// <summary>
@@ -172,7 +172,7 @@ internal sealed class M6ABaselineProbe(ShipDefinitionCatalog catalog, bool exact
     internal static (GameSimulation Game, OutcomeSequence<EventOutcome> Events) Incoming(
         M6CombatProofFixture fixture,
         GameSimulation game,
-        ShipSystemId system
+        ShipSystemKind system
     )
     {
         ShipDirectedEnergyApplicationResult hit = fixture.Incoming(game, system);

@@ -5,7 +5,7 @@ namespace AlterCourse.Core.Player;
 
 /// <summary>Projects player-owned repair identity and analytical progress.</summary>
 public sealed record SystemRepairProjection(
-    ShipSystemId TargetSystem,
+    ShipSystemKind TargetSystem,
     double Progress,
     SimulationTime ExpectedCompletion
 );

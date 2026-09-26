@@ -181,7 +181,7 @@ internal sealed class FactionAssignmentProofFixture
             nominal,
             new PowerAllocation(new PowerUnits(44), new PowerUnits(31)),
             new AtLocationStart(Dawn),
-            new SystemRepairStart(ShipSystemId.Sensors, damaged, nominal, new SimulationTime(0))
+            new SystemRepairStart(ShipSystemKind.Sensors, damaged, nominal, new SimulationTime(0))
         );
     }
 

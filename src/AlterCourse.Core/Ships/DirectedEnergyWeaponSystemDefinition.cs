@@ -27,7 +27,7 @@ public sealed record DirectedEnergyWeaponSystemDefinition : SystemDefinition
     }
 
     /// <inheritdoc />
-    public override ShipSystemId Kind => ShipSystemId.DirectedEnergyWeapons;
+    public override ShipSystemKind Kind => ShipSystemKind.DirectedEnergyWeapons;
 
     /// <summary>Gets the range, base damage, and cooldown tuning.</summary>
     public DirectedEnergyWeaponDefinition Weapon { get; }

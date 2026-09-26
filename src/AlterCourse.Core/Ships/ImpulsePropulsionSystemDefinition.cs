@@ -28,7 +28,7 @@ public sealed record ImpulsePropulsionSystemDefinition : SystemDefinition
     }
 
     /// <inheritdoc />
-    public override ShipSystemId Kind => ShipSystemId.ImpulsePropulsion;
+    public override ShipSystemKind Kind => ShipSystemKind.ImpulsePropulsion;
 
     /// <summary>Gets the attainable tactical speed at full capability.</summary>
     public SpeedKilometersPerSecond MaximumTacticalSpeed { get; }

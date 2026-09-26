@@ -14,5 +14,5 @@ public sealed record CommandInterfaceAction(
     SensorContactId? FocusedContactId = null,
     string? Tooltip = null,
     EngineeringAction? EngineeringCommand = null,
-    ShipSystemId? FocusedSystemId = null
+    ShipSystemKind? FocusedSystemId = null
 );

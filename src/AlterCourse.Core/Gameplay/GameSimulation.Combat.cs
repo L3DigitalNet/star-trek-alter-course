@@ -208,7 +208,7 @@ public sealed partial class GameSimulation
         ShipState victim,
         ShipEngineeringState damaged,
         ShieldDamageResult impact,
-        ShipSystemId targetSystem,
+        ShipSystemKind targetSystem,
         HashSet<ScheduledWork>? canceledRepairs
     )
     {
@@ -217,7 +217,7 @@ public sealed partial class GameSimulation
         if (
             victim.Engineering.ActiveRepair is { } repair
             && (
-                (repair.TargetSystem == ShipSystemId.Shields && impact.AbsorbedDamage > 0)
+                (repair.TargetSystem == ShipSystemKind.Shields && impact.AbsorbedDamage > 0)
                 || (repair.TargetSystem == targetSystem && impact.PenetratingDamage > 0)
             )
         )
@@ -246,7 +246,7 @@ public sealed partial class GameSimulation
         ShipInstanceId attackerId,
         SensorContactTrack contact,
         ShipState victim,
-        ShipSystemId targetSystem,
+        ShipSystemKind targetSystem,
         ShipEngineeringState before,
         ShieldDamageResult impact,
         bool repairInterrupted,
@@ -267,7 +267,7 @@ public sealed partial class GameSimulation
                         PlayerAdvanceEventKind.ShieldImpact,
                         state.Time,
                         contact.Id,
-                        ShipSystemId.Shields
+                        ShipSystemKind.Shields
                     )
                 );
             if (impact.PenetratingDamage > 0)
@@ -288,7 +288,7 @@ public sealed partial class GameSimulation
                         PlayerAdvanceEventKind.OwnSystemDamaged,
                         state.Time,
                         observedAttacker,
-                        ShipSystemId.Shields
+                        ShipSystemKind.Shields
                     )
                 );
             if (impact.PenetratingDamage > 0)
@@ -427,7 +427,7 @@ public sealed partial class GameSimulation
                 state,
                 catalog,
                 ship.InstanceId,
-                new FireDirectedEnergyIntent(decision.ContactId, ShipSystemId.DirectedEnergyWeapons),
+                new FireDirectedEnergyIntent(decision.ContactId, ShipSystemKind.DirectedEnergyWeapons),
                 events,
                 canceledRepairs,
                 collector
@@ -470,9 +470,9 @@ public sealed partial class GameSimulation
                             CombatFacts(state, ship, definition),
                             contact.ToActorSafeSnapshot(),
                             context,
-                            ShipSystemId.DirectedEnergyWeapons
+                            ShipSystemKind.DirectedEnergyWeapons
                         ),
-                        new ReadOnlyValueList<ShipSystemId>(CombatLegality.SupportedSystems)
+                        new ReadOnlyValueList<ShipSystemKind>(CombatLegality.SupportedSystems)
                     );
                 })
             )

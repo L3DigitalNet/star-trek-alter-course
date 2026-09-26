@@ -54,9 +54,9 @@ public sealed class M6ABaselineContinuationTests
             M6ABaselineScenarios.Player,
             M6ABaselineScenarios.Defender
         );
-        FireDirectedEnergyResult shot = M6ABaselineProbe.Fire(uninterrupted, contact, ShipSystemId.Sensors);
+        FireDirectedEnergyResult shot = M6ABaselineProbe.Fire(uninterrupted, contact, ShipSystemKind.Sensors);
         Assert.Equal(FireDirectedEnergyOutcome.Accepted, shot.Outcome);
-        Assert.Equal(shot, M6ABaselineProbe.Fire(resumed, contact, ShipSystemId.Sensors));
+        Assert.Equal(shot, M6ABaselineProbe.Fire(resumed, contact, ShipSystemKind.Sensors));
         Assert.Equal(exact.Probe.AllShips(uninterrupted), exact.Probe.AllShips(resumed));
     }
 }

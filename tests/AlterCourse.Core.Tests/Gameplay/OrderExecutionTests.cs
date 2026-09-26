@@ -245,7 +245,7 @@ public sealed class OrderExecutionTests
             ScheduledWorkKind.SystemRepairCompletion
         );
         var repair = new SystemRepairState(
-            ShipSystemId.Sensors,
+            ShipSystemKind.Sensors,
             new SystemCondition(0.5),
             new SystemCondition(1),
             new SimulationTime(0),
@@ -301,7 +301,7 @@ public sealed class OrderExecutionTests
                 new PlayerAdvanceEvent(
                     PlayerAdvanceEventKind.SystemRepairCompleted,
                     new SimulationTime(800),
-                    ShipSystemId: ShipSystemId.Sensors
+                    ShipSystemId: ShipSystemKind.Sensors
                 ),
             ],
             result.ResolvedEvents
@@ -335,7 +335,7 @@ public sealed class OrderExecutionTests
                 new PlayerAdvanceEvent(
                     PlayerAdvanceEventKind.SystemRepairCompleted,
                     new SimulationTime(1000),
-                    ShipSystemId: ShipSystemId.Sensors
+                    ShipSystemId: ShipSystemKind.Sensors
                 ),
             ],
             result.ResolvedEvents
@@ -379,7 +379,7 @@ public sealed class OrderExecutionTests
             ScheduledWorkKind.SystemRepairCompletion
         );
         var repair = new SystemRepairState(
-            ShipSystemId.Sensors,
+            ShipSystemKind.Sensors,
             new SystemCondition(0.25),
             new SystemCondition(1),
             new SimulationTime(0),
@@ -479,7 +479,7 @@ public sealed class OrderExecutionTests
             ScheduledWorkKind.SystemRepairCompletion
         );
         var repair = new SystemRepairState(
-            ShipSystemId.Sensors,
+            ShipSystemKind.Sensors,
             new SystemCondition(0.5),
             new SystemCondition(1),
             new SimulationTime(0),
@@ -518,7 +518,7 @@ public sealed class OrderExecutionTests
             ScheduledWorkKind.SystemRepairCompletion
         );
         var repair = new SystemRepairState(
-            ShipSystemId.Sensors,
+            ShipSystemKind.Sensors,
             new SystemCondition(0.5),
             new SystemCondition(1),
             new SimulationTime(0),

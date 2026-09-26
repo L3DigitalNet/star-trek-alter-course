@@ -32,10 +32,12 @@ public sealed class M6CombatLongHorizonTests
                 SimulationTime ready = M6CombatProofFixture.Player(game).Combat.NextDirectedEnergyReadyAt;
                 (game, resumed) = AdvanceTogether(game, resumed, ready, responding: false);
             }
-            FireDirectedEnergyResult fired = game.FireDirectedEnergy(new(contact, ShipSystemId.DirectedEnergyWeapons));
+            FireDirectedEnergyResult fired = game.FireDirectedEnergy(
+                new(contact, ShipSystemKind.DirectedEnergyWeapons)
+            );
             Assert.Equal(FireDirectedEnergyOutcome.Accepted, fired.Outcome);
             if (resumed is not null)
-                Assert.Equal(fired, resumed.FireDirectedEnergy(new(contact, ShipSystemId.DirectedEnergyWeapons)));
+                Assert.Equal(fired, resumed.FireDirectedEnergy(new(contact, ShipSystemKind.DirectedEnergyWeapons)));
             SimulationState pending = game.CaptureState();
             CombatStimulus stimulus = pending.GetRequiredShip(M6CombatProofFixture.Defender).Combat.PendingStimulus!;
             AssertPendingCorrelation(pending, stimulus);

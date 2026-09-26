@@ -199,20 +199,20 @@ public sealed record ShipEngineeringState
         }
     }
 
-    internal SystemCondition ConditionFor(ShipSystemId systemId) =>
-        systemId == ShipSystemId.Sensors ? SensorCondition
-        : systemId == ShipSystemId.ImpulsePropulsion ? ImpulseCondition
-        : systemId == ShipSystemId.Shields ? ShieldCondition
-        : systemId == ShipSystemId.DirectedEnergyWeapons ? DirectedEnergyCondition
-        : systemId == ShipSystemId.PowerGeneration ? GenerationCondition
+    internal SystemCondition ConditionFor(ShipSystemKind systemId) =>
+        systemId == ShipSystemKind.Sensors ? SensorCondition
+        : systemId == ShipSystemKind.ImpulsePropulsion ? ImpulseCondition
+        : systemId == ShipSystemKind.Shields ? ShieldCondition
+        : systemId == ShipSystemKind.DirectedEnergyWeapons ? DirectedEnergyCondition
+        : systemId == ShipSystemKind.PowerGeneration ? GenerationCondition
         : throw new ArgumentException("Ship system identity is invalid.", nameof(systemId));
 
-    internal ShipEngineeringState WithCondition(ShipSystemId systemId, SystemCondition condition) =>
-        systemId == ShipSystemId.Sensors ? this with { SensorCondition = condition }
-        : systemId == ShipSystemId.ImpulsePropulsion ? this with { ImpulseCondition = condition }
-        : systemId == ShipSystemId.Shields ? this with { ShieldCondition = condition }
-        : systemId == ShipSystemId.DirectedEnergyWeapons ? this with { DirectedEnergyCondition = condition }
-        : systemId == ShipSystemId.PowerGeneration ? this with { GenerationCondition = condition }
+    internal ShipEngineeringState WithCondition(ShipSystemKind systemId, SystemCondition condition) =>
+        systemId == ShipSystemKind.Sensors ? this with { SensorCondition = condition }
+        : systemId == ShipSystemKind.ImpulsePropulsion ? this with { ImpulseCondition = condition }
+        : systemId == ShipSystemKind.Shields ? this with { ShieldCondition = condition }
+        : systemId == ShipSystemKind.DirectedEnergyWeapons ? this with { DirectedEnergyCondition = condition }
+        : systemId == ShipSystemKind.PowerGeneration ? this with { GenerationCondition = condition }
         : throw new ArgumentException("Ship system identity is invalid.", nameof(systemId));
 
     private static double Capability(SystemCondition condition, PowerUnits allocated, PowerUnits demand) =>

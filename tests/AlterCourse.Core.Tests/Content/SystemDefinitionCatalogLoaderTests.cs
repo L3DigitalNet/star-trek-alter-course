@@ -65,13 +65,13 @@ public sealed class SystemDefinitionCatalogLoaderTests
         PowerGenerationSystemDefinition generation = Assert.IsType<PowerGenerationSystemDefinition>(
             catalog.Definitions[0]
         );
-        Assert.Equal(ShipSystemId.PowerGeneration, generation.Kind);
+        Assert.Equal(ShipSystemKind.PowerGeneration, generation.Kind);
         Assert.Equal(new PowerUnits(120), generation.NominalOutput);
         Assert.Null(generation.Power);
         Assert.Null(generation.Repair);
 
         SensorSystemDefinition sensors = Assert.IsType<SensorSystemDefinition>(catalog.Definitions[1]);
-        Assert.Equal(ShipSystemId.Sensors, sensors.Kind);
+        Assert.Equal(ShipSystemKind.Sensors, sensors.Kind);
         Assert.Equal(new SystemPowerDemand(new PowerUnits(70)), sensors.Power);
         Assert.Equal(new SystemRepairCapability(new SimulationDuration(8000), 300), sensors.Repair);
         Assert.Equal(new DistanceKilometers(30), sensors.PassiveRange);
@@ -80,20 +80,20 @@ public sealed class SystemDefinitionCatalogLoaderTests
         ImpulsePropulsionSystemDefinition impulse = Assert.IsType<ImpulsePropulsionSystemDefinition>(
             catalog.Definitions[2]
         );
-        Assert.Equal(ShipSystemId.ImpulsePropulsion, impulse.Kind);
+        Assert.Equal(ShipSystemKind.ImpulsePropulsion, impulse.Kind);
         Assert.Equal(new SystemPowerDemand(new PowerUnits(50)), impulse.Power);
         Assert.Equal(new SystemRepairCapability(new SimulationDuration(6000), 400), impulse.Repair);
         Assert.Equal(new SpeedKilometersPerSecond(10), impulse.MaximumTacticalSpeed);
 
         ShieldSystemDefinition shields = Assert.IsType<ShieldSystemDefinition>(catalog.Definitions[3]);
-        Assert.Equal(ShipSystemId.Shields, shields.Kind);
+        Assert.Equal(ShipSystemKind.Shields, shields.Kind);
         Assert.Equal(new SystemPowerDemand(new PowerUnits(40)), shields.Power);
         Assert.Equal(new SystemRepairCapability(new SimulationDuration(8000), 100), shields.Repair);
 
         DirectedEnergyWeaponSystemDefinition weapon = Assert.IsType<DirectedEnergyWeaponSystemDefinition>(
             catalog.Definitions[4]
         );
-        Assert.Equal(ShipSystemId.DirectedEnergyWeapons, weapon.Kind);
+        Assert.Equal(ShipSystemKind.DirectedEnergyWeapons, weapon.Kind);
         Assert.Equal(new SystemPowerDemand(new PowerUnits(30)), weapon.Power);
         Assert.Equal(new SystemRepairCapability(new SimulationDuration(6000), 200), weapon.Repair);
         Assert.Equal(
@@ -126,10 +126,10 @@ public sealed class SystemDefinitionCatalogLoaderTests
 
         Assert.Equal(
             [
-                ShipSystemId.Shields,
-                ShipSystemId.DirectedEnergyWeapons,
-                ShipSystemId.Sensors,
-                ShipSystemId.ImpulsePropulsion,
+                ShipSystemKind.Shields,
+                ShipSystemKind.DirectedEnergyWeapons,
+                ShipSystemKind.Sensors,
+                ShipSystemKind.ImpulsePropulsion,
             ],
             catalog
                 .Definitions.Where(definition => definition.Repair is not null)
@@ -262,11 +262,11 @@ public sealed class SystemDefinitionCatalogLoaderTests
     {
         Assert.Equal(
             [
-                ShipSystemId.PowerGeneration,
-                ShipSystemId.Sensors,
-                ShipSystemId.ImpulsePropulsion,
-                ShipSystemId.Shields,
-                ShipSystemId.DirectedEnergyWeapons,
+                ShipSystemKind.PowerGeneration,
+                ShipSystemKind.Sensors,
+                ShipSystemKind.ImpulsePropulsion,
+                ShipSystemKind.Shields,
+                ShipSystemKind.DirectedEnergyWeapons,
             ],
             LoadProduction().DamageTargetKinds
         );
@@ -275,7 +275,7 @@ public sealed class SystemDefinitionCatalogLoaderTests
         string shieldsOnly = """
             { "schemaVersion": 1, "definitions": [ { "id": "s", "kind": "shields", "componentLabel": "Shields", "commonOrder": 7, "conditionParticipation": true, "power": { "nominalDemandPowerUnits": 1 } } ] }
             """;
-        Assert.Equal([ShipSystemId.Shields], Load(("shields.json", shieldsOnly)).DamageTargetKinds);
+        Assert.Equal([ShipSystemKind.Shields], Load(("shields.json", shieldsOnly)).DamageTargetKinds);
     }
 
     /// <summary>
@@ -826,7 +826,7 @@ public sealed class SystemDefinitionCatalogLoaderTests
 
         Assert.Throws<NotSupportedException>(() => ((IList<SystemDefinition>)catalog.Definitions).Clear());
         Assert.Throws<NotSupportedException>(() =>
-            ((IList<ShipSystemId>)catalog.DamageTargetKinds).Add(ShipSystemId.Shields)
+            ((IList<ShipSystemKind>)catalog.DamageTargetKinds).Add(ShipSystemKind.Shields)
         );
     }
 

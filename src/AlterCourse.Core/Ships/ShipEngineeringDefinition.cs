@@ -92,11 +92,11 @@ public sealed record ShipEngineeringDefinition
     public SimulationDuration ImpulseRepairDuration { get; }
 
     /// <summary>Gets the authored repair duration for one repairable system.</summary>
-    public SimulationDuration RepairDurationFor(ShipSystemId systemId) =>
-        systemId == ShipSystemId.Sensors ? SensorRepairDuration
-        : systemId == ShipSystemId.ImpulsePropulsion ? ImpulseRepairDuration
-        : systemId == ShipSystemId.Shields && NominalShieldDemand.Value > 0 ? ShieldRepairDuration
-        : systemId == ShipSystemId.DirectedEnergyWeapons && NominalDirectedEnergyDemand.Value > 0
+    public SimulationDuration RepairDurationFor(ShipSystemKind systemId) =>
+        systemId == ShipSystemKind.Sensors ? SensorRepairDuration
+        : systemId == ShipSystemKind.ImpulsePropulsion ? ImpulseRepairDuration
+        : systemId == ShipSystemKind.Shields && NominalShieldDemand.Value > 0 ? ShieldRepairDuration
+        : systemId == ShipSystemKind.DirectedEnergyWeapons && NominalDirectedEnergyDemand.Value > 0
             ? DirectedEnergyRepairDuration
         : throw new ArgumentException("Absent systems and power generation repair is unsupported.", nameof(systemId));
 

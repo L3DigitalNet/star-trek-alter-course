@@ -186,7 +186,7 @@ public sealed class Milestone4EngineeringScenarioTests
         Assert.Equal(new SimulationTime(8_000), repairCompletion.FinalTime);
         PlayerAdvanceEvent repairEvent = Assert.Single(repairCompletion.ResolvedEvents);
         Assert.Equal(PlayerAdvanceEventKind.SystemRepairCompleted, repairEvent.Kind);
-        Assert.Equal(ShipSystemId.Sensors, repairEvent.ShipSystemId);
+        Assert.Equal(ShipSystemKind.Sensors, repairEvent.ShipSystemId);
         Assert.Equal(1, repairCompletion.Projection.Ship.Engineering.SensorCondition.Value);
         Assert.Null(repairCompletion.Projection.Ship.Engineering.ActiveRepair);
         AssertEquivalentState(pair.Uninterrupted, pair.Resumed);

@@ -147,7 +147,7 @@ public sealed partial class GameSimulation
     }
 
     /// <summary>Validates and schedules one player-ship analytical system repair.</summary>
-    public SystemRepairResult BeginSystemRepair(ShipSystemId targetSystem, SystemCondition targetCondition)
+    public SystemRepairResult BeginSystemRepair(ShipSystemKind targetSystem, SystemCondition targetCondition)
     {
         ShipState player = _state.GetRequiredShip(_state.PlayerShipId);
         if (player.Engineering.ActiveRepair is not null)
@@ -768,7 +768,7 @@ public sealed partial class GameSimulation
                 hasLocalTarget
                 && (
                     observer.TacticalMotion.Speed.Value != 0
-                    || observer.Engineering.ActiveRepair?.TargetSystem == ShipSystemId.Sensors
+                    || observer.Engineering.ActiveRepair?.TargetSystem == ShipSystemKind.Sensors
                 )
             )
             {
@@ -1816,7 +1816,7 @@ public sealed partial class GameSimulation
         ScheduledConsequenceAction action,
         bool completed,
         SensorContactId? contactId = null,
-        ShipSystemId? systemId = null,
+        ShipSystemKind? systemId = null,
         ShipContactDecisionExplanation? contactDecision = null,
         FactionAssignmentDecisionExplanation? factionDecision = null
     ) =>
@@ -1984,7 +1984,8 @@ public sealed partial class GameSimulation
     )
     {
         SystemRepairState? sensorRepair =
-            playerShip.Engineering.ActiveRepair is { TargetSystem: var target } repair && target == ShipSystemId.Sensors
+            playerShip.Engineering.ActiveRepair is { TargetSystem: var target } repair
+            && target == ShipSystemKind.Sensors
                 ? repair
                 : null;
         ActiveSensorScanState? activeScan = playerShip.SensorKnowledge.ActiveScan;
@@ -2099,21 +2100,21 @@ public sealed partial class GameSimulation
             definition,
             PowerAllocationPreset.PrioritizeDirectedEnergyWeapons
         );
-        AddRepairAction(actions, EngineeringAction.BeginShieldRepair, ship, definition, ShipSystemId.Shields);
+        AddRepairAction(actions, EngineeringAction.BeginShieldRepair, ship, definition, ShipSystemKind.Shields);
         AddRepairAction(
             actions,
             EngineeringAction.BeginDirectedEnergyRepair,
             ship,
             definition,
-            ShipSystemId.DirectedEnergyWeapons
+            ShipSystemKind.DirectedEnergyWeapons
         );
-        AddRepairAction(actions, EngineeringAction.BeginSensorRepair, ship, definition, ShipSystemId.Sensors);
+        AddRepairAction(actions, EngineeringAction.BeginSensorRepair, ship, definition, ShipSystemKind.Sensors);
         AddRepairAction(
             actions,
             EngineeringAction.BeginImpulseRepair,
             ship,
             definition,
-            ShipSystemId.ImpulsePropulsion
+            ShipSystemKind.ImpulsePropulsion
         );
         actions.Add(new EngineeringActionProjection(EngineeringAction.ReturnToCommand, true));
         return [.. actions];
@@ -2143,7 +2144,7 @@ public sealed partial class GameSimulation
         EngineeringAction action,
         ShipState ship,
         ShipDefinition definition,
-        ShipSystemId systemId
+        ShipSystemKind systemId
     )
     {
         EngineeringActionUnavailableReason? reason =
@@ -2155,11 +2156,11 @@ public sealed partial class GameSimulation
         actions.Add(new EngineeringActionProjection(action, reason is null, reason));
     }
 
-    private static bool SupportsRepair(ShipEngineeringDefinition definition, ShipSystemId system) =>
-        system == ShipSystemId.Sensors
-        || system == ShipSystemId.ImpulsePropulsion
-        || (system == ShipSystemId.Shields && definition.NominalShieldDemand.Value > 0)
-        || (system == ShipSystemId.DirectedEnergyWeapons && definition.NominalDirectedEnergyDemand.Value > 0);
+    private static bool SupportsRepair(ShipEngineeringDefinition definition, ShipSystemKind system) =>
+        system == ShipSystemKind.Sensors
+        || system == ShipSystemKind.ImpulsePropulsion
+        || (system == ShipSystemKind.Shields && definition.NominalShieldDemand.Value > 0)
+        || (system == ShipSystemKind.DirectedEnergyWeapons && definition.NominalDirectedEnergyDemand.Value > 0);
 
     private static double? ActiveScanProgressAt(SimulationTime currentTime, ActiveSensorScanState? activeScan)
     {

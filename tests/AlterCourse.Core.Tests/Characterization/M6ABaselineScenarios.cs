@@ -99,17 +99,17 @@ internal sealed class M6ABaselineScenarios
         GameSimulation game = Fixture.Pair();
         AllocationTuple allocation = exceedReducedGeneration ? new(70, 20, 0, 30) : new(40, 10, 0, 30);
         Assert.Equal(PowerAllocationOutcome.Accepted, M6ABaselineProbe.SetAllocation(game, allocation).Outcome);
-        return Damage(game, ShipSystemId.PowerGeneration);
+        return Damage(game, ShipSystemKind.PowerGeneration);
     }
 
-    internal DamageOutcome SubsystemDamage(ShipSystemId system) => Damage(Fixture.Pair(), system);
+    internal DamageOutcome SubsystemDamage(ShipSystemKind system) => Damage(Fixture.Pair(), system);
 
     internal SensingOutcome SensingAndScanning()
     {
         GameSimulation game = Fixture.FourShipFirstGame();
         Assert.Equal(
             PowerAllocationOutcome.Accepted,
-            M6ABaselineProbe.ApplyPreset(game, new PresetChoice(ShipSystemId.Sensors)).Outcome
+            M6ABaselineProbe.ApplyPreset(game, new PresetChoice(ShipSystemKind.Sensors)).Outcome
         );
         PlayerViewOutcome afterPreset = Probe.View(game);
         AdvanceUntilResult detection = game.AdvanceUntilNextPlayerRelevantEvent();
@@ -150,7 +150,7 @@ internal sealed class M6ABaselineScenarios
         (GameSimulation hit, OutcomeSequence<EventOutcome> events) = M6ABaselineProbe.Incoming(
             Fixture,
             game,
-            ShipSystemId.ImpulsePropulsion
+            ShipSystemKind.ImpulsePropulsion
         );
         ShipOutcome player = Probe.Player(hit);
         return new MotionScenarioOutcome(
@@ -194,7 +194,7 @@ internal sealed class M6ABaselineScenarios
     {
         GameSimulation game = Fixture.Pair();
         Assert.Equal(PowerAllocationOutcome.Accepted, M6ABaselineProbe.SetAllocation(game, new(70, 20, 4, 26)).Outcome);
-        return Damage(game, ShipSystemId.ImpulsePropulsion);
+        return Damage(game, ShipSystemKind.ImpulsePropulsion);
     }
 
     private OutcomeSequence<ShotOutcome> Engagement(GameSimulation game, long contact, long target)
@@ -203,7 +203,7 @@ internal sealed class M6ABaselineScenarios
         for (int shot = 0; shot < 16; shot++)
         {
             AdvanceTo(game, Math.Max(Probe.Player(game).Combat.WeaponReadyAtMs, M6ABaselineProbe.TimeMs(game)));
-            FireDirectedEnergyResult result = M6ABaselineProbe.Fire(game, contact, ShipSystemId.ImpulsePropulsion);
+            FireDirectedEnergyResult result = M6ABaselineProbe.Fire(game, contact, ShipSystemKind.ImpulsePropulsion);
             OutcomeSequence<EventOutcome> events = M6ABaselineProbe.Events(result.ResolvedEvents);
             shots.Add(
                 new ShotOutcome(
@@ -224,7 +224,7 @@ internal sealed class M6ABaselineScenarios
     }
 
     /// <summary>Damages <paramref name="system"/> by one real hit, then repairs it to nominal.</summary>
-    internal RepairLifecycleOutcome RepairLifecycle(ShipSystemId system)
+    internal RepairLifecycleOutcome RepairLifecycle(ShipSystemKind system)
     {
         (GameSimulation game, _) = M6ABaselineProbe.Incoming(Fixture, Fixture.Pair(), system);
         SystemRepairOutcome begin = M6ABaselineProbe.BeginRepair(game, system, 1).Outcome;
@@ -241,13 +241,13 @@ internal sealed class M6ABaselineScenarios
     internal RepairAdmissionOutcome RepairAdmission()
     {
         GameSimulation game = Fixture.Pair();
-        SystemRepairOutcome nominal = M6ABaselineProbe.BeginRepair(game, ShipSystemId.Sensors, 1).Outcome;
-        (game, _) = M6ABaselineProbe.Incoming(Fixture, game, ShipSystemId.PowerGeneration);
-        SystemRepairOutcome generation = M6ABaselineProbe.BeginRepair(game, ShipSystemId.PowerGeneration, 1).Outcome;
+        SystemRepairOutcome nominal = M6ABaselineProbe.BeginRepair(game, ShipSystemKind.Sensors, 1).Outcome;
+        (game, _) = M6ABaselineProbe.Incoming(Fixture, game, ShipSystemKind.PowerGeneration);
+        SystemRepairOutcome generation = M6ABaselineProbe.BeginRepair(game, ShipSystemKind.PowerGeneration, 1).Outcome;
         AdvanceTo(game, Probe.Ship(game, Defender).Combat.WeaponReadyAtMs);
-        (game, _) = M6ABaselineProbe.Incoming(Fixture, game, ShipSystemId.Sensors);
-        SystemRepairOutcome first = M6ABaselineProbe.BeginRepair(game, ShipSystemId.Sensors, 1).Outcome;
-        SystemRepairOutcome second = M6ABaselineProbe.BeginRepair(game, ShipSystemId.Sensors, 1).Outcome;
+        (game, _) = M6ABaselineProbe.Incoming(Fixture, game, ShipSystemKind.Sensors);
+        SystemRepairOutcome first = M6ABaselineProbe.BeginRepair(game, ShipSystemKind.Sensors, 1).Outcome;
+        SystemRepairOutcome second = M6ABaselineProbe.BeginRepair(game, ShipSystemKind.Sensors, 1).Outcome;
         return new RepairAdmissionOutcome(nominal, generation, first, second);
     }
 
@@ -260,7 +260,7 @@ internal sealed class M6ABaselineScenarios
     /// hit is never absorbed, so the absorption path would be unreachable and the case would silently degrade
     /// to the damage-elsewhere case.
     /// </remarks>
-    internal RepairHitOutcome RepairHit(ShipSystemId repaired, ShipSystemId hit, bool powerShields)
+    internal RepairHitOutcome RepairHit(ShipSystemKind repaired, ShipSystemKind hit, bool powerShields)
     {
         (GameSimulation game, _) = M6ABaselineProbe.Incoming(Fixture, Fixture.Pair(), repaired);
         Assert.Equal(SystemRepairOutcome.Accepted, M6ABaselineProbe.BeginRepair(game, repaired, 1).Outcome);
@@ -282,7 +282,7 @@ internal sealed class M6ABaselineScenarios
     {
         GameSimulation game = Fixture.Pair();
         long contact = M6ABaselineProbe.ContactOf(game, Player, Defender);
-        FireDirectedEnergyResult shot = M6ABaselineProbe.Fire(game, contact, ShipSystemId.Shields);
+        FireDirectedEnergyResult shot = M6ABaselineProbe.Fire(game, contact, ShipSystemKind.Shields);
         Assert.Equal(FireDirectedEnergyOutcome.Accepted, shot.Outcome);
         CombatOutcome afterShot = Probe.Ship(game, Defender).Combat;
         DefenseOutcome? beforeDue = Probe.Defense(game);
@@ -304,7 +304,7 @@ internal sealed class M6ABaselineScenarios
         long contact = M6ABaselineProbe.ContactOf(game, Player, Defender);
         Assert.Equal(
             FireDirectedEnergyOutcome.Accepted,
-            M6ABaselineProbe.Fire(game, contact, ShipSystemId.Shields).Outcome
+            M6ABaselineProbe.Fire(game, contact, ShipSystemKind.Shields).Outcome
         );
         MotionOutcome before = Probe.Ship(game, Defender).Motion;
         double separationBefore = Separation(game);
@@ -330,11 +330,11 @@ internal sealed class M6ABaselineScenarios
     /// </summary>
     internal GameSimulation MixedCheckpoint()
     {
-        (GameSimulation game, _) = M6ABaselineProbe.Incoming(Fixture, Fixture.Pair(), ShipSystemId.ImpulsePropulsion);
+        (GameSimulation game, _) = M6ABaselineProbe.Incoming(Fixture, Fixture.Pair(), ShipSystemKind.ImpulsePropulsion);
         AdvanceTo(game, Probe.Ship(game, Defender).Combat.WeaponReadyAtMs);
         Assert.Equal(
             SystemRepairOutcome.Accepted,
-            M6ABaselineProbe.BeginRepair(game, ShipSystemId.ImpulsePropulsion, 1).Outcome
+            M6ABaselineProbe.BeginRepair(game, ShipSystemKind.ImpulsePropulsion, 1).Outcome
         );
         long scanContact = M6ABaselineProbe.ContactOf(game, Player, ScanTarget);
         Assert.Equal(
@@ -344,7 +344,7 @@ internal sealed class M6ABaselineScenarios
         long defenderContact = M6ABaselineProbe.ContactOf(game, Player, Defender);
         Assert.Equal(
             FireDirectedEnergyOutcome.Accepted,
-            M6ABaselineProbe.Fire(game, defenderContact, ShipSystemId.Sensors).Outcome
+            M6ABaselineProbe.Fire(game, defenderContact, ShipSystemKind.Sensors).Outcome
         );
         return game;
     }
@@ -368,7 +368,7 @@ internal sealed class M6ABaselineScenarios
         return Sequence([.. outcomes]);
     }
 
-    private DamageOutcome Damage(GameSimulation game, ShipSystemId system)
+    private DamageOutcome Damage(GameSimulation game, ShipSystemKind system)
     {
         (GameSimulation hit, OutcomeSequence<EventOutcome> events) = M6ABaselineProbe.Incoming(Fixture, game, system);
         ShipOutcome player = Probe.Player(hit);

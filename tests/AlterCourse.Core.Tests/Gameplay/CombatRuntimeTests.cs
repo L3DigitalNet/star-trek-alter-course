@@ -34,7 +34,7 @@ public sealed class CombatRuntimeTests
         ShipState victim = before.GetRequiredShip(new ShipInstanceId(2));
         Assert.Equal(
             FireDirectedEnergyOutcome.Accepted,
-            game.FireDirectedEnergy(new(contact, ShipSystemId.Sensors)).Outcome
+            game.FireDirectedEnergy(new(contact, ShipSystemKind.Sensors)).Outcome
         );
         ShipState after = game.CaptureState().GetRequiredShip(victim.InstanceId);
         Assert.Equal(0.75, after.Engineering.ShieldCondition.Value, 12);
@@ -44,7 +44,7 @@ public sealed class CombatRuntimeTests
             game.CaptureState().GetRequiredShip(before.PlayerShipId).Combat.NextDirectedEnergyReadyAt.Milliseconds
         );
         SimulationState committed = game.CaptureState();
-        FireDirectedEnergyResult rejected = game.FireDirectedEnergy(new(contact, ShipSystemId.Sensors));
+        FireDirectedEnergyResult rejected = game.FireDirectedEnergy(new(contact, ShipSystemKind.Sensors));
         Assert.Equal(FireDirectedEnergyOutcome.CooldownActive, rejected.Outcome);
         Assert.Empty(rejected.ResolvedEvents);
         Assert.Same(committed, game.CaptureState());
@@ -66,7 +66,7 @@ public sealed class CombatRuntimeTests
     public void UnpoweredShieldsPermitConcreteSubsystemDamage(string systemName)
     {
         (GameSimulation game, _, SensorContactId contact) = Pair(shieldPower: 0);
-        var system = ShipSystemId.Parse(systemName);
+        var system = ShipSystemKind.Parse(systemName);
         Assert.Equal(FireDirectedEnergyOutcome.Accepted, game.FireDirectedEnergy(new(contact, system)).Outcome);
         ShipState victim = game.CaptureState().GetRequiredShip(new ShipInstanceId(2));
         Assert.Equal(0.75, victim.Engineering.ConditionFor(system).Value, 12);
@@ -87,7 +87,7 @@ public sealed class CombatRuntimeTests
         (GameSimulation game, _, SensorContactId contact) = Pair(shieldPower: 0);
         Assert.Equal(
             FireDirectedEnergyOutcome.Accepted,
-            game.FireDirectedEnergy(new(contact, ShipSystemId.Shields)).Outcome
+            game.FireDirectedEnergy(new(contact, ShipSystemKind.Shields)).Outcome
         );
         long firedAt = game.CaptureState().Time.Milliseconds;
         Assert.Equal(
@@ -101,7 +101,7 @@ public sealed class CombatRuntimeTests
             response.ResolvedEvents,
             item =>
                 item.Kind == PlayerAdvanceEventKind.OwnSystemDamaged
-                && item.ShipSystemId == ShipSystemId.DirectedEnergyWeapons
+                && item.ShipSystemId == ShipSystemKind.DirectedEnergyWeapons
         );
         Assert.Equal(
             DefensiveCombatDecisionAction.ReturnFire,
@@ -119,7 +119,7 @@ public sealed class CombatRuntimeTests
     public void FirstStimulusWinsWithoutGrowingWork()
     {
         (GameSimulation game, Milestone3ProofFixture fixture, SensorContactId contact) = Pair(shieldPower: 0);
-        game.FireDirectedEnergy(new(contact, ShipSystemId.Shields));
+        game.FireDirectedEnergy(new(contact, ShipSystemKind.Shields));
         SimulationState state = game.CaptureState();
         CombatStimulus first = state.GetRequiredShip(new ShipInstanceId(2)).Combat.PendingStimulus!;
         ShipState player = state.GetRequiredShip(state.PlayerShipId);
@@ -133,7 +133,7 @@ public sealed class CombatRuntimeTests
             ),
             fixture.Catalog
         );
-        game.FireDirectedEnergy(new(contact, ShipSystemId.Shields));
+        game.FireDirectedEnergy(new(contact, ShipSystemKind.Shields));
         Assert.Equal(first, game.CaptureState().GetRequiredShip(new ShipInstanceId(2)).Combat.PendingStimulus);
         Assert.Single(
             game.CaptureState()
@@ -197,7 +197,7 @@ public sealed class CombatRuntimeTests
         }
         SimulationTime repairStart = new(due.Milliseconds - 6000);
         var repair = new SystemRepairState(
-            ShipSystemId.DirectedEnergyWeapons,
+            ShipSystemKind.DirectedEnergyWeapons,
             new SystemCondition(0.5),
             new SystemCondition(1),
             repairStart,
@@ -205,7 +205,7 @@ public sealed class CombatRuntimeTests
             repairWork.Id
         );
         ShipEngineeringState engineering = player.Engineering.WithCondition(
-            ShipSystemId.DirectedEnergyWeapons,
+            ShipSystemKind.DirectedEnergyWeapons,
             repair.ConditionAt(state.Time)
         ) with
         {
@@ -333,7 +333,7 @@ public sealed class CombatRuntimeTests
         SimulationState before = game.CaptureState();
         var intent = new FireDirectedEnergyIntent(
             expected == FireDirectedEnergyOutcome.ContactNotFound ? new SensorContactId(99) : contact,
-            expected == FireDirectedEnergyOutcome.UnsupportedSystem ? default : ShipSystemId.Sensors
+            expected == FireDirectedEnergyOutcome.UnsupportedSystem ? default : ShipSystemKind.Sensors
         );
         FireDirectedEnergyResult result = game.FireDirectedEnergy(intent);
         Assert.Equal(expected, result.Outcome);
@@ -361,7 +361,7 @@ public sealed class CombatRuntimeTests
         Assert.Null(game.GetPlayerProjection().Ship.Combat.Targets.Single().Range);
         Assert.Equal(
             FireDirectedEnergyOutcome.OutOfRange,
-            game.FireDirectedEnergy(new(contact, ShipSystemId.Sensors)).Outcome
+            game.FireDirectedEnergy(new(contact, ShipSystemKind.Sensors)).Outcome
         );
         Assert.False(CombatLegality.WithinRange(double.PositiveInfinity, double.MaxValue));
     }
@@ -375,17 +375,17 @@ public sealed class CombatRuntimeTests
         ShipState npc = state.GetRequiredShip(new ShipInstanceId(2));
         npc = npc with { SensorKnowledge = SensorKnowledge.Empty };
         game = GameSimulation.RestoreState(state.ReplaceShip(npc.InstanceId, npc), fixture.Catalog);
-        game.FireDirectedEnergy(new(contact, ShipSystemId.Sensors));
+        game.FireDirectedEnergy(new(contact, ShipSystemKind.Sensors));
         Assert.Equal(5, game.GetPlayerProjection().Ship.Combat.Targets.Single().SupportedSystems.Count);
         game.AdvanceFixedSteps(19);
         Assert.Equal(
             FireDirectedEnergyOutcome.CooldownActive,
-            game.FireDirectedEnergy(new(contact, ShipSystemId.Sensors)).Outcome
+            game.FireDirectedEnergy(new(contact, ShipSystemKind.Sensors)).Outcome
         );
         game.AdvanceFixedSteps(1);
         Assert.Equal(
             FireDirectedEnergyOutcome.Accepted,
-            game.FireDirectedEnergy(new(contact, ShipSystemId.Sensors)).Outcome
+            game.FireDirectedEnergy(new(contact, ShipSystemKind.Sensors)).Outcome
         );
     }
 
@@ -398,7 +398,7 @@ public sealed class CombatRuntimeTests
         ShipState npc = state.GetRequiredShip(new ShipInstanceId(2));
         npc = npc with { SensorKnowledge = SensorKnowledge.Empty };
         game = GameSimulation.RestoreState(state.ReplaceShip(npc.InstanceId, npc), fixture.Catalog);
-        game.FireDirectedEnergy(new(contact, ShipSystemId.Shields));
+        game.FireDirectedEnergy(new(contact, ShipSystemKind.Shields));
         Assert.Null(game.CaptureState().GetRequiredShip(npc.InstanceId).Combat.PendingStimulus);
         game.AdvanceFixedSteps(1);
         Assert.Null(game.CaptureState().GetRequiredShip(npc.InstanceId).Combat.PendingStimulus);
@@ -414,7 +414,7 @@ public sealed class CombatRuntimeTests
             Time = new SimulationTime((long.MaxValue - 3000) / 100 * 100),
         };
         game = GameSimulation.RestoreState(state, fixture.Catalog);
-        FireDirectedEnergyResult result = game.FireDirectedEnergy(new(contact, ShipSystemId.Sensors));
+        FireDirectedEnergyResult result = game.FireDirectedEnergy(new(contact, ShipSystemKind.Sensors));
         Assert.Equal(FireDirectedEnergyOutcome.TimeLimitExceeded, result.Outcome);
         Assert.Empty(result.ResolvedEvents);
         Assert.Same(state, game.CaptureState());
@@ -459,7 +459,7 @@ public sealed class CombatRuntimeTests
             new AtLocationStart(location)
         );
         GameSimulation game = new GameBootstrap(default, map, start.InstanceId, [start]).CreateSimulation(catalog);
-        var system = ShipSystemId.Parse(systemName);
+        var system = ShipSystemKind.Parse(systemName);
         SimulationState before = game.CaptureState();
         Assert.Equal(
             SystemRepairOutcome.UnsupportedSystem,
@@ -467,7 +467,7 @@ public sealed class CombatRuntimeTests
         );
         Assert.Same(before, game.CaptureState());
         EngineeringAction action =
-            system == ShipSystemId.Shields
+            system == ShipSystemKind.Shields
                 ? EngineeringAction.BeginShieldRepair
                 : EngineeringAction.BeginDirectedEnergyRepair;
         Assert.False(
@@ -493,7 +493,7 @@ public sealed class CombatRuntimeTests
             state,
             fixture.Catalog,
             npc.InstanceId,
-            new(localPlayer, ShipSystemId.PowerGeneration)
+            new(localPlayer, ShipSystemKind.PowerGeneration)
         );
         Assert.Equal(FireDirectedEnergyOutcome.Accepted, shot.Outcome);
         game = GameSimulation.RestoreState(shot.CandidateState, fixture.Catalog);
@@ -515,14 +515,14 @@ public sealed class CombatRuntimeTests
     public void PositiveDamageToAlreadyOfflineRepairCannotBeReconstituted()
     {
         (GameSimulation game, Milestone3ProofFixture fixture, _) = Pair(0);
-        game = WithPlayerRepair(game, fixture, ShipSystemId.DirectedEnergyWeapons, default);
+        game = WithPlayerRepair(game, fixture, ShipSystemKind.DirectedEnergyWeapons, default);
         SimulationState state = game.CaptureState();
         ShipState npc = state.GetRequiredShip(new ShipInstanceId(2));
         ShipDirectedEnergyApplicationResult shot = GameSimulation.ApplyShipDirectedEnergy(
             state,
             fixture.Catalog,
             npc.InstanceId,
-            new(npc.SensorKnowledge.Contacts.Single().Id, ShipSystemId.DirectedEnergyWeapons)
+            new(npc.SensorKnowledge.Contacts.Single().Id, ShipSystemKind.DirectedEnergyWeapons)
         );
         game = GameSimulation.RestoreState(shot.CandidateState, fixture.Catalog);
         ShipState player = game.CaptureState().GetRequiredShip(state.PlayerShipId);
@@ -546,7 +546,7 @@ public sealed class CombatRuntimeTests
     public void AbsorptionInterruptsOnlyDamagedRepair(bool repairShields)
     {
         (GameSimulation game, Milestone3ProofFixture fixture, _) = Pair(0);
-        ShipSystemId repaired = repairShields ? ShipSystemId.Shields : ShipSystemId.Sensors;
+        ShipSystemKind repaired = repairShields ? ShipSystemKind.Shields : ShipSystemKind.Sensors;
         game = WithPlayerRepair(game, fixture, repaired, new SystemCondition(repairShields ? 0.4 : 0.8));
         SimulationState state = game.CaptureState();
         ShipState player = state.GetRequiredShip(state.PlayerShipId);
@@ -563,7 +563,7 @@ public sealed class CombatRuntimeTests
             state,
             fixture.Catalog,
             npc.InstanceId,
-            new(npc.SensorKnowledge.Contacts.Single().Id, ShipSystemId.Sensors)
+            new(npc.SensorKnowledge.Contacts.Single().Id, ShipSystemKind.Sensors)
         );
         game = GameSimulation.RestoreState(shot.CandidateState, fixture.Catalog);
         player = game.CaptureState().GetRequiredShip(player.InstanceId);
@@ -590,7 +590,7 @@ public sealed class CombatRuntimeTests
         ShipState npc = state.GetRequiredShip(new ShipInstanceId(2));
         npc = npc with { Engineering = npc.Engineering with { SensorCondition = new SystemCondition(0.4) } };
         game = GameSimulation.RestoreState(state.ReplaceShip(npc.InstanceId, npc), fixture.Catalog);
-        game.FireDirectedEnergy(new(contact, ShipSystemId.Sensors));
+        game.FireDirectedEnergy(new(contact, ShipSystemKind.Sensors));
         npc = game.CaptureState().GetRequiredShip(npc.InstanceId);
         Assert.NotNull(npc.Combat.PendingStimulus);
         Assert.Equal(SensorContactStatus.Stale, npc.SensorKnowledge.Contacts.Single().Status);
@@ -612,7 +612,7 @@ public sealed class CombatRuntimeTests
         ShipState npc = state.GetRequiredShip(new ShipInstanceId(2));
         npc = npc with { Engineering = npc.Engineering with { DirectedEnergyCondition = default } };
         game = GameSimulation.RestoreState(state.ReplaceShip(npc.InstanceId, npc), fixture.Catalog);
-        game.FireDirectedEnergy(new(contact, ShipSystemId.Shields));
+        game.FireDirectedEnergy(new(contact, ShipSystemKind.Shields));
         game.AdvanceFixedSteps(1);
         Assert.Equal(
             DefensiveCombatDecisionAction.Withdraw,
@@ -635,7 +635,7 @@ public sealed class CombatRuntimeTests
     private static GameSimulation WithPlayerRepair(
         GameSimulation game,
         Milestone3ProofFixture fixture,
-        ShipSystemId system,
+        ShipSystemKind system,
         SystemCondition starting
     )
     {
@@ -703,7 +703,7 @@ public sealed class CombatRuntimeTests
             Engineering = npc.Engineering with { DirectedEnergyCondition = default, ImpulseCondition = default },
         };
         game = GameSimulation.RestoreState(state.ReplaceShip(npc.InstanceId, npc), fixture.Catalog);
-        game.FireDirectedEnergy(new(contact, ShipSystemId.Shields));
+        game.FireDirectedEnergy(new(contact, ShipSystemKind.Shields));
         SimulationState before = game.CaptureState();
         AdvanceUntilResult result = game.AdvanceUntilNextPlayerRelevantEvent();
         Assert.Equal(AdvanceUntilOutcome.NoPlayerEvent, result.Outcome);

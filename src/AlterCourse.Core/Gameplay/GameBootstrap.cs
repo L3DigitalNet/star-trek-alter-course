@@ -342,9 +342,9 @@ public sealed class GameBootstrap
             work.Id
         );
         SystemCondition declared =
-            start.TargetSystem == ShipSystemId.Sensors ? ship.SensorCondition
-            : start.TargetSystem == ShipSystemId.ImpulsePropulsion ? ship.ImpulseCondition
-            : start.TargetSystem == ShipSystemId.Shields ? ship.ShieldCondition
+            start.TargetSystem == ShipSystemKind.Sensors ? ship.SensorCondition
+            : start.TargetSystem == ShipSystemKind.ImpulsePropulsion ? ship.ImpulseCondition
+            : start.TargetSystem == ShipSystemKind.Shields ? ship.ShieldCondition
             : ship.DirectedEnergyCondition;
         if (declared != repair.ConditionAt(InitialTime))
         {

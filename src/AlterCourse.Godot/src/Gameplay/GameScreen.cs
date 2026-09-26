@@ -1088,10 +1088,10 @@ public partial class GameScreen : Control
                     );
                     break;
                 case EngineeringAction.BeginSensorRepair:
-                    BeginSystemRepair(ShipSystemId.Sensors);
+                    BeginSystemRepair(ShipSystemKind.Sensors);
                     break;
                 case EngineeringAction.BeginImpulseRepair:
-                    BeginSystemRepair(ShipSystemId.ImpulsePropulsion);
+                    BeginSystemRepair(ShipSystemKind.ImpulsePropulsion);
                     break;
                 case EngineeringAction.PrioritizeShields:
                     ApplyPowerAllocationPreset(PowerAllocationPreset.PrioritizeShields, "Shield-priority allocation");
@@ -1103,10 +1103,10 @@ public partial class GameScreen : Control
                     );
                     break;
                 case EngineeringAction.BeginShieldRepair:
-                    BeginSystemRepair(ShipSystemId.Shields);
+                    BeginSystemRepair(ShipSystemKind.Shields);
                     break;
                 case EngineeringAction.BeginDirectedEnergyRepair:
-                    BeginSystemRepair(ShipSystemId.DirectedEnergyWeapons);
+                    BeginSystemRepair(ShipSystemKind.DirectedEnergyWeapons);
                     break;
                 case EngineeringAction.ReturnToCommand:
                     ShowCommandWorkspace();
@@ -1142,7 +1142,7 @@ public partial class GameScreen : Control
         SetMeta("last_engineering_command", $"allocation:{preset}:{result.Outcome}");
     }
 
-    private void BeginSystemRepair(ShipSystemId targetSystem)
+    private void BeginSystemRepair(ShipSystemKind targetSystem)
     {
         // Each projected repair action means a complete repair; Core still validates the nominal target against
         // current condition and the one-repair constraint at submission time.
@@ -1240,7 +1240,7 @@ public partial class GameScreen : Control
         }
     }
 
-    private void RequestDirectedEnergy(SensorContactId contactId, ShipSystemId system)
+    private void RequestDirectedEnergy(SensorContactId contactId, ShipSystemKind system)
     {
         if (_simulation is null || _dataMode != CommandInterfaceDataMode.Live)
             return;
@@ -1685,14 +1685,14 @@ public partial class GameScreen : Control
             : $"Contact {contactId.Value}";
     }
 
-    private static string EngineeringSystemLabel(ShipSystemId? system) =>
+    private static string EngineeringSystemLabel(ShipSystemKind? system) =>
         system switch
         {
-            ShipSystemId id when id == ShipSystemId.Sensors => "Sensor",
-            ShipSystemId id when id == ShipSystemId.ImpulsePropulsion => "Impulse propulsion",
-            ShipSystemId id when id == ShipSystemId.PowerGeneration => "Power generation",
-            ShipSystemId id when id == ShipSystemId.Shields => "Shield",
-            ShipSystemId id when id == ShipSystemId.DirectedEnergyWeapons => "Directed-energy weapon",
+            ShipSystemKind id when id == ShipSystemKind.Sensors => "Sensor",
+            ShipSystemKind id when id == ShipSystemKind.ImpulsePropulsion => "Impulse propulsion",
+            ShipSystemKind id when id == ShipSystemKind.PowerGeneration => "Power generation",
+            ShipSystemKind id when id == ShipSystemKind.Shields => "Shield",
+            ShipSystemKind id when id == ShipSystemKind.DirectedEnergyWeapons => "Directed-energy weapon",
             _ => "System",
         };
 

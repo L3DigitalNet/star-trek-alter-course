@@ -71,7 +71,7 @@ public sealed class M6ABaselineCharacterizationTests
     [InlineData("shields")]
     [InlineData("directed-energy-weapons")]
     public void PriorityPresetServesItsConsumerFirst(string system) =>
-        Assert.Equal(Expected.Preset(system), _scenarios.Preset(new PresetChoice(ShipSystemId.Parse(system))));
+        Assert.Equal(Expected.Preset(system), _scenarios.Preset(new PresetChoice(ShipSystemKind.Parse(system))));
 
     /// <summary>Pins exact-allocation acceptance and atomic rejection, including the current-speed guard.</summary>
     [Fact]
@@ -101,7 +101,7 @@ public sealed class M6ABaselineCharacterizationTests
     [InlineData("shields")]
     [InlineData("directed-energy-weapons")]
     public void SubsystemDamageReducesOnlyTheSelectedSystem(string system) =>
-        Assert.Equal(Expected.SubsystemDamage(system), _scenarios.SubsystemDamage(ShipSystemId.Parse(system)));
+        Assert.Equal(Expected.SubsystemDamage(system), _scenarios.SubsystemDamage(ShipSystemKind.Parse(system)));
 
     /// <summary>Pins passive range from capability, acquisition time, and the exact 2000 ms identifying scan.</summary>
     [Fact]
@@ -140,7 +140,7 @@ public sealed class M6ABaselineCharacterizationTests
     [InlineData("shields")]
     [InlineData("directed-energy-weapons")]
     public void RepairInterpolatesAndCompletesAtAuthoredDuration(string system) =>
-        Assert.Equal(Expected.RepairLifecycle(system), _scenarios.RepairLifecycle(ShipSystemId.Parse(system)));
+        Assert.Equal(Expected.RepairLifecycle(system), _scenarios.RepairLifecycle(ShipSystemKind.Parse(system)));
 
     /// <summary>Pins refusal of a non-improving target, of generation, and of a second concurrent repair.</summary>
     [Fact]
@@ -152,7 +152,7 @@ public sealed class M6ABaselineCharacterizationTests
     public void ShieldAbsorptionInterruptsShieldRepair() =>
         Assert.Equal(
             Expected.ShieldRepairInterruptedByAbsorption,
-            _scenarios.RepairHit(ShipSystemId.Shields, ShipSystemId.ImpulsePropulsion, powerShields: true)
+            _scenarios.RepairHit(ShipSystemKind.Shields, ShipSystemKind.ImpulsePropulsion, powerShields: true)
         );
 
     /// <summary>Pins that penetration to the repaired system cancels its repair and keeps the damaged value.</summary>
@@ -160,7 +160,7 @@ public sealed class M6ABaselineCharacterizationTests
     public void PenetrationInterruptsRepairOfTheHitSystem() =>
         Assert.Equal(
             Expected.SensorRepairInterruptedByPenetration,
-            _scenarios.RepairHit(ShipSystemId.Sensors, ShipSystemId.Sensors, powerShields: false)
+            _scenarios.RepairHit(ShipSystemKind.Sensors, ShipSystemKind.Sensors, powerShields: false)
         );
 
     /// <summary>Pins that damage to another system leaves the repair running to its original completion.</summary>
@@ -168,7 +168,7 @@ public sealed class M6ABaselineCharacterizationTests
     public void DamageElsewhereLeavesRepairRunning() =>
         Assert.Equal(
             Expected.SensorRepairSurvivesImpulseHit,
-            _scenarios.RepairHit(ShipSystemId.Sensors, ShipSystemId.ImpulsePropulsion, powerShields: false)
+            _scenarios.RepairHit(ShipSystemKind.Sensors, ShipSystemKind.ImpulsePropulsion, powerShields: false)
         );
 
     /// <summary>Pins one delayed, explained return fire exactly one fixed step after the public attack.</summary>

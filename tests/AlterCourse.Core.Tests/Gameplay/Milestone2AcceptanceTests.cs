@@ -269,7 +269,7 @@ public sealed class Milestone2AcceptanceTests
             ScheduledWorkKind.SystemRepairCompletion
         );
         var repair = new SystemRepairState(
-            ShipSystemId.Sensors,
+            ShipSystemKind.Sensors,
             new SystemCondition(0.25),
             new SystemCondition(1),
             Time(3),
@@ -310,7 +310,7 @@ public sealed class Milestone2AcceptanceTests
                 new PlayerAdvanceEvent(
                     PlayerAdvanceEventKind.SystemRepairCompleted,
                     Time(6),
-                    ShipSystemId: ShipSystemId.Sensors
+                    ShipSystemId: ShipSystemKind.Sensors
                 ),
             ],
             result.ResolvedEvents

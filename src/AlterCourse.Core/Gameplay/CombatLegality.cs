@@ -9,15 +9,15 @@ namespace AlterCourse.Core.Gameplay;
 /// <summary>Shares actor-safe fire constraints among commands, projections, and defensive decisions.</summary>
 internal static class CombatLegality
 {
-    internal static IReadOnlyList<ShipSystemId> SupportedSystems { get; } =
+    internal static IReadOnlyList<ShipSystemKind> SupportedSystems { get; } =
         Array.AsReadOnly(
             new[]
             {
-                ShipSystemId.PowerGeneration,
-                ShipSystemId.Sensors,
-                ShipSystemId.ImpulsePropulsion,
-                ShipSystemId.Shields,
-                ShipSystemId.DirectedEnergyWeapons,
+                ShipSystemKind.PowerGeneration,
+                ShipSystemKind.Sensors,
+                ShipSystemKind.ImpulsePropulsion,
+                ShipSystemKind.Shields,
+                ShipSystemKind.DirectedEnergyWeapons,
             }
         );
 
@@ -25,7 +25,7 @@ internal static class CombatLegality
         CombatOwnFacts own,
         SensorContactSnapshot? contact,
         bool sameContext,
-        ShipSystemId system
+        ShipSystemKind system
     )
     {
         if (!SupportedSystems.Contains(system))

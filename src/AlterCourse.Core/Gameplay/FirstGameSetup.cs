@@ -119,7 +119,7 @@ public static class FirstGameSetup
                 nominal,
                 balancedAllocation,
                 new AtLocationStart(dawn),
-                new SystemRepairStart(ShipSystemId.Sensors, damagedSensors, nominal, initialTime)
+                new SystemRepairStart(ShipSystemKind.Sensors, damagedSensors, nominal, initialTime)
             ),
             new(
                 new ShipInstanceId(2),

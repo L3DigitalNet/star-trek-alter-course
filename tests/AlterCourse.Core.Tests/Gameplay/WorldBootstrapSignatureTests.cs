@@ -144,7 +144,7 @@ public sealed class WorldBootstrapSignatureTests
                 new PlayerAdvanceEvent(
                     PlayerAdvanceEventKind.SystemRepairCompleted,
                     new SimulationTime(8000),
-                    ShipSystemId: ShipSystemId.Sensors
+                    ShipSystemId: ShipSystemKind.Sensors
                 ),
             ],
             repairs.ResolvedEvents
@@ -309,7 +309,7 @@ public sealed class WorldBootstrapSignatureTests
                     valid with
                     {
                         SystemRepair = new SystemRepairStart(
-                            ShipSystemId.Sensors,
+                            ShipSystemKind.Sensors,
                             new SystemCondition(0.4),
                             new SystemCondition(0.4),
                             new SimulationTime(0)
@@ -431,7 +431,7 @@ public sealed class WorldBootstrapSignatureTests
                 stopped,
                 damaged,
                 new AtLocationStart(new LocationId("dawn-anchor")),
-                new SystemRepairStart(ShipSystemId.Sensors, damaged, repaired, initial)
+                new SystemRepairStart(ShipSystemKind.Sensors, damaged, repaired, initial)
             ),
             new(
                 new ShipInstanceId(2),
@@ -441,7 +441,7 @@ public sealed class WorldBootstrapSignatureTests
                 stopped,
                 damaged,
                 new AtLocationStart(new LocationId("vesper-reach")),
-                new SystemRepairStart(ShipSystemId.Sensors, damaged, repaired, initial)
+                new SystemRepairStart(ShipSystemKind.Sensors, damaged, repaired, initial)
             ),
             new(
                 new ShipInstanceId(3),

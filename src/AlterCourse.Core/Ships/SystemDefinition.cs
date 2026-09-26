@@ -75,7 +75,7 @@ public abstract record SystemDefinition
     public SystemDefinitionId Id { get; }
 
     /// <summary>Gets the behavior kind; derived from the subclass, never authored independently of it.</summary>
-    public abstract ShipSystemId Kind { get; }
+    public abstract ShipSystemKind Kind { get; }
 
     /// <summary>Gets the presentation-only label. It is excluded from save compatibility.</summary>
     public string ComponentLabel { get; }

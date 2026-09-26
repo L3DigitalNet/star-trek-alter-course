@@ -44,7 +44,7 @@ internal static class M6ABaselineExpectations
         FirstGamePlayerStartAllocation,
         C(0.625, 0.4, 1, 1, 1),
         K(0.251428571, 0.62, 0, 0),
-        new RepairOutcome(ShipSystemId.Sensors, 0.4, 1, 0, 8000)
+        new RepairOutcome(ShipSystemKind.Sensors, 0.4, 1, 0, 8000)
     );
 
     private static readonly EngineeringOutcome NominalLegacyAllocation = new(
@@ -121,7 +121,7 @@ internal static class M6ABaselineExpectations
             ),
             PairPlayerAtRest,
             Sequence(
-                Ev(PlayerAdvanceEventKind.OwnSystemDamaged, PairReadyMs, 1, ShipSystemId.PowerGeneration),
+                Ev(PlayerAdvanceEventKind.OwnSystemDamaged, PairReadyMs, 1, ShipSystemKind.PowerGeneration),
                 Ev(PlayerAdvanceEventKind.PowerBrownout, PairReadyMs),
                 Ev(PlayerAdvanceEventKind.SensorContactStale, PairReadyMs, 2)
             )
@@ -131,7 +131,7 @@ internal static class M6ABaselineExpectations
         new(
             new EngineeringOutcome(90, 10, A(40, 10, 0, 30), C(0.75, 1, 1, 1, 1), K(0.571428571, 0.2, 0, 1), null),
             PairPlayerAtRest,
-            Sequence(Ev(PlayerAdvanceEventKind.OwnSystemDamaged, PairReadyMs, 1, ShipSystemId.PowerGeneration))
+            Sequence(Ev(PlayerAdvanceEventKind.OwnSystemDamaged, PairReadyMs, 1, ShipSystemKind.PowerGeneration))
         );
 
     internal static DamageOutcome SubsystemDamage(string system) =>
@@ -141,15 +141,15 @@ internal static class M6ABaselineExpectations
             "sensors" => Unabsorbed(
                 C(1, 0.75, 1, 1, 1),
                 K(0.75, 0.4, 0, 1),
-                ShipSystemId.Sensors,
+                ShipSystemKind.Sensors,
                 Ev(PlayerAdvanceEventKind.SensorContactStale, PairReadyMs, 2)
             ),
-            "impulse-propulsion" => Unabsorbed(C(1, 1, 0.75, 1, 1), K(1, 0.3, 0, 1), ShipSystemId.ImpulsePropulsion),
-            "shields" => Unabsorbed(C(1, 1, 1, 0.75, 1), K(1, 0.4, 0, 1), ShipSystemId.Shields),
+            "impulse-propulsion" => Unabsorbed(C(1, 1, 0.75, 1, 1), K(1, 0.3, 0, 1), ShipSystemKind.ImpulsePropulsion),
+            "shields" => Unabsorbed(C(1, 1, 1, 0.75, 1), K(1, 0.4, 0, 1), ShipSystemKind.Shields),
             "directed-energy-weapons" => Unabsorbed(
                 C(1, 1, 1, 1, 0.75),
                 K(1, 0.4, 0, 0.75),
-                ShipSystemId.DirectedEnergyWeapons
+                ShipSystemKind.DirectedEnergyWeapons
             ),
             _ => throw new ArgumentOutOfRangeException(nameof(system), system, "No pinned damage."),
         };
@@ -183,7 +183,7 @@ internal static class M6ABaselineExpectations
                 new EngineeringOutcome(120, 0, A(70, 20, 0, 30), C(1, 1, 0.75, 1, 1), K(1, 0.3, 0, 1), null),
                 new MotionOutcome(4, 0, 90, 3),
                 Sequence(
-                    Ev(PlayerAdvanceEventKind.OwnSystemDamaged, 3100, 1, ShipSystemId.ImpulsePropulsion),
+                    Ev(PlayerAdvanceEventKind.OwnSystemDamaged, 3100, 1, ShipSystemKind.ImpulsePropulsion),
                     Ev(PlayerAdvanceEventKind.ForcedDeceleration, 3100)
                 )
             ),
@@ -227,8 +227,8 @@ internal static class M6ABaselineExpectations
             ),
             PairPlayerAtRest,
             Sequence(
-                Ev(PlayerAdvanceEventKind.OwnSystemDamaged, PairReadyMs, 1, ShipSystemId.Shields),
-                Ev(PlayerAdvanceEventKind.OwnSystemDamaged, PairReadyMs, 1, ShipSystemId.ImpulsePropulsion)
+                Ev(PlayerAdvanceEventKind.OwnSystemDamaged, PairReadyMs, 1, ShipSystemKind.Shields),
+                Ev(PlayerAdvanceEventKind.OwnSystemDamaged, PairReadyMs, 1, ShipSystemKind.ImpulsePropulsion)
             )
         );
 
@@ -236,7 +236,7 @@ internal static class M6ABaselineExpectations
         system switch
         {
             "sensors" => Lifecycle(
-                ShipSystemId.Sensors,
+                ShipSystemKind.Sensors,
                 8000,
                 C(1, 0.875, 1, 1, 1),
                 K(0.875, 0.4, 0, 1),
@@ -244,14 +244,14 @@ internal static class M6ABaselineExpectations
                 Ev(PlayerAdvanceEventKind.SensorContactReacquired, 8000, 2)
             ),
             "impulse-propulsion" => Lifecycle(
-                ShipSystemId.ImpulsePropulsion,
+                ShipSystemKind.ImpulsePropulsion,
                 6000,
                 C(1, 1, 0.875, 1, 1),
                 K(1, 0.35, 0, 1)
             ),
-            "shields" => Lifecycle(ShipSystemId.Shields, 8000, C(1, 1, 1, 0.875, 1), K(1, 0.4, 0, 1)),
+            "shields" => Lifecycle(ShipSystemKind.Shields, 8000, C(1, 1, 1, 0.875, 1), K(1, 0.4, 0, 1)),
             "directed-energy-weapons" => Lifecycle(
-                ShipSystemId.DirectedEnergyWeapons,
+                ShipSystemKind.DirectedEnergyWeapons,
                 6000,
                 C(1, 1, 1, 1, 0.875),
                 K(1, 0.4, 0, 0.875)
@@ -267,8 +267,8 @@ internal static class M6ABaselineExpectations
             SystemRepairOutcome.RepairAlreadyActive
         );
 
-    private static readonly RepairOutcome ShieldRepair = new(ShipSystemId.Shields, 0.75, 1, PairReadyMs, 10100);
-    private static readonly RepairOutcome SensorRepair = new(ShipSystemId.Sensors, 0.75, 1, PairReadyMs, 10100);
+    private static readonly RepairOutcome ShieldRepair = new(ShipSystemKind.Shields, 0.75, 1, PairReadyMs, 10100);
+    private static readonly RepairOutcome SensorRepair = new(ShipSystemKind.Sensors, 0.75, 1, PairReadyMs, 10100);
 
     // Shield repair at 0.8125 after 2000 of 8000 ms; the impulse hit is fully absorbed (capacity 0.40625), and any
     // absorption cancels a shield repair even though the selected system was impulse.
@@ -283,8 +283,8 @@ internal static class M6ABaselineExpectations
                 ShieldRepair
             ),
             Sequence(
-                Ev(PlayerAdvanceEventKind.OwnSystemDamaged, 4100, 1, ShipSystemId.Shields),
-                Ev(PlayerAdvanceEventKind.SystemRepairInterrupted, 4100, 1, ShipSystemId.Shields)
+                Ev(PlayerAdvanceEventKind.OwnSystemDamaged, 4100, 1, ShipSystemKind.Shields),
+                Ev(PlayerAdvanceEventKind.SystemRepairInterrupted, 4100, 1, ShipSystemKind.Shields)
             ),
             new EngineeringOutcome(
                 120,
@@ -309,8 +309,8 @@ internal static class M6ABaselineExpectations
         new(
             new EngineeringOutcome(120, 0, A(70, 20, 0, 30), C(1, 0.8125, 1, 1, 1), K(0.8125, 0.4, 0, 1), SensorRepair),
             Sequence(
-                Ev(PlayerAdvanceEventKind.OwnSystemDamaged, 4100, 1, ShipSystemId.Sensors),
-                Ev(PlayerAdvanceEventKind.SystemRepairInterrupted, 4100, 1, ShipSystemId.Sensors)
+                Ev(PlayerAdvanceEventKind.OwnSystemDamaged, 4100, 1, ShipSystemKind.Sensors),
+                Ev(PlayerAdvanceEventKind.SystemRepairInterrupted, 4100, 1, ShipSystemKind.Sensors)
             ),
             new EngineeringOutcome(120, 0, A(70, 20, 0, 30), C(1, 0.5625, 1, 1, 1), K(0.5625, 0.4, 0, 1), null),
             Sequence(Ev(PlayerAdvanceEventKind.SensorContactLost, 7100, 2)),
@@ -320,7 +320,7 @@ internal static class M6ABaselineExpectations
     internal static RepairHitOutcome SensorRepairSurvivesImpulseHit { get; } =
         new(
             new EngineeringOutcome(120, 0, A(70, 20, 0, 30), C(1, 0.8125, 1, 1, 1), K(0.8125, 0.4, 0, 1), SensorRepair),
-            Sequence(Ev(PlayerAdvanceEventKind.OwnSystemDamaged, 4100, 1, ShipSystemId.ImpulsePropulsion)),
+            Sequence(Ev(PlayerAdvanceEventKind.OwnSystemDamaged, 4100, 1, ShipSystemKind.ImpulsePropulsion)),
             new EngineeringOutcome(
                 120,
                 0,
@@ -332,7 +332,7 @@ internal static class M6ABaselineExpectations
             Sequence(
                 Ev(PlayerAdvanceEventKind.SensorContactLost, 7100, 2),
                 Ev(PlayerAdvanceEventKind.SensorContactReacquired, 8000, 2),
-                Ev(PlayerAdvanceEventKind.SystemRepairCompleted, 10100, system: ShipSystemId.Sensors)
+                Ev(PlayerAdvanceEventKind.SystemRepairCompleted, 10100, system: ShipSystemKind.Sensors)
             ),
             new EngineeringOutcome(120, 0, A(70, 20, 0, 30), C(1, 1, 0.75, 1, 1), K(1, 0.3, 0, 1), null)
         );
@@ -349,7 +349,7 @@ internal static class M6ABaselineExpectations
             DefensiveCombatDecisionTieRule.ReturnFireThenWithdrawThenHold,
             CandidateOrder,
             FireDirectedEnergyOutcome.Accepted,
-            ShipSystemId.DirectedEnergyWeapons,
+            ShipSystemKind.DirectedEnergyWeapons,
             null,
             null,
             FireDirectedEnergyOutcome.Accepted,
@@ -359,12 +359,12 @@ internal static class M6ABaselineExpectations
     internal static DelayedDefenseOutcome DelayedDefense { get; } =
         new(
             Sequence(
-                Ev(PlayerAdvanceEventKind.DirectedEnergyFired, PairReadyMs, 1, ShipSystemId.Shields),
-                Ev(PlayerAdvanceEventKind.ShieldImpact, PairReadyMs, 1, ShipSystemId.Shields)
+                Ev(PlayerAdvanceEventKind.DirectedEnergyFired, PairReadyMs, 1, ShipSystemKind.Shields),
+                Ev(PlayerAdvanceEventKind.ShieldImpact, PairReadyMs, 1, ShipSystemKind.Shields)
             ),
             new CombatOutcome(0, new StimulusOutcome(1, PairReadyMs, 2200)),
             null,
-            Sequence(Ev(PlayerAdvanceEventKind.OwnSystemDamaged, 2200, 1, ShipSystemId.DirectedEnergyWeapons)),
+            Sequence(Ev(PlayerAdvanceEventKind.OwnSystemDamaged, 2200, 1, ShipSystemKind.DirectedEnergyWeapons)),
             ReturnFireDecision,
             new CombatOutcome(4200, null),
             new EngineeringOutcome(120, 0, A(70, 20, 0, 30), C(1, 1, 1, 1, 0.75), K(1, 0.4, 0, 0.75), null)
@@ -380,7 +380,7 @@ internal static class M6ABaselineExpectations
                 DefensiveCombatDecisionTieRule.ReturnFireThenWithdrawThenHold,
                 CandidateOrder,
                 FireDirectedEnergyOutcome.WeaponUnpowered,
-                ShipSystemId.DirectedEnergyWeapons,
+                ShipSystemKind.DirectedEnergyWeapons,
                 90,
                 1,
                 null,
@@ -397,9 +397,9 @@ internal static class M6ABaselineExpectations
     /// <summary>Player events of the mixed continuation run from the 4100 ms checkpoint to 12100 ms.</summary>
     internal static OutcomeSequence<EventOutcome> ContinuationEvents { get; } =
         Sequence(
-            Ev(PlayerAdvanceEventKind.OwnSystemDamaged, 4200, 1, ShipSystemId.DirectedEnergyWeapons),
+            Ev(PlayerAdvanceEventKind.OwnSystemDamaged, 4200, 1, ShipSystemKind.DirectedEnergyWeapons),
             Ev(PlayerAdvanceEventKind.ActiveSensorScanCompleted, 6100, 2),
-            Ev(PlayerAdvanceEventKind.SystemRepairCompleted, 10100, system: ShipSystemId.ImpulsePropulsion)
+            Ev(PlayerAdvanceEventKind.SystemRepairCompleted, 10100, system: ShipSystemKind.ImpulsePropulsion)
         );
 
     internal static ShipOutcome ContinuationCheckpointPlayer { get; } =
@@ -412,7 +412,7 @@ internal static class M6ABaselineExpectations
                 A(70, 20, 0, 30),
                 C(1, 1, 0.75, 1, 1),
                 K(1, 0.3, 0, 1),
-                new RepairOutcome(ShipSystemId.ImpulsePropulsion, 0.75, 1, 4100, 10100)
+                new RepairOutcome(ShipSystemKind.ImpulsePropulsion, 0.75, 1, 4100, 10100)
             ),
             PairPlayerAtRest,
             new CombatOutcome(6100, null),
@@ -453,7 +453,7 @@ internal static class M6ABaselineExpectations
         PlayerAdvanceEventKind kind,
         long atMs,
         long? contact = null,
-        ShipSystemId? system = null
+        ShipSystemKind? system = null
     ) => new(kind, atMs, contact, system);
 
     private static ContactOutcome Contact(
@@ -490,7 +490,7 @@ internal static class M6ABaselineExpectations
     private static DamageOutcome Unabsorbed(
         ConditionSet conditions,
         CapabilitySet capabilities,
-        ShipSystemId system,
+        ShipSystemKind system,
         params EventOutcome[] consequences
     ) =>
         new(
@@ -506,17 +506,17 @@ internal static class M6ABaselineExpectations
     {
         List<EventOutcome> events =
         [
-            Ev(PlayerAdvanceEventKind.DirectedEnergyFired, atMs, 1, ShipSystemId.ImpulsePropulsion),
-            Ev(PlayerAdvanceEventKind.ShieldImpact, atMs, 1, ShipSystemId.Shields),
+            Ev(PlayerAdvanceEventKind.DirectedEnergyFired, atMs, 1, ShipSystemKind.ImpulsePropulsion),
+            Ev(PlayerAdvanceEventKind.ShieldImpact, atMs, 1, ShipSystemKind.Shields),
         ];
         if (penetrated)
-            events.Add(Ev(PlayerAdvanceEventKind.SubsystemPenetration, atMs, 1, ShipSystemId.ImpulsePropulsion));
+            events.Add(Ev(PlayerAdvanceEventKind.SubsystemPenetration, atMs, 1, ShipSystemKind.ImpulsePropulsion));
         return new ShotOutcome(atMs, FireDirectedEnergyOutcome.Accepted, Sequence([.. events]), target, readyAtMs);
     }
 
     /// <summary>A real 0.25 hit then a repair to nominal from 2100 ms, midpoint condition 0.875.</summary>
     private static RepairLifecycleOutcome Lifecycle(
-        ShipSystemId system,
+        ShipSystemKind system,
         long durationMs,
         ConditionSet midpoint,
         CapabilitySet midpointCapabilities,

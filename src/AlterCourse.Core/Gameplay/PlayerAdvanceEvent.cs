@@ -9,5 +9,5 @@ public sealed record PlayerAdvanceEvent(
     PlayerAdvanceEventKind Kind,
     SimulationTime OccurredAt,
     SensorContactId? SensorContactId = null,
-    ShipSystemId? ShipSystemId = null
+    ShipSystemKind? ShipSystemId = null
 );

@@ -14,7 +14,7 @@ internal static class DefensiveCombatDecisionPolicy
             input.Own,
             input.Contact,
             input.SameContext,
-            ShipSystemId.DirectedEnergyWeapons
+            ShipSystemKind.DirectedEnergyWeapons
         );
         IReadOnlyList<DefensiveCombatConstraintEvaluation> fireConstraints = FireConstraints(input, fire);
         IReadOnlyList<DefensiveCombatConstraintEvaluation> withdrawConstraints = WithdrawConstraints(input);
@@ -57,7 +57,7 @@ internal static class DefensiveCombatDecisionPolicy
             new ReadOnlyDecisionList<DefensiveCombatDecisionCandidate>(candidates),
             selected,
             input.Stimulus.ContactId,
-            ShipSystemId.DirectedEnergyWeapons,
+            ShipSystemKind.DirectedEnergyWeapons,
             DefensiveCombatDecisionTieRule.ReturnFireThenWithdrawThenHold,
             course
         );

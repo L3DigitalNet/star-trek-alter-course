@@ -12,7 +12,7 @@ namespace AlterCourse.Core.Tests.Characterization;
 /// <remarks>
 /// <para>
 /// Every record here is plain data: numbers, times in milliseconds, event kinds, contact knowledge states, and
-/// per-kind values keyed by the stable semantic <see cref="ShipSystemId"/> strings the substrate wiki preserves.
+/// per-kind values keyed by the stable semantic <see cref="ShipSystemKind"/> strings the substrate wiki preserves.
 /// Nothing here names a fixed-field Core type (<c>PowerAllocation</c>, <c>ShipEngineeringState</c>,
 /// <c>SystemRepairState</c>, <c>EngineeringProjection</c>). Only <see cref="M6ABaselineProbe"/> builds these
 /// records, so replacing the ship-system representation must leave this file and every pinned expectation
@@ -46,7 +46,7 @@ internal static class M6ABaselineRecords
 
     /// <summary>The one active analytical repair, with the condition the state currently holds for its target.</summary>
     internal sealed record RepairOutcome(
-        ShipSystemId Target,
+        ShipSystemKind Target,
         double From,
         double To,
         long StartedAtMs,
@@ -110,7 +110,12 @@ internal static class M6ABaselineRecords
     );
 
     /// <summary>One player-visible advancement event.</summary>
-    internal sealed record EventOutcome(PlayerAdvanceEventKind Kind, long AtMs, long? ContactId, ShipSystemId? System);
+    internal sealed record EventOutcome(
+        PlayerAdvanceEventKind Kind,
+        long AtMs,
+        long? ContactId,
+        ShipSystemKind? System
+    );
 
     /// <summary>Authored ship-design facts every behavior below derives from.</summary>
     internal sealed record DefinitionFacts(
@@ -131,7 +136,7 @@ internal static class M6ABaselineRecords
         DefensiveCombatDecisionTieRule TieRule,
         OutcomeSequence<DefensiveCombatDecisionAction> CandidateOrder,
         FireDirectedEnergyOutcome? ReturnFireRejection,
-        ShipSystemId TargetSystem,
+        ShipSystemKind TargetSystem,
         double? ResultingHeading,
         double? ResultingSpeed,
         FireDirectedEnergyOutcome? ApplicationOutcome,
@@ -139,9 +144,9 @@ internal static class M6ABaselineRecords
     );
 
     /// <summary>A power-preset choice: Balanced, or priority for one consumer kind.</summary>
-    internal sealed record PresetChoice(ShipSystemId? Priority)
+    internal sealed record PresetChoice(ShipSystemKind? Priority)
     {
-        internal static PresetChoice Balanced { get; } = new((ShipSystemId?)null);
+        internal static PresetChoice Balanced { get; } = new((ShipSystemKind?)null);
     }
 
     /// <summary>Result of one command-level power change on the player ship.</summary>

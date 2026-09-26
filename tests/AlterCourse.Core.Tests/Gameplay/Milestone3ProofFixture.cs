@@ -99,7 +99,7 @@ internal sealed class Milestone3ProofFixture
                 stopped,
                 damaged,
                 new AtLocationStart(new LocationId("dawn-anchor")),
-                new SystemRepairStart(ShipSystemId.Sensors, damaged, repaired, initialTime)
+                new SystemRepairStart(ShipSystemKind.Sensors, damaged, repaired, initialTime)
             ),
             new(
                 new ShipInstanceId(2),
@@ -109,7 +109,7 @@ internal sealed class Milestone3ProofFixture
                 stopped,
                 damaged,
                 new AtLocationStart(new LocationId("vesper-reach")),
-                new SystemRepairStart(ShipSystemId.Sensors, damaged, repaired, initialTime)
+                new SystemRepairStart(ShipSystemKind.Sensors, damaged, repaired, initialTime)
             ),
             new(
                 new ShipInstanceId(3),

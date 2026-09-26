@@ -19,7 +19,7 @@ internal sealed record ScheduledConsequenceTrace(
     bool Completed,
     bool RandomnessUsed,
     SensorContactId? ContactId = null,
-    ShipSystemId? SystemId = null,
+    ShipSystemKind? SystemId = null,
     ShipContactDecisionExplanation? ContactDecision = null,
     FactionAssignmentDecisionExplanation? FactionDecision = null,
     FactionInvestigationDecisionExplanation? FactionInvestigationDecision = null,

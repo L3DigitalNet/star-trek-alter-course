@@ -10,5 +10,5 @@ public sealed record CombatTargetProjection(
     SensorContactId ContactId,
     DistanceKilometers? Range,
     FireDirectedEnergyOutcome Outcome,
-    IReadOnlyList<ShipSystemId> SupportedSystems
+    IReadOnlyList<ShipSystemKind> SupportedSystems
 );

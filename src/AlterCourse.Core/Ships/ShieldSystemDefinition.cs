@@ -22,5 +22,5 @@ public sealed record ShieldSystemDefinition : SystemDefinition
         ) { }
 
     /// <inheritdoc />
-    public override ShipSystemId Kind => ShipSystemId.Shields;
+    public override ShipSystemKind Kind => ShipSystemKind.Shields;
 }
