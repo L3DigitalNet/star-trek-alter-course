@@ -1,6 +1,6 @@
 ---
 name: stac-architecture
-description: Route Star Trek: Alter Course work across the pure deterministic Core, Godot presentation, content, persistence, observability, testing, AI, units, narrative, dependencies, and canonical verification boundaries.
+description: Route Star Trek: Alter Course work across the pure deterministic Core, Godot presentation, ship-system substrate, content, persistence, observability, testing, AI, units, narrative, dependencies, and canonical verification boundaries.
 ---
 
 # ST:AC architecture router
@@ -25,6 +25,14 @@ Load this skill before project implementation. The design wiki under `docs/wiki/
 - Branching narrative consumes read-only typed context and requests finite typed consequences. Core validates outcomes; narrative flow never becomes a second rules engine.
 - Prefer native Godot/.NET capabilities. Add packages, addons, frameworks, or managers only with demonstrated need and ADR 0003 admission evidence.
 
+## Ship-system conformance
+
+Before any ship-system expansion, read ADR 0014 and `docs/wiki/ship-system-substrate.md`. Issue #121 implements the selected substrate migration; adoption of the ADR alone is not runtime conformance. Damage Control gameplay and additional system kinds must not be folded into that migration.
+
+Common state, condition, repair, allocation, current snapshots, and generic Engineering controls use installed-system identity. Kind, reusable definition, and installation are distinct. Live ship loadouts are authoritative; a class default is only bootstrap input. Specialized behavior stays typed. Historical DTO fields and isolated legacy translators are permitted; parallel current mutable fields behind a collection facade are not.
+
+Require the owning contract's conformance evidence before claiming implementation complete: heterogeneous same-class loadouts, arbitrary IDs/order, exact continuation, absent capabilities, separate cardinality validation, direct current-format capture, and paired hidden-loadout tests. Do not expose another ship's inventory through target selectors, action availability, or absence-specific fire rejection. Generic UI commands address own installations, while remote aim remains observer-safe.
+
 ## Design routing
 
 Read the owning wiki page before changing a system, and record the design change on that page in the same change that implements it. Keep detailed game contracts inside `docs/wiki/`, including milestone proofs; do not create a parallel design/specification tree. README and ROADMAP are entry points, while ADRs retain architectural decision authority. Unapproved ideas belong in the open-question register, not on a system page.
@@ -36,6 +44,7 @@ Follow `docs/wiki/development-and-governance.md#recurring-design-reconciliation`
 | Vision, non-goals, priorities | `docs/wiki/vision-and-scope.md` |
 | Implemented versus planned | `docs/wiki/implementation-status.md` |
 | Project boundaries, dependencies, testing | `docs/wiki/architecture.md` |
+| Ship-system substrate and migration admission | `docs/wiki/ship-system-substrate.md` |
 | Ships, bootstrap, orders, space, time | `docs/wiki/world-navigation-and-time.md` |
 | Sensors, contacts, scan/hail, AI | `docs/wiki/sensors-knowledge-and-ai.md` |
 | Power, condition, repair, combat plans | `docs/wiki/engineering-and-combat.md` |
@@ -64,6 +73,7 @@ Follow `docs/wiki/development-and-governance.md#recurring-design-reconciliation`
 | Physical units | `docs/adr/0011-represent-physical-quantities-with-explicit-units.md` |
 | Narrative | `docs/adr/0012-keep-branching-narrative-subordinate-to-simulation.md` |
 | Branch/release | `docs/adr/0013-use-dev-for-development-and-main-for-releases.md` |
+| Extensible installed ship systems | `docs/adr/0014-use-an-extensible-bounded-ship-system-substrate.md` |
 
 ## Verification
 

@@ -6,7 +6,7 @@ description: 'Repository toolchain, validation, contribution workflow, and durab
 doc_type: 'reference'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-07'
+updated: '2026-09-26'
 tags:
   - 'development'
   - 'validation'
@@ -16,6 +16,7 @@ related:
   - 'docs/development-quality.md'
   - 'docs/development-agent-skills.md'
   - 'docs/adr/0013-use-dev-for-development-and-main-for-releases.md'
+  - 'docs/wiki/ship-system-substrate.md'
 ---
 
 # Development and governance
@@ -37,6 +38,12 @@ The canonical path covers locked restore/build, Core and AssetCtl tests, offline
 Use ordinary xUnit tests for pure behavior and vendored GdUnit4 for current engine integration. ADR-selected additional testing tools remain demand-driven. `./scripts/test-mutation.sh` is a separate deep-validation path without an invented mutation-score threshold.
 
 The launcher restores/builds before running Godot and handles source asset preparation. A stale Debug assembly or unimported asset is not evidence that the current Core rules are wrong; consult the [recorded gotchas](../handoff/bugs/INDEX.md).
+
+### Ship-system admission evidence
+
+For work governed by ADR 0014, apply the [substrate admission contract](ship-system-substrate.md#admission-proof-and-enforcement) in addition to the existing gates. Issue #121 must supply actual baseline-equivalence, heterogeneous-loadout, identity, information-boundary, migration/continuation, bounds, and architecture-conformance tests before it is called complete. A passing unchanged M6A suite, a collection-shaped wrapper, or a documentation-only ADR adoption does not establish conformance.
+
+Review current common mechanisms separately from legitimate typed behavior and frozen historical adapters. Require named evidence in the Final PR, not a promise to add conformance tests later. This is an acceptance requirement under the existing canonical test path, not a new verification service, test framework, or permission to change the mechanisms judging the work.
 
 ## Branches, issues, and releases
 
@@ -94,4 +101,4 @@ Follow [LICENSE](../../LICENSE.md), [LEGAL](../../LEGAL.md), contribution requir
 
 ## Sources
 
-[Development quality](../development-quality.md), [agent skills](../development-agent-skills.md), [quality-gate ADR](../adr/0002-use-one-canonical-quality-gate.md), [branch/release ADR](../adr/0013-use-dev-for-development-and-main-for-releases.md), and [historical provenance](sources.md#historical-provenance).
+[Development quality](../development-quality.md), [agent skills](../development-agent-skills.md), [quality-gate ADR](../adr/0002-use-one-canonical-quality-gate.md), [branch/release ADR](../adr/0013-use-dev-for-development-and-main-for-releases.md), [substrate admission](ship-system-substrate.md#admission-proof-and-enforcement), and [historical provenance](sources.md#historical-provenance).

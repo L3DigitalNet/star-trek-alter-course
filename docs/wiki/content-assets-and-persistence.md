@@ -17,6 +17,7 @@ related:
   - 'docs/wiki/asset-pipeline-tool.md'
   - 'docs/wiki/strategic-contact-reporting.md'
   - 'docs/wiki/faction-intent-and-autonomous-assignment.md'
+  - 'docs/wiki/ship-system-substrate.md'
 ---
 
 # Content, assets, and persistence
@@ -27,7 +28,7 @@ related:
 
 Authored domain definitions describe reusable game capability. Runtime instances describe the actual evolving world. Visual assets and presentation configuration describe how something is displayed. These must not become alternative authorities for the same fact.
 
-A ship class definition can be shared by many vessels; their names, conditions, activities, and future political affiliations are instance/world facts. A sprite or asset manifest cannot grant a ship a weapon or faction affiliation.
+A ship class definition can be shared by many vessels; their names, conditions, activities, and future political affiliations are instance/world facts. ADR 0014 additionally distinguishes a class default loadout from each live ship's actual installations. A sprite or asset manifest cannot grant a ship a weapon or faction affiliation.
 
 ## Domain content
 
@@ -41,13 +42,13 @@ Stable definition IDs are not display names or file paths. Content migration and
 
 ADR 0006 selects explicit versioned JSON snapshots, not serialization of live C# graphs, Godot scenes, an event store, or a database. Persist consequential state, stable references, ordering, and allocator continuation. Do not persist derived UI values, caches, logger objects, callbacks, or package-specific runtime identities.
 
-Released save V6 uses rules identity `strategic-contact-reporting-v1` and includes every ship, player identity, strategic/tactical state, Engineering condition/allocation/repair, active orders, actor-local contacts, scans, contact posture, the observation-location frame on each contact, correlated scheduled work, and counters. `KnownContactReports` is derived from that retained knowledge, not a separately serialized UI authority.
+Historical save V6 uses rules identity `strategic-contact-reporting-v1` and includes every ship, player identity, strategic/tactical state, Engineering condition/allocation/repair, active orders, actor-local contacts, scans, contact posture, the observation-location frame on each contact, correlated scheduled work, and counters. `KnownContactReports` is derived from that retained knowledge, not a separately serialized UI authority.
 
-The released V8 line supports adjacent migrations V1→V2→V3→V4→V5→V6→V7→V8 as described below. Current development extends that chain through V9. V1 reconstructs the representable single ship in a plural world; V3 adds orders without inventing historical intentions; V4 adds empty knowledge/no autonomous posture to older saves; V5 maps sensor integrity/repair into Engineering while preserving compatible historical capability and exact completion identity; V6 sets a null observation-location frame on every legacy contact and derives nothing, so a migrated contact stays on the tactical surface without appearing in strategic reports until a new qualifying observation is recorded. [Engineering and combat](engineering-and-combat.md), [Strategic Contact Reporting](strategic-contact-reporting.md), and [GamePersistence](../../src/AlterCourse.Core/Persistence/GamePersistence.cs) carry the current detail.
+The released V8 line supports adjacent migrations V1→V2→V3→V4→V5→V6→V7→V8 as described below. Current development extends that chain through V9. V1 reconstructs the representable single ship in a plural world; V3 adds orders without inventing historical intentions; V4 adds empty knowledge/no autonomous posture to older saves; V5 maps sensor integrity/repair into Engineering while preserving compatible historical capability and exact completion identity; V6 sets a null observation-location frame on every legacy contact and derives nothing, so a migrated contact stays on the tactical surface without appearing in strategic reports until a new qualifying observation is recorded. [Engineering and combat](engineering-and-combat.md), [Strategic Contact Reporting](strategic-contact-reporting.md), and [GamePersistence](../../src/AlterCourse.Core/Persistence/GamePersistence.cs) carry the implemented detail.
 
 The adjacent migrations deliberately supply only values that the next schema requires to represent the old world. V1 uses the referenced definition's design label once because V1 had no vessel name; V2 persists that resolved name. V2→V3 initializes the order allocator and leaves every historical `ActiveOrder` absent. V3→V4 creates empty sensor knowledge, allocator value 1, no active scan, contact posture, or decision wake. V4→V5 maps sensor integrity and any sensor repair into Engineering, initializes nominal generation and impulse condition, retains the exact repair correlation, and uses full allocations only where the V4-authored generation can meet both demands. These are migration facts, not permission to infer later intent, knowledge, or political history.
 
-Loading validates an entire candidate before replacing the live simulation. The current bounded envelope is 128 MiB; V6 records a 106,775,347-byte maximum-shape serialization test (previously 95,677,740 bytes under V5), not a normal four-ship save size. These are present admission bounds, not a rationale to redesign storage without measurement.
+Loading validates an entire candidate before replacing the live simulation. The current bounded envelope is 128 MiB; V6 records a 106,775,347-byte maximum-shape serialization test (previously 95,677,740 bytes under V5), not a normal four-ship save size. These are historical admission measurements, not current-format maxima or a rationale to redesign storage without measurement.
 
 The shell uses `user://quick-save.json`. The legacy default `quick-save-v1.json` fallback is consulted only if the generic slot is absent; custom paths do not use it. Broader compatibility promises, autosave policies, and eventual distribution remain separate decisions. Pre-1.0 does not promise perpetual migration support.
 
@@ -61,7 +62,7 @@ Zero-faction worlds must remain valid. New-game typed bootstrap may create the p
 
 Candidate validation rejects missing or wrong-domain targets, bad correlations, and corrupted JSON before replacing live state. It validates the envelope's schema and rules identity, required members, metadata, every reference and counter, and then constructs a complete candidate before a load can replace live state. The 128 MiB UTF-8 envelope and depth-32 JSON input limits apply before the candidate becomes authoritative. The historical V7 maximum-shape coverage measured 111,544,212 bytes for 256 ships, 256 factions, full contacts, and 66,302 simultaneously valid work items: 22,673,516 bytes below the unchanged 128 MiB envelope. Its V7 scheduler admission ceiling was 66,816; the lower test population reflects the incompatible per-ship commitments in that constructed world. Released V8 has a scheduler ceiling of 68,864; current V9 raises it to 69,120. v0.5.0 remains the historical V6 line.
 
-Godot compatibility evidence is complete: the shell loads both catalogs, accepts valid V7 quick-load continuation, and leaves its live state usable when faction/controller JSON is malformed. It exposes none of this data in the player UI. Targeted headless continuation and long-horizon scenarios also pass.
+The V7 Godot compatibility evidence covers both catalogs, valid V7 quick-load continuation, and failure preservation for malformed faction/controller JSON. It exposes none of that faction data in the player UI. Targeted headless continuation and long-horizon scenarios cover the original admission.
 
 [Observation-Driven Faction Response](observation-driven-faction-response.md) advances V7 to the released V8 format under rules identity `observation-driven-faction-response-v1`. V7→V8 adds a disabled response posture, empty in-flight/received report collections, no active investigation, no report-delivery work, and no location-response history. It does not mine existing contacts or infer faction knowledge. V8 persists only bounded report/investigation continuation, report identity allocation, and sparse completion watermarks; derived projections and indexes remain absent. Candidate validation rejects malformed identities, source/recipient authority contradictions, invalid report timing or location data, wrong-domain work, duplicate work, and inconsistent active-investigation state before replacing a live simulation.
 
@@ -77,6 +78,14 @@ Candidate validation treats Current contacts as present-time state: observer and
 
 The V9 faction fixture measures 88,137,170 bytes and the high-width report vertex measures 108,935,516 bytes. The conservative supported-shape bound is 113,292,140 bytes, below the unchanged 128 MiB envelope. These are persistence-proof measurements and bounds, not ordinary save sizes. The empty-combat report vertex does not demonstrate a populated combat continuation; that separate proof covers the legal maximum combat stimulus shape.
 
+## Selected substrate compatibility work
+
+Issue #121's [compatibility contract](ship-system-substrate.md#compatibility-and-current-format-capture) selects the next migration, expected ship V6/system-definition V1/save V10 if still unassigned. None of those target formats is implemented merely by this documentation. Preserve the existing supported chain and V9's installed-but-offline meaning; zero condition does not mean absent equipment.
+
+The new format must capture actual installations directly, with stable instance/definition references, allocator continuation, allocation, and typed repair/scan/weapon associations. Do not flatten current state through a historical five-field snapshot before capturing it. Historical DTOs keep their wire contract; narrowly isolated adapters may change to construct the new runtime model without rewriting history.
+
+Historical mapping must be version-qualified and independent of current ship defaults. A new default component, reordered loadout, or changed label cannot select a different legacy component implicitly. Validate relevant content semantics and ordering, preserve exact active-operation timing/work IDs, and reject missing or incompatible mappings rather than guessing. Compatible class-default changes must not overwrite a saved live loadout. The owning contract also requires new conservative bounds and heterogeneous continuation tests; existing V9 measurements cannot prove a future V10 maximum.
+
 ## AssetCtl pipeline
 
 AssetCtl is standalone .NET 10 development infrastructure, separate from both game assemblies. It searches the tracked catalog, plans routes, obtains candidates, mechanically validates untrusted bytes, selects/publishes assets with manifests, and retains provenance. The full [asset pipeline contract](asset-pipeline-tool.md) remains the detailed contract; this summary is not its replacement.
@@ -91,4 +100,4 @@ Store only credential environment-variable names in tracked asset configuration.
 
 ## Sources
 
-[Content ADR](../adr/0005-use-json-and-schema-validation-for-domain-content.md), [save ADR](../adr/0006-use-versioned-json-snapshot-saves.md), [asset pipeline contract](asset-pipeline-tool.md), [V5 ship schema](../../src/AlterCourse.Godot/content/schemas/ship-definition-v5.schema.json), [persistence implementation](../../src/AlterCourse.Core/Persistence/GamePersistence.cs), [V9 persistence tests](../../tests/AlterCourse.Core.Tests/Persistence/GamePersistenceV9CombatTests.cs), [AssetCtl admission](../dependency-admission/assetctl.md), [JsonSchema.Net admission](../dependency-admission/jsonschema-net-core.md), and [asset development workflow](../development-quality.md).
+[Content ADR](../adr/0005-use-json-and-schema-validation-for-domain-content.md), [save ADR](../adr/0006-use-versioned-json-snapshot-saves.md), [substrate contract](ship-system-substrate.md), [asset pipeline contract](asset-pipeline-tool.md), [V5 ship schema](../../src/AlterCourse.Godot/content/schemas/ship-definition-v5.schema.json), [persistence implementation](../../src/AlterCourse.Core/Persistence/GamePersistence.cs), [V9 persistence tests](../../tests/AlterCourse.Core.Tests/Persistence/GamePersistenceV9CombatTests.cs), [AssetCtl admission](../dependency-admission/assetctl.md), [JsonSchema.Net admission](../dependency-admission/jsonschema-net-core.md), and [asset development workflow](../development-quality.md).
