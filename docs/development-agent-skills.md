@@ -45,6 +45,8 @@ Each skill is present as a byte-identical pair under `.claude/skills/<name>/` an
 
 The Figma MCP server is project-scoped in both `.mcp.json` and `.codex/config.toml` at `https://mcp.figma.com/mcp`. After opening this repository in Codex, authorize the configured server interactively with `codex mcp login figma`; credentials remain outside the repository.
 
+On 2026-09-26, a live Figma `whoami` call in Codex confirmed authenticated access.
+
 ## CLI language servers
 
 Codex CLI and Claude Code share two project-scoped MCP entries, `csharp-lsp` and `godot-lsp`, in `.codex/config.toml` and `.mcp.json`. These expose language-server navigation, hover, references, and diagnostics through MCP tools. They do not require VS Code, its extensions, or a Claude native LSP plugin.
@@ -59,11 +61,25 @@ The installer requires Node 18 or newer, Bash, curl, tar, sha256sum, and unzip. 
 
 Restart each CLI in this trusted checkout after installation. Check registration with `codex mcp get csharp-lsp`, `codex mcp get godot-lsp`, and the corresponding `claude mcp get` commands. Claude's project settings enable these two entries. Each checkout or worktree needs its own installation; run the installer again after moving a checkout or changing pinned versions. MCP startup performs no downloads.
 
+Registration confirms that configuration was read. To verify that a server is loaded, check the active session's tool inventory and call its read-only `get_hover`, `find_definition`, or `get_diagnostics` tool on a source file. A pending optional server can be absent from the first inventory and appear later in the same Codex session. Allow initialization to finish and check again before diagnosing an installation failure.
+
 Use `csharp-lsp` for `.cs` files throughout the solution, including Godot C# scripts. Use `godot-lsp` for `.gd` files beneath `src/AlterCourse.Godot`; it does not provide scene/resource-file or C# language analysis. Both offer `find_definition`, `find_references`, `get_hover`, and `get_diagnostics`. Other advertised operations depend on the underlying server's capabilities. Language-server diagnostics complement the canonical verification gate.
 
 Each MCP session owns its bridge and language-server processes. The Godot entry starts a dedicated headless editor with isolated editor settings and an ephemeral local LSP port. It adapts cclsp's `.gd` language identifier to `gdscript`, which Godot requires before parsing an opened document. Shutdown closes these owned processes. The launcher waits for bridge preloading before forwarding client requests because concurrent first requests otherwise start duplicate servers. Upstream cclsp logs a three-second initialization-wait warning even after the LSP initialization response; the launcher separately requires successful preload.
 
 If startup reports missing tooling, rerun the installer. To disable these integrations, remove their two project MCP entries and Claude's matching `enabledMcpjsonServers` entries, then restart both CLIs. The ignored installation directory can be removed after the sessions stop; shared SDK/editor caches belong to the repository's existing resolvers.
+
+### Live verification
+
+The following checks ran on 2026-09-26 after PR #109 merged to `dev`. They establish the observed session state; repeat the checks after changing the installation or configuration.
+
+| Client and server | Executed check | Observed result |
+| --- | --- | --- |
+| Codex, `csharp-lsp` | `get_hover` on `src/AlterCourse.Core/Simulation/SimulationScheduler.cs`, line 9, character 24; `get_diagnostics` on the same file | Class documentation returned; only informational `IDE0305` and hint `IDE0047` diagnostics |
+| Codex, `godot-lsp` | `find_definition` for `test_csharp_node_enters_the_scene_tree` in `src/AlterCourse.Godot/tests/IntegrationProbeTest.gd`; `get_diagnostics` on the same file | Definition at line 5, character 6; no diagnostics |
+| Claude Code, both servers | `claude mcp get csharp-lsp` and `claude mcp get godot-lsp` | Both reported `Connected` with project scope |
+
+Godot was initially pending in Codex, then its tools appeared and the calls above succeeded during the same turn. Both language-server toolsets were available by the end of verification. The Claude checks prove connection; the semantic tool calls in this table were executed through Codex.
 
 ## Figma MCP pin and inventory
 
