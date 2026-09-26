@@ -204,6 +204,30 @@ public sealed class GamePersistenceV9CombatTests
         Assert.Equal(valid, GamePersistence.Serialize(game, Milestone3ProofFixture.Metadata));
     }
 
+    /// <summary>Malformed current knowledge rejects at load without mutating the live aggregate.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RejectsCurrentContactWithRemoteTargetWithoutChangingLiveGame(bool legacyFrame)
+    {
+        (GameSimulation game, Milestone3ProofFixture fixture, _) = Pair(0);
+        byte[] valid = GamePersistence.Serialize(game, Milestone3ProofFixture.Metadata);
+        JsonObject root = Parse(valid);
+        JsonObject simulation = root["simulation"]!.AsObject();
+        JsonObject remote = simulation["strategicMap"]!["locations"]![0]!.DeepClone().AsObject();
+        remote["id"] = "remote";
+        simulation["strategicMap"]!["locations"]!.AsArray().Add(remote);
+        JsonObject npc = simulation["ships"]![1]!.AsObject();
+        npc["strategicState"]!["locationId"] = "remote";
+        npc["sensorKnowledge"]!["contacts"]!.AsArray().Clear();
+        if (legacyFrame)
+            simulation["ships"]![0]!["sensorKnowledge"]!["contacts"]![0]!["observedAtLocationId"] = null;
+        Assert.Throws<GamePersistenceException>(() =>
+            GamePersistence.Deserialize(Encode(root), fixture.Catalog, "remote-current-contact.json")
+        );
+        Assert.Equal(valid, GamePersistence.Serialize(game, Milestone3ProofFixture.Metadata));
+    }
+
     private static bool TryMutateEngineeringV9(JsonObject npc, string mutation)
     {
         JsonObject combat = npc["combat"]!.AsObject();

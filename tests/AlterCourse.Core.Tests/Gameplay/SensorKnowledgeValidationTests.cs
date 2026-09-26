@@ -129,6 +129,51 @@ public sealed class SensorKnowledgeValidationTests
         AssertInvalid(new SensorKnowledge(2, [Contact(1, NpcId, observedAtLocationId: OtherLocation)]));
     }
 
+    /// <summary>Current knowledge requires a physically shared context even without a legacy frame.</summary>
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void RejectsCurrentContactWhenTargetLeavesSharedContext(bool traveling, bool legacyFrame)
+    {
+        SensorContactTrack contact = Contact(1, NpcId) with { ObservedAtLocationId = legacyFrame ? null : Location };
+        SimulationState state = CreateState(new SensorKnowledge(2, [contact]));
+        ShipState target = state.GetRequiredShip(NpcId);
+        if (traveling)
+        {
+            (SimulationScheduler scheduler, ScheduledWork arrival) = state.Scheduler.Schedule(
+                new SimulationTime(2100),
+                NpcId,
+                ScheduledWorkKind.TravelArrival
+            );
+            state = state with
+            {
+                Scheduler = scheduler,
+                StrategicMap = new StrategicMap(
+                    state.StrategicMap.Locations,
+                    [new StrategicRoute(Location, OtherLocation, new SimulationDuration(2000))]
+                ),
+            };
+            target = target with
+            {
+                StrategicState = new TravelingState(
+                    new TravelState(Location, OtherLocation, state.Time, arrival.DueTime, arrival.Id)
+                ),
+            };
+        }
+        else
+        {
+            target = target with { StrategicState = new AtLocationState(OtherLocation) };
+        }
+        state = state.ReplaceShip(NpcId, target);
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            state.Validate(CreateCatalog())
+        );
+        Assert.Contains("same current location", exception.Message, StringComparison.Ordinal);
+        Assert.Throws<InvalidOperationException>(() => GameSimulation.RestoreState(state, CreateCatalog()));
+    }
+
     /// <summary>Confirms a retained report keeps its own frame after the observer moves elsewhere.</summary>
     [Fact]
     public void AcceptsRetainedContactObservedAtAnotherLocation()
@@ -147,7 +192,42 @@ public sealed class SensorKnowledgeValidationTests
         );
     }
 
-    /// <summary>Confirms an explicitly unqualified legacy observation carries no location constraint.</summary>
+    /// <summary>Historical observations survive movement by either ship without inventing a legacy frame.</summary>
+    [Theory]
+    [InlineData(SensorContactStatus.Stale, false)]
+    [InlineData(SensorContactStatus.Stale, true)]
+    [InlineData(SensorContactStatus.Lost, false)]
+    [InlineData(SensorContactStatus.Lost, true)]
+    public void RetainsHistoricalObservationWhenBothShipsLeaveItsContext(SensorContactStatus status, bool legacyFrame)
+    {
+        SensorContactTrack contact = Contact(1, NpcId, status: status) with
+        {
+            ObservedAtLocationId = legacyFrame ? null : Location,
+        };
+        var scheduler = SimulationScheduler.Create();
+        if (status == SensorContactStatus.Stale)
+        {
+            (scheduler, ScheduledWork loss) = scheduler.Schedule(
+                new SimulationTime(500),
+                PlayerId,
+                ScheduledWorkKind.SensorContactLoss
+            );
+            contact = contact with { LossWorkId = loss.Id, LossDueTime = loss.DueTime };
+        }
+        SimulationState state = CreateState(new SensorKnowledge(2, [contact]), scheduler);
+        foreach (ShipInstanceId id in new[] { PlayerId, NpcId })
+        {
+            ShipState ship = state.GetRequiredShip(id);
+            state = state.ReplaceShip(id, ship with { StrategicState = new AtLocationState(OtherLocation) });
+        }
+        var restored = GameSimulation.RestoreState(state, CreateCatalog());
+        Assert.Equal(
+            contact,
+            Assert.Single(restored.CaptureState().GetRequiredShip(PlayerId).SensorKnowledge.Contacts)
+        );
+    }
+
+    /// <summary>Confirms an explicitly unqualified legacy observation retains its null frame in a shared context.</summary>
     [Fact]
     public void AcceptsLegacyContactWithoutAnObservedLocation()
     {
