@@ -2,8 +2,8 @@
 
 ## Current snapshot
 
-- v0.6.1 is the current immutable source-only GitHub Release; it has no assets.
-- Signed annotated tag `v0.6.1` targets Final PR #103's release merge `f0af2653ca44f17b9f701f6271e199cda1429d16`.
+- The current immutable source-only GitHub Release is available at <https://github.com/L3DigitalNet/star-trek-alter-course/releases/latest>.
+- v0.6.1 is the historical build-process correction release; its signed annotated tag targets Final PR #103's merge `f0af2653ca44f17b9f701f6271e199cda1429d16`.
 - Milestone 3A first observed contact, Milestone 4 Engineering Backbone, and Strategic Contact Reporting are released; Features #58, #62, and #77 are Done.
 - Strategic Contact Reporting merged into `dev` as `80c3084` (Final PR #78) and shipped in v0.5.0 through release Task #80 / Final PR #82 on 2026-09-06.
 - Current released rules are `observation-driven-faction-response-v1`, content schema V4, and save schema V8; V6/V7 migrations remain noninventive.
@@ -27,3 +27,4 @@
 - Handoff `9ebee7b` used the ADR 0013 direct route; GitHub reported a configured PR/check bypass, contrary to Feature #93's no-bypass constraint.
 - PR #101 fixed verification build-server reuse. Release and Debug verification passed with Core 598, AssetCtl 324, Godot integration and smoke checks.
 - The verification process scan found no remaining `dotnet`, `MSBuild`, or `VBCSCompiler` processes. Issue #100 and Task #102 are Done.
+- PR #104 synchronized the v0.6.1 release ancestry to `dev` as `5ad16bb` and Canonical verification passed.

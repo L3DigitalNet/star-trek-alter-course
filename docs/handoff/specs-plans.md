@@ -36,4 +36,4 @@
 | Feature #93 | Merged / Done | Bounded V8 observation response merged through Final PR #94 as `e7bdfe3`; released in v0.6.0. |
 | Task #96 | Published | v0.6.0 published through Final PR #97; Supporting PR #98 synchronized `main` to `dev`. |
 | Issue #100 | Merged / Done | PR #101 fixed verification build-server reuse; Release and Debug verification passed, and no `dotnet`, `MSBuild`, or `VBCSCompiler` process remained. |
-| Task #102 | Published / Done | v0.6.1 published through Final PR #103 as immutable source-only release `f0af265`. |
+| Task #102 | Published / Done | v0.6.1 build-process correction release published through Final PR #103 as immutable source-only release `f0af265`; PR #104 synchronized it to `dev` as `5ad16bb`. |
