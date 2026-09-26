@@ -527,17 +527,17 @@ public sealed class WorldBootstrapSignatureTests
     {
         string definition = $$"""
             {
-              "schemaVersion": 4,
+              "schemaVersion": 5,
               "id": "{{definitionId}}",
               "designDisplayName": "Pathfinder class",
               "maximumTacticalSpeedKilometersPerSecond": 10,
               "passiveSensorRangeKilometers": 30.0,
               "activeScanDurationMilliseconds": 2000,
-              "engineering": { "nominalGenerationPowerUnits": 120, "nominalSensorDemandPowerUnits": 70, "nominalImpulseDemandPowerUnits": 50, "sensorRepairDurationMilliseconds": 8000, "impulseRepairDurationMilliseconds": 6000 }
+              "engineering": { "nominalGenerationPowerUnits": 120, "nominalSensorDemandPowerUnits": 70, "nominalImpulseDemandPowerUnits": 50, "sensorRepairDurationMilliseconds": 8000, "impulseRepairDurationMilliseconds": 6000, "nominalShieldDemandPowerUnits": 40, "nominalDirectedEnergyDemandPowerUnits": 30, "shieldRepairDurationMilliseconds": 8000, "directedEnergyRepairDurationMilliseconds": 6000 }, "directedEnergyWeapon": { "rangeKilometers": 20, "baseNormalizedDamage": 0.25, "cooldownMilliseconds": 2000 }
             }
             """;
         string schema = File.ReadAllText(
-            Path.Combine(FindRepositoryRoot(), "src/AlterCourse.Godot/content/schemas/ship-definition-v4.schema.json")
+            Path.Combine(FindRepositoryRoot(), "src/AlterCourse.Godot/content/schemas/ship-definition-v5.schema.json")
         );
         return new ShipDefinitionCatalogLoader(schema).LoadCatalog([
             ShipDefinitionContent.FromText("pathfinder.json", definition),

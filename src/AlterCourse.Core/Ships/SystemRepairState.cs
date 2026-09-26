@@ -15,9 +15,14 @@ public sealed record SystemRepairState
         ScheduledWorkId scheduledCompletionId
     )
     {
-        if (targetSystem != ShipSystemId.Sensors && targetSystem != ShipSystemId.ImpulsePropulsion)
+        if (
+            targetSystem != ShipSystemId.Sensors
+            && targetSystem != ShipSystemId.ImpulsePropulsion
+            && targetSystem != ShipSystemId.Shields
+            && targetSystem != ShipSystemId.DirectedEnergyWeapons
+        )
         {
-            throw new ArgumentException("Only sensors and impulse propulsion are repairable.", nameof(targetSystem));
+            throw new ArgumentException("Only concrete consumer systems are repairable.", nameof(targetSystem));
         }
 
         if (targetCondition.Value <= startingCondition.Value)

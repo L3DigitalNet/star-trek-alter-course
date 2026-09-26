@@ -244,7 +244,7 @@ internal sealed class FactionAssignmentProofFixture
     private static ShipDefinitionCatalog LoadShips(string root)
     {
         string schema = File.ReadAllText(
-            Path.Combine(root, "src/AlterCourse.Godot/content/schemas/ship-definition-v4.schema.json")
+            Path.Combine(root, "src/AlterCourse.Godot/content/schemas/ship-definition-v5.schema.json")
         );
         string path = Path.Combine(root, "src/AlterCourse.Godot/content/ships/pathfinder.json");
         return new ShipDefinitionCatalogLoader(schema).LoadCatalog([

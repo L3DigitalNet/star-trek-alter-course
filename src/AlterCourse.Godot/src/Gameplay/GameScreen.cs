@@ -17,7 +17,7 @@ namespace AlterCourse.Godot.Gameplay;
 /// </summary>
 public partial class GameScreen : Control
 {
-    private const string SchemaPath = "res://content/schemas/ship-definition-v4.schema.json";
+    private const string SchemaPath = "res://content/schemas/ship-definition-v5.schema.json";
     private const string ShipPath = "res://content/ships/pathfinder.json";
     private const string FactionSchemaPath = "res://content/schemas/faction-definition-v1.schema.json";
     private const string FactionAPath = "res://content/factions/faction-a.json";

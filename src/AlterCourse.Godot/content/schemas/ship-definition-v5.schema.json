@@ -1,0 +1,98 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://l3digital.net/star-trek-alter-course/schemas/ship-definition-v5.schema.json",
+	"title": "Ship Definition Version 5",
+	"type": "object",
+	"required": [
+		"schemaVersion",
+		"id",
+		"designDisplayName",
+		"maximumTacticalSpeedKilometersPerSecond",
+		"passiveSensorRangeKilometers",
+		"activeScanDurationMilliseconds",
+		"engineering",
+		"directedEnergyWeapon"
+	],
+	"properties": {
+		"schemaVersion": { "const": 5 },
+		"id": {
+			"type": "string",
+			"minLength": 1,
+			"maxLength": 128,
+			"pattern": "^[A-Za-z0-9._-]+$"
+		},
+		"designDisplayName": { "type": "string", "minLength": 1, "maxLength": 64 },
+		"maximumTacticalSpeedKilometersPerSecond": { "type": "number", "minimum": 0 },
+		"passiveSensorRangeKilometers": { "type": "number", "minimum": 0 },
+		"activeScanDurationMilliseconds": { "type": "integer", "minimum": 1 },
+		"engineering": {
+			"type": "object",
+			"required": [
+				"nominalGenerationPowerUnits",
+				"nominalSensorDemandPowerUnits",
+				"nominalImpulseDemandPowerUnits",
+				"sensorRepairDurationMilliseconds",
+				"impulseRepairDurationMilliseconds",
+				"nominalShieldDemandPowerUnits",
+				"nominalDirectedEnergyDemandPowerUnits",
+				"shieldRepairDurationMilliseconds",
+				"directedEnergyRepairDurationMilliseconds"
+			],
+			"properties": {
+				"nominalGenerationPowerUnits": {
+					"type": "integer",
+					"minimum": 1,
+					"maximum": 1000000
+				},
+				"nominalSensorDemandPowerUnits": {
+					"type": "integer",
+					"minimum": 1,
+					"maximum": 1000000
+				},
+				"nominalImpulseDemandPowerUnits": {
+					"type": "integer",
+					"minimum": 1,
+					"maximum": 1000000
+				},
+				"sensorRepairDurationMilliseconds": { "type": "integer", "minimum": 1 },
+				"impulseRepairDurationMilliseconds": { "type": "integer", "minimum": 1 },
+				"nominalShieldDemandPowerUnits": {
+					"type": "integer",
+					"minimum": 1,
+					"maximum": 1000000
+				},
+				"nominalDirectedEnergyDemandPowerUnits": {
+					"type": "integer",
+					"minimum": 1,
+					"maximum": 1000000
+				},
+				"shieldRepairDurationMilliseconds": {
+					"type": "integer",
+					"minimum": 1,
+					"multipleOf": 100
+				},
+				"directedEnergyRepairDurationMilliseconds": {
+					"type": "integer",
+					"minimum": 1,
+					"multipleOf": 100
+				}
+			},
+			"additionalProperties": false
+		},
+		"directedEnergyWeapon": {
+			"type": "object",
+			"required": ["rangeKilometers", "baseNormalizedDamage", "cooldownMilliseconds"],
+			"properties": {
+				"rangeKilometers": { "type": "number", "exclusiveMinimum": 0 },
+				"baseNormalizedDamage": {
+					"type": "number",
+					"exclusiveMinimum": 0,
+					"maximum": 1
+				},
+				"cooldownMilliseconds": { "type": "integer", "minimum": 1, "multipleOf": 100 }
+			},
+			"additionalProperties": false
+		}
+	},
+	"additionalProperties": false
+}

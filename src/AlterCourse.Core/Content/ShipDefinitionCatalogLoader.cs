@@ -7,14 +7,14 @@ using Json.Schema;
 
 namespace AlterCourse.Core.Content;
 
-/// <summary>Strictly validates version-four authored ship JSON and constructs domain definitions.</summary>
+/// <summary>Strictly validates version-five authored ship JSON and constructs domain definitions.</summary>
 public sealed class ShipDefinitionCatalogLoader
 {
     /// <summary>Gets the maximum number of authored definitions admitted into one development catalog.</summary>
     public const int MaximumDefinitions = 256;
 
     private static readonly Uri SchemaBaseUri = new(
-        "https://l3digital.net/star-trek-alter-course/schemas/ship-definition-v4.schema.json"
+        "https://l3digital.net/star-trek-alter-course/schemas/ship-definition-v5.schema.json"
     );
     private static readonly EvaluationOptions SchemaEvaluationOptions = new()
     {
@@ -24,7 +24,7 @@ public sealed class ShipDefinitionCatalogLoader
 
     private readonly JsonSchema _schema;
 
-    /// <summary>Initializes the loader from the canonical version-four JSON Schema text.</summary>
+    /// <summary>Initializes the loader from the canonical version-five JSON Schema text.</summary>
     public ShipDefinitionCatalogLoader(string schemaText)
     {
         ArgumentNullException.ThrowIfNull(schemaText);
@@ -90,7 +90,7 @@ public sealed class ShipDefinitionCatalogLoader
         using (document)
         {
             ValidateSchema(document.RootElement, content.SourceIdentity);
-            AuthoredShipDefinitionV4 authored = ReadAuthoredModel(document.RootElement, content.SourceIdentity);
+            AuthoredShipDefinitionV5 authored = ReadAuthoredModel(document.RootElement, content.SourceIdentity);
             return ValidateSemantics(authored, content.SourceIdentity);
         }
     }
@@ -198,10 +198,20 @@ public sealed class ShipDefinitionCatalogLoader
 
     private static string Location(string pointer) => string.IsNullOrEmpty(pointer) ? "#" : "#" + pointer;
 
-    private static AuthoredShipDefinitionV4 ReadAuthoredModel(JsonElement root, string sourceIdentity)
+    private static AuthoredShipDefinitionV5 ReadAuthoredModel(JsonElement root, string sourceIdentity)
     {
+        if (ReadInt32(root, "schemaVersion", sourceIdentity) != 5)
+        {
+            throw Failure(
+                "schema.const",
+                sourceIdentity,
+                "#/schemaVersion",
+                string.Empty,
+                "Only ship definition version five is supported."
+            );
+        }
         JsonElement engineering = root.GetProperty("engineering");
-        return new AuthoredShipDefinitionV4(
+        return new AuthoredShipDefinitionV5(
             ReadInt32(root, "schemaVersion", sourceIdentity),
             root.GetProperty("id").GetString()!,
             root.GetProperty("designDisplayName").GetString()!,
@@ -212,7 +222,14 @@ public sealed class ShipDefinitionCatalogLoader
             ReadInt32(engineering, "nominalSensorDemandPowerUnits", sourceIdentity),
             ReadInt32(engineering, "nominalImpulseDemandPowerUnits", sourceIdentity),
             ReadInt64(engineering, "sensorRepairDurationMilliseconds", sourceIdentity),
-            ReadInt64(engineering, "impulseRepairDurationMilliseconds", sourceIdentity)
+            ReadInt64(engineering, "impulseRepairDurationMilliseconds", sourceIdentity),
+            ReadInt32(engineering, "nominalShieldDemandPowerUnits", sourceIdentity),
+            ReadInt32(engineering, "nominalDirectedEnergyDemandPowerUnits", sourceIdentity),
+            ReadInt64(engineering, "shieldRepairDurationMilliseconds", sourceIdentity),
+            ReadInt64(engineering, "directedEnergyRepairDurationMilliseconds", sourceIdentity),
+            root.GetProperty("directedEnergyWeapon").GetProperty("rangeKilometers").GetDouble(),
+            root.GetProperty("directedEnergyWeapon").GetProperty("baseNormalizedDamage").GetDouble(),
+            ReadInt64(root.GetProperty("directedEnergyWeapon"), "cooldownMilliseconds", sourceIdentity)
         );
     }
 
@@ -269,7 +286,7 @@ public sealed class ShipDefinitionCatalogLoader
             $"'{propertyName}' must be representable as {expectedType}."
         );
 
-    private static ShipDefinition ValidateSemantics(AuthoredShipDefinitionV4 authored, string sourceIdentity)
+    private static ShipDefinition ValidateSemantics(AuthoredShipDefinitionV5 authored, string sourceIdentity)
     {
         var diagnostics = new List<ShipContentDiagnostic>();
         ShipDefinitionId id = ValidateIdentity(authored.Id, sourceIdentity, diagnostics);
@@ -311,11 +328,18 @@ public sealed class ShipDefinitionCatalogLoader
             diagnostics
         );
 
+        ValidateCombat(authored, sourceIdentity, diagnostics);
+
         if (diagnostics.Count > 0)
         {
             throw new ShipContentValidationException(diagnostics);
         }
 
+        return CreateDefinition(authored, id);
+    }
+
+    private static ShipDefinition CreateDefinition(AuthoredShipDefinitionV5 authored, ShipDefinitionId id)
+    {
         return new ShipDefinition(
             id,
             authored.DesignDisplayName,
@@ -326,10 +350,80 @@ public sealed class ShipDefinitionCatalogLoader
                 new PowerUnits(authored.NominalGenerationPowerUnits),
                 new PowerUnits(authored.NominalSensorDemandPowerUnits),
                 new PowerUnits(authored.NominalImpulseDemandPowerUnits),
+                new PowerUnits(authored.NominalShieldDemandPowerUnits),
+                new PowerUnits(authored.NominalDirectedEnergyDemandPowerUnits),
                 new SimulationDuration(authored.SensorRepairDurationMilliseconds),
-                new SimulationDuration(authored.ImpulseRepairDurationMilliseconds)
+                new SimulationDuration(authored.ImpulseRepairDurationMilliseconds),
+                new SimulationDuration(authored.ShieldRepairDurationMilliseconds),
+                new SimulationDuration(authored.DirectedEnergyRepairDurationMilliseconds)
+            ),
+            new DirectedEnergyWeaponDefinition(
+                new DistanceKilometers(authored.RangeKilometers),
+                authored.BaseNormalizedDamage,
+                new SimulationDuration(authored.CooldownMilliseconds)
             )
         );
+    }
+
+    private static void ValidateCombat(
+        AuthoredShipDefinitionV5 authored,
+        string sourceIdentity,
+        List<ShipContentDiagnostic> diagnostics
+    )
+    {
+        ValidatePower(
+            authored.NominalShieldDemandPowerUnits,
+            "nominalShieldDemandPowerUnits",
+            sourceIdentity,
+            diagnostics
+        );
+        ValidatePower(
+            authored.NominalDirectedEnergyDemandPowerUnits,
+            "nominalDirectedEnergyDemandPowerUnits",
+            sourceIdentity,
+            diagnostics
+        );
+        ValidateEngineeringDuration(
+            authored.ShieldRepairDurationMilliseconds,
+            "shieldRepairDurationMilliseconds",
+            "Shield repair duration",
+            sourceIdentity,
+            diagnostics
+        );
+        ValidateEngineeringDuration(
+            authored.DirectedEnergyRepairDurationMilliseconds,
+            "directedEnergyRepairDurationMilliseconds",
+            "Directed-energy repair duration",
+            sourceIdentity,
+            diagnostics
+        );
+        ValidateDuration(
+            authored.CooldownMilliseconds,
+            "directedEnergyWeapon/cooldownMilliseconds",
+            "Weapon cooldown",
+            sourceIdentity,
+            diagnostics
+        );
+        if (!double.IsFinite(authored.RangeKilometers) || authored.RangeKilometers <= 0)
+            diagnostics.Add(
+                Semantic(
+                    sourceIdentity,
+                    "#/directedEnergyWeapon/rangeKilometers",
+                    "Weapon range must be positive and bounded."
+                )
+            );
+        if (
+            !double.IsFinite(authored.BaseNormalizedDamage)
+            || authored.BaseNormalizedDamage <= 0
+            || authored.BaseNormalizedDamage > 1
+        )
+            diagnostics.Add(
+                Semantic(
+                    sourceIdentity,
+                    "#/directedEnergyWeapon/baseNormalizedDamage",
+                    "Weapon damage must be positive and normalized."
+                )
+            );
     }
 
     private static ShipDefinitionId ValidateIdentity(
@@ -475,7 +569,7 @@ public sealed class ShipDefinitionCatalogLoader
         string message
     ) => new([new ShipContentDiagnostic(code, sourceIdentity, instanceLocation, schemaLocation, message)]);
 
-    private sealed record AuthoredShipDefinitionV4(
+    private sealed record AuthoredShipDefinitionV5(
         int SchemaVersion,
         string Id,
         string DesignDisplayName,
@@ -486,6 +580,13 @@ public sealed class ShipDefinitionCatalogLoader
         int NominalSensorDemandPowerUnits,
         int NominalImpulseDemandPowerUnits,
         long SensorRepairDurationMilliseconds,
-        long ImpulseRepairDurationMilliseconds
+        long ImpulseRepairDurationMilliseconds,
+        int NominalShieldDemandPowerUnits,
+        int NominalDirectedEnergyDemandPowerUnits,
+        long ShieldRepairDurationMilliseconds,
+        long DirectedEnergyRepairDurationMilliseconds,
+        double RangeKilometers,
+        double BaseNormalizedDamage,
+        long CooldownMilliseconds
     );
 }

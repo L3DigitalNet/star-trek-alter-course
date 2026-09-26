@@ -14,6 +14,12 @@ public readonly record struct ShipSystemId
     /// <summary>Gets impulse propulsion identity.</summary>
     public static ShipSystemId ImpulsePropulsion { get; } = new("impulse-propulsion");
 
+    /// <summary>Gets shield identity.</summary>
+    public static ShipSystemId Shields { get; } = new("shields");
+
+    /// <summary>Gets directed-energy weapon identity.</summary>
+    public static ShipSystemId DirectedEnergyWeapons { get; } = new("directed-energy-weapons");
+
     /// <summary>Gets the stable serialized identity.</summary>
     public string Value { get; }
 
@@ -24,6 +30,8 @@ public readonly record struct ShipSystemId
             "power-generation" => PowerGeneration,
             "sensors" => Sensors,
             "impulse-propulsion" => ImpulsePropulsion,
+            "shields" => Shields,
+            "directed-energy-weapons" => DirectedEnergyWeapons,
             _ => throw new ArgumentException("Ship system identity is unsupported.", nameof(value)),
         };
 
