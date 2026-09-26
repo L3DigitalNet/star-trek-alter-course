@@ -112,8 +112,9 @@ public sealed class ShipDefinitionCatalogLoader
             throw new ShipContentValidationException(schemaDiagnostics);
         }
 
-        // The schema const already pins the version; this guard keeps a relaxed schema from admitting V5 input.
-        if (root.GetProperty("schemaVersion").GetInt32() != SchemaVersion)
+        // The schema const already pins the version (admitting integral forms such as 6.0, hence the decimal read); this
+        // guard keeps a relaxed schema from admitting V5 input.
+        if (root.GetProperty("schemaVersion").GetDecimal() != SchemaVersion)
         {
             throw StrictContentJson.Failure(
                 "schema.const",

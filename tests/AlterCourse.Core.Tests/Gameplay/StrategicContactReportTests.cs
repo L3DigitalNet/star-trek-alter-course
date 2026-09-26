@@ -1,12 +1,12 @@
 using AlterCourse.Core.Gameplay;
 using AlterCourse.Core.Identity;
 using AlterCourse.Core.Player;
-using AlterCourse.Core.Quantities;
 using AlterCourse.Core.Sensors;
 using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
 using AlterCourse.Core.Tactical;
+using AlterCourse.Core.Tests.Support;
 
 namespace AlterCourse.Core.Tests.Gameplay;
 
@@ -221,10 +221,7 @@ public sealed class StrategicContactReportTests
             TacticalPosition = position,
             Engineering = sensorCondition is null
                 ? kestrel.Engineering
-                : kestrel.Engineering with
-                {
-                    SensorCondition = sensorCondition.Value,
-                },
+                : kestrel.Engineering.WithCondition(TestShipContent.Sensors, sensorCondition.Value),
         };
         return GameSimulation.RestoreState(state.ReplaceShip(kestrel.InstanceId, relocated), _fixture.Catalog);
     }
@@ -268,20 +265,14 @@ public sealed class StrategicContactReportTests
         );
     }
 
-    private static ShipStart ChainedShip(long id, string vesselDisplayName, double xKilometers)
-    {
-        var nominal = new SystemCondition(1);
-        return new ShipStart(
+    private static ShipStart ChainedShip(long id, string vesselDisplayName, double xKilometers) =>
+        new(
             new ShipInstanceId(id),
             new ShipDefinitionId("pathfinder"),
             vesselDisplayName,
             new TacticalPosition(xKilometers, 0),
             default,
-            nominal,
-            nominal,
-            nominal,
-            new PowerAllocation(new PowerUnits(70), new PowerUnits(50)),
-            new AtLocationStart(Dawn)
+            new AtLocationStart(Dawn),
+            TestShipStarts.Pathfinder()
         );
-    }
 }

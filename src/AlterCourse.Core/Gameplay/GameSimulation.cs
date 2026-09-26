@@ -251,6 +251,15 @@ public sealed partial class GameSimulation
         return new TacticalCourseApplicationResult(SetTacticalCourseOutcome.Accepted, candidate);
     }
 
+    /// <summary>
+    /// Gets the scan source: the ship's sole installed sensor when it can currently sense from a location, else null.
+    /// Its definition owns scan duration, and the scan records this installation so continuation never re-derives it.
+    /// </summary>
+    private static InstalledSystem? ScanSource(ShipState observer) =>
+        observer.StrategicState is AtLocationState && HasEffectiveSensorCapability(observer.Engineering)
+            ? ShipSystemAdmission.SupportedSingle(observer.Engineering.Systems, ShipSystemKind.Sensors)
+            : null;
+
     /// <summary>Validates and schedules an active scan of one player-local contact.</summary>
     public ActiveSensorScanResult RequestActiveSensorScan(SensorContactId contactId)
     {
@@ -273,17 +282,8 @@ public sealed partial class GameSimulation
             return new ActiveSensorScanResult(ActiveSensorScanOutcome.AlreadyIdentified);
         }
 
-        // The scan source is the ship's sole installed sensor; its definition owns scan duration, and the scan keeps
-        // that installation's identity so continuation never re-derives it.
-        InstalledSystem? sensor = ShipSystemAdmission.SupportedSingle(
-            observer.Engineering.Systems,
-            ShipSystemKind.Sensors
-        );
-        if (
-            sensor is null
-            || !HasEffectiveSensorCapability(observer.Engineering)
-            || observer.StrategicState is not AtLocationState
-        )
+        InstalledSystem? sensor = ScanSource(observer);
+        if (sensor is null)
         {
             return new ActiveSensorScanResult(ActiveSensorScanOutcome.SensorsUnavailable);
         }

@@ -8,6 +8,7 @@ using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
 using AlterCourse.Core.Tactical;
+using AlterCourse.Core.Tests.Support;
 
 namespace AlterCourse.Core.Tests.Gameplay;
 
@@ -39,7 +40,8 @@ public sealed class SensorObservationCommandTests
                 nameof(PlayerAdvanceEvent.Kind),
                 nameof(PlayerAdvanceEvent.OccurredAt),
                 nameof(PlayerAdvanceEvent.SensorContactId),
-                nameof(PlayerAdvanceEvent.ShipSystemId),
+                nameof(PlayerAdvanceEvent.SystemKind),
+                nameof(PlayerAdvanceEvent.InstalledSystemId),
             ],
             typeof(PlayerAdvanceEvent).GetProperties().Select(property => property.Name),
             StringComparer.Ordinal
@@ -60,8 +62,8 @@ public sealed class SensorObservationCommandTests
             "Traveling target",
             new TacticalPosition(1, 0),
             default,
-            new SystemCondition(1),
-            new TravelingStart(Local, Remote, new SimulationTime(0))
+            new TravelingStart(Local, Remote, new SimulationTime(0)),
+            TestShipStarts.Pathfinder()
         );
         GameSimulation game = CreateGame(
             Ship(1, ObserverDefinitionId, default, integrity: 0.5),
@@ -275,7 +277,7 @@ public sealed class SensorObservationCommandTests
             "Player",
             default,
             default,
-            NominalEngineering(),
+            NominalEngineering(ObserverDefinitionId),
             new TravelingState(
                 new TravelState(Remote, Local, new SimulationTime(0), arrivalWork.DueTime, arrivalWork.Id)
             ),
@@ -287,7 +289,7 @@ public sealed class SensorObservationCommandTests
             "Target",
             default,
             default,
-            NominalEngineering(),
+            NominalEngineering(TargetDefinitionId),
             new AtLocationState(Local)
         );
         var map = new StrategicMap(
@@ -383,7 +385,7 @@ public sealed class SensorObservationCommandTests
             player.InstanceId,
             player with
             {
-                Engineering = player.Engineering with { SensorCondition = new SystemCondition(0) },
+                Engineering = player.Engineering.WithCondition(TestShipContent.Sensors, new SystemCondition(0)),
             }
         );
         var unavailable = GameSimulation.RestoreState(state, CreateCatalog());
@@ -404,7 +406,8 @@ public sealed class SensorObservationCommandTests
             Ship(2, TargetDefinitionId, new TacticalPosition(5, 0))
         );
         observed.AdvanceFixedSteps(1);
-        var unavailable = GameSimulation.RestoreState(observed.CaptureState(), CreateCatalog(passiveRange: 0));
+        ShipDefinitionCatalog zeroRange = CreateCatalog(passiveRange: 0);
+        var unavailable = GameSimulation.RestoreState(Retune(observed.CaptureState(), zeroRange), zeroRange);
         PlayerProjection before = unavailable.GetPlayerProjection();
         SimulationState beforeState = unavailable.CaptureState();
 
@@ -513,7 +516,7 @@ public sealed class SensorObservationCommandTests
                 default,
                 integrity: 0.5,
                 repair: new SystemRepairStart(
-                    ShipSystemKind.Sensors,
+                    TestShipContent.Sensors,
                     new SystemCondition(0.5),
                     new SystemCondition(1),
                     new SimulationTime(0)
@@ -600,7 +603,7 @@ public sealed class SensorObservationCommandTests
                 default,
                 integrity: 0.5,
                 repair: new SystemRepairStart(
-                    ShipSystemKind.Sensors,
+                    TestShipContent.Sensors,
                     new SystemCondition(0.5),
                     new SystemCondition(1),
                     new SimulationTime(0)
@@ -655,12 +658,13 @@ public sealed class SensorObservationCommandTests
 
     private static GameSimulation CreateGame(params ShipStart[] starts) => CreateGame((IEnumerable<ShipStart>)starts);
 
-    private static ShipEngineeringState NominalEngineering() =>
-        new(
-            new SystemCondition(1),
-            new SystemCondition(1),
-            new SystemCondition(1),
-            new PowerAllocation(new(70), new(50))
+    private static ShipEngineeringState NominalEngineering(ShipDefinitionId design) =>
+        TestEngineering.FromDesign(
+            CreateCatalog(),
+            design,
+            TestEngineering.Allocation(70, 50, 0, 0),
+            shields: 0,
+            weapons: 0
         );
 
     private static GameSimulation CreateGame(IEnumerable<ShipStart> starts) => CreateGame(CreateCatalog(), starts);
@@ -689,6 +693,30 @@ public sealed class SensorObservationCommandTests
         return game;
     }
 
+    /// <summary>
+    /// Re-resolves every installation against another catalog, keeping identity, condition, and allocation. Installed
+    /// definitions are values, so changing content under a live world requires rebuilding its installations.
+    /// </summary>
+    private static SimulationState Retune(SimulationState state, ShipDefinitionCatalog catalog) =>
+        state.ReplaceShips([
+            .. state.Ships.Select(ship =>
+                ship with
+                {
+                    Engineering = ship.Engineering with
+                    {
+                        Systems = InstalledSystemCollection.Create(
+                            ship.Engineering.Systems.Select(system => new InstalledSystem(
+                                system.Id,
+                                catalog.SystemDefinitions.GetRequired(system.Definition.Id),
+                                system.Condition,
+                                system.Allocation
+                            ))
+                        ),
+                    },
+                }
+            ),
+        ]);
+
     private static ShipStart Ship(
         long id,
         ShipDefinitionId definitionId,
@@ -704,8 +732,8 @@ public sealed class SensorObservationCommandTests
             vesselName ?? $"Ship {id}",
             position,
             default,
-            new SystemCondition(integrity),
             new AtLocationStart(location ?? Local),
+            TestShipStarts.Pathfinder(sensors: integrity),
             repair
         );
 
@@ -713,33 +741,25 @@ public sealed class SensorObservationCommandTests
         double passiveRange = 10,
         long sensorRepairDurationMilliseconds = 8_000
     ) =>
-        new(
-            new Dictionary<ShipDefinitionId, ShipDefinition>
-            {
-                [ObserverDefinitionId] = Definition(
-                    ObserverDefinitionId,
-                    "Observer design",
-                    passiveRange,
-                    100,
-                    sensorRepairDurationMilliseconds
-                ),
-                [TargetDefinitionId] = Definition(TargetDefinitionId, "Target design", 4, 20),
-            }
+        TestShipContent.Designs(
+            (
+                ObserverDefinitionId.Value,
+                "Observer design",
+                Tuning(passiveRange, 100, sensorRepairDurationMilliseconds),
+                "observer"
+            ),
+            (TargetDefinitionId.Value, "Target design", Tuning(4, 20, 8_000), "target")
         );
 
-    private static ShipDefinition Definition(
-        ShipDefinitionId id,
-        string name,
+    private static PathfinderTuning Tuning(
         double passiveRange,
         double maximumSpeed,
-        long sensorRepairDurationMilliseconds = 8_000
+        long sensorRepairDurationMilliseconds
     ) =>
-        new(
-            id,
-            name,
-            new SpeedKilometersPerSecond(maximumSpeed),
-            new DistanceKilometers(passiveRange),
-            new SimulationDuration(2_000),
-            new SimulationDuration(sensorRepairDurationMilliseconds)
-        );
+        PathfinderTuning.Production with
+        {
+            PassiveRange = passiveRange,
+            MaximumTacticalSpeed = maximumSpeed,
+            SensorRepairMilliseconds = sensorRepairDurationMilliseconds,
+        };
 }

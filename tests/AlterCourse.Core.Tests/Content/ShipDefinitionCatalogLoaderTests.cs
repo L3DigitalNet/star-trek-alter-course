@@ -1,96 +1,63 @@
 using System.Text;
-using System.Text.Json;
 using AlterCourse.Core.Content;
-using AlterCourse.Core.Quantities;
 using AlterCourse.Core.Ships;
-using AlterCourse.Core.Simulation;
-using Json.Schema;
+using AlterCourse.Core.Tests.Support;
 
 namespace AlterCourse.Core.Tests.Content;
 
-/// <summary>Verifies strict, versioned admission of authored ship definitions.</summary>
+/// <summary>Verifies strict, versioned admission of authored V6 ship designs against the system catalog.</summary>
+/// <remarks>
+/// V6 designs carry identity, display name, and an initial loadout that references system definitions; every
+/// capability value (speed, range, scan and repair timing, power, weapon tuning) is owned by those system
+/// definitions and verified by the system-definition loader tests.
+/// </remarks>
 public sealed class ShipDefinitionCatalogLoaderTests
 {
     private const string ValidDefinition = """
         {
-          "schemaVersion": 5,
+          "schemaVersion": 6,
           "id": "pathfinder",
           "designDisplayName": "Pathfinder class",
-          "maximumTacticalSpeedKilometersPerSecond": 10,
-          "passiveSensorRangeKilometers": 30.0,
-          "activeScanDurationMilliseconds": 2000,
-          "engineering": {
-            "nominalGenerationPowerUnits": 120,
-            "nominalSensorDemandPowerUnits": 70,
-            "nominalImpulseDemandPowerUnits": 50,
-            "sensorRepairDurationMilliseconds": 8000,
-            "impulseRepairDurationMilliseconds": 6000, "nominalShieldDemandPowerUnits": 40, "nominalDirectedEnergyDemandPowerUnits": 30, "shieldRepairDurationMilliseconds": 8000, "directedEnergyRepairDurationMilliseconds": 6000
-          }, "directedEnergyWeapon": { "rangeKilometers": 20, "baseNormalizedDamage": 0.25, "cooldownMilliseconds": 2000 }
+          "initialLoadout": {
+            "nextInstalledSystemId": 6,
+            "systems": [
+              { "installedSystemId": 1, "definitionId": "pathfinder.power-generation" },
+              { "installedSystemId": 2, "definitionId": "pathfinder.sensors" },
+              { "installedSystemId": 3, "definitionId": "pathfinder.impulse-propulsion" },
+              { "installedSystemId": 4, "definitionId": "pathfinder.shields" },
+              { "installedSystemId": 5, "definitionId": "pathfinder.directed-energy-weapons" }
+            ]
+          }
         }
         """;
 
-    /// <summary>Confirms combat authorship rejects absent, duplicated, unknown, and invalid fields.</summary>
-    [Theory]
-    [InlineData("\"nominalShieldDemandPowerUnits\": 40,", "")]
-    [InlineData("\"nominalDirectedEnergyDemandPowerUnits\": 30,", "")]
-    [InlineData("\"shieldRepairDurationMilliseconds\": 8000,", "")]
-    [InlineData("\"directedEnergyRepairDurationMilliseconds\": 6000", "\"unexpected\": 6000")]
-    [InlineData("\"rangeKilometers\": 20", "\"rangeKilometers\": 0")]
-    [InlineData("\"baseNormalizedDamage\": 0.25", "\"baseNormalizedDamage\": 0")]
-    [InlineData("\"baseNormalizedDamage\": 0.25", "\"baseNormalizedDamage\": 1.01")]
-    [InlineData("\"cooldownMilliseconds\": 2000", "\"cooldownMilliseconds\": 2050")]
-    [InlineData("\"cooldownMilliseconds\": 2000", "\"cooldownMilliseconds\": 0")]
-    [InlineData("\"nominalShieldDemandPowerUnits\": 40", "\"nominalShieldDemandPowerUnits\": 0")]
-    [InlineData("\"nominalDirectedEnergyDemandPowerUnits\": 30", "\"nominalDirectedEnergyDemandPowerUnits\": 1000001")]
-    [InlineData("\"shieldRepairDurationMilliseconds\": 8000", "\"shieldRepairDurationMilliseconds\": 8050")]
-    [InlineData(
-        "\"directedEnergyRepairDurationMilliseconds\": 6000",
-        "\"directedEnergyRepairDurationMilliseconds\": -1"
-    )]
-    [InlineData("\"rangeKilometers\": 20", "\"rangeKilometers\": 20, \"rangeKilometers\": 10")]
-    [InlineData("\"cooldownMilliseconds\": 2000", "\"cooldownMilliseconds\": 2000, \"unknown\": 1")]
-    public void RejectsInvalidCombatAuthorship(string original, string replacement)
-    {
-        Assert.Contains(original, ValidDefinition, StringComparison.Ordinal);
-        string invalid = ValidDefinition.Replace(original, replacement, StringComparison.Ordinal);
-        Assert.Throws<ShipContentValidationException>(() => CreateLoader().LoadText(invalid, "combat-invalid.json"));
-    }
-
-    /// <summary>Confirms valid historical content cannot bypass the current loader's explicit version guard.</summary>
+    /// <summary>Confirms V5 content — valid under its own historical schema — cannot enter the V6 loader.</summary>
     [Fact]
-    public void CurrentLoaderRejectsHistoricalContentEvenWithHistoricalSchema()
+    public void CurrentLoaderRejectsHistoricalV5Content()
     {
         const string historicalContent = """
             {
-              "schemaVersion": 4,
+              "schemaVersion": 5,
               "id": "pathfinder",
               "designDisplayName": "Pathfinder class",
               "maximumTacticalSpeedKilometersPerSecond": 10,
               "passiveSensorRangeKilometers": 30.0,
               "activeScanDurationMilliseconds": 2000,
-              "engineering": {
-                "nominalGenerationPowerUnits": 120,
-                "nominalSensorDemandPowerUnits": 70,
-                "nominalImpulseDemandPowerUnits": 50,
-                "sensorRepairDurationMilliseconds": 8000,
-                "impulseRepairDurationMilliseconds": 6000
-              }
+              "engineering": { "nominalGenerationPowerUnits": 120, "nominalSensorDemandPowerUnits": 70, "nominalImpulseDemandPowerUnits": 50, "sensorRepairDurationMilliseconds": 8000, "impulseRepairDurationMilliseconds": 6000, "nominalShieldDemandPowerUnits": 40, "nominalDirectedEnergyDemandPowerUnits": 30, "shieldRepairDurationMilliseconds": 8000, "directedEnergyRepairDurationMilliseconds": 6000 }, "directedEnergyWeapon": { "rangeKilometers": 20, "baseNormalizedDamage": 0.25, "cooldownMilliseconds": 2000 }
             }
             """;
-        string schema = File.ReadAllText(
-            Path.Combine(FindRepositoryRoot(), "src/AlterCourse.Godot/content/schemas/ship-definition-v4.schema.json")
-        );
-        using var document = JsonDocument.Parse(historicalContent);
-        Assert.True(JsonSchema.FromText(schema).Evaluate(document.RootElement).IsValid);
         ShipContentValidationException exception = Assert.Throws<ShipContentValidationException>(() =>
-            new ShipDefinitionCatalogLoader(schema).LoadText(historicalContent, "historical.json")
+            CreateLoader().LoadText(historicalContent, "historical.json")
         );
-        ShipContentDiagnostic diagnostic = Assert.Single(exception.Diagnostics);
-        Assert.Equal("schema.const", diagnostic.Code);
-        Assert.Equal("#/schemaVersion", diagnostic.InstanceLocation);
+        Assert.Contains(
+            exception.Diagnostics,
+            diagnostic =>
+                string.Equals(diagnostic.Code, "schema.const", StringComparison.Ordinal)
+                && string.Equals(diagnostic.InstanceLocation, "#/schemaVersion", StringComparison.Ordinal)
+        );
     }
 
-    /// <summary>Confirms text, UTF-8 bytes, and streams map to the existing domain definition.</summary>
+    /// <summary>Confirms text, UTF-8 bytes, and streams map to the same resolved design and loadout.</summary>
     [Fact]
     public void LoadsValidDefinitionFromSupportedInputs()
     {
@@ -105,18 +72,9 @@ public sealed class ShipDefinitionCatalogLoaderTests
         Assert.Equal(fromText, fromStream);
         Assert.Equal(new ShipDefinitionId("pathfinder"), fromText.Id);
         Assert.Equal("Pathfinder class", fromText.DesignDisplayName);
-        Assert.Equal(10, fromText.MaximumTacticalSpeed.Value);
-        Assert.Equal(30, fromText.PassiveSensorRange.Value);
-        Assert.Equal(2000, fromText.ActiveScanDuration.Milliseconds);
-        Assert.Equal(8000, fromText.SensorRepairDuration.Milliseconds);
-        Assert.Equal(40, fromText.Engineering.NominalShieldDemand.Value);
-        Assert.Equal(30, fromText.Engineering.NominalDirectedEnergyDemand.Value);
-        Assert.Equal(8000, fromText.Engineering.ShieldRepairDuration.Milliseconds);
-        Assert.Equal(6000, fromText.Engineering.DirectedEnergyRepairDuration.Milliseconds);
-        Assert.NotNull(fromText.DirectedEnergyWeapon);
-        Assert.Equal(20, fromText.DirectedEnergyWeapon.Range.Value);
-        Assert.Equal(0.25, fromText.DirectedEnergyWeapon.BaseNormalizedDamage);
-        Assert.Equal(2000, fromText.DirectedEnergyWeapon.Cooldown.Milliseconds);
+        Assert.Equal(6, fromText.InitialLoadout.NextInstalledSystemId);
+        Assert.Equal([1L, 2L, 3L, 4L, 5L], fromText.InitialLoadout.Systems.Select(system => system.Id.Value));
+        Assert.Equal("pathfinder.directed-energy-weapons", fromText.InitialLoadout.Systems[4].DefinitionId.Value);
     }
 
     /// <summary>Confirms schema-valid integral numeric forms map to the authored integer contract.</summary>
@@ -124,56 +82,27 @@ public sealed class ShipDefinitionCatalogLoaderTests
     public void LoadsSchemaValidIntegralNumericForms()
     {
         string json = ValidDefinition
-            .Replace("\"schemaVersion\": 5", "\"schemaVersion\": 5.0", StringComparison.Ordinal)
-            .Replace(
-                "\"activeScanDurationMilliseconds\": 2000",
-                "\"activeScanDurationMilliseconds\": 2e3",
-                StringComparison.Ordinal
-            );
+            .Replace("\"schemaVersion\": 6", "\"schemaVersion\": 6.0", StringComparison.Ordinal)
+            .Replace("\"nextInstalledSystemId\": 6", "\"nextInstalledSystemId\": 6e0", StringComparison.Ordinal);
 
         ShipDefinition definition = CreateLoader().LoadText(json, "integral-forms.json");
 
-        Assert.Equal(2000, definition.ActiveScanDuration.Milliseconds);
+        Assert.Equal(6, definition.InitialLoadout.NextInstalledSystemId);
     }
 
-    /// <summary>Confirms an integral JSON number outside the runtime range fails with a typed diagnostic.</summary>
-    [Theory]
-    [InlineData("1e100")]
-    [InlineData("10000000000000000000")]
-    public void RejectsUnmappableIntegralNumberWithSourceAwareDiagnostic(string invalidDuration)
-    {
-        string json = ValidDefinition.Replace(
-            "\"activeScanDurationMilliseconds\": 2000",
-            $"\"activeScanDurationMilliseconds\": {invalidDuration}",
-            StringComparison.Ordinal
-        );
-
-        ShipContentValidationException exception = Assert.Throws<ShipContentValidationException>(() =>
-            CreateLoader().LoadText(json, "integral-range.json")
-        );
-
-        Assert.Contains("semantic", exception.Diagnostics[0].Code, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal("integral-range.json", exception.Diagnostics[0].SourceIdentity);
-        Assert.Equal("#/activeScanDurationMilliseconds", exception.Diagnostics[0].InstanceLocation);
-    }
-
-    /// <summary>Confirms the repository's canonical schema and ship definition remain load-compatible.</summary>
+    /// <summary>Confirms the repository's canonical V6 design loads against the production system catalog.</summary>
     [Fact]
     public void LoadsCanonicalPlayerShipDefinition()
     {
-        string root = FindRepositoryRoot();
-        string schema = File.ReadAllText(
-            Path.Combine(root, "src/AlterCourse.Godot/content/schemas/ship-definition-v5.schema.json")
-        );
-        string definition = File.ReadAllText(Path.Combine(root, "src/AlterCourse.Godot/content/ships/pathfinder.json"));
-
-        ShipDefinition ship = new ShipDefinitionCatalogLoader(schema).LoadText(
-            definition,
-            "res://content/ships/pathfinder.json"
-        );
+        ShipDefinition ship = CreateLoader()
+            .LoadText(
+                TestShipContent.ReadRepositoryFile("src/AlterCourse.Godot/content/ships/pathfinder.json"),
+                "res://content/ships/pathfinder.json"
+            );
 
         Assert.Equal(new ShipDefinitionId("pathfinder"), ship.Id);
         Assert.Equal("Pathfinder class", ship.DesignDisplayName);
+        Assert.Equal(5, ship.InitialLoadout.Systems.Count);
     }
 
     /// <summary>Confirms the domain and canonical schema share the exact persisted identity boundary.</summary>
@@ -181,9 +110,8 @@ public sealed class ShipDefinitionCatalogLoaderTests
     public void EnforcesShipDefinitionIdentityLengthAcrossDomainAndContent()
     {
         string maximumId = new('i', ShipDefinitionId.MaximumLength);
-        string maximum = DefinitionWithId(maximumId);
 
-        ShipDefinition loaded = CreateLoader().LoadText(maximum, "maximum-id.json");
+        ShipDefinition loaded = CreateLoader().LoadText(DefinitionWithId(maximumId), "maximum-id.json");
 
         Assert.Equal(maximumId, loaded.Id.Value);
         Assert.Throws<ArgumentException>(() =>
@@ -200,28 +128,21 @@ public sealed class ShipDefinitionCatalogLoaderTests
     public void EnforcesDesignDisplayNameLengthAcrossDomainAndContent()
     {
         string maximumName = new('n', ShipDefinition.MaximumDesignDisplayNameLength);
-        string maximum = ValidDefinition.Replace("Pathfinder class", maximumName, StringComparison.Ordinal);
-        ShipDefinition loaded = CreateLoader().LoadText(maximum, "maximum-name.json");
+        string oversizedName = new('n', ShipDefinition.MaximumDesignDisplayNameLength + 1);
+        ShipDefinition loaded = CreateLoader()
+            .LoadText(
+                ValidDefinition.Replace("Pathfinder class", maximumName, StringComparison.Ordinal),
+                "maximum-name.json"
+            );
 
         Assert.Equal(maximumName, loaded.DesignDisplayName);
         Assert.Throws<ArgumentException>(() =>
-            new ShipDefinition(
-                new ShipDefinitionId("oversized"),
-                new string('n', ShipDefinition.MaximumDesignDisplayNameLength + 1),
-                new SpeedKilometersPerSecond(1),
-                new DistanceKilometers(1),
-                new SimulationDuration(100),
-                new SimulationDuration(100)
-            )
+            new ShipDefinition(new ShipDefinitionId("oversized"), oversizedName, loaded.InitialLoadout)
         );
         Assert.Throws<ShipContentValidationException>(() =>
             CreateLoader()
                 .LoadText(
-                    ValidDefinition.Replace(
-                        "Pathfinder class",
-                        new string('n', ShipDefinition.MaximumDesignDisplayNameLength + 1),
-                        StringComparison.Ordinal
-                    ),
+                    ValidDefinition.Replace("Pathfinder class", oversizedName, StringComparison.Ordinal),
                     "oversized-name.json"
                 )
         );
@@ -243,8 +164,8 @@ public sealed class ShipDefinitionCatalogLoaderTests
 
     /// <summary>Confirms malformed and truncated JSON fail closed with source-aware diagnostics.</summary>
     [Theory]
-    [InlineData("{\"schemaVersion\":2")]
-    [InlineData("{\"schemaVersion\":2} trailing")]
+    [InlineData("{\"schemaVersion\":6")]
+    [InlineData("{\"schemaVersion\":6} trailing")]
     public void RejectsMalformedJson(string json)
     {
         ShipContentValidationException exception = Assert.Throws<ShipContentValidationException>(() =>
@@ -273,13 +194,21 @@ public sealed class ShipDefinitionCatalogLoaderTests
         Assert.DoesNotContain("schema", exception.Diagnostics[0].Code, StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>Confirms schema-unknown members cannot silently enter the authored contract.</summary>
-    [Fact]
-    public void RejectsUnknownMembers()
+    /// <summary>
+    /// Confirms schema-unknown members — including every V5 capability field, now owned by system definitions —
+    /// cannot silently enter the authored design contract.
+    /// </summary>
+    [Theory]
+    [InlineData("\"unconsumed\": true")]
+    [InlineData("\"maximumTacticalSpeedKilometersPerSecond\": 10")]
+    [InlineData("\"passiveSensorRangeKilometers\": 30.0")]
+    [InlineData("\"engineering\": {}")]
+    [InlineData("\"directedEnergyWeapon\": {}")]
+    public void RejectsUnknownMembers(string member)
     {
         string json = ValidDefinition.Replace(
-            "\"schemaVersion\": 5,",
-            "\"schemaVersion\": 5,\n  \"unconsumed\": true,",
+            "\"schemaVersion\": 6,",
+            $"\"schemaVersion\": 6,\n  {member},",
             StringComparison.Ordinal
         );
 
@@ -287,14 +216,15 @@ public sealed class ShipDefinitionCatalogLoaderTests
             CreateLoader().LoadText(json, "unknown.json")
         );
 
-        Assert.Contains("unconsumed", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("schema", exception.Diagnostics[0].Code, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>Confirms missing and unsupported schema versions are structural failures.</summary>
     [Theory]
-    [InlineData("\"schemaVersion\": 5,", "")]
-    [InlineData("\"schemaVersion\": 5", "\"schemaVersion\": 3")]
-    [InlineData("\"schemaVersion\": 5", "\"schemaVersion\": 4")]
+    [InlineData("\"schemaVersion\": 6,", "")]
+    [InlineData("\"schemaVersion\": 6", "\"schemaVersion\": 4")]
+    [InlineData("\"schemaVersion\": 6", "\"schemaVersion\": 5")]
+    [InlineData("\"schemaVersion\": 6", "\"schemaVersion\": 7")]
     public void RejectsWrongOrMissingSchemaVersion(string original, string replacement)
     {
         string json = ValidDefinition.Replace(original, replacement, StringComparison.Ordinal);
@@ -306,75 +236,85 @@ public sealed class ShipDefinitionCatalogLoaderTests
         Assert.Contains("schema", exception.Diagnostics[0].Code, StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>Confirms the removed instance starting condition cannot enter reusable design content.</summary>
+    /// <summary>Confirms the design must author its initial loadout.</summary>
     [Fact]
-    public void RejectsRemovedInitialSensorIntegrity()
+    public void RejectsMissingInitialLoadout()
     {
-        string json = ValidDefinition.Replace(
-            "\"sensorRepairDurationMilliseconds\": 8000",
-            "\"initialSensorIntegrity\": 0.4,\n  \"sensorRepairDurationMilliseconds\": 8000",
-            StringComparison.Ordinal
-        );
+        string json = """
+            {
+              "schemaVersion": 6,
+              "id": "pathfinder",
+              "designDisplayName": "Pathfinder class"
+            }
+            """;
 
         ShipContentValidationException exception = Assert.Throws<ShipContentValidationException>(() =>
-            CreateLoader().LoadText(json, "removed-field.json")
-        );
-
-        Assert.Contains("initialSensorIntegrity", exception.Message, StringComparison.Ordinal);
-        Assert.Contains("schema", exception.Diagnostics[0].Code, StringComparison.OrdinalIgnoreCase);
-    }
-
-    /// <summary>Confirms both version-three sensor capabilities are required.</summary>
-    [Theory]
-    [InlineData("  \"passiveSensorRangeKilometers\": 30.0,\n")]
-    [InlineData("  \"activeScanDurationMilliseconds\": 2000,\n")]
-    public void RejectsMissingSensorCapability(string removedMember)
-    {
-        string json = ValidDefinition.Replace(removedMember, string.Empty, StringComparison.Ordinal);
-
-        ShipContentValidationException exception = Assert.Throws<ShipContentValidationException>(() =>
-            CreateLoader().LoadText(json, "missing-capability.json")
+            CreateLoader().LoadText(json, "missing-loadout.json")
         );
 
         Assert.Contains("schema", exception.Diagnostics[0].Code, StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>Confirms structural constraints reject values that cannot reach domain construction.</summary>
+    /// <summary>
+    /// Confirms loadout invariants fail closed: an unresolved definition reference, a repeated installed identity,
+    /// and a continuation that does not exceed every authored identity.
+    /// </summary>
     [Theory]
-    [InlineData("\"maximumTacticalSpeedKilometersPerSecond\": 10", "\"maximumTacticalSpeedKilometersPerSecond\": -1")]
-    [InlineData("\"passiveSensorRangeKilometers\": 30.0", "\"passiveSensorRangeKilometers\": -1")]
-    [InlineData("\"activeScanDurationMilliseconds\": 2000", "\"activeScanDurationMilliseconds\": 0")]
-    public void RejectsStructurallyInvalidDefinition(string original, string replacement)
+    [InlineData("\"pathfinder.shields\"", "\"pathfinder.missing\"")]
+    [InlineData("\"installedSystemId\": 5,", "\"installedSystemId\": 4,")]
+    [InlineData("\"nextInstalledSystemId\": 6", "\"nextInstalledSystemId\": 5")]
+    public void RejectsInvalidLoadout(string original, string replacement)
     {
         string json = ValidDefinition.Replace(original, replacement, StringComparison.Ordinal);
 
         ShipContentValidationException exception = Assert.Throws<ShipContentValidationException>(() =>
-            CreateLoader().LoadText(json, "structural.json")
+            CreateLoader().LoadText(json, "loadout.json")
         );
 
-        Assert.Contains("schema", exception.Diagnostics[0].Code, StringComparison.OrdinalIgnoreCase);
+        Assert.StartsWith("#/initialLoadout", exception.Diagnostics[0].InstanceLocation, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Confirms an explicit loadout with two installations of one kind is valid storage but is refused at the
+    /// typed-world boundary with a distinct cardinality diagnostic, not a malformed-content one.
+    /// </summary>
+    [Fact]
+    public void RejectsUnsupportedCardinalityWithDistinctDiagnostic()
+    {
+        string json = ValidDefinition
+            .Replace("\"nextInstalledSystemId\": 6", "\"nextInstalledSystemId\": 7", StringComparison.Ordinal)
+            .Replace(
+                "{ \"installedSystemId\": 5, \"definitionId\": \"pathfinder.directed-energy-weapons\" }",
+                "{ \"installedSystemId\": 5, \"definitionId\": \"pathfinder.directed-energy-weapons\" },\n"
+                    + "              { \"installedSystemId\": 6, \"definitionId\": \"pathfinder.sensors\" }",
+                StringComparison.Ordinal
+            );
+
+        ShipContentValidationException exception = Assert.Throws<ShipContentValidationException>(() =>
+            CreateLoader().LoadText(json, "cardinality.json")
+        );
+
+        ShipContentDiagnostic diagnostic = Assert.Single(exception.Diagnostics);
+        Assert.Equal("semantic.unsupported-cardinality", diagnostic.Code);
+        Assert.Equal("#/initialLoadout/systems/5", diagnostic.InstanceLocation);
     }
 
     /// <summary>Confirms game-rule invariants remain a semantic validation stage after schema validation.</summary>
-    [Theory]
-    [InlineData("\"designDisplayName\": \"Pathfinder class\"", "\"designDisplayName\": \"   \"")]
-    [InlineData(
-        "\"maximumTacticalSpeedKilometersPerSecond\": 10",
-        "\"maximumTacticalSpeedKilometersPerSecond\": 1e400"
-    )]
-    [InlineData("\"passiveSensorRangeKilometers\": 30.0", "\"passiveSensorRangeKilometers\": 1e400")]
-    [InlineData("\"activeScanDurationMilliseconds\": 2000", "\"activeScanDurationMilliseconds\": 2050")]
-    [InlineData("\"sensorRepairDurationMilliseconds\": 8000", "\"sensorRepairDurationMilliseconds\": 8050")]
-    public void RejectsSemanticallyInvalidDefinition(string original, string replacement)
+    [Fact]
+    public void RejectsBlankDesignDisplayNameSemantically()
     {
-        string json = ValidDefinition.Replace(original, replacement, StringComparison.Ordinal);
+        string json = ValidDefinition.Replace(
+            "\"designDisplayName\": \"Pathfinder class\"",
+            "\"designDisplayName\": \"   \"",
+            StringComparison.Ordinal
+        );
 
         ShipContentValidationException exception = Assert.Throws<ShipContentValidationException>(() =>
             CreateLoader().LoadText(json, "semantic.json")
         );
 
         Assert.Contains("semantic", exception.Diagnostics[0].Code, StringComparison.OrdinalIgnoreCase);
-        Assert.NotEqual("#", exception.Diagnostics[0].InstanceLocation, StringComparer.Ordinal);
+        Assert.Equal("#/designDisplayName", exception.Diagnostics[0].InstanceLocation);
     }
 
     /// <summary>Confirms catalog registration rejects stable identities repeated across inputs.</summary>
@@ -427,8 +367,8 @@ public sealed class ShipDefinitionCatalogLoaderTests
     public void ProducesDeterministicUsefulDiagnostics()
     {
         string json = ValidDefinition.Replace(
-            "\"maximumTacticalSpeedKilometersPerSecond\": 10",
-            "\"maximumTacticalSpeedKilometersPerSecond\": -1",
+            "\"nextInstalledSystemId\": 6",
+            "\"nextInstalledSystemId\": -1",
             StringComparison.Ordinal
         );
         ShipDefinitionCatalogLoader loader = CreateLoader();
@@ -445,7 +385,7 @@ public sealed class ShipDefinitionCatalogLoaderTests
         Assert.All(first.Diagnostics, diagnostic => Assert.Equal("diagnostic.json", diagnostic.SourceIdentity));
         Assert.Contains(
             first.Diagnostics,
-            diagnostic => diagnostic.InstanceLocation.Contains("maximumTacticalSpeed", StringComparison.Ordinal)
+            diagnostic => diagnostic.InstanceLocation.Contains("nextInstalledSystemId", StringComparison.Ordinal)
         );
         Assert.Contains(first.Diagnostics, diagnostic => !string.IsNullOrWhiteSpace(diagnostic.SchemaLocation));
     }
@@ -494,14 +434,7 @@ public sealed class ShipDefinitionCatalogLoaderTests
     }
 
     private static ShipDefinitionCatalogLoader CreateLoader() =>
-        new(
-            File.ReadAllText(
-                Path.Combine(
-                    FindRepositoryRoot(),
-                    "src/AlterCourse.Godot/content/schemas/ship-definition-v5.schema.json"
-                )
-            )
-        );
+        TestShipContent.ShipLoader(TestShipContent.ProductionSystems());
 
     private static string DefinitionWithId(string id) =>
         ValidDefinition.Replace("\"id\": \"pathfinder\"", $"\"id\": \"{id}\"", StringComparison.Ordinal);
@@ -514,22 +447,5 @@ public sealed class ShipDefinitionCatalogLoaderTests
         }
 
         throw new InvalidOperationException("The bounded consumer enumerated past its rejection threshold.");
-    }
-
-    private static string FindRepositoryRoot()
-    {
-        for (
-            var directory = new DirectoryInfo(AppContext.BaseDirectory);
-            directory is not null;
-            directory = directory.Parent
-        )
-        {
-            if (File.Exists(Path.Combine(directory.FullName, "AlterCourse.sln")))
-            {
-                return directory.FullName;
-            }
-        }
-
-        throw new DirectoryNotFoundException("Could not locate the repository root from the test output directory.");
     }
 }

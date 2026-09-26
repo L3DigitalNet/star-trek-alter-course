@@ -9,6 +9,7 @@ using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
 using AlterCourse.Core.Tactical;
+using AlterCourse.Core.Tests.Support;
 
 namespace AlterCourse.Core.Tests.Gameplay;
 
@@ -20,7 +21,7 @@ public sealed class CombatRuntimeTests
     public void ExactAllocationCountsCombatConsumersBeforeCommit()
     {
         GameSimulation game = new Milestone3ProofFixture().CreateDefault();
-        var allocation = new PowerAllocation(new PowerUnits(44), new PowerUnits(31), new PowerUnits(1));
+        PowerAllocation allocation = TestEngineering.Allocation(44, 31, 1, 0);
         Assert.Equal(PowerAllocationOutcome.AvailablePowerExceeded, game.SetPowerAllocation(allocation).Outcome);
         Assert.Equal(new PowerUnits(44), game.GetPlayerProjection().Ship.Engineering.SensorAllocation);
     }
@@ -37,11 +38,14 @@ public sealed class CombatRuntimeTests
             game.FireDirectedEnergy(new(contact, ShipSystemKind.Sensors)).Outcome
         );
         ShipState after = game.CaptureState().GetRequiredShip(victim.InstanceId);
-        Assert.Equal(0.75, after.Engineering.ShieldCondition.Value, 12);
-        Assert.Equal(1, after.Engineering.SensorCondition.Value);
+        Assert.Equal(0.75, TestEngineering.ConditionOf(after.Engineering, ShipSystemKind.Shields), 12);
+        Assert.Equal(1, TestEngineering.ConditionOf(after.Engineering, ShipSystemKind.Sensors));
         Assert.Equal(
             before.Time.Milliseconds + 2000,
-            game.CaptureState().GetRequiredShip(before.PlayerShipId).Combat.NextDirectedEnergyReadyAt.Milliseconds
+            game.CaptureState()
+                .GetRequiredShip(before.PlayerShipId)
+                .Combat.ReadinessOf(TestShipContent.Weapons)!
+                .ReadyAt.Milliseconds
         );
         SimulationState committed = game.CaptureState();
         FireDirectedEnergyResult rejected = game.FireDirectedEnergy(new(contact, ShipSystemKind.Sensors));
@@ -51,7 +55,12 @@ public sealed class CombatRuntimeTests
         Assert.NotNull(after.Combat.PendingStimulus);
         Assert.Equal(before.Time.Milliseconds + 100, after.Combat.PendingStimulus.DueTime.Milliseconds);
         Assert.Equal(
-            fixture.Catalog.GetRequired(after.DefinitionId).DirectedEnergyWeapon!.Range,
+            (
+                (DirectedEnergyWeaponSystemDefinition)
+                    TestEngineering.Of(after.Engineering, ShipSystemKind.DirectedEnergyWeapons).Definition
+            )
+                .Weapon
+                .Range,
             game.GetPlayerProjection().Ship.Combat.WeaponRange
         );
     }
@@ -69,15 +78,8 @@ public sealed class CombatRuntimeTests
         var system = ShipSystemKind.Parse(systemName);
         Assert.Equal(FireDirectedEnergyOutcome.Accepted, game.FireDirectedEnergy(new(contact, system)).Outcome);
         ShipState victim = game.CaptureState().GetRequiredShip(new ShipInstanceId(2));
-        Assert.Equal(0.75, victim.Engineering.ConditionFor(system).Value, 12);
-        Assert.True(
-            victim.Engineering.Allocation.Total
-                <= victim
-                    .Engineering.AvailablePower(
-                        new Milestone3ProofFixture().Catalog.GetRequired(victim.DefinitionId).Engineering
-                    )
-                    .Value
-        );
+        Assert.Equal(0.75, TestEngineering.ConditionOf(victim.Engineering, system), 12);
+        Assert.True(victim.Engineering.Allocation.Total <= victim.Engineering.AvailablePower.Value);
     }
 
     /// <summary>Returns fire at a future boundary and delivers actual player damage through an NPC-owned wake.</summary>
@@ -101,7 +103,7 @@ public sealed class CombatRuntimeTests
             response.ResolvedEvents,
             item =>
                 item.Kind == PlayerAdvanceEventKind.OwnSystemDamaged
-                && item.ShipSystemId == ShipSystemKind.DirectedEnergyWeapons
+                && item.SystemKind == ShipSystemKind.DirectedEnergyWeapons
         );
         Assert.Equal(
             DefensiveCombatDecisionAction.ReturnFire,
@@ -128,7 +130,7 @@ public sealed class CombatRuntimeTests
                 player.InstanceId,
                 player with
                 {
-                    Combat = player.Combat with { NextDirectedEnergyReadyAt = default },
+                    Combat = player.Combat.WithReadiness(new DirectedEnergyReadiness(TestShipContent.Weapons, default)),
                 }
             ),
             fixture.Catalog
@@ -154,7 +156,10 @@ public sealed class CombatRuntimeTests
         SimulationAdvanceResult result = game.AdvanceFixedSteps(1);
         Assert.Equal(
             0.75,
-            game.CaptureState().GetRequiredShip(player.InstanceId).Engineering.DirectedEnergyCondition.Value,
+            TestEngineering.ConditionOf(
+                game.CaptureState().GetRequiredShip(player.InstanceId).Engineering,
+                ShipSystemKind.DirectedEnergyWeapons
+            ),
             12
         );
         Assert.Null(game.CaptureState().GetRequiredShip(player.InstanceId).Engineering.ActiveRepair);
@@ -197,20 +202,16 @@ public sealed class CombatRuntimeTests
         }
         SimulationTime repairStart = new(due.Milliseconds - 6000);
         var repair = new SystemRepairState(
-            ShipSystemKind.DirectedEnergyWeapons,
+            TestShipContent.Weapons,
             new SystemCondition(0.5),
             new SystemCondition(1),
             repairStart,
             due,
             repairWork.Id
         );
-        ShipEngineeringState engineering = player.Engineering.WithCondition(
-            ShipSystemKind.DirectedEnergyWeapons,
-            repair.ConditionAt(state.Time)
-        ) with
-        {
-            ActiveRepair = repair,
-        };
+        ShipEngineeringState engineering = player
+            .Engineering.WithCondition(TestShipContent.Weapons, repair.ConditionAt(state.Time))
+            .WithRepair(repair);
         state = state
             .ReplaceShip(player.InstanceId, player with { Engineering = engineering })
             .ReplaceShip(
@@ -235,40 +236,27 @@ public sealed class CombatRuntimeTests
         var fixture = new Milestone3ProofFixture();
         var location = new LocationId("pair");
         var map = new StrategicMap([new StrategicLocation(location, "Pair", default)], []);
-        ShipStart Start(long id, double x, PowerAllocation allocation) =>
+        ShipStart Start(long id, double x, int impulsePower, int shieldPower) =>
             new(
                 new ShipInstanceId(id),
                 new ShipDefinitionId("pathfinder"),
                 "Ship " + id,
                 new TacticalPosition(x, 0),
                 default,
-                new SystemCondition(1),
-                new SystemCondition(1),
-                new SystemCondition(1),
-                allocation,
-                new AtLocationStart(location)
-            )
-            {
-                ShieldCondition = new SystemCondition(1),
-                DirectedEnergyCondition = new SystemCondition(1),
-            };
+                new AtLocationStart(location),
+                TestShipStarts.Pathfinder(
+                    impulsePower: impulsePower,
+                    shieldPower: shieldPower,
+                    weaponPower: 30,
+                    shields: 1,
+                    weapons: 1
+                )
+            );
         GameSimulation game = new GameBootstrap(
             new SimulationTime(6000),
             map,
             new ShipInstanceId(1),
-            [
-                Start(1, 0, new PowerAllocation(new PowerUnits(70), new PowerUnits(20), default, new PowerUnits(30))),
-                Start(
-                    2,
-                    10,
-                    new PowerAllocation(
-                        new PowerUnits(70),
-                        new PowerUnits(5),
-                        new PowerUnits(shieldPower),
-                        new PowerUnits(30)
-                    )
-                ),
-            ]
+            [Start(1, 0, impulsePower: 20, shieldPower: 0), Start(2, 10, impulsePower: 5, shieldPower: shieldPower)]
         ).CreateSimulation(fixture.Catalog);
         SimulationState initial = game.CaptureState();
         ShipState npc = initial.GetRequiredShip(new ShipInstanceId(2));
@@ -318,12 +306,9 @@ public sealed class CombatRuntimeTests
             track = track with { LastObservedPosition = new TacticalPosition(21, 0) };
         ShipEngineeringState engineering = player.Engineering;
         if (expected == FireDirectedEnergyOutcome.WeaponUnpowered)
-            engineering = engineering with
-            {
-                Allocation = engineering.Allocation with { DirectedEnergyWeapons = default },
-            };
+            engineering = TestEngineering.WithAllocation(engineering, ShipSystemKind.DirectedEnergyWeapons, 0);
         if (expected == FireDirectedEnergyOutcome.WeaponOffline)
-            engineering = engineering with { DirectedEnergyCondition = default };
+            engineering = TestEngineering.WithCondition(engineering, ShipSystemKind.DirectedEnergyWeapons, 0);
         player = player with
         {
             SensorKnowledge = new SensorKnowledge(player.SensorKnowledge.NextContactId, [track], null),
@@ -420,60 +405,42 @@ public sealed class CombatRuntimeTests
         Assert.Same(state, game.CaptureState());
     }
 
-    /// <summary>Absent historical capacity yields typed rejection rather than inventing a repair duration.</summary>
+    /// <summary>An absent installed kind yields typed rejection rather than inventing a repair duration.</summary>
     [Theory]
     [InlineData("shields")]
     [InlineData("directed-energy-weapons")]
-    public void HistoricalAbsentSystemRepairIsUnsupported(string systemName)
+    public void AbsentSystemRepairIsUnknown(string systemName)
     {
-        var engineering = new ShipEngineeringDefinition(
-            new PowerUnits(120),
-            new PowerUnits(70),
-            new PowerUnits(50),
-            new SimulationDuration(8000),
-            new SimulationDuration(6000)
-        );
-        var definition = new ShipDefinition(
-            new ShipDefinitionId("pathfinder"),
-            "Historical design",
-            new SpeedKilometersPerSecond(10),
-            new DistanceKilometers(30),
-            new SimulationDuration(2000),
-            engineering
-        );
-        var catalog = new ShipDefinitionCatalog(
-            new Dictionary<ShipDefinitionId, ShipDefinition> { [definition.Id] = definition }
+        ShipDefinitionCatalog catalog = TestShipContent.Pathfinder(
+            PathfinderTuning.Production with
+            {
+                Combat = false,
+            },
+            designDisplayName: "Historical design"
         );
         var location = new LocationId("historical");
         var map = new StrategicMap([new StrategicLocation(location, "Historical", default)], []);
         var start = new ShipStart(
             new ShipInstanceId(1),
-            definition.Id,
+            new ShipDefinitionId("pathfinder"),
             "Historical vessel",
             default,
             default,
-            new SystemCondition(1),
-            new SystemCondition(1),
-            new SystemCondition(1),
-            new PowerAllocation(new PowerUnits(70), new PowerUnits(50)),
-            new AtLocationStart(location)
+            new AtLocationStart(location),
+            TestShipStarts.WithoutCombat()
         );
         GameSimulation game = new GameBootstrap(default, map, start.InstanceId, [start]).CreateSimulation(catalog);
         var system = ShipSystemKind.Parse(systemName);
         SimulationState before = game.CaptureState();
-        Assert.Equal(
-            SystemRepairOutcome.UnsupportedSystem,
-            game.BeginSystemRepair(system, new SystemCondition(1)).Outcome
-        );
+        Assert.Equal(SystemRepairOutcome.UnknownSystem, game.BeginSystemRepair(system, new SystemCondition(1)).Outcome);
         Assert.Same(before, game.CaptureState());
         EngineeringAction action =
             system == ShipSystemKind.Shields
                 ? EngineeringAction.BeginShieldRepair
                 : EngineeringAction.BeginDirectedEnergyRepair;
-        Assert.False(
-            game.GetPlayerProjection()
-                .Ship.Engineering.Actions.Single(projected => projected.Action == action)
-                .IsAvailable
+        Assert.DoesNotContain(
+            game.GetPlayerProjection().Ship.Engineering.Actions,
+            projected => projected.Action == action && projected.IsAvailable
         );
     }
 
@@ -498,7 +465,7 @@ public sealed class CombatRuntimeTests
         Assert.Equal(FireDirectedEnergyOutcome.Accepted, shot.Outcome);
         game = GameSimulation.RestoreState(shot.CandidateState, fixture.Catalog);
         ShipState player = game.CaptureState().GetRequiredShip(state.PlayerShipId);
-        Assert.Equal(0.75, player.Engineering.GenerationCondition.Value, 12);
+        Assert.Equal(0.75, TestEngineering.ConditionOf(player.Engineering, ShipSystemKind.PowerGeneration), 12);
         Assert.Equal(90, player.Engineering.Allocation.Total);
         Assert.Equal(90, player.TacticalMotion.Heading.Value);
         Assert.Equal(3, player.TacticalMotion.Speed.Value, 12);
@@ -527,7 +494,7 @@ public sealed class CombatRuntimeTests
         game = GameSimulation.RestoreState(shot.CandidateState, fixture.Catalog);
         ShipState player = game.CaptureState().GetRequiredShip(state.PlayerShipId);
         Assert.Null(player.Engineering.ActiveRepair);
-        Assert.Equal(0, player.Engineering.DirectedEnergyCondition.Value);
+        Assert.Equal(0, TestEngineering.ConditionOf(player.Engineering, ShipSystemKind.DirectedEnergyWeapons));
         Assert.DoesNotContain(
             game.CaptureState().Scheduler.OutstandingWork,
             work => work.Kind == ScheduledWorkKind.SystemRepairCompletion
@@ -535,7 +502,10 @@ public sealed class CombatRuntimeTests
         game.AdvanceFixedSteps(1);
         Assert.Equal(
             0,
-            game.CaptureState().GetRequiredShip(state.PlayerShipId).Engineering.DirectedEnergyCondition.Value
+            TestEngineering.ConditionOf(
+                game.CaptureState().GetRequiredShip(state.PlayerShipId).Engineering,
+                ShipSystemKind.DirectedEnergyWeapons
+            )
         );
     }
 
@@ -552,10 +522,7 @@ public sealed class CombatRuntimeTests
         ShipState player = state.GetRequiredShip(state.PlayerShipId);
         player = player with
         {
-            Engineering = player.Engineering with
-            {
-                Allocation = new PowerAllocation(new PowerUnits(70), default, new PowerUnits(20), new PowerUnits(30)),
-            },
+            Engineering = player.Engineering.WithAllocation(TestEngineering.Allocation(70, 0, 20, 30)),
         };
         state = state.ReplaceShip(player.InstanceId, player);
         ShipState npc = state.GetRequiredShip(new ShipInstanceId(2));
@@ -588,7 +555,7 @@ public sealed class CombatRuntimeTests
         (GameSimulation game, Milestone3ProofFixture fixture, SensorContactId contact) = Pair(0);
         SimulationState state = game.CaptureState();
         ShipState npc = state.GetRequiredShip(new ShipInstanceId(2));
-        npc = npc with { Engineering = npc.Engineering with { SensorCondition = new SystemCondition(0.4) } };
+        npc = npc with { Engineering = TestEngineering.WithCondition(npc.Engineering, ShipSystemKind.Sensors, 0.4) };
         game = GameSimulation.RestoreState(state.ReplaceShip(npc.InstanceId, npc), fixture.Catalog);
         game.FireDirectedEnergy(new(contact, ShipSystemKind.Sensors));
         npc = game.CaptureState().GetRequiredShip(npc.InstanceId);
@@ -610,7 +577,10 @@ public sealed class CombatRuntimeTests
         (GameSimulation game, Milestone3ProofFixture fixture, SensorContactId contact) = Pair(0);
         SimulationState state = game.CaptureState();
         ShipState npc = state.GetRequiredShip(new ShipInstanceId(2));
-        npc = npc with { Engineering = npc.Engineering with { DirectedEnergyCondition = default } };
+        npc = npc with
+        {
+            Engineering = TestEngineering.WithCondition(npc.Engineering, ShipSystemKind.DirectedEnergyWeapons, 0),
+        };
         game = GameSimulation.RestoreState(state.ReplaceShip(npc.InstanceId, npc), fixture.Catalog);
         game.FireDirectedEnergy(new(contact, ShipSystemKind.Shields));
         game.AdvanceFixedSteps(1);
@@ -641,19 +611,15 @@ public sealed class CombatRuntimeTests
     {
         SimulationState state = game.CaptureState();
         ShipState player = state.GetRequiredShip(state.PlayerShipId);
-        SimulationTime due = state.Time.AdvanceBy(
-            fixture.Catalog.GetRequired(player.DefinitionId).Engineering.RepairDurationFor(system)
-        );
+        InstalledSystem target = TestEngineering.Of(player.Engineering, system);
+        SimulationTime due = state.Time.AdvanceBy(target.Definition.Repair!.FullRepairDuration);
         (SimulationScheduler scheduler, ScheduledWork work) = state.Scheduler.Schedule(
             due,
             player.InstanceId,
             ScheduledWorkKind.SystemRepairCompletion
         );
-        var repair = new SystemRepairState(system, starting, new SystemCondition(1), state.Time, due, work.Id);
-        player = player with
-        {
-            Engineering = player.Engineering.WithCondition(system, starting) with { ActiveRepair = repair },
-        };
+        var repair = new SystemRepairState(target.Id, starting, new SystemCondition(1), state.Time, due, work.Id);
+        player = player with { Engineering = player.Engineering.WithCondition(target.Id, starting).WithRepair(repair) };
         return GameSimulation.RestoreState(
             state.ReplaceShip(player.InstanceId, player) with
             {
@@ -673,11 +639,11 @@ public sealed class CombatRuntimeTests
         ShipState npc = state.GetRequiredShip(new ShipInstanceId(2));
         npc = npc with
         {
-            Engineering = npc.Engineering with
-            {
-                ShieldCondition = new SystemCondition(0.1),
-                DirectedEnergyCondition = new SystemCondition(0.2),
-            },
+            Engineering = TestEngineering.WithCondition(
+                TestEngineering.WithCondition(npc.Engineering, ShipSystemKind.Shields, 0.1),
+                ShipSystemKind.DirectedEnergyWeapons,
+                0.2
+            ),
         };
         game = GameSimulation.RestoreState(state.ReplaceShip(npc.InstanceId, npc), fixture.Catalog);
         Assert.Equal(projected, game.GetPlayerProjection());
@@ -700,7 +666,11 @@ public sealed class CombatRuntimeTests
         npc = npc with
         {
             TacticalMotion = default,
-            Engineering = npc.Engineering with { DirectedEnergyCondition = default, ImpulseCondition = default },
+            Engineering = TestEngineering.WithCondition(
+                TestEngineering.WithCondition(npc.Engineering, ShipSystemKind.DirectedEnergyWeapons, 0),
+                ShipSystemKind.ImpulsePropulsion,
+                0
+            ),
         };
         game = GameSimulation.RestoreState(state.ReplaceShip(npc.InstanceId, npc), fixture.Catalog);
         game.FireDirectedEnergy(new(contact, ShipSystemKind.Shields));
@@ -712,32 +682,20 @@ public sealed class CombatRuntimeTests
         Assert.Equal(before.Time, result.StoppedAt);
     }
 
-    /// <summary>Historical definitions retain their authored absence rather than gaining bootstrap combat allocations.</summary>
+    /// <summary>
+    /// The first-game world always installs the production design defaults, so a design with a different default
+    /// loadout is refused at bootstrap instead of having combat capacity invented or silently dropped.
+    /// </summary>
     [Fact]
-    public void FirstGameSupportsHistoricalDefinitionsWithoutInventedCombatCapacity()
+    public void FirstGameRefusesDesignWhoseDefaultLoadoutDiffers()
     {
-        var engineering = new ShipEngineeringDefinition(
-            new PowerUnits(120),
-            new PowerUnits(70),
-            new PowerUnits(50),
-            new SimulationDuration(8000),
-            new SimulationDuration(6000)
+        ShipDefinitionCatalog catalog = TestShipContent.Pathfinder(
+            PathfinderTuning.Production with
+            {
+                Combat = false,
+            },
+            designDisplayName: "Historical design"
         );
-        var definition = new ShipDefinition(
-            new ShipDefinitionId("pathfinder"),
-            "Historical design",
-            new SpeedKilometersPerSecond(10),
-            new DistanceKilometers(30),
-            new SimulationDuration(2000),
-            engineering
-        );
-        var catalog = new ShipDefinitionCatalog(
-            new Dictionary<ShipDefinitionId, ShipDefinition> { [definition.Id] = definition }
-        );
-        GameSimulation game = FirstGameSetup.Create(catalog);
-        ShipState kestrel = game.CaptureState().GetRequiredShip(new ShipInstanceId(4));
-        Assert.Equal(default, kestrel.Engineering.ShieldCondition);
-        Assert.Equal(default, kestrel.Engineering.DirectedEnergyCondition);
-        Assert.Equal(new PowerAllocation(new PowerUnits(70), new PowerUnits(50)), kestrel.Engineering.Allocation);
+        Assert.Throws<ArgumentException>(() => FirstGameSetup.Create(catalog));
     }
 }

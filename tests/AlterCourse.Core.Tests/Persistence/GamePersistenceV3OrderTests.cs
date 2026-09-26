@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using AlterCourse.Core.Content;
 using AlterCourse.Core.Persistence;
+using AlterCourse.Core.Tests.Support;
 
 namespace AlterCourse.Core.Tests.Persistence;
 
@@ -398,33 +399,5 @@ public sealed class GamePersistenceV3OrderTests
     private static string FailureReason(GamePersistenceException exception) =>
         exception.Message[$"Save '{exception.SourceIdentity}' ".Length..];
 
-    private static ShipDefinitionCatalog CreateCatalog()
-    {
-        const string definition = """
-            { "schemaVersion": 5, "id": "pathfinder", "designDisplayName": "Pathfinder", "maximumTacticalSpeedKilometersPerSecond": 10, "passiveSensorRangeKilometers": 30.0, "activeScanDurationMilliseconds": 2000, "engineering": { "nominalGenerationPowerUnits": 120, "nominalSensorDemandPowerUnits": 70, "nominalImpulseDemandPowerUnits": 50, "sensorRepairDurationMilliseconds": 8000, "impulseRepairDurationMilliseconds": 6000, "nominalShieldDemandPowerUnits": 40, "nominalDirectedEnergyDemandPowerUnits": 30, "shieldRepairDurationMilliseconds": 8000, "directedEnergyRepairDurationMilliseconds": 6000 }, "directedEnergyWeapon": { "rangeKilometers": 20, "baseNormalizedDamage": 0.25, "cooldownMilliseconds": 2000 } }
-            """;
-        string schema = File.ReadAllText(
-            Path.Combine(FindRepositoryRoot(), "src/AlterCourse.Godot/content/schemas/ship-definition-v5.schema.json")
-        );
-        return new ShipDefinitionCatalogLoader(schema).LoadCatalog([
-            ShipDefinitionContent.FromText("pathfinder.json", definition),
-        ]);
-    }
-
-    private static string FindRepositoryRoot()
-    {
-        for (
-            var directory = new DirectoryInfo(AppContext.BaseDirectory);
-            directory is not null;
-            directory = directory.Parent
-        )
-        {
-            if (File.Exists(Path.Combine(directory.FullName, "AlterCourse.sln")))
-            {
-                return directory.FullName;
-            }
-        }
-
-        throw new DirectoryNotFoundException("Could not locate the repository root from the test output directory.");
-    }
+    private static ShipDefinitionCatalog CreateCatalog() => TestShipContent.Pathfinder(designDisplayName: "Pathfinder");
 }

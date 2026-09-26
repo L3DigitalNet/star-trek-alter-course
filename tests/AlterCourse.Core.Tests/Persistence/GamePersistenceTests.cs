@@ -3,9 +3,8 @@ using System.Text.Json.Nodes;
 using AlterCourse.Core.Content;
 using AlterCourse.Core.Gameplay;
 using AlterCourse.Core.Persistence;
-using AlterCourse.Core.Quantities;
 using AlterCourse.Core.Ships;
-using AlterCourse.Core.Simulation;
+using AlterCourse.Core.Tests.Support;
 
 namespace AlterCourse.Core.Tests.Persistence;
 
@@ -276,9 +275,17 @@ public sealed class GamePersistenceTests
         );
     }
 
-    /// <summary>Confirms the maximum definition identity survives normalized V2 serialization and reload.</summary>
+    /// <summary>
+    /// Confirms a maximum-length historical definition identity passes the identity bound but, having no frozen
+    /// historical tuning, fails closed instead of adopting the current catalog's design of that name.
+    /// </summary>
+    /// <remarks>
+    /// Before the installed-system substrate this V2 document round-tripped by reading the supplied catalog's tuning.
+    /// Historical validation now reads only the frozen V1–V9 table (<c>HistoricalShipContentV5</c>), so a design
+    /// the table does not know is unsupported history, not a new design to reinterpret it under.
+    /// </remarks>
     [Fact]
-    public void RoundTripsMaximumShipDefinitionIdentity()
+    public void HistoricalMaximumShipDefinitionIdentityWithoutFrozenTuningFailsClosed()
     {
         string maximumId = new('i', ShipDefinitionId.MaximumLength);
         byte[] candidate = MutateV2(root =>
@@ -288,18 +295,13 @@ public sealed class GamePersistenceTests
                 ship!["definitionId"] = maximumId;
             }
         });
-        ShipDefinitionCatalog catalog = CreateCatalog(maximumId);
 
-        LoadedGameSave loaded = GamePersistence.Deserialize(candidate, catalog, "maximum-definition-id.json");
-        byte[] normalized = GamePersistence.Serialize(loaded.Simulation, loaded.Metadata);
-
-        Assert.Equal(
-            normalized,
-            GamePersistence.Serialize(
-                GamePersistence.Deserialize(normalized, catalog, "maximum-definition-id-reload.json").Simulation,
-                loaded.Metadata
-            )
+        GamePersistenceException exception = Assert.Throws<GamePersistenceException>(() =>
+            GamePersistence.Deserialize(candidate, CreateCatalog(maximumId), "maximum-definition-id.json")
         );
+
+        Assert.Equal(GamePersistenceFailure.InvalidData, exception.Failure);
+        Assert.Contains("no frozen V1", exception.Message, StringComparison.Ordinal);
     }
 
     /// <summary>Confirms operation state must match scheduled identity, due time, kind, and target.</summary>
@@ -912,36 +914,8 @@ public sealed class GamePersistenceTests
     private static string FailureReason(GamePersistenceException exception) =>
         exception.Message[$"Save '{exception.SourceIdentity}' ".Length..];
 
-    private static ShipDefinition CreateDefinition() =>
-        new(
-            new ShipDefinitionId("pathfinder"),
-            "Pathfinder class",
-            new SpeedKilometersPerSecond(10),
-            new DistanceKilometers(30),
-            new SimulationDuration(2000),
-            new SimulationDuration(8000)
-        );
-
-    private static ShipDefinitionCatalog CreateCatalog(string definitionId = "pathfinder")
-    {
-        string definition = $$"""
-            {
-              "schemaVersion": 5,
-              "id": "{{definitionId}}",
-              "designDisplayName": "Pathfinder class",
-              "maximumTacticalSpeedKilometersPerSecond": 10,
-              "passiveSensorRangeKilometers": 30.0,
-              "activeScanDurationMilliseconds": 2000,
-              "engineering": { "nominalGenerationPowerUnits": 120, "nominalSensorDemandPowerUnits": 70, "nominalImpulseDemandPowerUnits": 50, "sensorRepairDurationMilliseconds": 8000, "impulseRepairDurationMilliseconds": 6000, "nominalShieldDemandPowerUnits": 40, "nominalDirectedEnergyDemandPowerUnits": 30, "shieldRepairDurationMilliseconds": 8000, "directedEnergyRepairDurationMilliseconds": 6000 }, "directedEnergyWeapon": { "rangeKilometers": 20, "baseNormalizedDamage": 0.25, "cooldownMilliseconds": 2000 }
-            }
-            """;
-        string schema = File.ReadAllText(
-            Path.Combine(FindRepositoryRoot(), "src/AlterCourse.Godot/content/schemas/ship-definition-v5.schema.json")
-        );
-        return new ShipDefinitionCatalogLoader(schema).LoadCatalog([
-            ShipDefinitionContent.FromText("pathfinder.json", definition),
-        ]);
-    }
+    private static ShipDefinitionCatalog CreateCatalog(string definitionId = "pathfinder") =>
+        TestShipContent.Pathfinder(designId: definitionId);
 
     private static GameSaveMetadata CreateMetadata() => new("slot-one", "Voyage One", CreatedAt, SavedAt);
 
@@ -950,22 +924,5 @@ public sealed class GamePersistenceTests
         string path = Path.Combine(Path.GetTempPath(), $"alter-course-persistence-{Guid.NewGuid():N}");
         Directory.CreateDirectory(path);
         return path;
-    }
-
-    private static string FindRepositoryRoot()
-    {
-        for (
-            var directory = new DirectoryInfo(AppContext.BaseDirectory);
-            directory is not null;
-            directory = directory.Parent
-        )
-        {
-            if (File.Exists(Path.Combine(directory.FullName, "AlterCourse.sln")))
-            {
-                return directory.FullName;
-            }
-        }
-
-        throw new DirectoryNotFoundException("Could not locate the repository root from the test output directory.");
     }
 }

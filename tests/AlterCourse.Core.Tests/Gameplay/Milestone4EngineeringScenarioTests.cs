@@ -9,6 +9,7 @@ using AlterCourse.Core.Sensors;
 using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
+using AlterCourse.Core.Tests.Support;
 
 namespace AlterCourse.Core.Tests.Gameplay;
 
@@ -186,7 +187,8 @@ public sealed class Milestone4EngineeringScenarioTests
         Assert.Equal(new SimulationTime(8_000), repairCompletion.FinalTime);
         PlayerAdvanceEvent repairEvent = Assert.Single(repairCompletion.ResolvedEvents);
         Assert.Equal(PlayerAdvanceEventKind.SystemRepairCompleted, repairEvent.Kind);
-        Assert.Equal(ShipSystemKind.Sensors, repairEvent.ShipSystemId);
+        Assert.Equal(ShipSystemKind.Sensors, repairEvent.SystemKind);
+        Assert.Equal(TestShipContent.Sensors, repairEvent.InstalledSystemId);
         Assert.Equal(1, repairCompletion.Projection.Ship.Engineering.SensorCondition.Value);
         Assert.Null(repairCompletion.Projection.Ship.Engineering.ActiveRepair);
         AssertEquivalentState(pair.Uninterrupted, pair.Resumed);

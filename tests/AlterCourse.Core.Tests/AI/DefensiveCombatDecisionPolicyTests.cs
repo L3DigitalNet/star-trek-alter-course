@@ -106,6 +106,7 @@ public sealed class DefensiveCombatDecisionPolicyTests
             default,
             new TacticalMotion(new HeadingDegrees(90), new SpeedKilometersPerSecond(1)),
             new SpeedKilometersPerSecond(10),
+            new InstalledSystemId(5),
             weapon,
             new SystemCondition(1),
             1,

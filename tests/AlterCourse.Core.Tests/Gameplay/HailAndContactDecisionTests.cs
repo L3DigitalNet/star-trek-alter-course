@@ -9,6 +9,7 @@ using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
 using AlterCourse.Core.Tactical;
+using AlterCourse.Core.Tests.Support;
 
 namespace AlterCourse.Core.Tests.Gameplay;
 
@@ -127,7 +128,13 @@ public sealed class HailAndContactDecisionTests
             NpcId,
             ScheduledWorkKind.ActiveSensorScanCompletion
         );
-        var activeScan = new ActiveSensorScanState(playerContact.Id, state.Time, completion.DueTime, completion.Id);
+        var activeScan = new ActiveSensorScanState(
+            playerContact.Id,
+            TestShipContent.Sensors,
+            state.Time,
+            completion.DueTime,
+            completion.Id
+        );
         SensorKnowledge scanningKnowledge = npc.SensorKnowledge with { ActiveScan = activeScan };
         game = GameSimulation.RestoreState(
             state.ReplaceShip(npc.InstanceId, npc with { SensorKnowledge = scanningKnowledge }) with
@@ -407,29 +414,18 @@ public sealed class HailAndContactDecisionTests
         ShipDefinitionId definitionId,
         string vesselName,
         TacticalPosition position
-    ) => new(id, definitionId, vesselName, position, default, new SystemCondition(1), new AtLocationStart(Local));
+    ) => new(id, definitionId, vesselName, position, default, new AtLocationStart(Local), TestShipStarts.Pathfinder());
 
     private static ShipDefinitionCatalog CreateCatalog() =>
-        new(
-            new Dictionary<ShipDefinitionId, ShipDefinition>
-            {
-                [PlayerDefinitionId] = Definition(PlayerDefinitionId, "Explorer", 100, 5),
-                [NpcDefinitionId] = Definition(NpcDefinitionId, "Scout", 20, 2),
-            }
+        TestShipContent.Designs(
+            (PlayerDefinitionId.Value, "Explorer", Tuning(100, 5), "explorer"),
+            (NpcDefinitionId.Value, "Scout", Tuning(20, 2), "scout")
         );
 
-    private static ShipDefinition Definition(
-        ShipDefinitionId id,
-        string designName,
-        double passiveRange,
-        double maximumSpeed
-    ) =>
-        new(
-            id,
-            designName,
-            new SpeedKilometersPerSecond(maximumSpeed),
-            new DistanceKilometers(passiveRange),
-            new SimulationDuration(2_000),
-            new SimulationDuration(8_000)
-        );
+    private static PathfinderTuning Tuning(double passiveRange, double maximumSpeed) =>
+        PathfinderTuning.Production with
+        {
+            PassiveRange = passiveRange,
+            MaximumTacticalSpeed = maximumSpeed,
+        };
 }

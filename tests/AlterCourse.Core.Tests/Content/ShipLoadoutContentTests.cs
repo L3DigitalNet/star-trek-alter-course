@@ -302,12 +302,35 @@ public sealed class ShipLoadoutContentTests
         );
     }
 
-    /// <summary>Confirms production V5 ship content does not satisfy the V6 schema; history is never reinterpreted.</summary>
+    /// <summary>
+    /// Confirms the last production V5 ship content (verbatim, as shipped before V6) does not satisfy the V6 schema;
+    /// history is never reinterpreted.
+    /// </summary>
     [Fact]
     public void RejectsHistoricalV5ShipContent()
     {
-        string v5 = ReadRepositoryFile("ships/pathfinder.json");
-        Assert.Contains("\"schemaVersion\": 5", v5, StringComparison.Ordinal);
+        const string v5 = """
+            {
+              "schemaVersion": 5,
+              "id": "pathfinder",
+              "designDisplayName": "Pathfinder class",
+              "maximumTacticalSpeedKilometersPerSecond": 10,
+              "passiveSensorRangeKilometers": 30.0,
+              "activeScanDurationMilliseconds": 2000,
+              "engineering": {
+                "nominalGenerationPowerUnits": 120,
+                "nominalSensorDemandPowerUnits": 70,
+                "nominalImpulseDemandPowerUnits": 50,
+                "sensorRepairDurationMilliseconds": 8000,
+                "impulseRepairDurationMilliseconds": 6000,
+                "nominalShieldDemandPowerUnits": 40,
+                "nominalDirectedEnergyDemandPowerUnits": 30,
+                "shieldRepairDurationMilliseconds": 8000,
+                "directedEnergyRepairDurationMilliseconds": 6000
+              },
+              "directedEnergyWeapon": { "rangeKilometers": 20, "baseNormalizedDamage": 0.25, "cooldownMilliseconds": 2000 }
+            }
+            """;
 
         Assert.Contains(
             AssertRejected(v5).Diagnostics,

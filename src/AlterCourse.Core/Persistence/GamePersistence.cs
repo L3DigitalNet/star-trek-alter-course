@@ -1808,7 +1808,11 @@ public static partial class GamePersistence
         ValidateSchedulerCandidateV7(snapshot);
     }
 
-    private static void ValidateCandidateV8(SaveEnvelopeV8 envelope, ShipDefinitionCatalog catalog)
+    private static void ValidateCandidateV8(
+        SaveEnvelopeV8 envelope,
+        ShipDefinitionCatalog catalog,
+        Func<string, HistoricalShipContentV5>? tuning = null
+    )
     {
         if (envelope.SchemaVersion != V8SchemaVersion)
         {
@@ -1850,7 +1854,7 @@ public static partial class GamePersistence
         // graph is validated only after reconstruction by SimulationState.Validate. Passing V8 through
         // the frozen V7 presence-only graph validator would reject valid response continuations.
         SimulationSnapshotV7 baseSnapshot = ToV7Snapshot(snapshot);
-        ValidateSimulationCandidateV5(ToBaseSnapshotV5(baseSnapshot), catalog, V6SchemaVersion);
+        ValidateSimulationCandidateV5(ToBaseSnapshotV5(baseSnapshot), catalog, V6SchemaVersion, tuning);
         ValidateObservedLocationCandidatesV6(ToObservedSnapshotV6(baseSnapshot));
         ValidateFactionShapeV8(snapshot);
         ValidateSchedulerCandidate(
@@ -2150,10 +2154,18 @@ public static partial class GamePersistence
         }
     }
 
+    /// <param name="snapshot">The candidate simulation.</param>
+    /// <param name="catalog">The supplied content (checked for presence only; historical tuning is frozen).</param>
+    /// <param name="sourceSchemaVersion">The schema version whose scheduler rules apply.</param>
+    /// <param name="tuning">
+    /// Resolves a ship definition's tuning. Every V1–V8 caller uses the frozen table (the default); only the
+    /// temporary V9 bridge supplies a current-content projection, and leg L4 removes that caller.
+    /// </param>
     private static void ValidateSimulationCandidateV5(
         SimulationSnapshotV5 snapshot,
         ShipDefinitionCatalog catalog,
-        int sourceSchemaVersion
+        int sourceSchemaVersion,
+        Func<string, HistoricalShipContentV5>? tuning = null
     )
     {
         if (snapshot.Ships is null || snapshot.Scheduler is null || snapshot.StrategicMap is null)
@@ -2162,7 +2174,8 @@ public static partial class GamePersistence
         }
 
         SimulationSnapshotV3 baseSnapshot = ToBaseSnapshotV3(snapshot);
-        ValidateSimulationCandidateV2(ToBaseSnapshotV2(baseSnapshot), catalog, V4SchemaVersion);
+        tuning ??= HistoricalShipContentV5.GetRequired;
+        ValidateSimulationCandidateV2(ToBaseSnapshotV2(baseSnapshot), catalog, V4SchemaVersion, tuning);
         ValidateOrderCandidatesV3(baseSnapshot);
         ValidateSensorCandidatesV4(ToSensorSnapshotV4(snapshot));
 
@@ -2172,7 +2185,7 @@ public static partial class GamePersistence
         {
             ValidateEngineeringCandidateV5(
                 ship,
-                HistoricalShipContentV5.GetRequired(ship.DefinitionId),
+                tuning(ship.DefinitionId),
                 snapshot.Scheduler,
                 snapshot.TimeMilliseconds
             );
@@ -2690,7 +2703,8 @@ public static partial class GamePersistence
     private static void ValidateSimulationCandidateV2(
         SimulationSnapshotV2 snapshot,
         ShipDefinitionCatalog catalog,
-        int sourceSchemaVersion
+        int sourceSchemaVersion,
+        Func<string, HistoricalShipContentV5>? tuning = null
     )
     {
         if (snapshot.Scheduler is null || snapshot.StrategicMap is null || snapshot.Ships is null)
@@ -2715,7 +2729,8 @@ public static partial class GamePersistence
 
         (HashSet<long> shipIds, Dictionary<long, HistoricalShipContentV5> definitions) = ValidateShipIdentitiesV2(
             snapshot.Ships,
-            catalog
+            catalog,
+            tuning ?? HistoricalShipContentV5.GetRequired
         );
 
         if (snapshot.PlayerShipId <= 0 || !shipIds.Contains(snapshot.PlayerShipId))
@@ -2746,7 +2761,8 @@ public static partial class GamePersistence
 
     private static (HashSet<long> Ids, Dictionary<long, HistoricalShipContentV5> Definitions) ValidateShipIdentitiesV2(
         ShipSnapshotV2[] ships,
-        ShipDefinitionCatalog catalog
+        ShipDefinitionCatalog catalog,
+        Func<string, HistoricalShipContentV5> tuning
     )
     {
         if (ships.Length == 0)
@@ -2772,7 +2788,7 @@ public static partial class GamePersistence
             ValidateText(ship.DefinitionId, "Ship definition identity", ShipDefinitionId.MaximumLength);
             ValidateText(ship.DisplayName, "Ship display name", ShipState.MaximumVesselDisplayNameLength);
             ArgumentNullException.ThrowIfNull(catalog);
-            definitions.Add(ship.InstanceId, HistoricalShipContentV5.GetRequired(ship.DefinitionId));
+            definitions.Add(ship.InstanceId, tuning(ship.DefinitionId));
         }
 
         return (shipIds, definitions);
@@ -3504,14 +3520,11 @@ public static partial class GamePersistence
             _ => throw new InvalidOperationException("Active ship order kind is unknown."),
         };
 
-    private static SystemRepairState? RestoreSystemRepairV5(
-        SaveModelsV5.SystemRepairSnapshotV5? snapshot,
-        string shipDefinitionId
-    ) =>
+    private static SystemRepairState? RestoreSystemRepairV5(SaveModelsV5.SystemRepairSnapshotV5? snapshot) =>
         snapshot is null
             ? null
             : new SystemRepairState(
-                HistoricalShipSystemsV9.InstalledIdFor(shipDefinitionId, snapshot.TargetSystem),
+                BridgeInstalledIdV9(snapshot.TargetSystem),
                 new SystemCondition(snapshot.StartingCondition),
                 new SystemCondition(snapshot.TargetCondition),
                 new SimulationTime(snapshot.StartedAtMilliseconds),

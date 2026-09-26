@@ -9,6 +9,7 @@ using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
 using AlterCourse.Core.Tactical;
+using AlterCourse.Core.Tests.Support;
 using FactionTestWorld = AlterCourse.Core.Tests.Gameplay.FactionBootstrapTests.FactionTestWorld;
 
 namespace AlterCourse.Core.Tests.Gameplay;
@@ -1688,7 +1689,7 @@ public sealed class ObservationRuntimeTests
                 ship.InstanceId,
                 ship with
                 {
-                    Engineering = ship.Engineering with { SensorCondition = new SystemCondition(0) },
+                    Engineering = TestEngineering.WithCondition(ship.Engineering, ShipSystemKind.Sensors, 0),
                 }
             );
         }

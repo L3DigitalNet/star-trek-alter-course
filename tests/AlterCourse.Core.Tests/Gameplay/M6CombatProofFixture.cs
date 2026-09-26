@@ -10,6 +10,7 @@ using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
 using AlterCourse.Core.Tactical;
+using AlterCourse.Core.Tests.Support;
 
 namespace AlterCourse.Core.Tests.Gameplay;
 
@@ -23,21 +24,8 @@ internal sealed class M6CombatProofFixture
         Catalog = _production.Catalog;
         if (lowDamage)
         {
-            ShipDefinition source = Catalog.GetRequired(new ShipDefinitionId("pathfinder"));
-            DirectedEnergyWeaponDefinition weapon = source.DirectedEnergyWeapon!;
             // Small authored output keeps the finite horizon active without recharge or fixture health resets.
-            var alternate = new ShipDefinition(
-                source.Id,
-                source.DesignDisplayName,
-                source.MaximumTacticalSpeed,
-                source.PassiveSensorRange,
-                source.ActiveScanDuration,
-                source.Engineering,
-                new DirectedEnergyWeaponDefinition(weapon.Range, 0.0001, weapon.Cooldown)
-            );
-            Catalog = new ShipDefinitionCatalog(
-                new Dictionary<ShipDefinitionId, ShipDefinition> { [alternate.Id] = alternate }
-            );
+            Catalog = TestShipContent.Pathfinder(PathfinderTuning.Production with { BaseDamage = 0.0001 });
         }
     }
 
@@ -75,10 +63,7 @@ internal sealed class M6CombatProofFixture
 
     internal SensorContactId EnterCombatRange(GameSimulation game)
     {
-        Assert.Equal(
-            PowerAllocationOutcome.Accepted,
-            game.ApplyPowerAllocationPreset(PowerAllocationPreset.PrioritizeSensors).Outcome
-        );
+        Assert.Equal(PowerAllocationOutcome.Accepted, game.ApplyPriorityAllocation(TestShipContent.Sensors).Outcome);
         game.AdvanceUntilNextPlayerRelevantEvent();
         SensorContactId contact = Assert.Single(game.GetPlayerProjection().Ship.Sensors.Contacts).Id;
         IdentifyAndHail(game, contact);
@@ -161,33 +146,29 @@ internal sealed class M6CombatProofFixture
     internal GameSimulation Pair()
     {
         var location = new LocationId("combat-proof");
-        ShipStart Start(long id, double x, PowerAllocation allocation) =>
+        ShipStart Start(long id, double x, int sensors, int impulse, int shields, int weapons) =>
             new(
                 new ShipInstanceId(id),
                 new ShipDefinitionId("pathfinder"),
                 "Proof ship " + id,
                 new TacticalPosition(x, 0),
                 default,
-                new SystemCondition(1),
-                new SystemCondition(1),
-                new SystemCondition(1),
-                allocation,
-                new AtLocationStart(location)
-            )
-            {
-                ShieldCondition = new SystemCondition(1),
-                DirectedEnergyCondition = new SystemCondition(1),
-            };
+                new AtLocationStart(location),
+                TestShipStarts.Pathfinder(
+                    sensorPower: sensors,
+                    impulsePower: impulse,
+                    shieldPower: shields,
+                    weaponPower: weapons,
+                    shields: 1,
+                    weapons: 1
+                )
+            );
         var map = new StrategicMap([new StrategicLocation(location, "Combat proof", default)], []);
         GameSimulation game = new GameBootstrap(
             default,
             map,
             new ShipInstanceId(1),
-            [
-                Start(1, 0, Allocation(70, 20, 0, 30)),
-                Start(2, 10, Allocation(70, 5, 15, 30)),
-                Start(3, 28, Allocation(70, 0, 0, 0)),
-            ]
+            [Start(1, 0, 70, 20, 0, 30), Start(2, 10, 70, 5, 15, 30), Start(3, 28, 70, 0, 0, 0)]
         ).CreateSimulation(Catalog);
         SimulationState initial = game.CaptureState();
         ShipState defender = initial.GetRequiredShip(Defender);
@@ -212,13 +193,15 @@ internal sealed class M6CombatProofFixture
     internal void IdentifyAndHail(GameSimulation game, SensorContactId contact)
     {
         Assert.Equal(ActiveSensorScanOutcome.Accepted, game.RequestActiveSensorScan(contact).Outcome);
-        long duration = Catalog.GetRequired(Player(game).DefinitionId).ActiveScanDuration.Milliseconds;
+        long duration = TestShipContent
+            .DefaultDefinition<SensorSystemDefinition>(Catalog, Player(game).DefinitionId)
+            .ActiveScanDuration.Milliseconds;
         game.AdvanceFixedSteps(checked((int)(duration / SimulationFixedStep.Duration.Milliseconds)));
         Assert.Equal(HailOutcome.Acknowledged, game.RequestHail(contact).Outcome);
     }
 
     internal static PowerAllocation Allocation(int sensors, int impulse, int shields, int weapons) =>
-        new(new PowerUnits(sensors), new PowerUnits(impulse), new PowerUnits(shields), new PowerUnits(weapons));
+        TestEngineering.Allocation(sensors, impulse, shields, weapons);
 
     internal static ShipState Player(GameSimulation game) =>
         game.CaptureState().GetRequiredShip(game.CaptureState().PlayerShipId);

@@ -13,8 +13,8 @@ namespace AlterCourse.Core.Persistence;
 /// though its values coincide with that content today; a later default-loadout change must never re-map old saves.
 /// </para>
 /// <para>
-/// Each row pins the semantics descriptor of the definition V9 play was simulated under. A current catalog whose
-/// definition describes differently is refused rather than silently adopted.
+/// Each row also pins the semantics descriptor of the definition V9 play was simulated under, for the V9→V10
+/// compatibility check.
 /// </para>
 /// </remarks>
 internal static class HistoricalShipSystemsV9
@@ -58,11 +58,20 @@ internal static class HistoricalShipSystemsV9
     internal static InstalledSystemId InstalledIdFor(string shipDefinitionId, string kind) =>
         new(RowFor(shipDefinitionId, kind).InstalledSystemId);
 
-    /// <summary>
-    /// Resolves the current catalog definition for a V9 kind and verifies it still describes the historical semantics.
-    /// </summary>
+    /// <summary>Gets the pinned semantics descriptor of the definition a V9 kind maps to.</summary>
+    internal static string ExpectedSemanticsFor(string shipDefinitionId, string kind) =>
+        RowFor(shipDefinitionId, kind).ExpectedSemantics;
+
+    /// <summary>Resolves the supplied catalog's definition for the identity a V9 kind maps to.</summary>
+    /// <remarks>
+    /// Resolution is by mapped identity only. Comparing the resolved definition with
+    /// <see cref="ExpectedSemanticsFor"/> — and failing incompatible content with a dedicated failure — belongs to
+    /// the V9→V10 migration (leg L4), which is this map's consumer. The temporary V9 bridge in
+    /// <c>GamePersistence.V9.cs</c> deliberately does not read this map: while V9 is still the current wire format it
+    /// resolves definitions from the saved ship's own design, as pre-substrate V9 loading did.
+    /// </remarks>
     /// <exception cref="KeyNotFoundException">The ship definition or kind has no V9 mapping.</exception>
-    /// <exception cref="InvalidOperationException">The current catalog lacks or changed the mapped definition.</exception>
+    /// <exception cref="InvalidOperationException">The supplied catalog lacks the mapped definition.</exception>
     internal static SystemDefinition ResolveDefinition(
         string shipDefinitionId,
         string kind,
@@ -70,24 +79,12 @@ internal static class HistoricalShipSystemsV9
     )
     {
         Row row = RowFor(shipDefinitionId, kind);
-        if (!catalog.TryGet(new SystemDefinitionId(row.DefinitionId), out SystemDefinition? definition))
-        {
-            throw new InvalidOperationException(
+        return catalog.TryGet(new SystemDefinitionId(row.DefinitionId), out SystemDefinition? definition)
+            ? definition
+            : throw new InvalidOperationException(
                 $"V9 ship definition '{shipDefinitionId}' maps '{kind}' to system definition '{row.DefinitionId}', "
-                    + "which the current content does not provide."
+                    + "which the supplied content does not provide."
             );
-        }
-
-        string current = SystemDefinitionSemantics.Describe(definition);
-        if (!string.Equals(current, row.ExpectedSemantics, StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException(
-                $"System definition '{row.DefinitionId}' describes '{current}', but V9 saves require "
-                    + $"'{row.ExpectedSemantics}'."
-            );
-        }
-
-        return definition;
     }
 
     private static Row RowFor(string shipDefinitionId, string kind) =>

@@ -2,24 +2,13 @@ using AlterCourse.Core.Identity;
 using AlterCourse.Core.Quantities;
 using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
+using AlterCourse.Core.Tests.Support;
 
 namespace AlterCourse.Core.Tests.Ships;
 
 /// <summary>Verifies deterministic combat engineering and normalized damage contracts.</summary>
 public sealed class CombatFoundationTests
 {
-    private static readonly ShipEngineeringDefinition Definition = new(
-        new PowerUnits(120),
-        new PowerUnits(70),
-        new PowerUnits(50),
-        new PowerUnits(40),
-        new PowerUnits(30),
-        new SimulationDuration(8000),
-        new SimulationDuration(6000),
-        new SimulationDuration(8000),
-        new SimulationDuration(6000)
-    );
-
     /// <summary>Confirms every supported system round trips through condition lookup and replacement.</summary>
     [Theory]
     [InlineData("power-generation")]
@@ -31,8 +20,8 @@ public sealed class CombatFoundationTests
     {
         var system = ShipSystemKind.Parse(name);
         Assert.Equal(name, system.Value);
-        ShipEngineeringState changed = State(1, Allocation(0, 0, 0, 0)).WithCondition(system, new SystemCondition(0.3));
-        Assert.Equal(new SystemCondition(0.3), changed.ConditionFor(system));
+        ShipEngineeringState changed = TestEngineering.WithCondition(State(1, Allocation(0, 0, 0, 0)), system, 0.3);
+        Assert.Equal(0.3, TestEngineering.ConditionOf(changed, system));
     }
 
     /// <summary>Confirms authored proportional presets use one-unit semantic remainders.</summary>
@@ -48,25 +37,19 @@ public sealed class CombatFoundationTests
     ) =>
         Assert.Equal(
             Allocation(sensors, impulse, shields, weapons),
-            State(generation, default).AllocationFor(Definition, PowerAllocationPreset.Balanced)
+            State(generation, Allocation(0, 0, 0, 0)).BalancedAllocation()
         );
 
     /// <summary>Confirms each priority consumes its demand before the remaining semantic order.</summary>
     [Theory]
-    [InlineData(PowerAllocationPreset.PrioritizeSensors, 70, 5, 0, 0)]
-    [InlineData(PowerAllocationPreset.PrioritizePropulsion, 25, 50, 0, 0)]
-    [InlineData(PowerAllocationPreset.PrioritizeShields, 35, 0, 40, 0)]
-    [InlineData(PowerAllocationPreset.PrioritizeDirectedEnergyWeapons, 45, 0, 0, 30)]
-    public void PriorityAllocationIsExact(
-        PowerAllocationPreset preset,
-        int sensors,
-        int impulse,
-        int shields,
-        int weapons
-    ) =>
+    [InlineData(2L, 70, 5, 0, 0)]
+    [InlineData(3L, 25, 50, 0, 0)]
+    [InlineData(4L, 35, 0, 40, 0)]
+    [InlineData(5L, 45, 0, 0, 30)]
+    public void PriorityAllocationIsExact(long priority, int sensors, int impulse, int shields, int weapons) =>
         Assert.Equal(
             Allocation(sensors, impulse, shields, weapons),
-            State(0.625, default).AllocationFor(Definition, preset)
+            State(0.625, Allocation(0, 0, 0, 0)).PriorityAllocation(new InstalledSystemId(priority))
         );
 
     /// <summary>Confirms brownout preserves covered allocations and scales only existing shares.</summary>
@@ -78,41 +61,38 @@ public sealed class CombatFoundationTests
     public void BrownoutAllocationIsExact(double generation, int sensors, int impulse, int shields, int weapons) =>
         Assert.Equal(
             Allocation(sensors, impulse, shields, weapons),
-            State(generation, Allocation(45, 32, 25, 18)).ReconcileAvailablePower(Definition)
+            State(generation, Allocation(45, 32, 25, 18)).ReconcileAvailablePower()
         );
 
     /// <summary>Confirms remainders skip exhausted earlier consumers without inventing allocations.</summary>
     [Fact]
     public void BrownoutSkipsZeroSharesAndPreservesCoveredReserve()
     {
-        Assert.Equal(Allocation(0, 1, 0, 0), State(0.01, Allocation(0, 1, 1, 1)).ReconcileAvailablePower(Definition));
+        Assert.Equal(Allocation(0, 1, 0, 0), State(0.01, Allocation(0, 1, 1, 1)).ReconcileAvailablePower());
         PowerAllocation allocation = Allocation(10, 5, 3, 2);
-        Assert.Equal(allocation, State(0.625, allocation).ReconcileAvailablePower(Definition));
-        Assert.Equal(55, State(0.625, allocation).Reserve(Definition).Value);
+        Assert.Equal(allocation, State(0.625, allocation).ReconcileAvailablePower());
+        Assert.Equal(55, State(0.625, allocation).Reserve.Value);
     }
 
     /// <summary>Confirms wide proportional products and four-consumer totals remain exact at quantity bounds.</summary>
     [Fact]
     public void HighBoundsUseWideArithmetic()
     {
-        var definition = new ShipEngineeringDefinition(
-            new PowerUnits(1_000_000),
-            new PowerUnits(1_000_000),
-            new PowerUnits(1_000_000),
-            new PowerUnits(1_000_000),
-            new PowerUnits(1_000_000),
-            new SimulationDuration(100),
-            new SimulationDuration(100),
-            new SimulationDuration(100),
-            new SimulationDuration(100)
+        var tuning = new PathfinderTuning(
+            Generation: 1_000_000,
+            SensorDemand: 1_000_000,
+            ImpulseDemand: 1_000_000,
+            ShieldDemand: 1_000_000,
+            WeaponDemand: 1_000_000
         );
-        ShipEngineeringState state = State(1, Allocation(1_000_000, 1_000_000, 1_000_000, 1_000_000));
+        ShipEngineeringState state = TestEngineering.State(
+            1,
+            Allocation(1_000_000, 1_000_000, 1_000_000, 1_000_000),
+            tuning
+        );
         Assert.Equal(4_000_000, state.Allocation.Total);
-        Assert.Equal(Allocation(250_000, 250_000, 250_000, 250_000), state.ReconcileAvailablePower(definition));
-        Assert.Equal(
-            Allocation(250_000, 250_000, 250_000, 250_000),
-            state.AllocationFor(definition, PowerAllocationPreset.Balanced)
-        );
+        Assert.Equal(Allocation(250_000, 250_000, 250_000, 250_000), state.ReconcileAvailablePower());
+        Assert.Equal(Allocation(250_000, 250_000, 250_000, 250_000), state.BalancedAllocation());
     }
 
     /// <summary>Confirms validation includes new demands and total available power.</summary>
@@ -122,27 +102,29 @@ public sealed class CombatFoundationTests
     [InlineData(70, 50, 1, 0)]
     public void InvalidCombatAllocationsAreRejected(int sensors, int impulse, int shields, int weapons) =>
         Assert.Throws<InvalidOperationException>(() =>
-            State(1, Allocation(sensors, impulse, shields, weapons)).Validate(Definition)
+            State(1, Allocation(sensors, impulse, shields, weapons)).Validate()
         );
 
     /// <summary>Confirms over-demand power cannot restore degraded capability.</summary>
     [Fact]
     public void CapabilityMultipliesConditionByCappedPowerSatisfaction()
     {
-        ShipEngineeringState state = State(1, Allocation(100, 100, 100, 100)) with
-        {
-            SensorCondition = new SystemCondition(0.4),
-            ImpulseCondition = new SystemCondition(0.4),
-            ShieldCondition = new SystemCondition(0.4),
-            DirectedEnergyCondition = new SystemCondition(0.4),
-        };
-        Assert.Equal(0.4, state.SensorCapability(Definition));
-        Assert.Equal(0.4, state.ImpulseCapability(Definition));
-        Assert.Equal(0.4, state.ShieldCapability(Definition));
-        Assert.Equal(0.4, state.DirectedEnergyCapability(Definition));
-        state = state with { Allocation = Allocation(35, 25, 20, 15) };
-        Assert.Equal(0.2, state.ShieldCapability(Definition));
-        Assert.Equal(0.2, state.DirectedEnergyCapability(Definition));
+        // Over-demand allocations are built directly (bypassing the demand invariant) to pin the satisfaction cap.
+        ShipEngineeringState state = TestEngineering.State(
+            1,
+            Allocation(100, 100, 100, 100),
+            sensors: 0.4,
+            impulse: 0.4,
+            shields: 0.4,
+            weapons: 0.4
+        );
+        Assert.Equal(0.4, TestEngineering.CapabilityOf(state, ShipSystemKind.Sensors));
+        Assert.Equal(0.4, TestEngineering.CapabilityOf(state, ShipSystemKind.ImpulsePropulsion));
+        Assert.Equal(0.4, TestEngineering.CapabilityOf(state, ShipSystemKind.Shields));
+        Assert.Equal(0.4, TestEngineering.CapabilityOf(state, ShipSystemKind.DirectedEnergyWeapons));
+        state = state.WithAllocation(Allocation(35, 25, 20, 15));
+        Assert.Equal(0.2, TestEngineering.CapabilityOf(state, ShipSystemKind.Shields));
+        Assert.Equal(0.2, TestEngineering.CapabilityOf(state, ShipSystemKind.DirectedEnergyWeapons));
     }
 
     /// <summary>Confirms shield depletion and subsystem penetration follow the exact normalized formula.</summary>
@@ -212,41 +194,38 @@ public sealed class CombatFoundationTests
     public void ConcreteConsumersAreRepairable(string name, long duration)
     {
         var system = ShipSystemKind.Parse(name);
-        Assert.Equal(duration, Definition.RepairDurationFor(system).Milliseconds);
+        InstalledSystem installed = TestEngineering.Of(State(1, Allocation(0, 0, 0, 0)), system);
+        Assert.Equal(duration, installed.Definition.Repair!.FullRepairDuration.Milliseconds);
         var repair = new SystemRepairState(
-            system,
+            installed.Id,
             new SystemCondition(0),
             new SystemCondition(1),
             new SimulationTime(0),
             new SimulationTime(duration),
             new ScheduledWorkId(1)
         );
-        Assert.Equal(system, repair.TargetSystem);
-        Assert.Throws<ArgumentException>(() => Definition.RepairDurationFor(ShipSystemKind.PowerGeneration));
+        Assert.Equal(installed.Id, repair.Target);
+        Assert.Null(
+            TestEngineering.Of(State(1, Allocation(0, 0, 0, 0)), ShipSystemKind.PowerGeneration).Definition.Repair
+        );
     }
 
-    /// <summary>Confirms legacy definitions and state gain no combat capability implicitly.</summary>
+    /// <summary>Confirms a loadout without combat systems gains no combat capability implicitly.</summary>
     [Fact]
-    public void LegacyConstructionKeepsCombatOffline()
+    public void AbsentCombatSystemsHaveNoCapability()
     {
-        var definition = new ShipEngineeringDefinition(
-            new PowerUnits(120),
-            new PowerUnits(70),
-            new PowerUnits(50),
-            new SimulationDuration(8000),
-            new SimulationDuration(6000)
+        ShipEngineeringState state = TestEngineering.State(
+            1,
+            TestEngineering.Allocation(0, 0),
+            PathfinderTuning.Production with
+            {
+                Combat = false,
+            }
         );
-        var state = new ShipEngineeringState(
-            new SystemCondition(1),
-            new SystemCondition(1),
-            new SystemCondition(1),
-            default
-        );
-        Assert.Equal(0, state.ShieldCondition.Value);
-        Assert.Equal(0, state.DirectedEnergyCondition.Value);
-        Assert.Equal(0, state.ShieldCapability(definition));
-        Assert.Equal(0, state.DirectedEnergyCapability(definition));
-        Assert.Throws<ArgumentException>(() => definition.RepairDurationFor(ShipSystemKind.Shields));
+        Assert.Empty(state.Systems.OfKind(ShipSystemKind.Shields));
+        Assert.Empty(state.Systems.OfKind(ShipSystemKind.DirectedEnergyWeapons));
+        Assert.Equal(0, TestEngineering.CapabilityOf(state, ShipSystemKind.Shields));
+        Assert.Equal(0, TestEngineering.CapabilityOf(state, ShipSystemKind.DirectedEnergyWeapons));
     }
 
     /// <summary>Confirms weapon tuning has positive finite output and aligned timing.</summary>
@@ -262,33 +241,21 @@ public sealed class CombatFoundationTests
             new DirectedEnergyWeaponDefinition(new DistanceKilometers(range), damage, new SimulationDuration(cooldown))
         );
 
-    /// <summary>Confirms shield satisfaction handles absent capacity and caps excess power.</summary>
+    /// <summary>Confirms shield satisfaction handles zero and capped power.</summary>
     [Fact]
     public void ShieldPowerSatisfactionHasSafeEndpoints()
     {
-        Assert.Equal(0, State(1, default).ShieldPowerSatisfaction(Definition));
-        Assert.Equal(0.5, State(1, Allocation(0, 0, 20, 0)).ShieldPowerSatisfaction(Definition));
-        Assert.Equal(1, State(1, Allocation(0, 0, 80, 0)).ShieldPowerSatisfaction(Definition));
-        var legacy = new ShipEngineeringDefinition(
-            new PowerUnits(120),
-            new PowerUnits(70),
-            new PowerUnits(50),
-            new SimulationDuration(8000),
-            new SimulationDuration(6000)
-        );
-        Assert.Equal(0, State(1, default).ShieldPowerSatisfaction(legacy));
+        Assert.Equal(0, Satisfaction(State(1, Allocation(0, 0, 0, 0))));
+        Assert.Equal(0.5, Satisfaction(State(1, Allocation(0, 0, 20, 0))));
+        Assert.Equal(1, Satisfaction(State(1, Allocation(0, 0, 40, 0))));
     }
 
+    private static double Satisfaction(ShipEngineeringState state) =>
+        ShipEngineeringState.PowerSatisfaction(TestEngineering.Of(state, ShipSystemKind.Shields));
+
     private static PowerAllocation Allocation(int sensors, int impulse, int shields, int weapons) =>
-        new(new PowerUnits(sensors), new PowerUnits(impulse), new PowerUnits(shields), new PowerUnits(weapons));
+        TestEngineering.Allocation(sensors, impulse, shields, weapons);
 
     private static ShipEngineeringState State(double generation, PowerAllocation allocation) =>
-        new(
-            new SystemCondition(generation),
-            new SystemCondition(1),
-            new SystemCondition(1),
-            new SystemCondition(1),
-            new SystemCondition(1),
-            allocation
-        );
+        TestEngineering.State(generation, allocation);
 }

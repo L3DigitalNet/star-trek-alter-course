@@ -2,10 +2,10 @@ using AlterCourse.Core.Content;
 using AlterCourse.Core.Gameplay;
 using AlterCourse.Core.Identity;
 using AlterCourse.Core.Orders;
-using AlterCourse.Core.Quantities;
 using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
+using AlterCourse.Core.Tests.Support;
 
 namespace AlterCourse.Core.Tests.Gameplay;
 
@@ -93,8 +93,8 @@ public sealed class PlayerTravelAndNpcOrdersTests
             $"Ship {id.Value}",
             default,
             default,
-            new SystemCondition(1),
             strategic,
+            TestShipStarts.Pathfinder(),
             ActiveOrder: activeOrder
         );
 
@@ -114,20 +114,15 @@ public sealed class PlayerTravelAndNpcOrdersTests
         );
     }
 
-    private static ShipDefinitionCatalog CreateCatalog()
-    {
-        var definition = new ShipDefinition(
-            DefinitionId,
-            "Test ship",
-            new SpeedKilometersPerSecond(10),
-            new DistanceKilometers(30),
-            new SimulationDuration(2000),
-            Duration(6)
+    private static ShipDefinitionCatalog CreateCatalog() =>
+        TestShipContent.Pathfinder(
+            PathfinderTuning.Production with
+            {
+                SensorRepairMilliseconds = Duration(6).Milliseconds,
+            },
+            DefinitionId.Value,
+            "Test ship"
         );
-        return new ShipDefinitionCatalog(
-            new Dictionary<ShipDefinitionId, ShipDefinition> { [definition.Id] = definition }
-        );
-    }
 
     private static SimulationTime Time(long hours) => new(hours * HourMilliseconds);
 

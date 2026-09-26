@@ -62,7 +62,7 @@ internal sealed record ShipState
         SensorKnowledge = sensorKnowledge ?? SensorKnowledge.Empty;
         AutonomousState = autonomousState ?? ShipAutonomousState.Empty;
         DirectControllerFactionId = directControllerFactionId;
-        Combat = combat ?? ShipCombatState.Empty;
+        Combat = combat ?? ShipCombatState.InitialFor(engineering.Systems);
     }
 
     internal ShipInstanceId InstanceId { get; }

@@ -2,12 +2,12 @@ using AlterCourse.Core.AI;
 using AlterCourse.Core.Content;
 using AlterCourse.Core.Gameplay;
 using AlterCourse.Core.Identity;
-using AlterCourse.Core.Quantities;
 using AlterCourse.Core.Sensors;
 using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
 using AlterCourse.Core.Tactical;
+using AlterCourse.Core.Tests.Support;
 
 namespace AlterCourse.Core.Tests.Gameplay;
 
@@ -294,6 +294,7 @@ public sealed class SensorKnowledgeValidationTests
             .Schedule(new SimulationTime(2100), PlayerId, ScheduledWorkKind.ActiveSensorScanCompletion);
         var scan = new ActiveSensorScanState(
             new SensorContactId(1),
+            TestShipContent.Sensors,
             new SimulationTime(100),
             completion.DueTime,
             completion.Id
@@ -430,27 +431,23 @@ public sealed class SensorKnowledgeValidationTests
             $"Ship {id.Value}",
             default,
             default,
-            new ShipEngineeringState(
-                new SystemCondition(1),
-                new SystemCondition(1),
-                new SystemCondition(1),
-                new PowerAllocation(new(70), new(50))
+            TestEngineering.FromDesign(
+                CreateCatalog(),
+                DefinitionId,
+                TestEngineering.Allocation(70, 50, 0, 0),
+                shields: 0,
+                weapons: 0
             ),
             new AtLocationState(Location)
         );
 
-    private static ShipDefinitionCatalog CreateCatalog()
-    {
-        var definition = new ShipDefinition(
-            DefinitionId,
-            "Test design",
-            new SpeedKilometersPerSecond(10),
-            new DistanceKilometers(30),
-            new SimulationDuration(2000),
-            new SimulationDuration(1000)
+    private static ShipDefinitionCatalog CreateCatalog() =>
+        TestShipContent.Pathfinder(
+            PathfinderTuning.Production with
+            {
+                SensorRepairMilliseconds = 1000,
+            },
+            DefinitionId.Value,
+            "Test design"
         );
-        return new ShipDefinitionCatalog(
-            new Dictionary<ShipDefinitionId, ShipDefinition> { [DefinitionId] = definition }
-        );
-    }
 }

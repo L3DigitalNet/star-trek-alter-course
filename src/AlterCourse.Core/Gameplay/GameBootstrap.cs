@@ -241,13 +241,7 @@ public sealed class GameBootstrap
         };
         ShipOrder? order = CreateOrder(start, strategic, ref scheduler, ref orderIdAllocator);
 
-        // Every installed weapon starts ready at time zero, which is what the pre-substrate single readiness time
-        // meant; a ship without a weapon has no readiness entry at all.
-        var combat = new ShipCombatState(
-            engineering
-                .Systems.ByIdentity.Where(system => system.Definition is DirectedEnergyWeaponSystemDefinition)
-                .Select(system => new DirectedEnergyReadiness(system.Id, new SimulationTime(0)))
-        );
+        var combat = ShipCombatState.InitialFor(engineering.Systems);
         return new ShipState(
             start.InstanceId,
             start.DefinitionId,

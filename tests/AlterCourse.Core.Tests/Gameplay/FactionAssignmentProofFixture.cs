@@ -9,6 +9,7 @@ using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
 using AlterCourse.Core.Tactical;
+using AlterCourse.Core.Tests.Support;
 
 namespace AlterCourse.Core.Tests.Gameplay;
 
@@ -34,9 +35,8 @@ internal sealed class FactionAssignmentProofFixture
 
     internal FactionAssignmentProofFixture()
     {
-        string root = FindRepositoryRoot();
-        ShipCatalog = LoadShips(root);
-        FactionCatalog = LoadFactions(root);
+        ShipCatalog = TestShipContent.Production();
+        FactionCatalog = LoadFactions(TestShipContent.RepositoryRoot);
     }
 
     internal ShipDefinitionCatalog ShipCatalog { get; }
@@ -117,9 +117,11 @@ internal sealed class FactionAssignmentProofFixture
         SensorContactTrack contact = observer.SensorKnowledge.Contacts.Single(track =>
             track.TargetShipId == new ShipInstanceId(4)
         );
-        SimulationTime completion = observed.Time.AdvanceBy(
-            ShipCatalog.GetRequired(observer.DefinitionId).ActiveScanDuration
+        SensorSystemDefinition sensors = TestEngineering.DefinitionOf<SensorSystemDefinition>(
+            observer.Engineering,
+            ShipSystemKind.Sensors
         );
+        SimulationTime completion = observed.Time.AdvanceBy(sensors.ActiveScanDuration);
         (SimulationScheduler scheduler, ScheduledWork work) = observed.Scheduler.Schedule(
             completion,
             PreferredShipId,
@@ -127,7 +129,13 @@ internal sealed class FactionAssignmentProofFixture
         );
         SensorKnowledge knowledge = observer.SensorKnowledge with
         {
-            ActiveScan = new ActiveSensorScanState(contact.Id, observed.Time, completion, work.Id),
+            ActiveScan = new ActiveSensorScanState(
+                contact.Id,
+                TestShipContent.Sensors,
+                observed.Time,
+                completion,
+                work.Id
+            ),
         };
         SimulationState scanned = observed.ReplaceShip(
             PreferredShipId,
@@ -145,14 +153,12 @@ internal sealed class FactionAssignmentProofFixture
     private static ShipStart[] CreateShipStarts(bool preferredCommitted)
     {
         var definition = new ShipDefinitionId("pathfinder");
-        var nominal = new SystemCondition(1);
-        var full = new PowerAllocation(new PowerUnits(70), new PowerUnits(50));
         var stopped = new TacticalMotion(new HeadingDegrees(0), new SpeedKilometersPerSecond(0));
         return
         [
-            CreatePlayer(definition, nominal, stopped),
+            CreatePlayer(definition, stopped),
             CreateShip(2, "USS Wayfarer", definition, new TacticalPosition(-2, 4), Vesper, FactionB),
-            CreateTravelingShip(definition, nominal, full, stopped),
+            CreateTravelingShip(definition, stopped),
             CreateShip(4, "Survey Vessel Kestrel", definition, new TacticalPosition(21.25, -7.5), Dawn, null),
             CreateShip(
                 5,
@@ -167,41 +173,27 @@ internal sealed class FactionAssignmentProofFixture
         ];
     }
 
-    private static ShipStart CreatePlayer(ShipDefinitionId definition, SystemCondition nominal, TacticalMotion stopped)
-    {
-        var damaged = new SystemCondition(0.4);
-        return new ShipStart(
+    private static ShipStart CreatePlayer(ShipDefinitionId definition, TacticalMotion stopped) =>
+        new(
             PlayerId,
             definition,
             "USS Pathfinder",
             new TacticalPosition(3.25, -7.5),
             stopped,
-            new SystemCondition(0.625),
-            damaged,
-            nominal,
-            new PowerAllocation(new PowerUnits(44), new PowerUnits(31)),
             new AtLocationStart(Dawn),
-            new SystemRepairStart(ShipSystemKind.Sensors, damaged, nominal, new SimulationTime(0))
+            TestShipStarts.Pathfinder(generation: 0.625, sensors: 0.4, sensorPower: 44, impulsePower: 31),
+            TestShipStarts.Repair(TestShipContent.Sensors, 0.4, 1, 0)
         );
-    }
 
-    private static ShipStart CreateTravelingShip(
-        ShipDefinitionId definition,
-        SystemCondition nominal,
-        PowerAllocation full,
-        TacticalMotion stopped
-    ) =>
+    private static ShipStart CreateTravelingShip(ShipDefinitionId definition, TacticalMotion stopped) =>
         new(
             new ShipInstanceId(3),
             definition,
             "USS Horizon",
             new TacticalPosition(6, 1.5),
             stopped,
-            nominal,
-            nominal,
-            nominal,
-            full,
-            new TravelingStart(Vesper, Meridian, new SimulationTime(0))
+            new TravelingStart(Vesper, Meridian, new SimulationTime(0)),
+            TestShipStarts.Pathfinder()
         );
 
     private static ShipStart CreateShip(
@@ -219,13 +211,10 @@ internal sealed class FactionAssignmentProofFixture
             name,
             position,
             default,
-            new SystemCondition(1),
-            new SystemCondition(1),
-            new SystemCondition(1),
-            new PowerAllocation(new PowerUnits(70), new PowerUnits(50)),
             new AtLocationStart(location),
-            activeOrder: order,
-            directControllerFactionId: controller
+            TestShipStarts.Pathfinder(),
+            ActiveOrder: order,
+            DirectControllerFactionId: controller
         );
 
     private static StrategicMap CreateMap() =>
@@ -241,17 +230,6 @@ internal sealed class FactionAssignmentProofFixture
             ]
         );
 
-    private static ShipDefinitionCatalog LoadShips(string root)
-    {
-        string schema = File.ReadAllText(
-            Path.Combine(root, "src/AlterCourse.Godot/content/schemas/ship-definition-v5.schema.json")
-        );
-        string path = Path.Combine(root, "src/AlterCourse.Godot/content/ships/pathfinder.json");
-        return new ShipDefinitionCatalogLoader(schema).LoadCatalog([
-            ShipDefinitionContent.FromText(path, File.ReadAllText(path)),
-        ]);
-    }
-
     private static FactionDefinitionCatalog LoadFactions(string root)
     {
         string schema = File.ReadAllText(
@@ -263,19 +241,5 @@ internal sealed class FactionAssignmentProofFixture
                 .EnumerateFiles(directory, "*.json")
                 .Select(path => FactionDefinitionContent.FromText(path, File.ReadAllText(path)))
         );
-    }
-
-    private static string FindRepositoryRoot()
-    {
-        for (
-            var directory = new DirectoryInfo(AppContext.BaseDirectory);
-            directory is not null;
-            directory = directory.Parent
-        )
-        {
-            if (File.Exists(Path.Combine(directory.FullName, "AlterCourse.sln")))
-                return directory.FullName;
-        }
-        throw new DirectoryNotFoundException("Could not locate the repository root from the test output directory.");
     }
 }

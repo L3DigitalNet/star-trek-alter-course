@@ -8,6 +8,7 @@ using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
 using AlterCourse.Core.Tactical;
+using AlterCourse.Core.Tests.Support;
 
 namespace AlterCourse.Core.Tests.Gameplay;
 
@@ -50,7 +51,7 @@ public sealed class Milestone3ProofScenarioTests
 
         Assert.Equal(new TacticalPosition(21.25, -7.5), kestrel.TacticalPosition);
         Assert.Equal(default, kestrel.TacticalMotion);
-        Assert.Equal(1, kestrel.Engineering.SensorCondition.Value);
+        Assert.Equal(1, TestEngineering.ConditionOf(kestrel.Engineering, ShipSystemKind.Sensors));
         Assert.Null(kestrel.Engineering.ActiveRepair);
         Assert.Null(kestrel.ActiveOrder);
         Assert.Equal(new LocationId("dawn-anchor"), Assert.IsType<AtLocationState>(kestrel.StrategicState).LocationId);

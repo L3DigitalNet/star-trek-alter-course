@@ -3,6 +3,7 @@ using AlterCourse.Core.Gameplay;
 using AlterCourse.Core.Sensors;
 using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
+using AlterCourse.Core.Tests.Support;
 
 namespace AlterCourse.Core.Tests.Gameplay;
 
@@ -29,7 +30,10 @@ public sealed class M6CombatLongHorizonTests
         {
             if (shot > 0)
             {
-                SimulationTime ready = M6CombatProofFixture.Player(game).Combat.NextDirectedEnergyReadyAt;
+                SimulationTime ready = M6CombatProofFixture
+                    .Player(game)
+                    .Combat.ReadinessOf(TestShipContent.Weapons)!
+                    .ReadyAt;
                 (game, resumed) = AdvanceTogether(game, resumed, ready, responding: false);
             }
             FireDirectedEnergyResult fired = game.FireDirectedEnergy(
@@ -53,9 +57,19 @@ public sealed class M6CombatLongHorizonTests
         Assert.Equal(1, maximumOutstanding);
         Assert.Equal(startingWorkId + ShotCount, game.CaptureState().Scheduler.NextWorkId);
         Assert.Equal(startingSequence + ShotCount, game.CaptureState().Scheduler.NextSequence);
-        Assert.InRange(M6CombatProofFixture.Player(game).Engineering.DirectedEnergyCondition.Value, 0.9, 0.999);
+        Assert.InRange(
+            TestEngineering.ConditionOf(
+                M6CombatProofFixture.Player(game).Engineering,
+                ShipSystemKind.DirectedEnergyWeapons
+            ),
+            0.9,
+            0.999
+        );
         Assert.True(
-            game.CaptureState().GetRequiredShip(M6CombatProofFixture.Defender).Engineering.ShieldCondition.Value < 1
+            TestEngineering.ConditionOf(
+                game.CaptureState().GetRequiredShip(M6CombatProofFixture.Defender).Engineering,
+                ShipSystemKind.Shields
+            ) < 1
         );
         long elapsed = game.CaptureState().Time.Milliseconds - startedAt;
         Assert.True(elapsed > 1_000_000);

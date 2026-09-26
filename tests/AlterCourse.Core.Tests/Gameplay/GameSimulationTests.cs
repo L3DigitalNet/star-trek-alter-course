@@ -10,6 +10,7 @@ using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
 using AlterCourse.Core.Tactical;
+using AlterCourse.Core.Tests.Support;
 
 namespace AlterCourse.Core.Tests.Gameplay;
 
@@ -288,7 +289,8 @@ public sealed class GameSimulationTests
         var repairCompleted = new PlayerAdvanceEvent(
             PlayerAdvanceEventKind.SystemRepairCompleted,
             new SimulationTime(8000),
-            ShipSystemId: ShipSystemKind.Sensors
+            SystemKind: ShipSystemKind.Sensors,
+            InstalledSystemId: TestShipContent.Sensors
         );
         Assert.Equal([repairCompleted], repair.ResolvedEvents);
         Assert.NotNull(repair.Projection.Strategic.Travel);
@@ -446,11 +448,11 @@ public sealed class GameSimulationTests
                         $"USS Test {index}",
                         isMover ? default : new TacticalPosition(index, -index),
                         isMover ? new TacticalMotion(new HeadingDegrees(90), new SpeedKilometersPerSecond(1)) : default,
-                        new SystemCondition(isRepairing ? 0.4 : 1),
                         new AtLocationStart(location.Id),
+                        TestShipStarts.Pathfinder(sensors: isRepairing ? 0.4 : 1),
                         isRepairing
                             ? new SystemRepairStart(
-                                ShipSystemKind.Sensors,
+                                TestShipContent.Sensors,
                                 new SystemCondition(0.4),
                                 new SystemCondition(1),
                                 new SimulationTime(0)
@@ -475,7 +477,13 @@ public sealed class GameSimulationTests
         Assert.Equal(stepCount * 100, result.FinalTime.Milliseconds);
         Assert.Equal(500, final.GetRequiredShip(new ShipInstanceId(1)).TacticalPosition.XKilometers, 8);
         Assert.Equal(inactivePosition, final.GetRequiredShip(new ShipInstanceId(shipCount)).TacticalPosition);
-        Assert.Equal(1, final.GetRequiredShip(new ShipInstanceId(2)).Engineering.SensorCondition.Value);
+        Assert.Equal(
+            1,
+            TestEngineering.ConditionOf(
+                final.GetRequiredShip(new ShipInstanceId(2)).Engineering,
+                ShipSystemKind.Sensors
+            )
+        );
         Assert.Null(final.GetRequiredShip(new ShipInstanceId(2)).Engineering.ActiveRepair);
     }
 
@@ -495,8 +503,8 @@ public sealed class GameSimulationTests
             "USS Boundary",
             default,
             default,
-            new SystemCondition(1),
-            new TravelingStart(origin.Id, destination.Id, new SimulationTime(0))
+            new TravelingStart(origin.Id, destination.Id, new SimulationTime(0)),
+            TestShipStarts.Pathfinder()
         );
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
@@ -521,8 +529,8 @@ public sealed class GameSimulationTests
             "USS Pathfinder",
             new TacticalPosition(3.25, -7.5),
             default,
-            new SystemCondition(1),
-            new AtLocationStart(location.Id)
+            new AtLocationStart(location.Id),
+            TestShipStarts.Pathfinder()
         );
         return new GameBootstrap(
             new SimulationTime(0),
@@ -532,44 +540,7 @@ public sealed class GameSimulationTests
         ).CreateSimulation(CreateCatalog());
     }
 
-    private static ShipDefinitionCatalog CreateCatalog()
-    {
-        const string definition = """
-            {
-              "schemaVersion": 5,
-              "id": "pathfinder",
-              "designDisplayName": "Pathfinder class",
-              "maximumTacticalSpeedKilometersPerSecond": 10,
-              "passiveSensorRangeKilometers": 30.0,
-              "activeScanDurationMilliseconds": 2000,
-              "engineering": { "nominalGenerationPowerUnits": 120, "nominalSensorDemandPowerUnits": 70, "nominalImpulseDemandPowerUnits": 50, "sensorRepairDurationMilliseconds": 8000, "impulseRepairDurationMilliseconds": 6000, "nominalShieldDemandPowerUnits": 40, "nominalDirectedEnergyDemandPowerUnits": 30, "shieldRepairDurationMilliseconds": 8000, "directedEnergyRepairDurationMilliseconds": 6000 }, "directedEnergyWeapon": { "rangeKilometers": 20, "baseNormalizedDamage": 0.25, "cooldownMilliseconds": 2000 }
-            }
-            """;
-        string schema = File.ReadAllText(
-            Path.Combine(FindRepositoryRoot(), "src/AlterCourse.Godot/content/schemas/ship-definition-v5.schema.json")
-        );
-        ShipDefinitionCatalog catalog = new ShipDefinitionCatalogLoader(schema).LoadCatalog([
-            ShipDefinitionContent.FromText("pathfinder.json", definition),
-        ]);
-        return catalog;
-    }
-
-    private static string FindRepositoryRoot()
-    {
-        for (
-            var directory = new DirectoryInfo(AppContext.BaseDirectory);
-            directory is not null;
-            directory = directory.Parent
-        )
-        {
-            if (File.Exists(Path.Combine(directory.FullName, "AlterCourse.sln")))
-            {
-                return directory.FullName;
-            }
-        }
-
-        throw new DirectoryNotFoundException("Could not locate the repository root from the test output directory.");
-    }
+    private static ShipDefinitionCatalog CreateCatalog() => TestShipContent.Pathfinder();
 
     private static LocationId ConnectedDestination(GameSimulation game)
     {

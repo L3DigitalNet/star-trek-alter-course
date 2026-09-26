@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using AlterCourse.Core.Simulation;
 
 namespace AlterCourse.Core.Ships;
 
@@ -46,6 +47,20 @@ internal sealed record ShipCombatState
     }
 
     internal static ShipCombatState Empty { get; } = new([]);
+
+    /// <summary>
+    /// Creates the initial continuation for a loadout: every installed weapon ready at time zero, which is what the
+    /// pre-substrate single readiness time defaulted to. A loadout without a weapon has no readiness entry.
+    /// </summary>
+    internal static ShipCombatState InitialFor(InstalledSystemCollection systems)
+    {
+        ArgumentNullException.ThrowIfNull(systems);
+        return new ShipCombatState(
+            systems
+                .OfKind(ShipSystemKind.DirectedEnergyWeapons)
+                .Select(system => new DirectedEnergyReadiness(system.Id, new SimulationTime(0)))
+        );
+    }
 
     internal ImmutableArray<DirectedEnergyReadiness> WeaponReadiness { get; init; }
 

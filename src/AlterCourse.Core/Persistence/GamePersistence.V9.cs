@@ -24,9 +24,69 @@ public static partial class GamePersistence
     private const string WeaponsKind = "directed-energy-weapons";
 
     // TEMPORARY BRIDGE (removed by leg L4): until V10 persistence exists, the current runtime is written in the V9
-    // wire format. That is lossless only for a ship whose installations are exactly the five installations the V9
-    // map defines (HistoricalShipSystemsV9), so any other loadout is refused rather than flattened into fixed
-    // fields. L4 replaces this capture with CaptureV10, which reads installed state directly.
+    // wire format. That is lossless only for a ship whose installations are exactly five, one per V9 fixed field, in
+    // the V9 slots (installed ids 1–5, continuation 6), so any other loadout is refused rather than flattened into
+    // fixed fields. L4 replaces this capture with CaptureV10, which reads installed state directly.
+    //
+    // While V9 is still the current wire format, the bridge resolves a V9 ship's definitions and tuning from the
+    // ship's own design in the supplied catalog, exactly as pre-substrate V9 loading read that catalog. The frozen
+    // historical boundary (HistoricalShipSystemsV9 keyed by "pathfinder", HistoricalShipContentV5) is not applied
+    // here: it becomes the V9 rule when L4 makes V9 historical and moves this translation into MigrateV9ToV10.
+    private const long BridgeNextInstalledSystemIdV9 = 6;
+
+    private static InstalledSystemId BridgeInstalledIdV9(string kind) =>
+        kind switch
+        {
+            GenerationKind => new InstalledSystemId(1),
+            SensorsKind => new InstalledSystemId(2),
+            ImpulseKind => new InstalledSystemId(3),
+            ShieldsKind => new InstalledSystemId(4),
+            WeaponsKind => new InstalledSystemId(5),
+            _ => throw new InvalidOperationException($"V9 system kind '{kind}' has no installed-system slot."),
+        };
+
+    /// <summary>Resolves the definition the ship's design installs in a V9 slot, verifying its kind.</summary>
+    private static SystemDefinition BridgeDefinitionV9(ShipDefinitionCatalog catalog, string design, string kind)
+    {
+        InstalledSystemId slot = BridgeInstalledIdV9(kind);
+        SystemDefinition? definition = catalog
+            .GetRequired(new ShipDefinitionId(design))
+            .InitialLoadout.Systems.Where(system => system.Id == slot)
+            .Select(system => catalog.SystemDefinitions.GetRequired(system.DefinitionId))
+            .SingleOrDefault();
+        return definition is not null && string.Equals(definition.Kind.Value, kind, StringComparison.Ordinal)
+            ? definition
+            : throw new InvalidOperationException(
+                $"Ship definition '{design}' does not install a '{kind}' system in V9 slot {slot.Value}."
+            );
+    }
+
+    /// <summary>Projects the ship's design into the historical tuning shape the shared V2–V8 validators read.</summary>
+    private static HistoricalShipContentV5 BridgeTuningV9(ShipDefinitionCatalog catalog, string design)
+    {
+        T Of<T>(string kind)
+            where T : SystemDefinition => (T)BridgeDefinitionV9(catalog, design, kind);
+        PowerGenerationSystemDefinition generation = Of<PowerGenerationSystemDefinition>(GenerationKind);
+        SensorSystemDefinition sensors = Of<SensorSystemDefinition>(SensorsKind);
+        ImpulsePropulsionSystemDefinition impulse = Of<ImpulsePropulsionSystemDefinition>(ImpulseKind);
+        ShieldSystemDefinition shields = Of<ShieldSystemDefinition>(ShieldsKind);
+        DirectedEnergyWeaponSystemDefinition weapons = Of<DirectedEnergyWeaponSystemDefinition>(WeaponsKind);
+        return new HistoricalShipContentV5(
+            design,
+            catalog.GetRequired(new ShipDefinitionId(design)).DesignDisplayName,
+            impulse.MaximumTacticalSpeed.Value,
+            generation.NominalOutput.Value,
+            sensors.Power!.NominalDemand.Value,
+            impulse.Power!.NominalDemand.Value,
+            shields.Power!.NominalDemand.Value,
+            weapons.Power!.NominalDemand.Value,
+            sensors.Repair!.FullRepairDuration.Milliseconds,
+            impulse.Repair!.FullRepairDuration.Milliseconds,
+            shields.Repair!.FullRepairDuration.Milliseconds,
+            weapons.Repair!.FullRepairDuration.Milliseconds
+        );
+    }
+
     private static SaveEnvelopeV9 CaptureV9(SimulationState state, GameSaveMetadata metadata)
     {
         if (
@@ -74,7 +134,7 @@ public static partial class GamePersistence
             new SaveModelsV9.ShipCombatSnapshotV9
             {
                 NextDirectedEnergyReadyAtMilliseconds = ship
-                    .Combat.ReadinessOf(HistoricalShipSystemsV9.InstalledIdFor(ship.DefinitionId.Value, WeaponsKind))!
+                    .Combat.ReadinessOf(BridgeInstalledIdV9(WeaponsKind))!
                     .ReadyAt.Milliseconds,
                 PendingStimulus = ship.Combat.PendingStimulus is not { } stimulus
                     ? null
@@ -92,12 +152,9 @@ public static partial class GamePersistence
     private static SaveModelsV9.EngineeringSnapshotV9 CaptureEngineeringV9(ShipState ship)
     {
         ShipEngineeringState engineering = ship.Engineering;
-        string design = ship.DefinitionId.Value;
         InstalledSystem Mapped(string kind) =>
-            engineering.Systems.TryGet(
-                HistoricalShipSystemsV9.InstalledIdFor(design, kind),
-                out InstalledSystem? system
-            ) && string.Equals(system.Kind.Value, kind, StringComparison.Ordinal)
+            engineering.Systems.TryGet(BridgeInstalledIdV9(kind), out InstalledSystem? system)
+            && string.Equals(system.Kind.Value, kind, StringComparison.Ordinal)
                 ? system
                 : throw new InvalidOperationException("Heterogeneous loadouts require V10 persistence");
 
@@ -106,10 +163,7 @@ public static partial class GamePersistence
         InstalledSystem impulse = Mapped(ImpulseKind);
         InstalledSystem shields = Mapped(ShieldsKind);
         InstalledSystem weapons = Mapped(WeaponsKind);
-        if (
-            engineering.Systems.Count != 5
-            || engineering.InstallationIds.NextId != HistoricalShipSystemsV9.NextInstalledSystemId
-        )
+        if (engineering.Systems.Count != 5 || engineering.InstallationIds.NextId != BridgeNextInstalledSystemIdV9)
         {
             throw new InvalidOperationException("Heterogeneous loadouts require V10 persistence");
         }
@@ -305,12 +359,12 @@ public static partial class GamePersistence
         return new LoadedGameSave(metadata, GameSimulation.RestoreState(state, catalog, factionCatalog));
     }
 
-    // TEMPORARY BRIDGE (removed by leg L4): restores a V9 ship through the explicit version-qualified map
-    // (HistoricalShipSystemsV9): five installations with ids 1–5 and continuation 6, the V9 conditions and
-    // allocations verbatim (zero condition stays an installed-but-offline system, never absence), the repair target
-    // and scan source mapped by kind, and the single readiness time attached to the mapped weapon. Each mapped
-    // definition is verified against its pinned semantics. No class default is read. L4 keeps the map and moves
-    // this translation into MigrateV9ToV10.
+    // TEMPORARY BRIDGE (removed by leg L4): restores a V9 ship into the V9 slots: five installations with ids 1–5
+    // and continuation 6, the V9 conditions and allocations verbatim (zero condition stays an installed-but-offline
+    // system, never absence), the repair target and scan source mapped by kind, and the single readiness time
+    // attached to the weapon slot. Definitions come from the ship's design in the supplied catalog (see the note on
+    // BridgeInstalledIdV9). No class default is read. L4 moves this translation into MigrateV9ToV10, where the
+    // frozen HistoricalShipSystemsV9 map and its semantics check replace the catalog lookup.
     private static ShipState RestoreShipV9(ShipSnapshotV9 snapshot, ShipDefinitionCatalog catalog)
     {
         SaveModelsV9.EngineeringSnapshotV9 engineering = snapshot.Engineering;
@@ -318,8 +372,8 @@ public static partial class GamePersistence
         string design = snapshot.DefinitionId;
         InstalledSystem Install(string kind, double condition, int? allocation) =>
             new(
-                HistoricalShipSystemsV9.InstalledIdFor(design, kind),
-                HistoricalShipSystemsV9.ResolveDefinition(design, kind, catalog.SystemDefinitions),
+                BridgeInstalledIdV9(kind),
+                BridgeDefinitionV9(catalog, design, kind),
                 new SystemCondition(condition),
                 allocation is null ? null : new PowerUnits(allocation.Value)
             );
@@ -342,21 +396,18 @@ public static partial class GamePersistence
             ),
             new ShipEngineeringState(
                 installations,
-                InstalledSystemIdAllocator.Restore(HistoricalShipSystemsV9.NextInstalledSystemId),
-                RestoreSystemRepairV5(engineering.ActiveRepair, design)
+                InstalledSystemIdAllocator.Restore(BridgeNextInstalledSystemIdV9),
+                RestoreSystemRepairV5(engineering.ActiveRepair)
             ),
             RestoreStrategicStateV2(snapshot.StrategicState),
             RestoreOrderV3(snapshot.ActiveOrder),
-            RestoreSensorKnowledgeV6(
-                snapshot.SensorKnowledge,
-                HistoricalShipSystemsV9.InstalledIdFor(design, SensorsKind)
-            ),
+            RestoreSensorKnowledgeV6(snapshot.SensorKnowledge, BridgeInstalledIdV9(SensorsKind)),
             RestoreAutonomousStateV4(snapshot.AutonomousState),
             snapshot.DirectControllerFactionId is null ? null : new FactionId(snapshot.DirectControllerFactionId.Value),
             new ShipCombatState(
                 [
                     new DirectedEnergyReadiness(
-                        HistoricalShipSystemsV9.InstalledIdFor(design, WeaponsKind),
+                        BridgeInstalledIdV9(WeaponsKind),
                         new SimulationTime(snapshot.Combat.NextDirectedEnergyReadyAtMilliseconds)
                     ),
                 ],
@@ -409,7 +460,7 @@ public static partial class GamePersistence
         // are validated against the complete V9 scheduler and the original graph in RestoreV9; the V8 loader
         // never receives a V9 document or accepts its new work/repair semantics.
         SaveEnvelopeV8 legacy = LegacyShapeV9(envelope);
-        ValidateCandidateV8(legacy, catalog);
+        ValidateCandidateV8(legacy, catalog, design => BridgeTuningV9(catalog, design));
         ValidateSchedulerCandidate(
             snapshot.Scheduler,
             snapshot.TimeMilliseconds,

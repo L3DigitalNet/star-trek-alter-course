@@ -6,6 +6,7 @@ using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
 using AlterCourse.Core.Tactical;
+using AlterCourse.Core.Tests.Support;
 
 namespace AlterCourse.Core.Tests.Gameplay;
 
@@ -20,14 +21,7 @@ internal sealed class Milestone3ProofFixture
 
     internal Milestone3ProofFixture()
     {
-        string root = FindRepositoryRoot();
-        string schema = File.ReadAllText(
-            Path.Combine(root, "src/AlterCourse.Godot/content/schemas/ship-definition-v5.schema.json")
-        );
-        string definition = File.ReadAllText(Path.Combine(root, "src/AlterCourse.Godot/content/ships/pathfinder.json"));
-        Catalog = new ShipDefinitionCatalogLoader(schema).LoadCatalog([
-            ShipDefinitionContent.FromText("pathfinder.json", definition),
-        ]);
+        Catalog = TestShipContent.Production();
     }
 
     internal ShipDefinitionCatalog Catalog { get; }
@@ -86,8 +80,15 @@ internal sealed class Milestone3ProofFixture
     {
         var initialTime = new SimulationTime(0);
         var definitionId = new ShipDefinitionId("pathfinder");
-        var damaged = new SystemCondition(0.4);
-        var repaired = new SystemCondition(1);
+        // Pre-combat proof starts: generation and impulse nominal at 70/50, shields and weapons installed offline.
+        ShipSystemsStart damaged = TestShipStarts.Pathfinder(sensors: 0.4);
+        ShipSystemsStart repaired = TestShipStarts.Pathfinder();
+        SystemRepairStart sensorRepair = TestShipStarts.Repair(
+            TestShipContent.Sensors,
+            0.4,
+            1,
+            initialTime.Milliseconds
+        );
         TacticalMotion stopped = default;
         return
         [
@@ -97,9 +98,9 @@ internal sealed class Milestone3ProofFixture
                 "USS Pathfinder",
                 new TacticalPosition(3.25, -7.5),
                 stopped,
-                damaged,
                 new AtLocationStart(new LocationId("dawn-anchor")),
-                new SystemRepairStart(ShipSystemKind.Sensors, damaged, repaired, initialTime)
+                damaged,
+                sensorRepair
             ),
             new(
                 new ShipInstanceId(2),
@@ -107,9 +108,9 @@ internal sealed class Milestone3ProofFixture
                 "USS Wayfarer",
                 new TacticalPosition(-2, 4),
                 stopped,
-                damaged,
                 new AtLocationStart(new LocationId("vesper-reach")),
-                new SystemRepairStart(ShipSystemKind.Sensors, damaged, repaired, initialTime)
+                damaged,
+                sensorRepair
             ),
             new(
                 new ShipInstanceId(3),
@@ -117,8 +118,8 @@ internal sealed class Milestone3ProofFixture
                 "USS Horizon",
                 new TacticalPosition(6, 1.5),
                 stopped,
-                repaired,
-                new TravelingStart(new LocationId("vesper-reach"), new LocationId("meridian-drift"), initialTime)
+                new TravelingStart(new LocationId("vesper-reach"), new LocationId("meridian-drift"), initialTime),
+                repaired
             ),
             new(
                 new ShipInstanceId(4),
@@ -126,8 +127,8 @@ internal sealed class Milestone3ProofFixture
                 "Survey Vessel Kestrel",
                 new TacticalPosition(21.25, -7.5),
                 stopped,
-                repaired,
-                new AtLocationStart(new LocationId("dawn-anchor"))
+                new AtLocationStart(new LocationId("dawn-anchor")),
+                repaired
             ),
         ];
     }
@@ -156,22 +157,5 @@ internal sealed class Milestone3ProofFixture
                 new StrategicRoute(vesper.Id, meridian.Id, new SimulationDuration(14000)),
             ]
         );
-    }
-
-    private static string FindRepositoryRoot()
-    {
-        for (
-            var directory = new DirectoryInfo(AppContext.BaseDirectory);
-            directory is not null;
-            directory = directory.Parent
-        )
-        {
-            if (File.Exists(Path.Combine(directory.FullName, "AlterCourse.sln")))
-            {
-                return directory.FullName;
-            }
-        }
-
-        throw new DirectoryNotFoundException("Could not locate the repository root from the test output directory.");
     }
 }

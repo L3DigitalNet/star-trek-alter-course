@@ -4,13 +4,13 @@ using AlterCourse.Core.AI;
 using AlterCourse.Core.Gameplay;
 using AlterCourse.Core.Identity;
 using AlterCourse.Core.Persistence;
-using AlterCourse.Core.Quantities;
 using AlterCourse.Core.Sensors;
 using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
 using AlterCourse.Core.Tactical;
 using AlterCourse.Core.Tests.Gameplay;
+using AlterCourse.Core.Tests.Support;
 
 namespace AlterCourse.Core.Tests.Persistence;
 
@@ -105,7 +105,7 @@ public sealed class GamePersistenceV9CombatTests
         SimulationState state = game.CaptureState();
         ShipState player = state.GetRequiredShip(state.PlayerShipId);
         var system = ShipSystemKind.Parse(systemName);
-        player = player with { Engineering = player.Engineering.WithCondition(system, new SystemCondition(0.25)) };
+        player = player with { Engineering = TestEngineering.WithCondition(player.Engineering, system, 0.25) };
         state = state.ReplaceShip(player.InstanceId, player);
         game = GameSimulation.RestoreState(state, fixture.Catalog);
         Assert.Equal(SystemRepairOutcome.Accepted, game.BeginSystemRepair(system, new SystemCondition(1)).Outcome);
@@ -124,7 +124,7 @@ public sealed class GamePersistenceV9CombatTests
         Assert.Null(restored.CaptureState().GetRequiredShip(player.InstanceId).Engineering.ActiveRepair);
         Assert.Equal(
             1,
-            restored.CaptureState().GetRequiredShip(player.InstanceId).Engineering.ConditionFor(system).Value
+            TestEngineering.ConditionOf(restored.CaptureState().GetRequiredShip(player.InstanceId).Engineering, system)
         );
     }
 
@@ -142,11 +142,11 @@ public sealed class GamePersistenceV9CombatTests
         GameSimulation migrated = GamePersistence.Deserialize(source, fixture.Catalog, "historical-v8.json").Simulation;
         foreach (ShipState ship in migrated.CaptureState().Ships)
         {
-            Assert.Equal(0, ship.Engineering.ShieldCondition.Value);
-            Assert.Equal(0, ship.Engineering.DirectedEnergyCondition.Value);
-            Assert.Equal(0, ship.Engineering.Allocation.Shields.Value);
-            Assert.Equal(0, ship.Engineering.Allocation.DirectedEnergyWeapons.Value);
-            Assert.Equal(ShipCombatState.Empty, ship.Combat);
+            Assert.Equal(0, TestEngineering.ConditionOf(ship.Engineering, ShipSystemKind.Shields));
+            Assert.Equal(0, TestEngineering.ConditionOf(ship.Engineering, ShipSystemKind.DirectedEnergyWeapons));
+            Assert.Equal(0, TestEngineering.AllocationOf(ship.Engineering, ShipSystemKind.Shields));
+            Assert.Equal(0, TestEngineering.AllocationOf(ship.Engineering, ShipSystemKind.DirectedEnergyWeapons));
+            Assert.Equal(ShipCombatState.InitialFor(ship.Engineering.Systems), ship.Combat);
         }
         Assert.DoesNotContain(
             migrated.CaptureState().Scheduler.OutstandingWork,
@@ -358,7 +358,7 @@ public sealed class GamePersistenceV9CombatTests
             var system = ShipSystemKind.Parse(token);
             SimulationState state = game.CaptureState();
             ShipState player = state.GetRequiredShip(state.PlayerShipId);
-            player = player with { Engineering = player.Engineering.WithCondition(system, new SystemCondition(0.25)) };
+            player = player with { Engineering = TestEngineering.WithCondition(player.Engineering, system, 0.25) };
             game = GameSimulation.RestoreState(state.ReplaceShip(player.InstanceId, player), fixture.Catalog);
             game.BeginSystemRepair(system, new SystemCondition(1));
         }
@@ -381,7 +381,7 @@ public sealed class GamePersistenceV9CombatTests
         var system = ShipSystemKind.Parse(systemName);
         SimulationState state = game.CaptureState();
         ShipState player = state.GetRequiredShip(state.PlayerShipId);
-        player = player with { Engineering = player.Engineering.WithCondition(system, new SystemCondition(0.25)) };
+        player = player with { Engineering = TestEngineering.WithCondition(player.Engineering, system, 0.25) };
         game = GameSimulation.RestoreState(state.ReplaceShip(player.InstanceId, player), fixture.Catalog);
         Assert.Equal(SystemRepairOutcome.Accepted, game.BeginSystemRepair(system, new SystemCondition(1)).Outcome);
         byte[] valid = GamePersistence.Serialize(game, Milestone3ProofFixture.Metadata);
@@ -540,40 +540,27 @@ public sealed class GamePersistenceV9CombatTests
         var fixture = new Milestone3ProofFixture();
         var location = new LocationId("pair");
         var map = new StrategicMap([new StrategicLocation(location, "Pair", default)], []);
-        ShipStart Start(long id, double x, PowerAllocation allocation) =>
+        ShipStart Start(long id, double x, int impulsePower, int shieldPower) =>
             new(
                 new ShipInstanceId(id),
                 new ShipDefinitionId("pathfinder"),
                 "Ship " + id,
                 new TacticalPosition(x, 0),
                 default,
-                new SystemCondition(1),
-                new SystemCondition(1),
-                new SystemCondition(1),
-                allocation,
-                new AtLocationStart(location)
-            )
-            {
-                ShieldCondition = new SystemCondition(1),
-                DirectedEnergyCondition = new SystemCondition(1),
-            };
+                new AtLocationStart(location),
+                TestShipStarts.Pathfinder(
+                    impulsePower: impulsePower,
+                    shieldPower: shieldPower,
+                    weaponPower: 30,
+                    shields: 1,
+                    weapons: 1
+                )
+            );
         GameSimulation game = new GameBootstrap(
             new SimulationTime(6000),
             map,
             new ShipInstanceId(1),
-            [
-                Start(1, 0, new PowerAllocation(new PowerUnits(70), new PowerUnits(20), default, new PowerUnits(30))),
-                Start(
-                    2,
-                    10,
-                    new PowerAllocation(
-                        new PowerUnits(70),
-                        new PowerUnits(5),
-                        new PowerUnits(shieldPower),
-                        new PowerUnits(30)
-                    )
-                ),
-            ]
+            [Start(1, 0, impulsePower: 20, shieldPower: 0), Start(2, 10, impulsePower: 5, shieldPower: shieldPower)]
         ).CreateSimulation(fixture.Catalog);
         SimulationState initial = game.CaptureState();
         ShipState npc = initial.GetRequiredShip(new ShipInstanceId(2));

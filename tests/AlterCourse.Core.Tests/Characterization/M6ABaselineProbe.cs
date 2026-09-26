@@ -8,6 +8,9 @@ using AlterCourse.Core.Sensors;
 using AlterCourse.Core.Ships;
 using AlterCourse.Core.Tests.Gameplay;
 using static AlterCourse.Core.Tests.Characterization.M6ABaselineRecords;
+using CorePowerAllocationOutcome = AlterCourse.Core.Gameplay.PowerAllocationOutcome;
+using CorePowerAllocationResult = AlterCourse.Core.Gameplay.PowerAllocationResult;
+using CoreSystemRepairOutcome = AlterCourse.Core.Gameplay.SystemRepairOutcome;
 
 namespace AlterCourse.Core.Tests.Characterization;
 
@@ -16,20 +19,19 @@ namespace AlterCourse.Core.Tests.Characterization;
 /// </summary>
 /// <remarks>
 /// <para>
-/// CONTRACT: this class is the only code under <c>Characterization/</c> allowed to touch the fixed-field
-/// ship-system API — the five named conditions and <c>Allocation</c> on <see cref="ShipEngineeringState"/>, the
-/// four named fields of <see cref="PowerAllocation"/>, the named demand and repair-duration fields of
-/// <see cref="ShipEngineeringDefinition"/>, <see cref="SystemRepairState"/>, the named fields of
-/// <see cref="EngineeringProjection"/>, directed-energy readiness on the ship combat state, and every command
-/// that selects a system by kind. It translates them into the representation-neutral records of
+/// CONTRACT: this class is the only code under <c>Characterization/</c> allowed to touch Core's ship-system
+/// representation — installed systems and their definitions, the exact <see cref="PowerAllocation"/> keyed by
+/// installed id, <see cref="SystemRepairState"/>, weapon readiness, the Engineering projection, and every command
+/// that selects an installation. It translates them into the representation-neutral records of
 /// <see cref="M6ABaselineRecords"/> and translates canonical tuples back into commands.
 /// </para>
 /// <para>
-/// When issue #121 replaces named fields with installed-system instances, rewrite this class (and scenario
-/// setup in <see cref="M6ABaselineScenarios"/> only where it authors state) so each record field keeps its
-/// meaning: <c>Conditions.Shields</c> is the condition of the ship's shield installation, an allocation tuple is
-/// the exact allocation per installed consumer in canonical order, and so on. Do not edit
-/// <see cref="M6ABaselineExpectations"/> to make a migrated run pass — that file is the baseline.
+/// Each record field keeps its M6A meaning: <c>Conditions.Shields</c> is the condition of the ship's sole shield
+/// installation (resolved by kind through the typed singleton rule), an allocation tuple is the exact allocation of
+/// the four consumer installations by kind, a kind-keyed command addresses the ship's installation of that kind,
+/// and Core's generic outcomes are mapped back to the frozen M6A vocabulary (<see cref="PowerAllocationOutcome"/>,
+/// <see cref="SystemRepairOutcome"/>). Do not edit <see cref="M6ABaselineExpectations"/> to make a migrated run
+/// pass — that file is the baseline.
 /// </para>
 /// <para>
 /// Doubles are rounded to <see cref="PinnedDigits"/> decimal places unless the probe is built with
@@ -43,28 +45,41 @@ internal sealed class M6ABaselineProbe(ShipDefinitionCatalog catalog, bool exact
 
     internal DefinitionFacts Definition(string definitionId)
     {
-        ShipDefinition definition = catalog.GetRequired(new ShipDefinitionId(definitionId));
-        ShipEngineeringDefinition engineering = definition.Engineering;
-        DirectedEnergyWeaponDefinition weapon = definition.DirectedEnergyWeapon!;
-        return new DefinitionFacts(
-            engineering.NominalGeneration.Value,
-            new AllocationTuple(
-                engineering.NominalSensorDemand.Value,
-                engineering.NominalImpulseDemand.Value,
-                engineering.NominalShieldDemand.Value,
-                engineering.NominalDirectedEnergyDemand.Value
+        // Tuning now lives on the system definitions the design's default loadout references, by kind.
+        ShipDefinition design = catalog.GetRequired(new ShipDefinitionId(definitionId));
+        SystemDefinition[] loadout =
+        [
+            .. design.InitialLoadout.Systems.Select(system =>
+                catalog.SystemDefinitions.GetRequired(system.DefinitionId)
             ),
-            Round(definition.PassiveSensorRange.Value),
-            Round(definition.MaximumTacticalSpeed.Value),
-            definition.ActiveScanDuration.Milliseconds,
+        ];
+        T Of<T>()
+            where T : SystemDefinition => loadout.OfType<T>().Single();
+        PowerGenerationSystemDefinition generation = Of<PowerGenerationSystemDefinition>();
+        SensorSystemDefinition sensors = Of<SensorSystemDefinition>();
+        ImpulsePropulsionSystemDefinition impulse = Of<ImpulsePropulsionSystemDefinition>();
+        ShieldSystemDefinition shields = Of<ShieldSystemDefinition>();
+        DirectedEnergyWeaponSystemDefinition weapons = Of<DirectedEnergyWeaponSystemDefinition>();
+        DirectedEnergyWeaponDefinition weapon = weapons.Weapon;
+        return new DefinitionFacts(
+            generation.NominalOutput.Value,
+            new AllocationTuple(
+                sensors.Power!.NominalDemand.Value,
+                impulse.Power!.NominalDemand.Value,
+                shields.Power!.NominalDemand.Value,
+                weapons.Power!.NominalDemand.Value
+            ),
+            Round(sensors.PassiveRange.Value),
+            Round(impulse.MaximumTacticalSpeed.Value),
+            sensors.ActiveScanDuration.Milliseconds,
             Round(weapon.Range.Value),
             Round(weapon.BaseNormalizedDamage),
             weapon.Cooldown.Milliseconds,
             new RepairDurations(
-                engineering.SensorRepairDuration.Milliseconds,
-                engineering.ImpulseRepairDuration.Milliseconds,
-                engineering.ShieldRepairDuration.Milliseconds,
-                engineering.DirectedEnergyRepairDuration.Milliseconds
+                sensors.Repair!.FullRepairDuration.Milliseconds,
+                impulse.Repair!.FullRepairDuration.Milliseconds,
+                shields.Repair!.FullRepairDuration.Milliseconds,
+                weapons.Repair!.FullRepairDuration.Milliseconds
             )
         );
     }
@@ -112,7 +127,7 @@ internal sealed class M6ABaselineProbe(ShipDefinitionCatalog catalog, bool exact
                 item.Kind,
                 item.OccurredAt.Milliseconds,
                 item.SensorContactId?.Value,
-                item.ShipSystemId
+                item.SystemKind
             )),
         ]);
 
@@ -142,25 +157,32 @@ internal sealed class M6ABaselineProbe(ShipDefinitionCatalog catalog, bool exact
             .Id.Value;
 
     internal static PowerAllocationResult SetAllocation(GameSimulation game, AllocationTuple allocation) =>
-        game.SetPowerAllocation(ToAllocation(allocation));
+        Translate(game, game.SetPowerAllocation(ToAllocation(PlayerEngineering(game), allocation)));
 
-    /// <summary>Applies a Core-generated preset; priority presets are selected by consumer kind.</summary>
+    /// <summary>Applies Balanced, or the priority allocation for the player's installation of a consumer kind.</summary>
     internal static PowerAllocationResult ApplyPreset(GameSimulation game, PresetChoice choice) =>
-        game.ApplyPowerAllocationPreset(
-            choice.Priority switch
-            {
-                null => PowerAllocationPreset.Balanced,
-                { } kind when kind == ShipSystemKind.Sensors => PowerAllocationPreset.PrioritizeSensors,
-                { } kind when kind == ShipSystemKind.ImpulsePropulsion => PowerAllocationPreset.PrioritizePropulsion,
-                { } kind when kind == ShipSystemKind.Shields => PowerAllocationPreset.PrioritizeShields,
-                { } kind when kind == ShipSystemKind.DirectedEnergyWeapons =>
-                    PowerAllocationPreset.PrioritizeDirectedEnergyWeapons,
-                { } kind => throw new ArgumentOutOfRangeException(nameof(choice), kind, "Kind is not a consumer."),
-            }
+        Translate(
+            game,
+            choice.Priority is { } kind
+                ? game.ApplyPriorityAllocation(Installed(PlayerEngineering(game), kind).Id)
+                : game.ApplyBalancedAllocation()
         );
 
     internal static SystemRepairResult BeginRepair(GameSimulation game, ShipSystemKind system, double target) =>
-        game.BeginSystemRepair(system, new SystemCondition(target));
+        new(
+            game.BeginSystemRepair(
+                Installed(PlayerEngineering(game), system).Id,
+                new SystemCondition(target)
+            ).Outcome switch
+            {
+                CoreSystemRepairOutcome.Accepted => SystemRepairOutcome.Accepted,
+                CoreSystemRepairOutcome.RepairAlreadyActive => SystemRepairOutcome.RepairAlreadyActive,
+                CoreSystemRepairOutcome.TargetDoesNotImproveCondition =>
+                    SystemRepairOutcome.TargetDoesNotImproveCondition,
+                CoreSystemRepairOutcome.NotRepairable => SystemRepairOutcome.UnsupportedSystem,
+                var other => throw new InvalidOperationException($"Repair outcome {other} has no M6A equivalent."),
+            }
+        );
 
     internal static FireDirectedEnergyResult Fire(GameSimulation game, long contactId, ShipSystemKind system) =>
         game.FireDirectedEnergy(new(new SensorContactId(contactId), system));
@@ -194,18 +216,74 @@ internal sealed class M6ABaselineProbe(ShipDefinitionCatalog catalog, bool exact
                 ship.InstanceId,
                 ship with
                 {
-                    Engineering = ship.Engineering with { Allocation = ToAllocation(allocation) },
+                    Engineering = ship.Engineering.WithAllocation(ToAllocation(ship.Engineering, allocation)),
                 }
             )
         );
     }
 
-    private static PowerAllocation ToAllocation(AllocationTuple allocation) =>
+    /// <summary>Builds a complete exact allocation over the ship's four consumer installations, resolved by kind.</summary>
+    private static PowerAllocation ToAllocation(ShipEngineeringState engineering, AllocationTuple allocation) =>
+        new([
+            new(Installed(engineering, ShipSystemKind.Sensors).Id, new PowerUnits(allocation.Sensors)),
+            new(Installed(engineering, ShipSystemKind.ImpulsePropulsion).Id, new PowerUnits(allocation.Impulse)),
+            new(Installed(engineering, ShipSystemKind.Shields).Id, new PowerUnits(allocation.Shields)),
+            new(
+                Installed(engineering, ShipSystemKind.DirectedEnergyWeapons).Id,
+                new PowerUnits(allocation.DirectedEnergy)
+            ),
+        ]);
+
+    /// <summary>Maps Core's generic allocation outcome back to the frozen M6A vocabulary.</summary>
+    /// <remarks>
+    /// A consumer-demand refusal names the offending installation; its kind selects the per-kind M6A member. The
+    /// probe always sends complete allocations over installed consumers, so incomplete or unknown-consumer outcomes
+    /// mean the probe itself is broken and throw.
+    /// </remarks>
+    private static PowerAllocationResult Translate(GameSimulation game, CorePowerAllocationResult result) =>
         new(
-            new PowerUnits(allocation.Sensors),
-            new PowerUnits(allocation.Impulse),
-            new PowerUnits(allocation.Shields),
-            new PowerUnits(allocation.DirectedEnergy)
+            result.Outcome switch
+            {
+                CorePowerAllocationOutcome.Accepted => PowerAllocationOutcome.Accepted,
+                CorePowerAllocationOutcome.AvailablePowerExceeded => PowerAllocationOutcome.AvailablePowerExceeded,
+                CorePowerAllocationOutcome.CurrentSpeedExceedsResultingMaximum =>
+                    PowerAllocationOutcome.CurrentSpeedExceedsResultingMaximum,
+                CorePowerAllocationOutcome.ConsumerDemandExceeded => DemandOutcome(
+                    PlayerEngineering(game).Systems.GetRequired(result.Consumer!.Value).Kind
+                ),
+                var other => throw new InvalidOperationException($"Allocation outcome {other} has no M6A equivalent."),
+            },
+            result.ResolvedEvents
+        );
+
+    private static PowerAllocationOutcome DemandOutcome(ShipSystemKind kind) =>
+        kind == ShipSystemKind.Sensors ? PowerAllocationOutcome.SensorDemandExceeded
+        : kind == ShipSystemKind.ImpulsePropulsion ? PowerAllocationOutcome.ImpulseDemandExceeded
+        : kind == ShipSystemKind.Shields ? PowerAllocationOutcome.ShieldDemandExceeded
+        : kind == ShipSystemKind.DirectedEnergyWeapons ? PowerAllocationOutcome.DirectedEnergyDemandExceeded
+        : throw new InvalidOperationException($"Kind {kind.Value} is not a consumer.");
+
+    private static ShipEngineeringState PlayerEngineering(GameSimulation game)
+    {
+        SimulationState state = game.CaptureState();
+        return state.GetRequiredShip(state.PlayerShipId).Engineering;
+    }
+
+    private static InstalledSystem Installed(ShipEngineeringState engineering, ShipSystemKind kind) =>
+        ShipSystemAdmission.SupportedSingle(engineering.Systems, kind)
+        ?? throw new InvalidOperationException($"The ship has no installed {kind.Value} system.");
+
+    private static int AllocationOf(ShipEngineeringState engineering, ShipSystemKind kind) =>
+        ShipSystemAdmission.SupportedSingle(engineering.Systems, kind)?.Allocation?.Value ?? 0;
+
+    private double ConditionOf(ShipEngineeringState engineering, ShipSystemKind kind) =>
+        Round(ShipSystemAdmission.SupportedSingle(engineering.Systems, kind)?.Condition.Value ?? 0);
+
+    private double CapabilityOf(ShipEngineeringState engineering, ShipSystemKind kind) =>
+        Round(
+            ShipSystemAdmission.SupportedSingle(engineering.Systems, kind) is { } system
+                ? ShipEngineeringState.Capability(system)
+                : 0
         );
 
     private ShipOutcome Ship(SimulationState state, ShipInstanceId shipId)
@@ -224,7 +302,9 @@ internal sealed class M6ABaselineProbe(ShipDefinitionCatalog catalog, bool exact
                 Round(ship.TacticalMotion.Speed.Value)
             ),
             new CombatOutcome(
-                ship.Combat.NextDirectedEnergyReadyAt.Milliseconds,
+                ship.Combat.ReadinessOf(
+                    Installed(ship.Engineering, ShipSystemKind.DirectedEnergyWeapons).Id
+                )!.ReadyAt.Milliseconds,
                 stimulus is null
                     ? null
                     : new StimulusOutcome(
@@ -255,35 +335,34 @@ internal sealed class M6ABaselineProbe(ShipDefinitionCatalog catalog, bool exact
 
     private EngineeringOutcome Engineering(ShipState ship)
     {
-        ShipEngineeringDefinition definition = catalog.GetRequired(ship.DefinitionId).Engineering;
         ShipEngineeringState engineering = ship.Engineering;
         SystemRepairState? repair = engineering.ActiveRepair;
         return new EngineeringOutcome(
-            engineering.AvailablePower(definition).Value,
-            engineering.Reserve(definition).Value,
+            engineering.AvailablePower.Value,
+            engineering.Reserve.Value,
             new AllocationTuple(
-                engineering.Allocation.Sensors.Value,
-                engineering.Allocation.ImpulsePropulsion.Value,
-                engineering.Allocation.Shields.Value,
-                engineering.Allocation.DirectedEnergyWeapons.Value
+                AllocationOf(engineering, ShipSystemKind.Sensors),
+                AllocationOf(engineering, ShipSystemKind.ImpulsePropulsion),
+                AllocationOf(engineering, ShipSystemKind.Shields),
+                AllocationOf(engineering, ShipSystemKind.DirectedEnergyWeapons)
             ),
             new ConditionSet(
-                Round(engineering.GenerationCondition.Value),
-                Round(engineering.SensorCondition.Value),
-                Round(engineering.ImpulseCondition.Value),
-                Round(engineering.ShieldCondition.Value),
-                Round(engineering.DirectedEnergyCondition.Value)
+                ConditionOf(engineering, ShipSystemKind.PowerGeneration),
+                ConditionOf(engineering, ShipSystemKind.Sensors),
+                ConditionOf(engineering, ShipSystemKind.ImpulsePropulsion),
+                ConditionOf(engineering, ShipSystemKind.Shields),
+                ConditionOf(engineering, ShipSystemKind.DirectedEnergyWeapons)
             ),
             new CapabilitySet(
-                Round(engineering.SensorCapability(definition)),
-                Round(engineering.ImpulseCapability(definition)),
-                Round(engineering.ShieldCapability(definition)),
-                Round(engineering.DirectedEnergyCapability(definition))
+                CapabilityOf(engineering, ShipSystemKind.Sensors),
+                CapabilityOf(engineering, ShipSystemKind.ImpulsePropulsion),
+                CapabilityOf(engineering, ShipSystemKind.Shields),
+                CapabilityOf(engineering, ShipSystemKind.DirectedEnergyWeapons)
             ),
             repair is null
                 ? null
                 : new RepairOutcome(
-                    repair.TargetSystem,
+                    engineering.Systems.GetRequired(repair.Target).Kind,
                     Round(repair.StartingCondition.Value),
                     Round(repair.TargetCondition.Value),
                     repair.StartedAt.Milliseconds,

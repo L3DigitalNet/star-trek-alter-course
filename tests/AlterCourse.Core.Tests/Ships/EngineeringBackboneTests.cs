@@ -8,20 +8,13 @@ using AlterCourse.Core.Sensors;
 using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
+using AlterCourse.Core.Tests.Support;
 
 namespace AlterCourse.Core.Tests.Ships;
 
 /// <summary>Verifies the concrete Milestone 4 Engineering authority and its gameplay consequences.</summary>
 public sealed class EngineeringBackboneTests
 {
-    private static readonly ShipEngineeringDefinition PathfinderEngineering = new(
-        new PowerUnits(120),
-        new PowerUnits(70),
-        new PowerUnits(50),
-        new SimulationDuration(8000),
-        new SimulationDuration(6000)
-    );
-
     /// <summary>Confirms the abstract quantity includes both declared endpoints.</summary>
     [Theory]
     [InlineData(0)]
@@ -77,19 +70,10 @@ public sealed class EngineeringBackboneTests
     {
         ShipEngineeringState engineering = ConstrainedEngineering();
 
-        Assert.Equal(new PowerUnits(75), engineering.AvailablePower(PathfinderEngineering));
-        Assert.Equal(
-            new PowerAllocation(new PowerUnits(44), new PowerUnits(31)),
-            engineering.AllocationFor(PathfinderEngineering, PowerAllocationPreset.Balanced)
-        );
-        Assert.Equal(
-            new PowerAllocation(new PowerUnits(70), new PowerUnits(5)),
-            engineering.AllocationFor(PathfinderEngineering, PowerAllocationPreset.PrioritizeSensors)
-        );
-        Assert.Equal(
-            new PowerAllocation(new PowerUnits(25), new PowerUnits(50)),
-            engineering.AllocationFor(PathfinderEngineering, PowerAllocationPreset.PrioritizePropulsion)
-        );
+        Assert.Equal(new PowerUnits(75), engineering.AvailablePower);
+        Assert.Equal(TestEngineering.Allocation(44, 31), engineering.BalancedAllocation());
+        Assert.Equal(TestEngineering.Allocation(70, 5), engineering.PriorityAllocation(TestShipContent.Sensors));
+        Assert.Equal(TestEngineering.Allocation(25, 50), engineering.PriorityAllocation(TestShipContent.Impulse));
     }
 
     /// <summary>Confirms floor rounding is stable at representative exact and fractional boundaries.</summary>
@@ -100,10 +84,9 @@ public sealed class EngineeringBackboneTests
     [InlineData(999_999, 1, 999_999)]
     public void AvailablePowerUsesDeterministicFloorRounding(int generation, double condition, int expected)
     {
-        ShipEngineeringDefinition definition = Definition(generation, 1, 1);
-        ShipEngineeringState engineering = Engineering(condition, 1, 1, 0, 0);
+        ShipEngineeringState engineering = Engineering(Tuning(generation, 1, 1), condition, 1, 1, 0, 0);
 
-        Assert.Equal(new PowerUnits(expected), engineering.AvailablePower(definition));
+        Assert.Equal(new PowerUnits(expected), engineering.AvailablePower);
     }
 
     /// <summary>Confirms every preset conserves available power and respects each authored demand.</summary>
@@ -119,21 +102,31 @@ public sealed class EngineeringBackboneTests
         int generationPercent
     )
     {
-        ShipEngineeringDefinition definition = Definition(generation, sensorDemand, impulseDemand);
-        ShipEngineeringState engineering = Engineering(generationPercent / 100d, 1, 1, 0, 0);
+        ShipEngineeringState engineering = Engineering(
+            Tuning(generation, sensorDemand, impulseDemand),
+            generationPercent / 100d,
+            1,
+            1,
+            0,
+            0
+        );
 
-        foreach (PowerAllocationPreset preset in Enum.GetValues<PowerAllocationPreset>())
+        PowerAllocation[] generated =
+        [
+            engineering.BalancedAllocation(),
+            engineering.PriorityAllocation(TestShipContent.Sensors),
+            engineering.PriorityAllocation(TestShipContent.Impulse),
+        ];
+        foreach (PowerAllocation allocation in generated)
         {
-            PowerAllocation allocation = engineering.AllocationFor(definition, preset);
-            ShipEngineeringState allocated = engineering with { Allocation = allocation };
-            int available = engineering.AvailablePower(definition).Value;
+            ShipEngineeringState allocated = engineering.WithAllocation(allocation);
+            int available = engineering.AvailablePower.Value;
+            Assert.True(allocation.TryGet(TestShipContent.Sensors, out PowerUnits sensors));
+            Assert.True(allocation.TryGet(TestShipContent.Impulse, out PowerUnits impulse));
 
-            Assert.InRange(allocation.Sensors.Value, 0, sensorDemand);
-            Assert.InRange(allocation.ImpulsePropulsion.Value, 0, impulseDemand);
-            Assert.Equal(
-                available,
-                allocation.Sensors.Value + allocation.ImpulsePropulsion.Value + allocated.Reserve(definition).Value
-            );
+            Assert.InRange(sensors.Value, 0, sensorDemand);
+            Assert.InRange(impulse.Value, 0, impulseDemand);
+            Assert.Equal(available, sensors.Value + impulse.Value + allocated.Reserve.Value);
         }
     }
 
@@ -150,12 +143,11 @@ public sealed class EngineeringBackboneTests
         int expectedImpulse
     )
     {
-        ShipEngineeringDefinition definition = Definition(available, sensorDemand, impulseDemand);
-        ShipEngineeringState engineering = Engineering(1, 1, 1, 0, 0);
+        ShipEngineeringState engineering = Engineering(Tuning(available, sensorDemand, impulseDemand), 1, 1, 1, 0, 0);
 
-        PowerAllocation allocation = engineering.AllocationFor(definition, PowerAllocationPreset.Balanced);
+        PowerAllocation allocation = engineering.BalancedAllocation();
 
-        Assert.Equal(new PowerAllocation(new PowerUnits(expectedSensors), new PowerUnits(expectedImpulse)), allocation);
+        Assert.Equal(TestEngineering.Allocation(expectedSensors, expectedImpulse), allocation);
     }
 
     /// <summary>Confirms capability remains bounded and is monotonic in allocation and condition.</summary>
@@ -170,14 +162,14 @@ public sealed class EngineeringBackboneTests
         double higherCondition
     )
     {
-        ShipEngineeringDefinition definition = Definition(120, 70, 50);
-        ShipEngineeringState lowerPower = Engineering(1, higherCondition, 1, lowerAllocation, 0);
-        ShipEngineeringState higherPower = Engineering(1, higherCondition, 1, higherAllocation, 0);
-        ShipEngineeringState lowerConditionState = Engineering(1, lowerCondition, 1, higherAllocation, 0);
+        PathfinderTuning tuning = Tuning(120, 70, 50);
+        ShipEngineeringState lowerPower = Engineering(tuning, 1, higherCondition, 1, lowerAllocation, 0);
+        ShipEngineeringState higherPower = Engineering(tuning, 1, higherCondition, 1, higherAllocation, 0);
+        ShipEngineeringState lowerConditionState = Engineering(tuning, 1, lowerCondition, 1, higherAllocation, 0);
 
-        double lowerPowerCapability = lowerPower.SensorCapability(definition);
-        double higherPowerCapability = higherPower.SensorCapability(definition);
-        double lowerConditionCapability = lowerConditionState.SensorCapability(definition);
+        double lowerPowerCapability = TestEngineering.CapabilityOf(lowerPower, ShipSystemKind.Sensors);
+        double higherPowerCapability = TestEngineering.CapabilityOf(higherPower, ShipSystemKind.Sensors);
+        double lowerConditionCapability = TestEngineering.CapabilityOf(lowerConditionState, ShipSystemKind.Sensors);
 
         Assert.InRange(lowerPowerCapability, 0, 1);
         Assert.InRange(higherPowerCapability, 0, 1);
@@ -190,17 +182,17 @@ public sealed class EngineeringBackboneTests
     [Fact]
     public void CapabilityEndpointsHaveZeroAndIdentitySemantics()
     {
-        ShipEngineeringDefinition definition = Definition(120, 70, 50);
-        ShipEngineeringState offline = Engineering(1, 0, 0, 70, 50);
-        ShipEngineeringState unpowered = Engineering(1, 1, 1, 0, 0);
-        ShipEngineeringState nominal = Engineering(1, 1, 1, 70, 50);
+        PathfinderTuning tuning = Tuning(120, 70, 50);
+        ShipEngineeringState offline = Engineering(tuning, 1, 0, 0, 70, 50);
+        ShipEngineeringState unpowered = Engineering(tuning, 1, 1, 1, 0, 0);
+        ShipEngineeringState nominal = Engineering(tuning, 1, 1, 1, 70, 50);
 
-        Assert.Equal(0, offline.SensorCapability(definition));
-        Assert.Equal(0, offline.ImpulseCapability(definition));
-        Assert.Equal(0, unpowered.SensorCapability(definition));
-        Assert.Equal(0, unpowered.ImpulseCapability(definition));
-        Assert.Equal(1, nominal.SensorCapability(definition));
-        Assert.Equal(1, nominal.ImpulseCapability(definition));
+        Assert.Equal(0, TestEngineering.CapabilityOf(offline, ShipSystemKind.Sensors));
+        Assert.Equal(0, TestEngineering.CapabilityOf(offline, ShipSystemKind.ImpulsePropulsion));
+        Assert.Equal(0, TestEngineering.CapabilityOf(unpowered, ShipSystemKind.Sensors));
+        Assert.Equal(0, TestEngineering.CapabilityOf(unpowered, ShipSystemKind.ImpulsePropulsion));
+        Assert.Equal(1, TestEngineering.CapabilityOf(nominal, ShipSystemKind.Sensors));
+        Assert.Equal(1, TestEngineering.CapabilityOf(nominal, ShipSystemKind.ImpulsePropulsion));
     }
 
     /// <summary>Confirms the player projection derives all Engineering values from the aggregate.</summary>
@@ -231,7 +223,7 @@ public sealed class EngineeringBackboneTests
         );
         PlayerProjection before = game.GetPlayerProjection();
 
-        PowerAllocationResult result = game.ApplyPowerAllocationPreset(PowerAllocationPreset.PrioritizeSensors);
+        PowerAllocationResult result = game.ApplyPriorityAllocation(TestShipContent.Sensors);
 
         Assert.Equal(PowerAllocationOutcome.CurrentSpeedExceedsResultingMaximum, result.Outcome);
         Assert.Empty(result.ResolvedEvents);
@@ -240,23 +232,23 @@ public sealed class EngineeringBackboneTests
 
     /// <summary>Confirms each direct allocation bound rejects without replacing or changing the aggregate.</summary>
     [Theory]
-    [InlineData(71, 0, PowerAllocationOutcome.SensorDemandExceeded)]
-    [InlineData(0, 51, PowerAllocationOutcome.ImpulseDemandExceeded)]
-    [InlineData(70, 50, PowerAllocationOutcome.AvailablePowerExceeded)]
+    [InlineData(71, 0, PowerAllocationOutcome.ConsumerDemandExceeded, 2L)]
+    [InlineData(0, 51, PowerAllocationOutcome.ConsumerDemandExceeded, 3L)]
+    [InlineData(70, 50, PowerAllocationOutcome.AvailablePowerExceeded, null)]
     public void InvalidDirectAllocationPreservesCompleteAggregateIdentity(
         int sensors,
         int impulse,
-        PowerAllocationOutcome expectedOutcome
+        PowerAllocationOutcome expectedOutcome,
+        long? expectedConsumer
     )
     {
         GameSimulation game = CreateDefault();
         SimulationState before = game.CaptureState();
 
-        PowerAllocationResult result = game.SetPowerAllocation(
-            new PowerAllocation(new PowerUnits(sensors), new PowerUnits(impulse))
-        );
+        PowerAllocationResult result = game.SetPowerAllocation(TestEngineering.Allocation(sensors, impulse, 0, 0));
 
         Assert.Equal(expectedOutcome, result.Outcome);
+        Assert.Equal(expectedConsumer, result.Consumer?.Value);
         Assert.Empty(result.ResolvedEvents);
         Assert.Same(before, game.CaptureState());
     }
@@ -266,17 +258,12 @@ public sealed class EngineeringBackboneTests
     public void ZeroSensorAllocationCancelsExactScanAndReconcilesContactsAtSameTime()
     {
         GameSimulation game = CreateDefault();
-        Assert.Equal(
-            PowerAllocationOutcome.Accepted,
-            game.ApplyPowerAllocationPreset(PowerAllocationPreset.PrioritizeSensors).Outcome
-        );
+        Assert.Equal(PowerAllocationOutcome.Accepted, game.ApplyPriorityAllocation(TestShipContent.Sensors).Outcome);
         SimulationAdvanceResult acquisition = game.AdvanceFixedSteps(35);
         SensorContactSnapshot contact = Assert.Single(acquisition.Projection.Ship.Sensors.Contacts);
         Assert.Equal(ActiveSensorScanOutcome.Accepted, game.RequestActiveSensorScan(contact.Id).Outcome);
 
-        PowerAllocationResult result = game.SetPowerAllocation(
-            new PowerAllocation(new PowerUnits(0), new PowerUnits(50))
-        );
+        PowerAllocationResult result = game.SetPowerAllocation(TestEngineering.Allocation(0, 50, 0, 0));
 
         Assert.Equal(PowerAllocationOutcome.Accepted, result.Outcome);
         Assert.Contains(result.ResolvedEvents, item => item.Kind == PlayerAdvanceEventKind.SensorContactStale);
@@ -303,7 +290,8 @@ public sealed class EngineeringBackboneTests
             completion.ResolvedEvents,
             item => item.Kind == PlayerAdvanceEventKind.SystemRepairCompleted
         );
-        Assert.Equal(ShipSystemKind.Sensors, resolved.ShipSystemId);
+        Assert.Equal(ShipSystemKind.Sensors, resolved.SystemKind);
+        Assert.Equal(TestShipContent.Sensors, resolved.InstalledSystemId);
         Assert.Equal(1, completion.Projection.Ship.Engineering.SensorCondition.Value);
         Assert.Null(completion.Projection.Ship.Engineering.ActiveRepair);
     }
@@ -315,7 +303,7 @@ public sealed class EngineeringBackboneTests
         GameSimulation uninterrupted = CreateSingleShip(new SystemCondition(0.5), new SystemCondition(0.5));
         Assert.Equal(
             SystemRepairOutcome.Accepted,
-            uninterrupted.BeginSystemRepair(ShipSystemKind.ImpulsePropulsion, new SystemCondition(1)).Outcome
+            uninterrupted.BeginSystemRepair(TestShipContent.Impulse, new SystemCondition(1)).Outcome
         );
         SystemRepairState started = Assert.IsType<SystemRepairState>(
             uninterrupted.CaptureState().GetRequiredShip(new ShipInstanceId(1)).Engineering.ActiveRepair
@@ -350,7 +338,8 @@ public sealed class EngineeringBackboneTests
         PlayerAdvanceEvent resolved = Assert.Single(completion.ResolvedEvents);
         Assert.Equal(PlayerAdvanceEventKind.SystemRepairCompleted, resolved.Kind);
         Assert.Equal(new SimulationTime(6_000), resolved.OccurredAt);
-        Assert.Equal(ShipSystemKind.ImpulsePropulsion, resolved.ShipSystemId);
+        Assert.Equal(ShipSystemKind.ImpulsePropulsion, resolved.SystemKind);
+        Assert.Equal(TestShipContent.Impulse, resolved.InstalledSystemId);
         Assert.Equal(0.5, completion.Projection.Ship.Engineering.SensorCondition.Value, 12);
         Assert.Equal(1, completion.Projection.Ship.Engineering.ImpulseCondition.Value);
         Assert.Null(completion.Projection.Ship.Engineering.ActiveRepair);
@@ -379,20 +368,20 @@ public sealed class EngineeringBackboneTests
         GameSimulation game = CreateSingleShip(new SystemCondition(0.5), new SystemCondition(0.5));
 
         Assert.Equal(
-            SystemRepairOutcome.UnsupportedSystem,
-            game.BeginSystemRepair(default, new SystemCondition(1)).Outcome
+            SystemRepairOutcome.UnknownSystem,
+            game.BeginSystemRepair(new InstalledSystemId(99), new SystemCondition(1)).Outcome
         );
         Assert.Equal(
-            SystemRepairOutcome.UnsupportedSystem,
-            game.BeginSystemRepair(ShipSystemKind.PowerGeneration, new SystemCondition(1)).Outcome
+            SystemRepairOutcome.NotRepairable,
+            game.BeginSystemRepair(TestShipContent.Generator, new SystemCondition(1)).Outcome
         );
         Assert.Equal(
             SystemRepairOutcome.Accepted,
-            game.BeginSystemRepair(ShipSystemKind.ImpulsePropulsion, new SystemCondition(1)).Outcome
+            game.BeginSystemRepair(TestShipContent.Impulse, new SystemCondition(1)).Outcome
         );
         Assert.Equal(
             SystemRepairOutcome.RepairAlreadyActive,
-            game.BeginSystemRepair(ShipSystemKind.Sensors, new SystemCondition(1)).Outcome
+            game.BeginSystemRepair(TestShipContent.Sensors, new SystemCondition(1)).Outcome
         );
     }
 
@@ -403,7 +392,7 @@ public sealed class EngineeringBackboneTests
         GameSimulation game = CreateSingleShip(new SystemCondition(1), new SystemCondition(1));
         PlayerProjection before = game.GetPlayerProjection();
 
-        SystemRepairResult result = game.BeginSystemRepair(ShipSystemKind.Sensors, new SystemCondition(1));
+        SystemRepairResult result = game.BeginSystemRepair(TestShipContent.Sensors, new SystemCondition(1));
 
         Assert.Equal(SystemRepairOutcome.TargetDoesNotImproveCondition, result.Outcome);
         Assert.Equal(before, game.GetPlayerProjection());
@@ -416,7 +405,7 @@ public sealed class EngineeringBackboneTests
         GameSimulation game = CreateSingleShip(new SystemCondition(0.5), new SystemCondition(0.5));
         Assert.Equal(
             SystemRepairOutcome.Accepted,
-            game.BeginSystemRepair(ShipSystemKind.ImpulsePropulsion, new SystemCondition(1)).Outcome
+            game.BeginSystemRepair(TestShipContent.Impulse, new SystemCondition(1)).Outcome
         );
 
         PlayerShipProjection projection = game.GetPlayerProjection().Ship;
@@ -459,34 +448,41 @@ public sealed class EngineeringBackboneTests
     }
 
     private static ShipEngineeringState ConstrainedEngineering() =>
-        new(
-            new SystemCondition(0.625),
-            new SystemCondition(0.4),
-            new SystemCondition(1),
-            new PowerAllocation(new PowerUnits(44), new PowerUnits(31))
+        TestEngineering.State(
+            0.625,
+            TestEngineering.Allocation(44, 31),
+            PathfinderTuning.Production with
+            {
+                Combat = false,
+            },
+            sensors: 0.4
         );
 
     private static ShipEngineeringState Engineering(
+        PathfinderTuning tuning,
         double generationCondition,
         double sensorCondition,
         double impulseCondition,
         int sensorAllocation,
         int impulseAllocation
     ) =>
-        new(
-            new SystemCondition(generationCondition),
-            new SystemCondition(sensorCondition),
-            new SystemCondition(impulseCondition),
-            new PowerAllocation(new PowerUnits(sensorAllocation), new PowerUnits(impulseAllocation))
+        TestEngineering.State(
+            generationCondition,
+            TestEngineering.Allocation(sensorAllocation, impulseAllocation),
+            tuning,
+            sensors: sensorCondition,
+            impulse: impulseCondition
         );
 
-    private static ShipEngineeringDefinition Definition(int generation, int sensorDemand, int impulseDemand) =>
+    /// <summary>Three-consumer-era tuning: sensors and impulse only, no shields or weapons installed.</summary>
+    private static PathfinderTuning Tuning(int generation, int sensorDemand, int impulseDemand) =>
         new(
-            new PowerUnits(generation),
-            new PowerUnits(sensorDemand),
-            new PowerUnits(impulseDemand),
-            new SimulationDuration(100),
-            new SimulationDuration(100)
+            Generation: generation,
+            SensorDemand: sensorDemand,
+            ImpulseDemand: impulseDemand,
+            SensorRepairMilliseconds: 100,
+            ImpulseRepairMilliseconds: 100,
+            Combat: false
         );
 
     private static GameSimulation CreateDefault() => FirstGameSetup.Create(CreateCatalog());
@@ -501,11 +497,8 @@ public sealed class EngineeringBackboneTests
             "USS Pathfinder",
             default,
             default,
-            new SystemCondition(1),
-            sensors,
-            impulse,
-            new PowerAllocation(new PowerUnits(70), new PowerUnits(50)),
-            new AtLocationStart(location.Id)
+            new AtLocationStart(location.Id),
+            TestShipStarts.Pathfinder(sensors: sensors.Value, impulse: impulse.Value)
         );
         return new GameBootstrap(
             new SimulationTime(0),
@@ -515,20 +508,9 @@ public sealed class EngineeringBackboneTests
         ).CreateSimulation(CreateCatalog());
     }
 
-    private static ShipDefinitionCatalog CreateCatalog() =>
-        new(
-            new Dictionary<ShipDefinitionId, ShipDefinition>
-            {
-                [new ShipDefinitionId("pathfinder")] = new ShipDefinition(
-                    new ShipDefinitionId("pathfinder"),
-                    "Pathfinder class",
-                    new SpeedKilometersPerSecond(10),
-                    new DistanceKilometers(30),
-                    new SimulationDuration(2000),
-                    PathfinderEngineering
-                ),
-            }
-        );
+    // The production catalog: the pre-substrate fixture's three-consumer design is represented by the production
+    // loadout with shields and weapons installed but offline, which leaves every sensor and impulse number unchanged.
+    private static ShipDefinitionCatalog CreateCatalog() => TestShipContent.Production();
 
     private static GameSaveMetadata ImpulseRepairMetadata()
     {

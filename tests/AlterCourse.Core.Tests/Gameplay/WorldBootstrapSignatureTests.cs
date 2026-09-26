@@ -9,6 +9,7 @@ using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
 using AlterCourse.Core.Tactical;
+using AlterCourse.Core.Tests.Support;
 
 namespace AlterCourse.Core.Tests.Gameplay;
 
@@ -82,8 +83,8 @@ public sealed class WorldBootstrapSignatureTests
                     expandingDisplayName,
                     default,
                     default,
-                    new SystemCondition(1),
-                    new AtLocationStart(map.Locations[0].Id)
+                    new AtLocationStart(map.Locations[0].Id),
+                    TestShipStarts.Pathfinder()
                 )),
         ];
         GameSimulation game = new GameBootstrap(
@@ -144,7 +145,8 @@ public sealed class WorldBootstrapSignatureTests
                 new PlayerAdvanceEvent(
                     PlayerAdvanceEventKind.SystemRepairCompleted,
                     new SimulationTime(8000),
-                    ShipSystemId: ShipSystemKind.Sensors
+                    SystemKind: ShipSystemKind.Sensors,
+                    InstalledSystemId: TestShipContent.Sensors
                 ),
             ],
             repairs.ResolvedEvents
@@ -301,7 +303,7 @@ public sealed class WorldBootstrapSignatureTests
                 .CreateSimulation(CreateCatalog())
         );
         Assert.Throws<ArgumentException>(() =>
-            CreateBootstrap([valid with { SensorCondition = new SystemCondition(0.5) }])
+            CreateBootstrap([valid with { Systems = TestShipStarts.Pathfinder(sensors: 0.5) }])
                 .CreateSimulation(CreateCatalog())
         );
         Assert.Throws<ArgumentException>(() =>
@@ -309,7 +311,7 @@ public sealed class WorldBootstrapSignatureTests
                     valid with
                     {
                         SystemRepair = new SystemRepairStart(
-                            ShipSystemKind.Sensors,
+                            TestShipContent.Sensors,
                             new SystemCondition(0.4),
                             new SystemCondition(0.4),
                             new SimulationTime(0)
@@ -429,9 +431,9 @@ public sealed class WorldBootstrapSignatureTests
                 "USS Pathfinder",
                 new TacticalPosition(3.25, -7.5),
                 stopped,
-                damaged,
                 new AtLocationStart(new LocationId("dawn-anchor")),
-                new SystemRepairStart(ShipSystemKind.Sensors, damaged, repaired, initial)
+                TestShipStarts.Pathfinder(sensors: damaged.Value),
+                new SystemRepairStart(TestShipContent.Sensors, damaged, repaired, initial)
             ),
             new(
                 new ShipInstanceId(2),
@@ -439,9 +441,9 @@ public sealed class WorldBootstrapSignatureTests
                 "USS Wayfarer",
                 new TacticalPosition(-2, 4),
                 stopped,
-                damaged,
                 new AtLocationStart(new LocationId("vesper-reach")),
-                new SystemRepairStart(ShipSystemKind.Sensors, damaged, repaired, initial)
+                TestShipStarts.Pathfinder(sensors: damaged.Value),
+                new SystemRepairStart(TestShipContent.Sensors, damaged, repaired, initial)
             ),
             new(
                 new ShipInstanceId(3),
@@ -449,8 +451,8 @@ public sealed class WorldBootstrapSignatureTests
                 "USS Horizon",
                 new TacticalPosition(6, 1.5),
                 stopped,
-                repaired,
-                new TravelingStart(new LocationId("vesper-reach"), new LocationId("meridian-drift"), initial)
+                new TravelingStart(new LocationId("vesper-reach"), new LocationId("meridian-drift"), initial),
+                TestShipStarts.Pathfinder(sensors: repaired.Value)
             ),
         ];
     }
@@ -523,26 +525,8 @@ public sealed class WorldBootstrapSignatureTests
         throw new InvalidOperationException("The bounded consumer enumerated past its rejection threshold.");
     }
 
-    private static ShipDefinitionCatalog CreateCatalog(string definitionId = "pathfinder")
-    {
-        string definition = $$"""
-            {
-              "schemaVersion": 5,
-              "id": "{{definitionId}}",
-              "designDisplayName": "Pathfinder class",
-              "maximumTacticalSpeedKilometersPerSecond": 10,
-              "passiveSensorRangeKilometers": 30.0,
-              "activeScanDurationMilliseconds": 2000,
-              "engineering": { "nominalGenerationPowerUnits": 120, "nominalSensorDemandPowerUnits": 70, "nominalImpulseDemandPowerUnits": 50, "sensorRepairDurationMilliseconds": 8000, "impulseRepairDurationMilliseconds": 6000, "nominalShieldDemandPowerUnits": 40, "nominalDirectedEnergyDemandPowerUnits": 30, "shieldRepairDurationMilliseconds": 8000, "directedEnergyRepairDurationMilliseconds": 6000 }, "directedEnergyWeapon": { "rangeKilometers": 20, "baseNormalizedDamage": 0.25, "cooldownMilliseconds": 2000 }
-            }
-            """;
-        string schema = File.ReadAllText(
-            Path.Combine(FindRepositoryRoot(), "src/AlterCourse.Godot/content/schemas/ship-definition-v5.schema.json")
-        );
-        return new ShipDefinitionCatalogLoader(schema).LoadCatalog([
-            ShipDefinitionContent.FromText("pathfinder.json", definition),
-        ]);
-    }
+    private static ShipDefinitionCatalog CreateCatalog(string definitionId = "pathfinder") =>
+        TestShipContent.Pathfinder(designId: definitionId);
 
     private static JsonObject Parse(GameSimulation simulation) =>
         JsonNode.Parse(GamePersistence.Serialize(simulation, Metadata))!.AsObject();
@@ -553,21 +537,4 @@ public sealed class WorldBootstrapSignatureTests
         root["simulation"]!["scheduler"]!["outstandingWork"]!
             .AsArray()
             .Single(work => work!["targetShipId"]!.GetValue<long>() == shipId.Value)!;
-
-    private static string FindRepositoryRoot()
-    {
-        for (
-            var directory = new DirectoryInfo(AppContext.BaseDirectory);
-            directory is not null;
-            directory = directory.Parent
-        )
-        {
-            if (File.Exists(Path.Combine(directory.FullName, "AlterCourse.sln")))
-            {
-                return directory.FullName;
-            }
-        }
-
-        throw new DirectoryNotFoundException("Could not locate the repository root from the test output directory.");
-    }
 }

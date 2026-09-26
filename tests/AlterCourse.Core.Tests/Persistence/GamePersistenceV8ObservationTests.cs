@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json.Nodes;
 using AlterCourse.Core.AI;
+using AlterCourse.Core.Content;
 using AlterCourse.Core.Factions;
 using AlterCourse.Core.Gameplay;
 using AlterCourse.Core.Identity;
@@ -11,6 +12,7 @@ using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
 using AlterCourse.Core.Tactical;
 using AlterCourse.Core.Tests.Gameplay;
+using AlterCourse.Core.Tests.Support;
 using FactionTestWorld = AlterCourse.Core.Tests.Gameplay.FactionBootstrapTests.FactionTestWorld;
 
 namespace AlterCourse.Core.Tests.Persistence;
@@ -436,17 +438,26 @@ public sealed class GamePersistenceV8ObservationTests
         GamePersistenceV9CombatTests.StripCombat(source);
         source["schemaVersion"] = 8;
         source["simulationRulesVersion"] = "observation-driven-faction-response-v1";
+        RetargetToProductionDesign(source);
+
+        ShipDefinitionCatalog historicalCatalog = FactionTestWorld.CreateShipCatalog("pathfinder");
         LoadedGameSave loaded = GamePersistence.Deserialize(
             Encoding.UTF8.GetBytes(source.ToJsonString()),
-            FactionTestWorld.ShipCatalog,
+            historicalCatalog,
             FactionTestWorld.FactionCatalog,
             "historical-v8-observation.json"
         );
         foreach (ShipState ship in loaded.Simulation.CaptureState().Ships)
         {
-            Assert.Equal(0, ship.Engineering.ShieldCondition.Value);
-            Assert.Equal(0, ship.Engineering.DirectedEnergyCondition.Value);
-            Assert.Equal(ShipCombatState.Empty, ship.Combat);
+            // Migrated history carries shields and weapons installed but offline, never absent, and the one
+            // historical readiness time (zero) attaches to the mapped weapon installation.
+            Assert.Equal(0, TestEngineering.ConditionOf(ship.Engineering, ShipSystemKind.Shields));
+            Assert.Equal(0, TestEngineering.ConditionOf(ship.Engineering, ShipSystemKind.DirectedEnergyWeapons));
+            Assert.Single(ship.Engineering.Systems.OfKind(ShipSystemKind.Shields));
+            Assert.Equal(
+                new ShipCombatState([new DirectedEnergyReadiness(TestShipContent.Weapons, new SimulationTime(0))]),
+                ship.Combat
+            );
         }
         JsonObject projected = Parse(GamePersistence.Serialize(loaded.Simulation, loaded.Metadata));
         GamePersistenceV9CombatTests.StripCombat(projected);
@@ -455,8 +466,32 @@ public sealed class GamePersistenceV8ObservationTests
         Assert.True(JsonNode.DeepEquals(source, projected));
         AssertContinuation(
             loaded.Simulation,
-            new SimulationTime(loaded.Simulation.CaptureState().Time.Milliseconds + 2_000)
+            new SimulationTime(loaded.Simulation.CaptureState().Time.Milliseconds + 2_000),
+            historicalCatalog
         );
+    }
+
+    /// <summary>
+    /// Historical validation reads only the frozen V1–V9 tuning, which knows the production design alone, so the
+    /// test world's own design identity fails closed rather than being reinterpreted under the supplied catalog. The
+    /// same history authored under the production identity is then used; its load catalog keeps the test world's
+    /// tuning under that identity so continuation is unchanged.
+    /// </summary>
+    private static void RetargetToProductionDesign(JsonObject source)
+    {
+        GamePersistenceException unsupported = Assert.Throws<GamePersistenceException>(() =>
+            GamePersistence.Deserialize(
+                Encoding.UTF8.GetBytes(source.ToJsonString()),
+                FactionTestWorld.ShipCatalog,
+                FactionTestWorld.FactionCatalog,
+                "historical-v8-observation.json"
+            )
+        );
+        Assert.Contains("no frozen V1", unsupported.Message, StringComparison.Ordinal);
+        foreach (JsonNode? ship in source["simulation"]!["ships"]!.AsArray())
+        {
+            ship!["definitionId"] = "pathfinder";
+        }
     }
 
     private static GameSimulation CreateReceivedReportGame()
@@ -683,33 +718,42 @@ public sealed class GamePersistenceV8ObservationTests
             [new StrategicRoute(FactionTestWorld.Alpha, FactionTestWorld.Beta, new SimulationDuration(70_000))]
         );
 
-    private static void AssertContinuation(GameSimulation simulation, SimulationTime target)
+    private static void AssertContinuation(
+        GameSimulation simulation,
+        SimulationTime target,
+        ShipDefinitionCatalog? catalog = null
+    )
     {
-        GameSimulation uninterrupted = Advance(simulation, target);
-        GameSimulation reloaded = Advance(Reload(simulation), target);
+        GameSimulation uninterrupted = Advance(simulation, target, catalog);
+        GameSimulation reloaded = Advance(Reload(simulation, catalog), target, catalog);
         Assert.Equal(GamePersistence.Serialize(uninterrupted, Metadata), GamePersistence.Serialize(reloaded, Metadata));
     }
 
-    private static GameSimulation Advance(GameSimulation simulation, SimulationTime target) =>
+    private static GameSimulation Advance(
+        GameSimulation simulation,
+        SimulationTime target,
+        ShipDefinitionCatalog? catalog = null
+    ) =>
         Restore(
             GameSimulation
                 .AdvanceTo(
                     simulation.CaptureState(),
                     target,
-                    FactionTestWorld.ShipCatalog,
+                    catalog ?? FactionTestWorld.ShipCatalog,
                     FactionTestWorld.FactionCatalog
                 )
-                .State
+                .State,
+            catalog
         );
 
-    private static GameSimulation Restore(SimulationState state) =>
-        GameSimulation.RestoreState(state, FactionTestWorld.ShipCatalog, FactionTestWorld.FactionCatalog);
+    private static GameSimulation Restore(SimulationState state, ShipDefinitionCatalog? catalog = null) =>
+        GameSimulation.RestoreState(state, catalog ?? FactionTestWorld.ShipCatalog, FactionTestWorld.FactionCatalog);
 
-    private static GameSimulation Reload(GameSimulation simulation) =>
+    private static GameSimulation Reload(GameSimulation simulation, ShipDefinitionCatalog? catalog = null) =>
         GamePersistence
             .Deserialize(
                 GamePersistence.Serialize(simulation, Metadata),
-                FactionTestWorld.ShipCatalog,
+                catalog ?? FactionTestWorld.ShipCatalog,
                 FactionTestWorld.FactionCatalog,
                 "continuation-v8.json"
             )
