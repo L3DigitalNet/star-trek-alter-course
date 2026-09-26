@@ -13,6 +13,7 @@ aliases: []
 related:
   - 'docs/adr/0001-separate-simulation-from-godot.md'
   - 'docs/adr/0003-prefer-native-capabilities-and-demand-driven-dependencies.md'
+  - 'docs/adr/0014-use-an-extensible-bounded-ship-system-substrate.md'
   - 'docs/wiki/faction-intent-and-autonomous-assignment.md'
   - 'docs/wiki/engineering-and-combat.md'
   - 'Directory.Packages.props'
@@ -56,6 +57,12 @@ The separate defensive policy receives only the acting ship's own facts and loca
 
 The detailed rules belong to [Engineering and combat](engineering-and-combat.md); [content and persistence](content-assets-and-persistence.md) owns V5 ship definitions and V9 continuation. M6A is unreleased development, M6 remains partial, and these implementation boundaries do not approve later combat refinements.
 
+## Extensible ship-system boundary
+
+[ADR 0014](../adr/0014-use-an-extensible-bounded-ship-system-substrate.md) requires the current field-oriented five-system representation to become an extensible bounded ship-system substrate before the next behavior-affecting ship-system expansion. The existing `ShipSystemId` values are valid semantic system kinds, but kind, reusable system definition, and installed system instance are distinct identities. A ship design owns an initial loadout; each live ship instance owns its actual installed systems, so ships of the same class may diverge through future refit/replacement/removal/installation without mutating the class definition.
+
+The substrate supports zero, one, or multiple installed instances of a kind when that kind's typed domain rules permit it. Common mechanics—condition, damage, repair, power allocation, persistence, generic projection, and Engineering presentation—must operate over the bounded installed-system set rather than repeated named fields/switches. System-specific effects remain explicit typed domain behavior; ADR 0014 does not admit an ECS, generic behavior engine, or arbitrary component framework.
+
 ## Dependency choices
 
 Start with existing domain code and the .NET standard library for Core, and native Godot capabilities for presentation. Admit focused packages for demonstrated needs, with compatibility, licensing, transitive/native dependency, headless determinism, and replacement-boundary evidence. Central versions and lock files remain authoritative; the wiki is not a competing version catalog.
@@ -71,7 +78,7 @@ The complete ADR catalog is indexed in [Sources](sources.md). Its governing boun
 - ADRs 0001-0003: one-way Core/Godot separation, one canonical quality gate, and demand-driven dependency admission.
 - ADRs 0004-0007: semantic multi-scale space, validated ordinary JSON content, explicit versioned JSON saves, and deterministic time/scheduling/randomness.
 - ADRs 0008-0011: structured diagnostics, layered tests, information-limited explainable AI, and explicit quantities/units.
-- ADRs 0012-0013: narrative subordinate to simulation and permanent `dev` with release-only `main`.
+- ADRs 0012-0014: narrative subordinate to simulation, permanent `dev` with release-only `main`, and an extensible bounded ship-system substrate with typed system-specific behavior.
 
 Logs are not state, events are not serialized delegates, and presentation clocks are not simulation clocks. Determinism means equivalent semantic outcomes for the same supported rules/content/snapshot/commands, not permanent bitwise replay compatibility across arbitrary versions.
 
@@ -83,4 +90,4 @@ ADR 0008 selects Serilog configured at a composition boundary through Microsoft 
 
 ## Sources
 
-[Core/Godot separation](../adr/0001-separate-simulation-from-godot.md), [dependency policy](../adr/0003-prefer-native-capabilities-and-demand-driven-dependencies.md), [testing](../adr/0009-use-layered-testing-and-architecture-conformance.md), [narrative](../adr/0012-keep-branching-narrative-subordinate-to-simulation.md), [package declarations](../../Directory.Packages.props), [combat transition](../../src/AlterCourse.Core/Gameplay/GameSimulation.Combat.cs), [defensive policy](../../src/AlterCourse.Core/AI/DefensiveCombatDecisionPolicy.cs), and [development quality](../development-quality.md).
+[Core/Godot separation](../adr/0001-separate-simulation-from-godot.md), [dependency policy](../adr/0003-prefer-native-capabilities-and-demand-driven-dependencies.md), [testing](../adr/0009-use-layered-testing-and-architecture-conformance.md), [ship-system substrate](../adr/0014-use-an-extensible-bounded-ship-system-substrate.md), [narrative](../adr/0012-keep-branching-narrative-subordinate-to-simulation.md), [package declarations](../../Directory.Packages.props), [combat transition](../../src/AlterCourse.Core/Gameplay/GameSimulation.Combat.cs), [defensive policy](../../src/AlterCourse.Core/AI/DefensiveCombatDecisionPolicy.cs), and [development quality](../development-quality.md).
