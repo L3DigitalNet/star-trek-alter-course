@@ -149,7 +149,7 @@ Examples include:
 - directed-energy capability participating in firing;
 - future warp, communications, life-support, tractor, or specialized weapon rules.
 
-Those rules may request the state of a known `ShipSystemId` or a focused typed definition. They must not require every system to inherit one behavior interface, register arbitrary callbacks, or execute rules declared in JSON.
+Those rules may query installed systems by semantic kind and operate on stable installed-system identities plus focused typed definitions. Specialized runtime state that is not common to every system may remain in a focused typed aggregate keyed by installed-system identity; it must not be forced into an untyped generic property bag. The rules must not require every system to inherit one behavior interface, register arbitrary callbacks, or execute rules declared in JSON.
 
 A new system kind therefore has two deliberate integration surfaces:
 
