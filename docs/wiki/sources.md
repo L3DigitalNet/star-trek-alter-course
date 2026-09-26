@@ -6,7 +6,7 @@ description: 'Coverage index of original architecture, design, specification, wo
 doc_type: 'index'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-07'
+updated: '2026-09-08'
 tags:
   - 'design'
   - 'architecture'
@@ -31,6 +31,14 @@ This catalog inventories the wiki's game contracts, implementation evidence, and
 The wiki is the single source of truth for game design, including detailed rules and milestone proofs. Active ADRs record architectural decisions. Historical records explain origin, and current code/tests establish actual implementation behavior. A source's future tense, example, package candidate, or archived assistant recommendation is not evidence of an implemented feature or owner approval. [The documentation authority map](../README.md) defines the distinct roles of documents retained outside the wiki.
 
 ## Review record
+
+Targeted release reconciliation, 2026-09-08:
+
+- **Source:** signed `v0.6.0` tag and release commit `d00460ea8b472c44ea2a8343d43e676efb96000b`, whose tree equals candidate `13bbe41bd9b8d6c94934642d3dfdcc7a4ded1307`.
+- **Scope:** postpublication release language in the root [README](../../README.md), [roadmap](../../ROADMAP.md), wiki home, implementation status, persistence, milestone, faction, architecture, decision, knowledge, and future-domain summaries.
+- **Evidence:** immutable source-only [v0.6.0 release](https://github.com/L3DigitalNet/star-trek-alter-course/releases/tag/v0.6.0), published 2026-09-08T01:04:05Z; Feature #86 / Final PR #87 and Feature #93 / Final PR #94; the release candidate’s recorded 598 Core, 324 AssetCtl, and 67 Godot gameplay tests, plus one Godot integration and two asset-import tests. The published release includes V8 under `observation-driven-faction-response-v1`, bounded response limits of 8 in-flight reports, 16 retained reports, 1 active investigation, a 60,000 ms freshness window, and a 2,000 ms delivery delay; the compact high-width fixture is 108,890,984 bytes and the conservative ceiling is 113,024,376 bytes.
+- **Findings and disposition:** replaced stale “unreleased V8” and “current v0.5.0/V6” claims with the published v0.6.0/V8 baseline. Retained v0.5.0/V6 and V7 statements when they describe migration or release history. M3 and M5 remain incomplete; M6 first engagement, Q-10 refinement, then combat-driven Engineering remain next.
+- **Full-review cadence:** this is a targeted release reconciliation, not a full semantic sweep. The existing next full-review deadline remains 2026-09-13.
 
 Targeted review, 2026-09-07:
 

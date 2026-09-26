@@ -28,7 +28,7 @@ Fix findings at their cause. Any suppression must be narrow, justified, and list
 
 ## C-004: Protected branch and release lifecycle
 
-Develop from `dev` on issue-named branches and merge significant work by PR. Squash into `dev`; release from `main`; return hotfixes to `dev`. Direct `dev` pushes are handoff paths or T0 prose; hooks and CI enforce this.
+Develop from `dev` on issue-named branches and merge significant work by PR. Squash into `dev`; release from `main`; return hotfixes to `dev`. Route release closeout through a supporting PR after synchronization.
 
 ## C-005: Formatting and semantic style
 

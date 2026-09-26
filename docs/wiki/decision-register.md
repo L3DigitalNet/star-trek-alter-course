@@ -6,7 +6,7 @@ description: 'Stable index of architectural decisions, approved implementation/d
 doc_type: 'index'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-07'
+updated: '2026-09-08'
 tags:
   - 'design'
   - 'architecture'
@@ -52,7 +52,7 @@ D-07 resolved Q-01. The slice is not canonically named `M3B`, did not complete M
 
 ## Approved faction-assignment decisions — September 6, 2026
 
-All six decisions below are owner-approved. [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) owns their complete meaning and proof. They select the first bounded contribution toward M5, not the entire milestone. Feature #86 / Final PR #87 implements them in `dev` as `0217296` with V7; v0.5.0 remains V6 and no release is claimed.
+All six decisions below are owner-approved. [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) owns their complete meaning and proof. They select the first bounded contribution toward M5, not the entire milestone. Feature #86 / Final PR #87 implements them in `dev` as `0217296` with V7; v0.5.0 remains the historical V6 release and v0.6.0 advances the released format to V8.
 
 **D-08 — Era-neutral autonomous-assignment proof.** Two root factions; A has an objective to establish presence at Vesper Reach and at least two controlled NPC ships; B has a ship there. A's deterministic choice changes when the preferred candidate is already committed. Existing orders, travel, and sensors produce an offscreen NPC-NPC consequence without player interaction. Q-05 is resolved for this slice; Q-06 remains open for the eventual campaign.
 
@@ -70,7 +70,7 @@ The slice adds no faction/affiliation UI, political hierarchy runtime, organizat
 
 ## Approved next-development decisions — September 7, 2026
 
-The owner selected [Observation-Driven Faction Response](observation-driven-faction-response.md) as the next bounded slice and selected M6 Tactical Combat Foundation as the next major development family after it. Feature #93 / Final PR #94 implements the selected response contract. Unreleased development uses V8; v0.5.0 remains the released V6 baseline.
+The owner selected [Observation-Driven Faction Response](observation-driven-faction-response.md) as the next bounded slice and selected M6 Tactical Combat Foundation as the next major development family after it. Feature #93 / Final PR #94 implements the selected response contract and v0.6.0 releases it with V8. v0.5.0 remains the historical V6 release.
 
 **D-14 — Observation must drive faction action before combat.** The next slice closes one information-to-action loop: a legitimate NPC observation produces a bounded delayed report to its direct controlling faction, the received information changes an explainable faction decision, an eligible ordinary NPC ship investigates the reported location, and ordinary local sensing establishes the outcome. This is a bounded M5 contribution and partial Q-04 resolution, not completion of M3/M5 or a general intelligence architecture.
 
@@ -78,7 +78,7 @@ The owner selected [Observation-Driven Faction Response](observation-driven-fact
 
 **D-16 — One bounded deterministic investigation response.** Factions may investigate a fresh reported strategic location using only received reports, already-approved own-asset administrative facts, and legitimately known routes. The policy never preempts existing orders or commands the player, excludes the reporting observer as its own responder, uses stable report/candidate tie-breaks, allows at most one active investigation per faction, and treats arrival plus ordinary sensing as completion even when the originally observed vessel is gone. The slice caps each faction at 8 in-flight and 16 received reports and uses a 60,000 ms observation freshness window with location-based completion suppression to prevent feedback loops. Existing presence intent is processed first and keeps its one-shot meaning.
 
-**D-17 — Adjacent non-inventive persistence for reported knowledge.** Unreleased development advances V7 to V8 under rules identity `observation-driven-faction-response-v1`. It persists only consequential queued/received knowledge, exact delivery/response continuation, bounded handling state, posture, and required identity continuation. Migration creates no reports, investigations, or delivery work and disables the new posture for migrated factions. New-game bootstrap enables it explicitly for the proof. The derived scheduler bounds are 68,864 stored work items, 68,853 same-instant consequence executions, and 78,853 total consequence executions. Compact V8's tested conservative persistence ceiling is 113,024,376 bytes, below the unchanged 128 MiB envelope. No database or unbounded event history is admitted.
+**D-17 — Adjacent non-inventive persistence for reported knowledge.** v0.6.0 advances V7 to released V8 under rules identity `observation-driven-faction-response-v1`. It persists only consequential queued/received knowledge, exact delivery/response continuation, bounded handling state, posture, and required identity continuation. Migration creates no reports, investigations, or delivery work and disables the new posture for migrated factions. New-game bootstrap enables it explicitly for the proof. The derived scheduler bounds are 68,864 stored work items, 68,853 same-instant consequence executions, and 78,853 total consequence executions. Compact V8's tested conservative persistence ceiling is 113,024,376 bytes, below the unchanged 128 MiB envelope. No database or unbounded event history is admitted.
 
 **D-18 — Tactical combat follows this slice; Engineering grows through combat consumers.** M6 first combat engagement is the next major development family. Full M3 or M5 completion is not a prerequisite. The first M6 refinement should compose one bounded directed-energy/shield/targeting/damage/withdrawal interaction with existing sensing, motion, Engineering, AI, and persistence; exact Q-10 mechanics remain open until that refinement. Ship-system depth is added when it creates or materially changes a command decision rather than through an exhaustive pre-combat subsystem catalog.
 

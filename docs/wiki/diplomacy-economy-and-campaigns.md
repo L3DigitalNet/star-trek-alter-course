@@ -6,7 +6,7 @@ description: 'Future strategic autonomy, durable political consequences, trade, 
 doc_type: 'concept'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-07'
+updated: '2026-09-08'
 tags:
   - 'design'
   - 'simulation'
@@ -24,7 +24,7 @@ related:
 
 ## Status
 
-These are future gameplay domains. The current v0.5.0 baseline supplies typed hail, bounded ship behavior, and strategic last-known contact reporting, not treaties, faction planning, trade, governments, or a generated campaign. Current `dev` adds the bounded root-faction assignment proof; the broader political framework remains distinct from implemented runtime.
+These are future gameplay domains. The current v0.6.0 baseline supplies typed hail, bounded ship behavior, strategic last-known contact reporting, and bounded faction response, not treaties, broader faction planning, trade, governments, or a generated campaign. The broader political framework remains distinct from implemented runtime.
 
 ## Living sector and faction autonomy
 

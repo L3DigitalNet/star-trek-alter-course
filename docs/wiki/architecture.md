@@ -6,7 +6,7 @@ description: 'Simulation authority, project boundaries, dependency policy, and a
 doc_type: 'reference'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-07'
+updated: '2026-09-08'
 tags:
   - 'architecture'
 aliases: []
@@ -41,7 +41,7 @@ Avoid parallel mechanisms. New strategic decisions should consume established in
 
 The policy input is a narrow own-asset administrative projection, not unrestricted world/ship state or a faction sensor network. The scheduler has closed Ship/Faction targets with exact typed validation and preserved ordering. Its persisted items are data only: stable identity, due time, same-time sequence, target, and known kind; executable callbacks do not cross the save boundary. Faction state, controller links, and initial work belong in typed bootstrap and complete candidate validation, not post-construction proof mutations.
 
-Faction Intent and Autonomous Assignment introduced V7 with a non-inventive V6→V7 migration and zero-faction validity. Observation-Driven Faction Response advances unreleased development to V8 without inventing report or investigation history. The released v0.5.0 runtime remains V6. No organization/controller abstraction, hierarchy runtime, random policy, new dependency/framework, or political UI is part of these slices. These choices implement existing ADRs 0005-0007 and 0010; no ADR changes.
+Faction Intent and Autonomous Assignment introduced V7 with a non-inventive V6→V7 migration and zero-faction validity. Observation-Driven Faction Response advances the released format to V8 without inventing report or investigation history. v0.5.0 remains the historical V6 release. No organization/controller abstraction, hierarchy runtime, random policy, new dependency/framework, or political UI is part of these slices. These choices implement existing ADRs 0005-0007 and 0010; no ADR changes.
 
 The Godot adapter loads faction content only to build a valid Core aggregate and preserve V8 save compatibility. It does not project hidden controller, faction, objective, report, investigation, or scheduled-work state; ordinary observed vessels remain available through existing player-safe contact projections. Malformed faction or response data fails without corrupting the live shell.
 

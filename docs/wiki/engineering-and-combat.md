@@ -6,7 +6,7 @@ description: 'Implemented Engineering rules and the approved sequencing principl
 doc_type: 'concept'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-07'
+updated: '2026-09-08'
 tags:
   - 'engineering'
   - 'simulation'
@@ -30,7 +30,7 @@ Engineering is a deliberately small connected Core model: generated power constr
 
 `SystemCondition` is finite and bounded from zero through one; its Offline, Degraded, and Nominal labels are presentation states. `PowerUnits` is a non-negative abstract integer quantity bounded at 1,000,000. Construction rejects negative or out-of-range values, addition is checked, comparison is deterministic, and JSON uses an invariant integer. It is neither watts nor stored energy, fuel, heat, or a physical-precision claim.
 
-Content defines immutable capability. Authored power values are positive and bounded; active-scan, sensor-repair, and impulse-repair durations are positive and aligned to the 100 ms simulation step. Runtime state holds three conditions, exact sensor/impulse allocation, and optionally one repair. Derived power, reserve, capability, range, speed, repair-progress labels, and UI state are not persisted. The current unreleased V8 save contract and migrations belong to [content, assets, and persistence](content-assets-and-persistence.md); former V4/V5 details were historical contracts, not current format guidance.
+Content defines immutable capability. Authored power values are positive and bounded; active-scan, sensor-repair, and impulse-repair durations are positive and aligned to the 100 ms simulation step. Runtime state holds three conditions, exact sensor/impulse allocation, and optionally one repair. Derived power, reserve, capability, range, speed, repair-progress labels, and UI state are not persisted. The current released V8 save contract and migrations belong to [content, assets, and persistence](content-assets-and-persistence.md); former V4/V5 details were historical contracts, not current format guidance.
 
 ## Power and capability
 

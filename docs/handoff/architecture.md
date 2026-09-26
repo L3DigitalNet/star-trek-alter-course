@@ -41,7 +41,7 @@
 - V7 migration preserves ship work and creates no factions or controller history; zero-faction worlds remain valid.
 - Investigation policy reads fresh received reports and bounded own-asset/routes; direct control authorizes application.
 - V8 persists bounded reports, in-flight delivery, active investigations, and per-location completion watermarks.
-- V7→V8 migration creates no response history and does not mine historical contacts. Released v0.5.0 remains V6; merged Feature #93 uses V8 on `dev`.
+- V7→V8 migration creates no response history and does not mine historical contacts. Released v0.6.0 uses V8.
 - No RNG, organization/hierarchy runtime, generic actor framework, political UI, or player-command override belongs to the first slice.
 
 ## Standing backlog

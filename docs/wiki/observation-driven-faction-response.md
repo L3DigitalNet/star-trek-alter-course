@@ -6,7 +6,7 @@ description: 'Approved bounded design for delayed ship-to-faction observation re
 doc_type: 'spec'
 status: 'active'
 created: '2026-09-07'
-updated: '2026-09-07'
+updated: '2026-09-08'
 tags:
   - 'design'
   - 'simulation'
@@ -27,7 +27,7 @@ related:
 
 ## Status and purpose
 
-**Implemented by Feature #93 / Final PR #94; unreleased development uses V8.** This bounded gameplay slice follows Faction Intent and Autonomous Assignment. It connects existing local sensor knowledge to existing faction decision and ship-order machinery without introducing a general intelligence service, political hierarchy, affiliation inference, combat, or communications-network simulation. v0.5.0 remains the released V6 baseline and V7 is the preceding development schema.
+**Implemented by Feature #93 / Final PR #94 and released in v0.6.0 with V8.** This bounded gameplay slice follows Faction Intent and Autonomous Assignment. It connects existing local sensor knowledge to existing faction decision and ship-order machinery without introducing a general intelligence service, political hierarchy, affiliation inference, combat, or communications-network simulation. v0.5.0 remains the historical V6 release and V7 is the preceding development schema.
 
 The required causal proof is:
 
@@ -152,7 +152,7 @@ If the selected responder was already at the destination, Core performs the same
 
 ## Persistence and migration
 
-The implementation advances saves to **V8** under rules identity `observation-driven-faction-response-v1`. V7 remains the historical development schema and v0.5.0 remains the released V6 baseline.
+The implementation advances saves to released **V8** under rules identity `observation-driven-faction-response-v1`. V7 remains the historical development schema and v0.5.0 remains the historical V6 release.
 
 Persist only consequential authoritative state needed for deterministic continuation:
 

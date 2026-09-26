@@ -6,7 +6,7 @@ description: 'Single source of truth for the design of the game: decisions, impl
 doc_type: 'index'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-07'
+updated: '2026-09-08'
 tags:
   - 'design'
   - 'architecture'
@@ -27,11 +27,11 @@ related:
 
 This wiki is the single source of truth for the design of the game: what it is intended to become, what the code actually does, which decisions are settled, and which questions remain open. Detailed game rules and milestone acceptance contracts live here. [Documents outside the wiki](../README.md) have distinct architectural, operational, onboarding, or legal roles; they do not introduce additional gameplay rules.
 
-The initial implementation review is against `dev` commit `42481ca7fbc6c5c9da96985e02565f78a236cab7`, reviewed September 6, 2026. The current released gameplay baseline is source-only v0.5.0, Strategic Contact Reporting, which succeeds v0.4.0, First Contact & Engineering Backbone. Strategic Contact Reporting is delivered by Feature #77, Final PR #78, merged into `dev` as `80c3084`, and released in v0.5.0; it does not complete Milestone 3 and does not itself begin Milestone 5.
+The initial implementation review is against `dev` commit `42481ca7fbc6c5c9da96985e02565f78a236cab7`, reviewed September 6, 2026. The current released gameplay baseline is source-only [v0.6.0](https://github.com/L3DigitalNet/star-trek-alter-course/releases/tag/v0.6.0), Faction Observation and Response, at `d00460e`; it includes both Feature #86 faction assignment and Feature #93 observation response. Strategic Contact Reporting remains the v0.5.0 historical V6 release; it does not complete Milestone 3 and does not itself begin Milestone 5.
 
-[Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) is the first implemented contribution toward M5, delivered by Feature #86 / Final PR #87 and merged into `dev` as `0217296`. Its era-neutral proof implements the six selected boundary decisions and introduced V7 saves with faction content V1. Unreleased development now uses V8; v0.5.0 remains the V6 release and ship-definition content remains V4. This does not declare M3 or M5 complete.
+[Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) is the first implemented contribution toward M5, delivered by Feature #86 / Final PR #87 and merged into `dev` as `0217296`. Its era-neutral proof implements the six selected boundary decisions and introduced V7 saves with faction content V1. The v0.6.0 release uses V8; v0.5.0 remains the historical V6 release and ship-definition content remains V4. This does not declare M3 or M5 complete.
 
-[Observation-Driven Faction Response](observation-driven-faction-response.md) is implemented by Feature #93 / Final PR #94. Unreleased development uses V8 under `observation-driven-faction-response-v1`; v0.5.0 remains the released V6 baseline. It connects legitimate NPC sensor observations to delayed direct-faction reports and deterministic investigation assignments while preserving observer-local identity, information limits, existing orders, and bounded persistence. Its reviewed evidence includes Core scenario/horizon coverage, actor-safe Godot coverage, and the V8 persistence bound. M6 Tactical Combat Foundation is the next major development family; full M3 or M5 completion is not a prerequisite for beginning the first bounded combat engagement.
+[Observation-Driven Faction Response](observation-driven-faction-response.md) is implemented by Feature #93 / Final PR #94 and released in v0.6.0. V8 uses `observation-driven-faction-response-v1`; v0.5.0 remains the historical V6 release. It connects legitimate NPC sensor observations to delayed direct-faction reports and deterministic investigation assignments while preserving observer-local identity, information limits, existing orders, and bounded persistence. Its reviewed evidence includes Core scenario/horizon coverage, actor-safe Godot coverage, and the V8 persistence bound. M6 Tactical Combat Foundation is the next major development family; full M3 or M5 completion is not a prerequisite for beginning the first bounded combat engagement.
 
 The [recurring design-reconciliation procedure](development-and-governance.md#recurring-design-reconciliation) governs review of these claims. The [source catalog review record](sources.md#review-record) identifies the latest full and targeted reviews.
 
@@ -49,11 +49,11 @@ The [recurring design-reconciliation procedure](development-and-governance.md#re
 - [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md): implemented bounded M5 contribution: direct NPC assignment, own-asset knowledge, typed scheduling, V7 migration, and no RNG.
 - [Engineering and combat](engineering-and-combat.md): the implemented power/condition/repair model and the planned combat integration.
 - [Interface and player commands](interface-and-player-commands.md): Command Deck, Engineering, presentation authority, controls, and preview boundaries.
-- [Content, assets, and persistence](content-assets-and-persistence.md): JSON definitions, released V6 and unreleased V8 snapshots, adjacent migrations, and the independent AssetCtl pipeline.
+- [Content, assets, and persistence](content-assets-and-persistence.md): JSON definitions, released V8 snapshots, historical adjacent migrations, and the independent AssetCtl pipeline.
 
 ## Implemented response and future design
 
-- [Observation-Driven Faction Response](observation-driven-faction-response.md): implemented delayed direct ship-to-faction reporting and bounded investigation response with bounded persistence proof; unreleased development uses V8.
+- [Observation-Driven Faction Response](observation-driven-faction-response.md): implemented delayed direct ship-to-faction reporting and bounded investigation response with bounded V8 persistence proof.
 - [Factions and organizations](factions-and-organizations.md): owner-approved political framework; the root-faction/direct-control subset is implemented while broader political runtime remains future work.
 - [Diplomacy, economy, and campaigns](diplomacy-economy-and-campaigns.md): political consequences, history, trade, canon, and later campaign work.
 - [Decision register](decision-register.md): settled decisions and their owning pages.
