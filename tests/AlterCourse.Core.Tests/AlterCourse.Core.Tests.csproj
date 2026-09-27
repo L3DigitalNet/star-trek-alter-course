@@ -26,7 +26,13 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<Compile Include="../../src/AlterCourse.Godot/src/Gameplay/Logging/GameDiagnostics.cs" Link="Gameplay/Logging/GameDiagnostics.cs" />
-		<Compile Include="../../src/AlterCourse.Godot/src/Gameplay/Logging/GameplayLogging.cs" Link="Gameplay/Logging/GameplayLogging.cs" />
+		<Compile
+			Include="../../src/AlterCourse.Godot/src/Gameplay/Logging/GameDiagnostics.cs"
+			Link="Gameplay/Logging/GameDiagnostics.cs"
+		/>
+		<Compile
+			Include="../../src/AlterCourse.Godot/src/Gameplay/Logging/GameplayLogging.cs"
+			Link="Gameplay/Logging/GameplayLogging.cs"
+		/>
 	</ItemGroup>
 </Project>
