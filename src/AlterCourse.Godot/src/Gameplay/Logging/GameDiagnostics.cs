@@ -19,7 +19,7 @@ internal sealed partial class GameDiagnostics(ILogger<GameDiagnostics> logger, A
     internal void PersistenceCompleted(bool loading, long? simulationTime, long? actorId) =>
         Emit(() => PersistenceLog(logger, loading ? "Load" : "Save", simulationTime, actorId));
 
-    internal void Consequence(PlayerAdvanceEvent value, long actorId) =>
+    internal void Consequence(PlayerAdvanceEvent value, long? actorId) =>
         Emit(() =>
             ConsequenceLog(logger, value.Kind, value.OccurredAt.Milliseconds, actorId, value.SensorContactId?.Value)
         );
@@ -74,7 +74,7 @@ internal sealed partial class GameDiagnostics(ILogger<GameDiagnostics> logger, A
         ILogger logger,
         PlayerAdvanceEventKind consequence,
         long simulationTimeMilliseconds,
-        long actorId,
+        long? actorId,
         long? contactId
     );
 
@@ -92,7 +92,6 @@ internal sealed partial class GameDiagnostics(ILogger<GameDiagnostics> logger, A
             ShipContentValidationException or FactionContentValidationException => "InvalidExternalInput",
             OperationCanceledException => "Cancellation",
             IOException or UnauthorizedAccessException => "RecoverableIO",
-            InvalidOperationException => "DomainInvariant",
             _ => "ProgrammingDefect",
         };
 
@@ -126,5 +125,6 @@ internal sealed partial class GameDiagnostics(ILogger<GameDiagnostics> logger, A
         Load,
         Simulation,
         Command,
+        Presentation,
     }
 }

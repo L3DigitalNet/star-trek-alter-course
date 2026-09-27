@@ -110,7 +110,7 @@ public sealed partial class GameSimulation
                     CandidateLog(
                         _diagnosticLogger!,
                         trace.ResolutionTime.Milliseconds,
-                        trace.Target.ShipId?.Value ?? 0,
+                        trace.Target.ShipId?.Value,
                         "DefensiveCombat",
                         candidate.Action.ToString(),
                         "Rank",
@@ -122,7 +122,7 @@ public sealed partial class GameSimulation
                         ConstraintLog(
                             _diagnosticLogger!,
                             trace.ResolutionTime.Milliseconds,
-                            trace.Target.ShipId?.Value ?? 0,
+                            trace.Target.ShipId?.Value,
                             "DefensiveCombat",
                             candidate.Action.ToString(),
                             constraint.Constraint.ToString(),
@@ -262,7 +262,7 @@ public sealed partial class GameSimulation
     private static partial void CandidateLog(
         ILogger logger,
         long simulationTimeMilliseconds,
-        long actorId,
+        long? actorId,
         string decisionKind,
         string candidate,
         string rankingMetric,
@@ -279,7 +279,7 @@ public sealed partial class GameSimulation
     private static partial void ConstraintLog(
         ILogger logger,
         long simulationTimeMilliseconds,
-        long actorId,
+        long? actorId,
         string decisionKind,
         string candidate,
         string constraint,

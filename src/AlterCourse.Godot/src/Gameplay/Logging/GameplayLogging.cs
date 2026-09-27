@@ -55,21 +55,24 @@ internal sealed class GameplayLogging : IDisposable
     )
     {
         Directory.CreateDirectory(directory);
-        Serilog.Core.Logger backend = new LoggerConfiguration()
+        LoggerConfiguration configuration = new LoggerConfiguration()
             .MinimumLevel.Is(minimumLevel)
             .Enrich.WithProperty("SessionCorrelation", Guid.NewGuid().ToString("N"))
-            .WriteTo.Console(formatProvider: CultureInfo.InvariantCulture)
-            .WriteTo.File(
-                new JsonFormatter(renderMessage: true, formatProvider: CultureInfo.InvariantCulture),
-                Path.Combine(directory, "gameplay-.json"),
-                rollingInterval: RollingInterval.Day,
-                retainedFileCountLimit: RetainedFileCount,
-                fileSizeLimitBytes: FileSizeLimitBytes,
-                rollOnFileSizeLimit: true
-            )
-            .CreateLogger();
+            .WriteTo.Console(formatProvider: CultureInfo.InvariantCulture);
+        Serilog.Core.Logger backend = ConfigureFileSink(configuration, directory).CreateLogger();
         return new Serilog.Extensions.Logging.SerilogLoggerFactory(backend, dispose: true);
     }
+
+    // Both production composition and rollover proof use the same bounded file configuration.
+    internal static LoggerConfiguration ConfigureFileSink(LoggerConfiguration configuration, string directory) =>
+        configuration.WriteTo.File(
+            new JsonFormatter(renderMessage: true, formatProvider: CultureInfo.InvariantCulture),
+            Path.Combine(directory, "gameplay-.json"),
+            rollingInterval: RollingInterval.Day,
+            retainedFileCountLimit: RetainedFileCount,
+            fileSizeLimitBytes: FileSizeLimitBytes,
+            rollOnFileSizeLimit: true
+        );
 
     private ILogger<T> GetLogger<T>()
     {
