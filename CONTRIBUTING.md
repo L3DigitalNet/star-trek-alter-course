@@ -19,6 +19,8 @@ Start from current `dev`. Use the governing issue number and a lowercase hyphena
 - `task/<issue>-<slug>`
 - `docs/<issue>-<slug>`
 
+Bounded low-risk maintenance without a governing issue uses `standalone/<slug>` from current `dev` and targets only `dev`. The branch name grants no admission: the Branch policy check requires the installed GitHub workflow package to report a `Standalone` relationship and pass its Ready contract, including acceptance coverage, verification, and its canonical risk declaration. Maintainers still judge whether the work fits the bounded low-risk scope; a clear automated result does not make significant work eligible.
+
 Maintainers reserve `hotfix/<issue>-<slug>` for urgent work based on `main`. Do not open ordinary development pull requests against `main`.
 
 Configure the tracked hooks once per checkout:
