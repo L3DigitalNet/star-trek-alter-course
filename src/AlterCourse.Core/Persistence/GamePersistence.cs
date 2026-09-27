@@ -73,9 +73,10 @@ public static partial class GamePersistence
     private const int V7SchemaVersion = 7;
     private const int V8SchemaVersion = 8;
 
-    // The current aliases name the V10 constants and are used only by Serialize, the Deserialize dispatch arm, and
-    // V10 capture/validation. No migration or historical validator may read them: each declares its own fixed
-    // source and target labels, so adding a schema never relabels an older document's migration output.
+    // The current aliases name the V10 constants and are used only by Serialize's writer check and the Deserialize
+    // dispatch arm; V10 capture, validation, and V9→V10 migration name the V10 constants directly. No migration or
+    // historical validator may read the aliases: each declares its own fixed source and target labels, so adding a
+    // schema never relabels an older document's migration output.
     private const int CurrentSchemaVersion = V10SchemaVersion;
     private const string V1SimulationRulesVersion = "first-playable-v1";
     private const string V2SimulationRulesVersion = "first-playable-v1";
