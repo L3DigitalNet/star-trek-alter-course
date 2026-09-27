@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using AlterCourse.Core.AI;
@@ -199,7 +200,7 @@ public static partial class GamePersistence
             ValidateInputBounds(utf8Json, sourceIdentity);
             byte[] documentBytes = utf8Json.ToArray();
             using var document = JsonDocument.Parse(documentBytes, DocumentOptions);
-            RejectDuplicateMembers(document.RootElement, sourceIdentity, "$", 0);
+            RejectDuplicateMembers(document.RootElement, sourceIdentity, [], 0);
             int version = ReadSchemaVersion(document.RootElement, sourceIdentity);
 
             return version switch
@@ -3703,14 +3704,21 @@ public static partial class GamePersistence
         return version;
     }
 
-    private static void RejectDuplicateMembers(JsonElement element, string sourceIdentity, string path, int depth)
+    // Rendering a whole path at every child multiplies parent-name length by child count. Retain
+    // only bounded name/index segments during the walk and render them solely for a failure.
+    private static void RejectDuplicateMembers(
+        JsonElement element,
+        string sourceIdentity,
+        List<(string? Property, int Index)> path,
+        int depth
+    )
     {
         if (depth > MaximumJsonDepth)
         {
             throw Failure(
                 GamePersistenceFailure.InvalidData,
                 sourceIdentity,
-                $"exceeds the JSON depth limit at '{path}'."
+                $"exceeds the JSON depth limit at '{FormatJsonPath(path)}'."
             );
         }
 
@@ -3719,16 +3727,25 @@ public static partial class GamePersistence
             var names = new HashSet<string>(StringComparer.Ordinal);
             foreach (JsonProperty property in element.EnumerateObject())
             {
-                if (!names.Add(property.Name))
+                // ValidateInputBounds has already bounded and decoded every name before this walk.
+                string name = property.Name;
+                if (!names.Add(name))
                 {
                     throw Failure(
                         GamePersistenceFailure.InvalidData,
                         sourceIdentity,
-                        $"contains duplicate JSON member '{property.Name}' at '{path}'."
+                        $"contains duplicate JSON member '{name}' at '{FormatJsonPath(path)}'."
                     );
                 }
-
-                RejectDuplicateMembers(property.Value, sourceIdentity, $"{path}.{property.Name}", depth + 1);
+                path.Add((name, 0));
+                try
+                {
+                    RejectDuplicateMembers(property.Value, sourceIdentity, path, depth + 1);
+                }
+                finally
+                {
+                    path.RemoveAt(path.Count - 1);
+                }
             }
         }
         else if (element.ValueKind == JsonValueKind.Array)
@@ -3736,10 +3753,31 @@ public static partial class GamePersistence
             int index = 0;
             foreach (JsonElement item in element.EnumerateArray())
             {
-                RejectDuplicateMembers(item, sourceIdentity, $"{path}[{index}]", depth + 1);
+                path.Add((null, index));
+                try
+                {
+                    RejectDuplicateMembers(item, sourceIdentity, path, depth + 1);
+                }
+                finally
+                {
+                    path.RemoveAt(path.Count - 1);
+                }
                 index++;
             }
         }
+    }
+
+    private static string FormatJsonPath(List<(string? Property, int Index)> path)
+    {
+        var result = new StringBuilder("$");
+        foreach ((string? property, int index) in path)
+        {
+            if (property is null)
+                result.Append('[').Append(index).Append(']');
+            else
+                result.Append('.').Append(property);
+        }
+        return result.ToString();
     }
 
     private static void ValidateMetadata(GameSaveMetadata metadata)

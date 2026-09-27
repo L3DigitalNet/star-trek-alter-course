@@ -14,6 +14,14 @@ namespace AlterCourse.Core.Persistence;
 
 public static partial class GamePersistence
 {
+    // Historical DTOs remain supported. GamePersistenceMemberAdmissionTests checks this longest
+    // wire name against every DTO property. JSON escapes require up to six bytes per code unit.
+    internal static readonly int MaximumJsonMemberNameLength = nameof(
+        SaveModelsV9.ShipCombatSnapshotV9.NextDirectedEnergyReadyAtMilliseconds
+    ).Length;
+
+    private static readonly int MaximumJsonMemberNameBytes = MaximumJsonMemberNameLength * 6;
+
     /// <summary>Checks existing collection and string ceilings before materializing untrusted JSON values.</summary>
     internal static void ValidateInputBounds(ReadOnlySpan<byte> json, string sourceIdentity)
     {
@@ -37,6 +45,7 @@ public static partial class GamePersistence
         {
             while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
             {
+                ValidateMemberName(ref reader, sourceIdentity);
                 (int childMaximum, string childLabel) = CollectionBound(ref reader);
                 (int childTextMaximum, string textLabel) = StringBound(ref reader);
                 if (!reader.Read())
@@ -71,6 +80,28 @@ public static partial class GamePersistence
         else if (reader.TokenType == JsonTokenType.String && maximumText != int.MaxValue)
         {
             ValidateStringToken(ref reader, maximumText, label, sourceIdentity);
+        }
+    }
+
+    private static void ValidateMemberName(ref Utf8JsonReader reader, string sourceIdentity)
+    {
+        if (reader.ValueSpan.Length > MaximumJsonMemberNameBytes)
+            throw Failure(
+                GamePersistenceFailure.InvalidData,
+                sourceIdentity,
+                "contains a JSON member name longer than any supported save member."
+            );
+
+        Span<char> decoded = stackalloc char[MaximumJsonMemberNameBytes];
+        try
+        {
+            // Tokenization accepts malformed Unicode that decoding rejects. Keep this translation
+            // at the JSON-name decoder; domain InvalidOperationException failures are not handled here.
+            _ = reader.CopyString(decoded);
+        }
+        catch (InvalidOperationException exception)
+        {
+            throw new JsonException("A save member name contains invalid Unicode.", exception);
         }
     }
 
