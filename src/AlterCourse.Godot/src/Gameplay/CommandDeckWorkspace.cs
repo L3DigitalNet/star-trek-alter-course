@@ -149,7 +149,7 @@ public partial class CommandDeckWorkspace : Control
             presentation.DataMode == CommandInterfaceDataMode.Live && presentation.Mode == CommandInterfaceMode.Combat;
         _targetSelector.Visible = liveCombat;
         _targetSystemLabel.Visible = liveCombat;
-        ShipSystemKind[] choices = liveCombat ? [.. presentation.CombatTarget?.SupportedSystems ?? []] : [];
+        ShipSystemKind[] choices = liveCombat ? [.. presentation.CombatTarget?.AimKinds ?? []] : [];
         bool retainedFocus = _targetSelector.HasFocus();
         bool changed = !_targetSystems.Values.SequenceEqual(choices);
         if (changed)
@@ -196,15 +196,7 @@ public partial class CommandDeckWorkspace : Control
     }
 
     private static string TargetSystemLabel(ShipSystemKind system) =>
-        system.Value switch
-        {
-            "power-generation" => "Power generation",
-            "sensors" => "Sensors",
-            "impulse-propulsion" => "Impulse propulsion",
-            "shields" => "Shields",
-            "directed-energy-weapons" => "Directed-energy weapons",
-            _ => system.Value,
-        };
+        EngineeringKindPresentation.TargetLabel(system, system.Value);
 
     private void PresentSystems(CommandInterfacePresentation presentation)
     {
@@ -437,7 +429,7 @@ public partial class CommandDeckWorkspace : Control
             {
                 if (_selectedTargetSystem is not { } system || !_targetSystems.ContainsValue(system))
                     return;
-                action = action with { FocusedSystemId = system };
+                action = action with { AimKind = system };
             }
             PresentationActionRequested?.Invoke(this, new ActionEventArgs(action));
         }

@@ -131,8 +131,8 @@ public sealed class HiddenLoadoutTargetingTests
         (GameSimulation shielded, _) = TestPairs.Create(Catalog, TestPairs.Loadout(), TestPairs.Loadout());
 
         Assert.Equal(
-            shielded.GetPlayerProjection().Ship.Combat.Targets.Single().SupportedSystems,
-            shieldless.GetPlayerProjection().Ship.Combat.Targets.Single().SupportedSystems
+            shielded.GetPlayerProjection().Ship.Combat.Targets.Single().AimKinds,
+            shieldless.GetPlayerProjection().Ship.Combat.Targets.Single().AimKinds
         );
         Assert.Equal(
             FireDirectedEnergyOutcome.Accepted,
@@ -170,7 +170,7 @@ public sealed class HiddenLoadoutTargetingTests
         Assert.DoesNotContain(ShipSystemKind.Shields, catalog.SystemDefinitions.DamageTargetKinds);
         Assert.All(
             game.GetPlayerProjection().Ship.Combat.Targets,
-            target => Assert.DoesNotContain(ShipSystemKind.Shields, target.SupportedSystems)
+            target => Assert.DoesNotContain(ShipSystemKind.Shields, target.AimKinds)
         );
     }
 
@@ -201,7 +201,7 @@ public sealed class HiddenLoadoutTargetingTests
                 target.ContactId,
                 target.Range,
                 target.Outcome,
-                string.Join(',', target.SupportedSystems.Select(kind => kind.Value)),
+                string.Join(',', target.AimKinds.Select(kind => kind.Value)),
                 result.Outcome,
                 Render(result.ResolvedEvents),
                 after.RemainingCooldown,
@@ -249,6 +249,6 @@ public sealed class HiddenLoadoutTargetingTests
         FireDirectedEnergyOutcome Outcome,
         string Events,
         SimulationDuration RemainingCooldown,
-        SimulationTime ReadyAt
+        SimulationTime? ReadyAt
     );
 }

@@ -80,10 +80,7 @@ public sealed class Milestone3ProofScenarioTests
     public void PrimaryScenarioPersistsMidScanAndAfterAcknowledgedHail()
     {
         GameSimulation uninterrupted = _fixture.CreateDefault();
-        Assert.Equal(
-            PowerAllocationOutcome.Accepted,
-            uninterrupted.ApplyPowerAllocationPreset(PowerAllocationPreset.PrioritizeSensors).Outcome
-        );
+        Assert.Equal(PowerAllocationOutcome.Accepted, uninterrupted.PrioritizePlayer(ShipSystemKind.Sensors).Outcome);
         AdvanceUntilResult acquisition = uninterrupted.AdvanceUntilNextPlayerRelevantEvent();
         Assert.Equal(3500, acquisition.StoppedAt.Milliseconds);
         Assert.Equal(PlayerAdvanceEventKind.SensorContactDetected, Assert.Single(acquisition.ResolvedEvents).Kind);
@@ -140,10 +137,7 @@ public sealed class Milestone3ProofScenarioTests
     public void NoInteractionScenarioPersistsDuringStaleAndLosesAt29100Milliseconds()
     {
         GameSimulation uninterrupted = _fixture.CreateDefault();
-        Assert.Equal(
-            PowerAllocationOutcome.Accepted,
-            uninterrupted.ApplyPowerAllocationPreset(PowerAllocationPreset.PrioritizeSensors).Outcome
-        );
+        Assert.Equal(PowerAllocationOutcome.Accepted, uninterrupted.PrioritizePlayer(ShipSystemKind.Sensors).Outcome);
 
         SimulationAdvanceResult beforeAcquisition = uninterrupted.AdvanceFixedSteps(34);
         Assert.Empty(beforeAcquisition.Projection.Ship.Sensors.Contacts);

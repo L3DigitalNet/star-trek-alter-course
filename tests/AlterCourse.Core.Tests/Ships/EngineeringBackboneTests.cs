@@ -203,11 +203,11 @@ public sealed class EngineeringBackboneTests
 
         Assert.Equal(new PowerUnits(120), engineering.NominalGeneration);
         Assert.Equal(new PowerUnits(75), engineering.AvailablePower);
-        Assert.Equal(new PowerUnits(44), engineering.SensorAllocation);
-        Assert.Equal(new PowerUnits(31), engineering.ImpulseAllocation);
+        Assert.Equal(new PowerUnits(44), engineering.System(ShipSystemKind.Sensors).Allocation);
+        Assert.Equal(new PowerUnits(31), engineering.System(ShipSystemKind.ImpulsePropulsion).Allocation);
         Assert.Equal(new PowerUnits(0), engineering.Reserve);
-        Assert.Equal(44d / 70 * 0.4, engineering.SensorCapability, 12);
-        Assert.Equal(31d / 50, engineering.ImpulseCapability, 12);
+        Assert.Equal(44d / 70 * 0.4, engineering.System(ShipSystemKind.Sensors).Capability!.Value, 12);
+        Assert.Equal(31d / 50, engineering.System(ShipSystemKind.ImpulsePropulsion).Capability!.Value, 12);
         Assert.Equal(30 * 44d / 70 * 0.4, engineering.EffectivePassiveSensorRange.Value, 12);
         Assert.Equal(6.2, engineering.EffectiveMaximumTacticalSpeed.Value, 12);
     }
@@ -282,7 +282,7 @@ public sealed class EngineeringBackboneTests
         GameSimulation game = CreateDefault();
 
         SimulationAdvanceResult midpoint = game.AdvanceFixedSteps(40);
-        Assert.Equal(0.7, midpoint.Projection.Ship.Engineering.SensorCondition.Value, 12);
+        Assert.Equal(0.7, midpoint.Projection.Ship.Engineering.System(ShipSystemKind.Sensors).Condition.Value, 12);
         Assert.Equal(0.5, midpoint.Projection.Ship.Engineering.ActiveRepair!.Progress, 12);
 
         SimulationAdvanceResult completion = game.AdvanceFixedSteps(40);
@@ -292,7 +292,7 @@ public sealed class EngineeringBackboneTests
         );
         Assert.Equal(ShipSystemKind.Sensors, resolved.SystemKind);
         Assert.Equal(TestShipContent.Sensors, resolved.InstalledSystemId);
-        Assert.Equal(1, completion.Projection.Ship.Engineering.SensorCondition.Value);
+        Assert.Equal(1, completion.Projection.Ship.Engineering.System(ShipSystemKind.Sensors).Condition.Value);
         Assert.Null(completion.Projection.Ship.Engineering.ActiveRepair);
     }
 
@@ -320,8 +320,12 @@ public sealed class EngineeringBackboneTests
 
         SimulationAdvanceResult midpoint = uninterrupted.AdvanceFixedSteps(30);
         Assert.Equal(new SimulationTime(3_000), midpoint.FinalTime);
-        Assert.Equal(0.5, midpoint.Projection.Ship.Engineering.SensorCondition.Value, 12);
-        Assert.Equal(0.75, midpoint.Projection.Ship.Engineering.ImpulseCondition.Value, 12);
+        Assert.Equal(0.5, midpoint.Projection.Ship.Engineering.System(ShipSystemKind.Sensors).Condition.Value, 12);
+        Assert.Equal(
+            0.75,
+            midpoint.Projection.Ship.Engineering.System(ShipSystemKind.ImpulsePropulsion).Condition.Value,
+            12
+        );
         Assert.Equal(0.5, midpoint.Projection.Ship.Engineering.ActiveRepair!.Progress, 12);
 
         GameSaveMetadata metadata = ImpulseRepairMetadata();
@@ -340,8 +344,11 @@ public sealed class EngineeringBackboneTests
         Assert.Equal(new SimulationTime(6_000), resolved.OccurredAt);
         Assert.Equal(ShipSystemKind.ImpulsePropulsion, resolved.SystemKind);
         Assert.Equal(TestShipContent.Impulse, resolved.InstalledSystemId);
-        Assert.Equal(0.5, completion.Projection.Ship.Engineering.SensorCondition.Value, 12);
-        Assert.Equal(1, completion.Projection.Ship.Engineering.ImpulseCondition.Value);
+        Assert.Equal(0.5, completion.Projection.Ship.Engineering.System(ShipSystemKind.Sensors).Condition.Value, 12);
+        Assert.Equal(
+            1,
+            completion.Projection.Ship.Engineering.System(ShipSystemKind.ImpulsePropulsion).Condition.Value
+        );
         Assert.Null(completion.Projection.Ship.Engineering.ActiveRepair);
         Assert.DoesNotContain(
             uninterrupted.CaptureState().Scheduler.OutstandingWork,
@@ -412,7 +419,7 @@ public sealed class EngineeringBackboneTests
 
         Assert.False(projection.Sensors.IsRepairing);
         Assert.Equal(1, projection.Sensors.RepairProgress);
-        Assert.Equal(ShipSystemKind.ImpulsePropulsion, projection.Engineering.ActiveRepair!.TargetSystem);
+        Assert.Equal(ShipSystemKind.ImpulsePropulsion, projection.Engineering.ActiveRepair!.TargetKind);
     }
 
     /// <summary>Confirms tactical commands use current effective propulsion rather than design maximum.</summary>

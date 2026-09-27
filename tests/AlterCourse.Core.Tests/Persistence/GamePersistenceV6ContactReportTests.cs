@@ -7,6 +7,7 @@ using AlterCourse.Core.Sensors;
 using AlterCourse.Core.Ships;
 using AlterCourse.Core.Strategic;
 using AlterCourse.Core.Tests.Gameplay;
+using AlterCourse.Core.Tests.Support;
 
 namespace AlterCourse.Core.Tests.Persistence;
 
@@ -197,10 +198,7 @@ public sealed class GamePersistenceV6ContactReportTests
     private GameSimulation CreateObservedWorld(int steps)
     {
         GameSimulation game = _fixture.CreateDefault();
-        Assert.Equal(
-            PowerAllocationOutcome.Accepted,
-            game.ApplyPowerAllocationPreset(PowerAllocationPreset.PrioritizeSensors).Outcome
-        );
+        Assert.Equal(PowerAllocationOutcome.Accepted, game.PrioritizePlayer(ShipSystemKind.Sensors).Outcome);
         game.AdvanceFixedSteps(steps);
         return game;
     }

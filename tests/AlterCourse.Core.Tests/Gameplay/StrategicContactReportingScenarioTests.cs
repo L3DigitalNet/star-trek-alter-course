@@ -5,6 +5,7 @@ using AlterCourse.Core.Sensors;
 using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
+using AlterCourse.Core.Tests.Support;
 
 namespace AlterCourse.Core.Tests.Gameplay;
 
@@ -33,10 +34,7 @@ public sealed class StrategicContactReportingScenarioTests
     public void ObservedReportSurvivesHiddenMovementObserverTravelAndPersistence()
     {
         GameSimulation game = _fixture.CreateDefault();
-        Assert.Equal(
-            PowerAllocationOutcome.Accepted,
-            game.ApplyPowerAllocationPreset(PowerAllocationPreset.PrioritizeSensors).Outcome
-        );
+        Assert.Equal(PowerAllocationOutcome.Accepted, game.PrioritizePlayer(ShipSystemKind.Sensors).Outcome);
 
         SensorContactId contactId = DetectAndIdentifyKestrelAtDawnAnchor(game);
         StrategicContactReportProjection lost = LoseTheContactWithoutLosingTheReport(game, contactId);
@@ -58,14 +56,8 @@ public sealed class StrategicContactReportingScenarioTests
         Assert.Null(Milestone3ProofFixture.Kestrel(orderless).ActiveOrder);
         Assert.NotNull(Milestone3ProofFixture.Kestrel(holding).ActiveOrder);
 
-        Assert.Equal(
-            PowerAllocationOutcome.Accepted,
-            orderless.ApplyPowerAllocationPreset(PowerAllocationPreset.PrioritizeSensors).Outcome
-        );
-        Assert.Equal(
-            PowerAllocationOutcome.Accepted,
-            holding.ApplyPowerAllocationPreset(PowerAllocationPreset.PrioritizeSensors).Outcome
-        );
+        Assert.Equal(PowerAllocationOutcome.Accepted, orderless.PrioritizePlayer(ShipSystemKind.Sensors).Outcome);
+        Assert.Equal(PowerAllocationOutcome.Accepted, holding.PrioritizePlayer(ShipSystemKind.Sensors).Outcome);
 
         // Detection, the last current observation, staleness and loss: the reports must agree at every stage,
         // not merely at the end, where two differences could cancel each other out.

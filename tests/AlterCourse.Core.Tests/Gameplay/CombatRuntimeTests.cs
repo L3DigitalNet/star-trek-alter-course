@@ -23,7 +23,10 @@ public sealed class CombatRuntimeTests
         GameSimulation game = new Milestone3ProofFixture().CreateDefault();
         PowerAllocation allocation = TestEngineering.Allocation(44, 31, 1, 0);
         Assert.Equal(PowerAllocationOutcome.AvailablePowerExceeded, game.SetPowerAllocation(allocation).Outcome);
-        Assert.Equal(new PowerUnits(44), game.GetPlayerProjection().Ship.Engineering.SensorAllocation);
+        Assert.Equal(
+            new PowerUnits(44),
+            game.GetPlayerProjection().Ship.Engineering.System(ShipSystemKind.Sensors).Allocation
+        );
     }
 
     /// <summary>Consumes powered shields before the selected subsystem and rejects cooldown without any state change.</summary>
@@ -361,7 +364,7 @@ public sealed class CombatRuntimeTests
         npc = npc with { SensorKnowledge = SensorKnowledge.Empty };
         game = GameSimulation.RestoreState(state.ReplaceShip(npc.InstanceId, npc), fixture.Catalog);
         game.FireDirectedEnergy(new(contact, ShipSystemKind.Sensors));
-        Assert.Equal(5, game.GetPlayerProjection().Ship.Combat.Targets.Single().SupportedSystems.Count);
+        Assert.Equal(5, game.GetPlayerProjection().Ship.Combat.Targets.Single().AimKinds.Count);
         game.AdvanceFixedSteps(19);
         Assert.Equal(
             FireDirectedEnergyOutcome.CooldownActive,
@@ -405,7 +408,10 @@ public sealed class CombatRuntimeTests
         Assert.Same(state, game.CaptureState());
     }
 
-    /// <summary>An absent installed kind yields typed rejection rather than inventing a repair duration.</summary>
+    /// <summary>
+    /// An absent installation projects no row and no repair action, and addressing the identity it would have had
+    /// yields typed rejection rather than inventing a repair duration.
+    /// </summary>
     [Theory]
     [InlineData("shields")]
     [InlineData("directed-energy-weapons")]
@@ -431,17 +437,13 @@ public sealed class CombatRuntimeTests
         );
         GameSimulation game = new GameBootstrap(default, map, start.InstanceId, [start]).CreateSimulation(catalog);
         var system = ShipSystemKind.Parse(systemName);
+        InstalledSystemId absent = system == ShipSystemKind.Shields ? TestShipContent.Shields : TestShipContent.Weapons;
         SimulationState before = game.CaptureState();
-        Assert.Equal(SystemRepairOutcome.UnknownSystem, game.BeginSystemRepair(system, new SystemCondition(1)).Outcome);
+        Assert.Equal(SystemRepairOutcome.UnknownSystem, game.BeginSystemRepair(absent, new SystemCondition(1)).Outcome);
         Assert.Same(before, game.CaptureState());
-        EngineeringAction action =
-            system == ShipSystemKind.Shields
-                ? EngineeringAction.BeginShieldRepair
-                : EngineeringAction.BeginDirectedEnergyRepair;
-        Assert.DoesNotContain(
-            game.GetPlayerProjection().Ship.Engineering.Actions,
-            projected => projected.Action == action && projected.IsAvailable
-        );
+        EngineeringProjection engineering = game.GetPlayerProjection().Ship.Engineering;
+        Assert.DoesNotContain(engineering.Systems, row => row.Kind == system || row.Id == absent);
+        Assert.DoesNotContain(engineering.Actions, projected => projected.Target == absent);
     }
 
     /// <summary>Forced generation reconciliation preserves heading and reports player-owned brownout and deceleration.</summary>

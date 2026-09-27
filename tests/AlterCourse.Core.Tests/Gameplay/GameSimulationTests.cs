@@ -155,10 +155,7 @@ public sealed class GameSimulationTests
     public void TacticalHeadingUsesClockwiseDegreesFromNorth(double heading, double expectedX, double expectedY)
     {
         GameSimulation game = CreateGame();
-        Assert.Equal(
-            PowerAllocationOutcome.Accepted,
-            game.ApplyPowerAllocationPreset(PowerAllocationPreset.PrioritizePropulsion).Outcome
-        );
+        Assert.Equal(PowerAllocationOutcome.Accepted, game.PrioritizePlayer(ShipSystemKind.ImpulsePropulsion).Outcome);
         Assert.Equal(
             SetTacticalCourseOutcome.Accepted,
             game.SetTacticalCourse(
@@ -234,10 +231,7 @@ public sealed class GameSimulationTests
     public void MaximumTacticalSpeedIsAccepted()
     {
         GameSimulation game = CreateGame();
-        Assert.Equal(
-            PowerAllocationOutcome.Accepted,
-            game.ApplyPowerAllocationPreset(PowerAllocationPreset.PrioritizePropulsion).Outcome
-        );
+        Assert.Equal(PowerAllocationOutcome.Accepted, game.PrioritizePlayer(ShipSystemKind.ImpulsePropulsion).Outcome);
 
         SetTacticalCourseResult result = game.SetTacticalCourse(
             new SetTacticalCourseIntent(new HeadingDegrees(0), new SpeedKilometersPerSecond(10))

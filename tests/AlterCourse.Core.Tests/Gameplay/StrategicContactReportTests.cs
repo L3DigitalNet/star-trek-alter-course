@@ -229,10 +229,7 @@ public sealed class StrategicContactReportTests
     private GameSimulation CreateAcquiredContact()
     {
         GameSimulation game = _fixture.CreateDefault();
-        Assert.Equal(
-            PowerAllocationOutcome.Accepted,
-            game.ApplyPowerAllocationPreset(PowerAllocationPreset.PrioritizeSensors).Outcome
-        );
+        Assert.Equal(PowerAllocationOutcome.Accepted, game.PrioritizePlayer(ShipSystemKind.Sensors).Outcome);
         game.AdvanceFixedSteps(StepsToAcquisition);
         return game;
     }

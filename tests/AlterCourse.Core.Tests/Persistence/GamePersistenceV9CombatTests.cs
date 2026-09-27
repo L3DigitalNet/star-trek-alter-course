@@ -111,7 +111,10 @@ public sealed class GamePersistenceV9CombatTests
         player = player with { Engineering = TestEngineering.WithCondition(player.Engineering, system, 0.25) };
         state = state.ReplaceShip(player.InstanceId, player);
         game = GameSimulation.RestoreState(state, fixture.Catalog);
-        Assert.Equal(SystemRepairOutcome.Accepted, game.BeginSystemRepair(system, new SystemCondition(1)).Outcome);
+        Assert.Equal(
+            SystemRepairOutcome.Accepted,
+            game.BeginSystemRepair(game.PlayerInstallation(system), new SystemCondition(1)).Outcome
+        );
         game.AdvanceFixedSteps(7);
         GameSimulation restored = fixture.RoundTrip(game, "combat-repair.json");
         Assert.Equal(
@@ -364,7 +367,7 @@ public sealed class GamePersistenceV9CombatTests
             ShipState player = state.GetRequiredShip(state.PlayerShipId);
             player = player with { Engineering = TestEngineering.WithCondition(player.Engineering, system, 0.25) };
             game = GameSimulation.RestoreState(state.ReplaceShip(player.InstanceId, player), fixture.Catalog);
-            game.BeginSystemRepair(system, new SystemCondition(1));
+            game.BeginSystemRepair(game.PlayerInstallation(system), new SystemCondition(1));
         }
         JsonObject historical = Parse(GamePersistence.Serialize(game, Milestone3ProofFixture.Metadata));
         StripCombat(historical);
@@ -387,7 +390,10 @@ public sealed class GamePersistenceV9CombatTests
         ShipState player = state.GetRequiredShip(state.PlayerShipId);
         player = player with { Engineering = TestEngineering.WithCondition(player.Engineering, system, 0.25) };
         game = GameSimulation.RestoreState(state.ReplaceShip(player.InstanceId, player), fixture.Catalog);
-        Assert.Equal(SystemRepairOutcome.Accepted, game.BeginSystemRepair(system, new SystemCondition(1)).Outcome);
+        Assert.Equal(
+            SystemRepairOutcome.Accepted,
+            game.BeginSystemRepair(game.PlayerInstallation(system), new SystemCondition(1)).Outcome
+        );
         byte[] valid = GamePersistence.Serialize(game, Milestone3ProofFixture.Metadata);
         foreach (string mutation in new[] { "workId", "dueTime", "duration", "condition", "target", "owner", "orphan" })
         {

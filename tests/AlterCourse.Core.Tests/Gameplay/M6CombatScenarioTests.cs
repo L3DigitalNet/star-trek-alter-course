@@ -214,7 +214,7 @@ public sealed class M6CombatScenarioTests
         );
         Assert.Equal(
             SystemRepairOutcome.Accepted,
-            game.BeginSystemRepair(ShipSystemKind.Sensors, new SystemCondition(1)).Outcome
+            game.BeginSystemRepair(TestShipContent.Sensors, new SystemCondition(1)).Outcome
         );
         SystemRepairState repair = M6CombatProofFixture.Player(game).Engineering.ActiveRepair!;
         ShipDirectedEnergyApplicationResult hit = _fixture.Incoming(

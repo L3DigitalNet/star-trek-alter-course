@@ -9,138 +9,135 @@ namespace AlterCourse.Core.Gameplay;
 /// <summary>Player-facing Engineering and Combat projection assembly.</summary>
 public sealed partial class GameSimulation
 {
-    // TEMPORARY BRIDGE (removed by leg L5): the Engineering projection keeps its pre-substrate public shape (named
-    // per-kind conditions, allocations, capabilities, and the kind-addressed EngineeringAction list) so the unchanged
-    // Godot presenter keeps compiling. Every value is read from the ship's actual installations through
-    // ShipSystemAdmission.SupportedSingle; an absent kind projects zeros and offers no action. This is a read-only
-    // view, never a second authority: Core commands and validation do not read it. L5 replaces it with the
-    // installed-system rows and generic actions of the substrate design.
+    /// <summary>
+    /// Projects the player's actual installations as generic rows plus the Core-owned action list. Nothing here is a
+    /// second authority: availability is decided by running the same validation the commands run, and every row is
+    /// read from the ship's installed-system collection.
+    /// </summary>
     private static EngineeringProjection ProjectEngineering(SimulationState state, ShipState ship)
     {
         ShipEngineeringState engineering = ship.Engineering;
-        InstalledSystem? generator = Single(engineering, ShipSystemKind.PowerGeneration);
-        InstalledSystem? sensors = Single(engineering, ShipSystemKind.Sensors);
-        InstalledSystem? impulse = Single(engineering, ShipSystemKind.ImpulsePropulsion);
-        InstalledSystem? shields = Single(engineering, ShipSystemKind.Shields);
-        InstalledSystem? weapons = Single(engineering, ShipSystemKind.DirectedEnergyWeapons);
         SystemRepairState? repair = engineering.ActiveRepair;
+        InstalledSystem? repairTarget = repair is null ? null : engineering.Systems.GetRequired(repair.Target);
         return new EngineeringProjection(
             engineering.NominalGeneration,
             engineering.AvailablePower,
-            sensors?.Allocation ?? default,
-            impulse?.Allocation ?? default,
+            new PowerUnits(checked((int)engineering.Allocation.Total)),
             engineering.Reserve,
-            generator?.Condition ?? default,
-            sensors?.Condition ?? default,
-            impulse?.Condition ?? default,
-            CapabilityOf(sensors),
-            CapabilityOf(impulse),
             EffectivePassiveSensorRange(engineering),
             EffectiveMaximumTacticalSpeed(engineering),
-            repair is null
+            ProjectSystems(engineering.Systems),
+            repairTarget is null || repair is null
                 ? null
                 : new SystemRepairProjection(
-                    engineering.Systems.GetRequired(repair.Target).Kind,
+                    repairTarget.Id,
+                    repairTarget.Kind,
+                    repairTarget.Definition.ComponentLabel,
                     repair.ProgressAt(state.Time),
                     repair.ExpectedCompletion
                 ),
-            new ReadOnlyValueList<EngineeringActionProjection>(ProjectEngineeringActions(ship)),
-            shields?.Condition ?? default,
-            weapons?.Condition ?? default,
-            CapabilityOf(shields),
-            CapabilityOf(weapons),
-            shields?.Allocation ?? default,
-            weapons?.Allocation ?? default,
-            shields?.Definition.Power?.NominalDemand ?? default,
-            weapons?.Definition.Power?.NominalDemand ?? default
+            ProjectEngineeringActions(ship)
         );
     }
 
     /// <summary>
-    /// Emits the legacy action list in its base order. Availability comes from the generic commands' own validation,
-    /// so the adapter decides no rule.
+    /// Projects one row per installation in canonical common order. It reads only common installation facts, never
+    /// a typed singleton, so it is valid for any collection storage admits — including several of one kind.
     /// </summary>
-    private static EngineeringActionProjection[] ProjectEngineeringActions(ShipState ship)
+    internal static IReadOnlyList<InstalledSystemProjection> ProjectSystems(InstalledSystemCollection systems) =>
+        new ReadOnlyValueList<InstalledSystemProjection>(systems.InCommonOrder.Select(ProjectSystem));
+
+    private static InstalledSystemProjection ProjectSystem(InstalledSystem system)
     {
-        var actions = new List<EngineeringActionProjection>();
-        AddAllocationAction(actions, EngineeringAction.Balanced, ship, ship.Engineering.BalancedAllocation());
-        AddPriorityAction(actions, EngineeringAction.PrioritizeSensors, ship, ShipSystemKind.Sensors);
-        AddPriorityAction(actions, EngineeringAction.PrioritizePropulsion, ship, ShipSystemKind.ImpulsePropulsion);
-        AddPriorityAction(actions, EngineeringAction.PrioritizeShields, ship, ShipSystemKind.Shields);
-        AddPriorityAction(
-            actions,
-            EngineeringAction.PrioritizeDirectedEnergyWeapons,
-            ship,
-            ShipSystemKind.DirectedEnergyWeapons
+        bool consumer = system.Definition.Power is not null;
+        return new InstalledSystemProjection(
+            system.Id,
+            system.Kind,
+            system.Definition.Id,
+            system.Definition.ComponentLabel,
+            system.Condition,
+            system.Definition.Power?.NominalDemand,
+            consumer ? system.Allocation : null,
+            consumer ? ShipEngineeringState.Capability(system) : null,
+            system.Definition.Repair?.FullRepairDuration
         );
-        AddRepairAction(actions, EngineeringAction.BeginShieldRepair, ship, ShipSystemKind.Shields);
-        AddRepairAction(
-            actions,
-            EngineeringAction.BeginDirectedEnergyRepair,
-            ship,
-            ShipSystemKind.DirectedEnergyWeapons
-        );
-        AddRepairAction(actions, EngineeringAction.BeginSensorRepair, ship, ShipSystemKind.Sensors);
-        AddRepairAction(actions, EngineeringAction.BeginImpulseRepair, ship, ShipSystemKind.ImpulsePropulsion);
-        actions.Add(new EngineeringActionProjection(EngineeringAction.ReturnToCommand, true));
-        return [.. actions];
     }
 
-    private static void AddPriorityAction(
-        List<EngineeringActionProjection> actions,
-        EngineeringAction action,
-        ShipState ship,
-        ShipSystemKind kind
-    )
+    /// <summary>
+    /// Emits the action list in its contract order: Balance; Prioritize for each consumer in common order;
+    /// BeginRepair for each repairable installation by (authored repair-action order, installed id); ReturnToCommand.
+    /// </summary>
+    /// <remarks>
+    /// Iterating actual installations means an absent kind simply contributes no action, and a nonrepairable
+    /// installation (the generator) gets no repair action, so there is no "unsupported system" reason to report.
+    /// With production content this reproduces the pre-substrate button sequence exactly: the repair order comes
+    /// from content (shields, weapons, sensors, impulse), not from a presentation-side table.
+    /// </remarks>
+    internal static IReadOnlyList<EngineeringActionProjection> ProjectEngineeringActions(ShipState ship)
     {
-        if (Single(ship.Engineering, kind) is { Definition.Power: not null } consumer)
+        ShipEngineeringState engineering = ship.Engineering;
+        var actions = new List<EngineeringActionProjection>
         {
-            AddAllocationAction(actions, action, ship, ship.Engineering.PriorityAllocation(consumer.Id));
-        }
+            AllocationAction(EngineeringOperation.Balance, null, ship, engineering.BalancedAllocation()),
+        };
+        actions.AddRange(
+            engineering.Systems.Consumers.Select(consumer =>
+                AllocationAction(
+                    EngineeringOperation.Prioritize,
+                    consumer.Id,
+                    ship,
+                    engineering.PriorityAllocation(consumer.Id)
+                )
+            )
+        );
+        actions.AddRange(
+            engineering
+                .Systems.InCommonOrder.Where(system => system.Definition.Repair is not null)
+                .OrderBy(system => system.Definition.Repair!.ActionOrder)
+                .ThenBy(system => system.Id.Value)
+                .Select(system => RepairAction(engineering, system))
+        );
+        actions.Add(new EngineeringActionProjection(EngineeringOperation.ReturnToCommand, null, true));
+        return new ReadOnlyValueList<EngineeringActionProjection>(actions);
     }
 
-    private static void AddAllocationAction(
-        List<EngineeringActionProjection> actions,
-        EngineeringAction action,
+    private static EngineeringActionProjection AllocationAction(
+        EngineeringOperation operation,
+        InstalledSystemId? target,
         ShipState ship,
         PowerAllocation allocation
     )
     {
         bool available = ValidateAllocation(ship, allocation).Outcome == PowerAllocationOutcome.Accepted;
-        actions.Add(
-            new EngineeringActionProjection(
-                action,
-                available,
-                available ? null : EngineeringActionUnavailableReason.CurrentSpeedTooHigh
-            )
+        return new EngineeringActionProjection(
+            operation,
+            target,
+            available,
+            available ? null : EngineeringActionUnavailableReason.CurrentSpeedTooHigh
         );
     }
 
-    private static void AddRepairAction(
-        List<EngineeringActionProjection> actions,
-        EngineeringAction action,
-        ShipState ship,
-        ShipSystemKind kind
-    )
+    /// <summary>
+    /// Reason precedence matches the repair command: an occupied repair slot is reported before a nominal target.
+    /// </summary>
+    private static EngineeringActionProjection RepairAction(ShipEngineeringState engineering, InstalledSystem target)
     {
-        if (Single(ship.Engineering, kind) is not { } target)
-        {
-            return;
-        }
-
         EngineeringActionUnavailableReason? reason =
-            target.Definition.Repair is null ? EngineeringActionUnavailableReason.UnsupportedSystem
-            : ship.Engineering.ActiveRepair is not null ? EngineeringActionUnavailableReason.RepairAlreadyActive
+            engineering.ActiveRepair is not null ? EngineeringActionUnavailableReason.RepairAlreadyActive
             : target.Condition.Value == 1 ? EngineeringActionUnavailableReason.SystemAlreadyNominal
             : null;
-        actions.Add(new EngineeringActionProjection(action, reason is null, reason));
+        return new EngineeringActionProjection(EngineeringOperation.BeginRepair, target.Id, reason is null, reason);
     }
 
-    private static InstalledSystem? Single(ShipEngineeringState engineering, ShipSystemKind kind) =>
-        ShipSystemAdmission.SupportedSingle(engineering.Systems, kind);
-
-    private static double CapabilityOf(InstalledSystem? system) =>
-        system is null ? 0 : ShipEngineeringState.Capability(system);
+    private static CombatSystemStatusProjection? CombatStatus(ShipEngineeringState engineering, ShipSystemKind kind) =>
+        ShipSystemAdmission.SupportedSingle(engineering.Systems, kind) is { } system
+            ? new CombatSystemStatusProjection(
+                system.Id,
+                system.Condition,
+                system.Allocation ?? default,
+                ShipEngineeringState.Capability(system)
+            )
+            : null;
 
     /// <summary>
     /// Projects the player's combat view. Aim kinds are the catalog's public damage-target vocabulary — identical for
@@ -152,14 +149,15 @@ public sealed partial class GameSimulation
         CombatOwnFacts own = CombatFacts(state, ship);
         var aimKinds = new ReadOnlyValueList<ShipSystemKind>(catalog.SystemDefinitions.DamageTargetKinds);
 
-        // Without a weapon there is no readiness entry; the legacy non-null field reports the current time (ready,
-        // zero remaining) while WeaponRange and Cooldown stay null to mark the capability absent.
-        SimulationTime readyAt = own.WeaponId is null ? state.Time : own.ReadyAt;
+        // Without a weapon there is no readiness entry: readiness is null and nothing remains to cool down.
+        SimulationTime? readyAt = own.WeaponId is null ? null : own.ReadyAt;
         return new(
             own.Weapon?.Range,
             own.Weapon?.Cooldown,
             readyAt,
-            new SimulationDuration(Math.Max(0, readyAt.Milliseconds - state.Time.Milliseconds)),
+            new SimulationDuration(
+                readyAt is { } ready ? Math.Max(0, ready.Milliseconds - state.Time.Milliseconds) : 0
+            ),
             new ReadOnlyValueList<CombatTargetProjection>(
                 ship.SensorKnowledge.Contacts.Select(contact =>
                 {
@@ -174,7 +172,9 @@ public sealed partial class GameSimulation
                         aimKinds
                     );
                 })
-            )
+            ),
+            CombatStatus(ship.Engineering, ShipSystemKind.Shields),
+            CombatStatus(ship.Engineering, ShipSystemKind.DirectedEnergyWeapons)
         );
     }
 }

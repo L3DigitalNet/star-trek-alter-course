@@ -108,18 +108,26 @@ internal sealed class M6ABaselineProbe(ShipDefinitionCatalog catalog, bool exact
             engineering.AvailablePower.Value,
             engineering.Reserve.Value,
             new AllocationTuple(
-                engineering.SensorAllocation.Value,
-                engineering.ImpulseAllocation.Value,
-                engineering.ShieldAllocation.Value,
-                engineering.DirectedEnergyAllocation.Value
+                RowAllocation(engineering, ShipSystemKind.Sensors),
+                RowAllocation(engineering, ShipSystemKind.ImpulsePropulsion),
+                RowAllocation(engineering, ShipSystemKind.Shields),
+                RowAllocation(engineering, ShipSystemKind.DirectedEnergyWeapons)
             ),
             Round(engineering.EffectivePassiveSensorRange.Value),
             Round(engineering.EffectiveMaximumTacticalSpeed.Value),
             engineering.ActiveRepair is null ? null : Round(engineering.ActiveRepair.Progress),
             ship.Sensors.ActiveScanProgress is { } progress ? Round(progress) : null,
-            ship.Combat.NextDirectedEnergyReadyAt.Milliseconds
+            (
+                ship.Combat.NextDirectedEnergyReadyAt
+                ?? throw new InvalidOperationException("Every M6A baseline scenario player has a weapon.")
+            ).Milliseconds
         );
     }
+
+    // The baseline scenarios all use the five-installation production loadout, so each kind has exactly one
+    // projected row; Single() failing here would mean a scenario no longer matches the pinned records.
+    private static int RowAllocation(EngineeringProjection engineering, ShipSystemKind kind) =>
+        engineering.Systems.Single(row => row.Kind == kind).Allocation!.Value.Value;
 
     internal static OutcomeSequence<EventOutcome> Events(IEnumerable<PlayerAdvanceEvent> events) =>
         Sequence([

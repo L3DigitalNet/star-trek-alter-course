@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using AlterCourse.Core.Content;
 using AlterCourse.Core.Gameplay;
@@ -44,6 +45,11 @@ public partial class GameScreen : Control
     private readonly SimulationRateController _rateController = new();
     private readonly List<CommandInterfacePresenter.ActivityEvent> _recentActivity = [];
     private GameSimulation? _simulation;
+
+    // Incremented on every assignment or clearing of _simulation (bootstrap, failed bootstrap, quick-load), never by
+    // an ordinary refresh. Own-ship actions and deferred callbacks capture it so nothing presented or queued for one
+    // simulation can act on its replacement; see OwnShipActionBinding.
+    private long _simulationGeneration;
     private ShipDefinitionCatalog? _shipCatalog;
     private FactionDefinitionCatalog? _factionCatalog;
     private PlayerProjection? _projection;
@@ -139,6 +145,7 @@ public partial class GameScreen : Control
             _shipCatalog = shipCatalog;
             _factionCatalog = factionCatalog;
             _simulation = simulation;
+            _simulationGeneration++;
             SetMeta("quick_save_user_path", QuickSaveUserPath);
             SetSimulationRate(1);
             ShowStrategicView();
@@ -149,6 +156,7 @@ public partial class GameScreen : Control
             // Loading is fail-closed: retaining a partial aggregate would present commands whose
             // definition and validation contracts never completed.
             _simulation = null;
+            _simulationGeneration++;
             _shipCatalog = null;
             _factionCatalog = null;
             _projection = null;
@@ -363,6 +371,7 @@ public partial class GameScreen : Control
             // Core constructs and validates the candidate in isolation. Assignment stays after that
             // boundary so an unreadable or invalid save cannot damage the playable aggregate.
             _simulation = loaded.Simulation;
+            _simulationGeneration++;
             _quickSaveCreatedAtUtc = loaded.Metadata.CreatedAtUtc;
             _recentActivity.Clear();
             ClearSelectedDestination();
@@ -783,7 +792,8 @@ public partial class GameScreen : Control
             _selectedDestination,
             _selectedContact,
             _recentActivity,
-            mode
+            mode,
+            new OwnShipActionBinding(_projection.Ship.InstanceId, _simulationGeneration)
         );
         PresentWorkspace(presentation);
         PresentShell(presentation);
@@ -1074,16 +1084,23 @@ public partial class GameScreen : Control
         EngineeringWorkspace.EngineeringCommandRequestedEventArgs args
     )
     {
-        if (
-            _dataMode == CommandInterfaceDataMode.Live
-            && args.Action.EngineeringCommand is EngineeringAction engineeringAction
-        )
+        if (_dataMode == CommandInterfaceDataMode.Live && args.Action.EngineeringOperation is not null)
         {
-            SubmitEngineeringAction(engineeringAction);
+            SubmitEngineeringAction(args.Action);
         }
     }
 
-    private void SubmitEngineeringAction(EngineeringAction action)
+    /// <summary>
+    /// Submits one Engineering control only if it still means what it meant when presented: its binding must match
+    /// the current simulation generation and player ship, and its key must re-resolve to an available action in a
+    /// freshly read Core projection. Otherwise nothing is submitted and the player is told the control lapsed.
+    /// </summary>
+    /// <remarks>
+    /// Re-resolving by key alone is not enough: installed identities are ship-local, so after a load that changes
+    /// the player ship or reuses id 4 for another definition, "repair:4" would silently retarget. The switch below
+    /// is over the four generic operations only; it never branches on a system kind.
+    /// </remarks>
+    private void SubmitEngineeringAction(CommandInterfaceAction action)
     {
         if (_simulation is null || _dataMode != CommandInterfaceDataMode.Live)
         {
@@ -1092,47 +1109,46 @@ public partial class GameScreen : Control
 
         try
         {
-            switch (action)
+            PlayerProjection current = _simulation.GetPlayerProjection();
+            if (
+                action.EngineeringOperation is not { } operation
+                || !IsCurrentBinding(action.Binding, current)
+                || !current.Ship.Engineering.Actions.Any(candidate =>
+                    candidate.Operation == operation
+                    && candidate.Target == action.EngineeringTarget
+                    && candidate.IsAvailable
+                )
+            )
             {
-                case EngineeringAction.Balanced:
-                    ApplyPowerAllocationPreset(PowerAllocationPreset.Balanced, "Balanced allocation");
+                RefuseLapsedControl(action);
+                return;
+            }
+
+            InstalledSystemProjection? target = action.EngineeringTarget is { } id
+                ? current.Ship.Engineering.Systems.Single(row => row.Id == id)
+                : null;
+            switch (operation)
+            {
+                case EngineeringOperation.Balance:
+                    ApplyAllocation(_simulation.ApplyBalancedAllocation(), "Balanced allocation", action, current);
                     break;
-                case EngineeringAction.PrioritizeSensors:
-                    ApplyPowerAllocationPreset(PowerAllocationPreset.PrioritizeSensors, "Sensor-priority allocation");
-                    break;
-                case EngineeringAction.PrioritizePropulsion:
-                    ApplyPowerAllocationPreset(
-                        PowerAllocationPreset.PrioritizePropulsion,
-                        "Propulsion-priority allocation"
+                case EngineeringOperation.Prioritize when target is not null:
+                    ApplyAllocation(
+                        _simulation.ApplyPriorityAllocation(target.Id),
+                        EngineeringKindPresentation.PriorityMessageLabel(target),
+                        action,
+                        current
                     );
                     break;
-                case EngineeringAction.BeginSensorRepair:
-                    BeginSystemRepair(ShipSystemKind.Sensors);
+                case EngineeringOperation.BeginRepair when target is not null:
+                    BeginSystemRepair(target, action);
                     break;
-                case EngineeringAction.BeginImpulseRepair:
-                    BeginSystemRepair(ShipSystemKind.ImpulsePropulsion);
-                    break;
-                case EngineeringAction.PrioritizeShields:
-                    ApplyPowerAllocationPreset(PowerAllocationPreset.PrioritizeShields, "Shield-priority allocation");
-                    break;
-                case EngineeringAction.PrioritizeDirectedEnergyWeapons:
-                    ApplyPowerAllocationPreset(
-                        PowerAllocationPreset.PrioritizeDirectedEnergyWeapons,
-                        "Weapon-priority allocation"
-                    );
-                    break;
-                case EngineeringAction.BeginShieldRepair:
-                    BeginSystemRepair(ShipSystemKind.Shields);
-                    break;
-                case EngineeringAction.BeginDirectedEnergyRepair:
-                    BeginSystemRepair(ShipSystemKind.DirectedEnergyWeapons);
-                    break;
-                case EngineeringAction.ReturnToCommand:
+                case EngineeringOperation.ReturnToCommand:
                     ShowCommandWorkspace();
                     _messageLabel.Text = "Returned to Command Deck.";
                     break;
                 default:
-                    throw new ArgumentOutOfRangeException(nameof(action), action, "Unknown Engineering action.");
+                    throw new ArgumentOutOfRangeException(nameof(action), operation, "Unknown Engineering action.");
             }
         }
         catch (Exception exception)
@@ -1141,9 +1157,25 @@ public partial class GameScreen : Control
         }
     }
 
-    private void ApplyPowerAllocationPreset(PowerAllocationPreset preset, string label)
+    private bool IsCurrentBinding(OwnShipActionBinding? binding, PlayerProjection current) =>
+        binding is not null
+        && binding.SimulationGeneration == _simulationGeneration
+        && binding.Owner == current.Ship.InstanceId;
+
+    private void RefuseLapsedControl(CommandInterfaceAction action)
     {
-        PowerAllocationResult result = _simulation!.ApplyPowerAllocationPreset(preset);
+        RefreshProjection();
+        _messageLabel.Text = "Command unavailable: that control is no longer available.";
+        SetMeta("last_refused_action", action.Id);
+    }
+
+    private void ApplyAllocation(
+        PowerAllocationResult result,
+        string label,
+        CommandInterfaceAction action,
+        PlayerProjection before
+    )
+    {
         PresentResolvedEvents(result.ResolvedEvents, announce: false);
         RefreshProjection();
         _messageLabel.Text = result.Outcome switch
@@ -1151,32 +1183,41 @@ public partial class GameScreen : Control
             PowerAllocationOutcome.Accepted => $"{label} applied.",
             PowerAllocationOutcome.CurrentSpeedExceedsResultingMaximum =>
                 "Allocation unavailable: reduce current speed before lowering propulsion power.",
-            PowerAllocationOutcome.ConsumerDemandExceeded =>
-                "Allocation unavailable: a consumer demand would be exceeded.",
+            PowerAllocationOutcome.ConsumerDemandExceeded => EngineeringKindPresentation.DemandExceededMessage(
+                before.Ship.Engineering.Systems.SingleOrDefault(row => row.Id == result.Consumer)?.Kind
+            ),
             PowerAllocationOutcome.AvailablePowerExceeded =>
                 "Allocation unavailable: requested load exceeds available power.",
             _ => "Power allocation was not accepted.",
         };
-        SetMeta("last_engineering_command", $"allocation:{preset}:{result.Outcome}");
+        SetMeta("last_engineering_command", EngineeringCommandMeta(action, result.Outcome.ToString()));
     }
 
-    private void BeginSystemRepair(ShipSystemKind targetSystem)
+    private void BeginSystemRepair(InstalledSystemProjection target, CommandInterfaceAction action)
     {
         // Each projected repair action means a complete repair; Core still validates the nominal target against
         // current condition and the one-repair constraint at submission time.
-        SystemRepairResult result = _simulation!.BeginSystemRepair(targetSystem, new SystemCondition(1));
+        SystemRepairResult result = _simulation!.BeginSystemRepair(target.Id, new SystemCondition(1));
         RefreshProjection();
         _messageLabel.Text = result.Outcome switch
         {
-            SystemRepairOutcome.Accepted => $"{EngineeringSystemLabel(targetSystem)} repair started.",
+            SystemRepairOutcome.Accepted =>
+                $"{EngineeringKindPresentation.MessageNoun(target.Kind, target.ComponentLabel)} repair started.",
             SystemRepairOutcome.RepairAlreadyActive => "Repair unavailable: another system repair is active.",
             SystemRepairOutcome.NotRepairable => "Repair unavailable: that system is unsupported.",
             SystemRepairOutcome.TargetDoesNotImproveCondition =>
                 "Repair unavailable: the selected system is already nominal.",
             _ => "System repair was not accepted.",
         };
-        SetMeta("last_engineering_command", $"repair:{targetSystem.Value}:{result.Outcome}");
+        SetMeta("last_engineering_command", EngineeringCommandMeta(action, result.Outcome.ToString()));
     }
+
+    // Test hook "<operation>:<installed id or ->:<outcome>", e.g. "Prioritize:2:Accepted" or "Balance:-:Accepted".
+    private static string EngineeringCommandMeta(CommandInterfaceAction action, string outcome) =>
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"{action.EngineeringOperation}:{(action.EngineeringTarget is { } id ? id.Value.ToString(CultureInfo.InvariantCulture) : "-")}:{outcome}"
+        );
 
     private void SubmitIntent(CommandInterfaceIntent intent)
     {
@@ -1201,9 +1242,22 @@ public partial class GameScreen : Control
 
     private void SubmitAction(CommandInterfaceAction action, CommandInterfaceIntent intent)
     {
+        // Command Deck actions are bound like Engineering ones: contact identities are observer-local, so a control
+        // presented for a replaced simulation must not act on whatever now carries the same local contact id.
+        if (_simulation is null)
+        {
+            return;
+        }
+
+        if (!IsCurrentBinding(action.Binding, _simulation.GetPlayerProjection()))
+        {
+            RefuseLapsedControl(action);
+            return;
+        }
+
         if (intent == CommandInterfaceIntent.FireDirectedEnergy)
         {
-            if (action.FocusedContactId is { } contact && action.FocusedSystemId is { } system)
+            if (action.FocusedContactId is { } contact && action.AimKind is { } system)
                 RequestDirectedEnergy(contact, system);
             return;
         }
@@ -1323,7 +1377,7 @@ public partial class GameScreen : Control
         SetMeta("sensor_repairing", projection.Ship.Sensors.IsRepairing);
         SetEngineeringMetadata(projection.Ship.Engineering);
         SetMeta("combat_remaining_cooldown", projection.Ship.Combat.RemainingCooldown.Milliseconds);
-        SetMeta("combat_next_ready_at", projection.Ship.Combat.NextDirectedEnergyReadyAt.Milliseconds);
+        SetMeta("combat_next_ready_at", projection.Ship.Combat.NextDirectedEnergyReadyAt?.Milliseconds ?? -1);
         CombatTargetProjection? combatTarget = projection.Ship.Combat.Targets.SingleOrDefault(target =>
             target.ContactId == _selectedContact
         );
@@ -1342,20 +1396,71 @@ public partial class GameScreen : Control
         SetContactMetadata(projection);
     }
 
+    /// <summary>
+    /// Publishes test hooks. The kind-named hooks read the production loadout's single row of each kind and are
+    /// removed when the player has no such installation; they are observation only and feed no decision.
+    /// </summary>
     private void SetEngineeringMetadata(EngineeringProjection engineering)
     {
         SetMeta("engineering_nominal_power", engineering.NominalGeneration.Value);
         SetMeta("engineering_available_power", engineering.AvailablePower.Value);
-        SetMeta("engineering_sensor_allocation", engineering.SensorAllocation.Value);
-        SetMeta("engineering_impulse_allocation", engineering.ImpulseAllocation.Value);
-        SetMeta("engineering_shield_allocation", engineering.ShieldAllocation.Value);
-        SetMeta("engineering_weapon_allocation", engineering.DirectedEnergyAllocation.Value);
-        SetMeta("engineering_shield_condition", engineering.ShieldCondition.Value);
-        SetMeta("engineering_weapon_condition", engineering.DirectedEnergyCondition.Value);
+        SetRowAllocationMeta(engineering, ShipSystemKind.Sensors, "engineering_sensor_allocation");
+        SetRowAllocationMeta(engineering, ShipSystemKind.ImpulsePropulsion, "engineering_impulse_allocation");
+        SetRowAllocationMeta(engineering, ShipSystemKind.Shields, "engineering_shield_allocation");
+        SetRowAllocationMeta(engineering, ShipSystemKind.DirectedEnergyWeapons, "engineering_weapon_allocation");
+        SetRowMeta(engineering, ShipSystemKind.Shields, "engineering_shield_condition", row => row.Condition.Value);
+        SetRowMeta(
+            engineering,
+            ShipSystemKind.DirectedEnergyWeapons,
+            "engineering_weapon_condition",
+            row => row.Condition.Value
+        );
         SetMeta("engineering_reserve", engineering.Reserve.Value);
-        SetMeta("engineering_sensor_capability", engineering.SensorCapability);
-        SetMeta("engineering_impulse_capability", engineering.ImpulseCapability);
-        SetMeta("engineering_repair_target", engineering.ActiveRepair?.TargetSystem.Value ?? string.Empty);
+        SetRowMeta(engineering, ShipSystemKind.Sensors, "engineering_sensor_capability", row => row.Capability);
+        SetRowMeta(
+            engineering,
+            ShipSystemKind.ImpulsePropulsion,
+            "engineering_impulse_capability",
+            row => row.Capability
+        );
+        SetMeta("engineering_repair_target", engineering.ActiveRepair?.TargetKind.Value ?? string.Empty);
+        SetMeta(
+            "engineering_repair_target_id",
+            engineering.ActiveRepair?.Target.Value.ToString(CultureInfo.InvariantCulture) ?? string.Empty
+        );
+        SetMeta(
+            "engineering_system_ids",
+            string.Join(',', engineering.Systems.Select(row => row.Id.Value.ToString(CultureInfo.InvariantCulture)))
+        );
+    }
+
+    private void SetRowMeta(
+        EngineeringProjection engineering,
+        ShipSystemKind kind,
+        string name,
+        Func<InstalledSystemProjection, double?> value
+    )
+    {
+        if (engineering.Systems.SingleOrDefault(row => row.Kind == kind) is { } row && value(row) is { } present)
+        {
+            SetMeta(name, present);
+        }
+        else
+        {
+            RemoveMeta(name);
+        }
+    }
+
+    private void SetRowAllocationMeta(EngineeringProjection engineering, ShipSystemKind kind, string name)
+    {
+        if (engineering.Systems.SingleOrDefault(row => row.Kind == kind)?.Allocation is { } allocation)
+        {
+            SetMeta(name, allocation.Value);
+        }
+        else
+        {
+            RemoveMeta(name);
+        }
     }
 
     private void SetContactMetadata(PlayerProjection projection)
@@ -1547,16 +1652,27 @@ public partial class GameScreen : Control
     // revalidated at flush time and a stale request is dropped; any later request queued in the same
     // frame (FocusCurrentWorkspace after a view switch) still applies, matching
     // EngineeringWorkspace.RestorePendingFocus.
-    private static void DeferFocus(Control target) =>
+    //
+    // The request also captures the simulation generation: a focus request queued for one simulation is dropped if
+    // a quick-load replaced it before the flush, since the load queues its own focus target.
+    private void DeferFocus(Control target)
+    {
+        long generation = _simulationGeneration;
         Callable
             .From(() =>
             {
-                if (GodotObject.IsInstanceValid(target) && target.IsInsideTree() && target.IsVisibleInTree())
+                if (
+                    generation == _simulationGeneration
+                    && GodotObject.IsInstanceValid(target)
+                    && target.IsInsideTree()
+                    && target.IsVisibleInTree()
+                )
                 {
                     target.GrabFocus();
                 }
             })
             .CallDeferred();
+    }
 
     private void FocusCurrentWorkspace()
     {
@@ -1673,7 +1789,7 @@ public partial class GameScreen : Control
         {
             PlayerAdvanceEventKind.TravelArrived => "arrival complete",
             PlayerAdvanceEventKind.SystemRepairCompleted =>
-                $"{EngineeringSystemLabel(@event.SystemKind).ToLowerInvariant()} repair complete",
+                $"{EngineeringKindPresentation.MessageNoun(@event.SystemKind).ToLowerInvariant()} repair complete",
             PlayerAdvanceEventKind.SensorContactDetected => $"{DescribeContact(@event)} detected",
             PlayerAdvanceEventKind.SensorContactStale => $"{DescribeContact(@event)} stale",
             PlayerAdvanceEventKind.SensorContactReacquired => $"{DescribeContact(@event)} reacquired",
@@ -1702,17 +1818,6 @@ public partial class GameScreen : Control
             ? contact.KnownVesselDisplayName ?? contact.KnownDesignDisplayName ?? $"Contact {contactId.Value}"
             : $"Contact {contactId.Value}";
     }
-
-    private static string EngineeringSystemLabel(ShipSystemKind? system) =>
-        system switch
-        {
-            ShipSystemKind id when id == ShipSystemKind.Sensors => "Sensor",
-            ShipSystemKind id when id == ShipSystemKind.ImpulsePropulsion => "Impulse propulsion",
-            ShipSystemKind id when id == ShipSystemKind.PowerGeneration => "Power generation",
-            ShipSystemKind id when id == ShipSystemKind.Shields => "Shield",
-            ShipSystemKind id when id == ShipSystemKind.DirectedEnergyWeapons => "Directed-energy weapon",
-            _ => "System",
-        };
 
     private void ReportPersistenceFailure(string operation, string status, string category, Exception exception)
     {
