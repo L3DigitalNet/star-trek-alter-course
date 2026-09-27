@@ -983,6 +983,168 @@ func test_stale_command_deck_control_is_refused_after_quick_load() -> void:
 	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_greater(time_before)
 
 
+func test_live_quick_load_round_trips_v10_installations_into_engineering() -> void:
+	# Design §7.6 live-game regression: a V10 quick-save restores the saved installations, and the Engineering
+	# projection shown afterwards is the loaded one, not the pre-load live state.
+	var screen := _create_screen()
+	screen.call("ShowEngineeringWorkspace")
+	screen.call("QuickSave")
+	var saved := FileAccess.get_file_as_string(TEST_QUICK_SAVE_PATH)
+	assert_int(int((JSON.parse_string(saved) as Dictionary).get("schemaVersion", -1))).is_equal(10)
+	(_find_engineering_action_button(screen, "prioritize:2") as Button).emit_signal("pressed")
+	assert_int(screen.get_meta("engineering_sensor_allocation", -1)).is_equal(70)
+
+	screen.call("QuickLoad")
+	assert_str(screen.get_meta("quick_save_status", "")).is_equal("loaded")
+	assert_str(screen.get_meta("engineering_system_ids", "")).is_equal("1,2,3,4,5")
+	assert_int(screen.get_meta("engineering_sensor_allocation", -1)).is_equal(44)
+	assert_int(screen.get_meta("engineering_impulse_allocation", -1)).is_equal(31)
+	assert_str(screen.get_meta("engineering_repair_target_id", "")).is_equal("2")
+	assert_array(_section_rows(_engineering_workspace(screen).get_node("%ConnectedLoadsContent"))).contains(
+		["SENSORS=44 units"]
+	)
+	screen.call("QuickSave")
+	var resaved: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(TEST_QUICK_SAVE_PATH))
+	assert_dict(resaved.get("simulation", {})).is_equal((JSON.parse_string(saved) as Dictionary).get("simulation", {}))
+
+
+func test_quick_load_without_player_shields_presents_only_actual_installations() -> void:
+	# Codex disposition 5: remove only the player's installation 4. The pathfinder.shields definition row stays
+	# because the NPC ships still reference it, so the load must succeed before absence is asserted.
+	var screen := _create_screen()
+	screen.call("QuickSave")
+	var saved := FileAccess.get_file_as_string(TEST_QUICK_SAVE_PATH)
+	var edited := _regex_replace_first(saved, ',\\s*\\{\\s*"installedSystemId"\\s*:\\s*4\\s*,[^}]*\\}', "")
+	assert_int(edited.count("pathfinder.shields")).is_equal(saved.count("pathfinder.shields") - 1)
+	_write_text(TEST_QUICK_SAVE_PATH, edited)
+
+	screen.call("QuickLoad")
+	assert_str(screen.get_meta("quick_save_status", "")).is_equal("loaded")
+	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(0)
+	assert_str(screen.get_meta("engineering_system_ids", "")).is_equal("1,2,3,5")
+	assert_bool(screen.has_meta("engineering_shield_condition")).is_false()
+	var deck_shields := _command_deck(screen).get_node("%SystemRows").get_node("System_shields")
+	assert_str((deck_shields.get_child(1) as Label).text).is_equal("UNAVAILABLE")
+
+	screen.call("ShowEngineeringWorkspace")
+	var engineering := _engineering_workspace(screen)
+	assert_array(_button_texts(engineering.get_node("%EngineeringHierarchy"))).is_equal([
+		"Hierarchy_overview=OVERVIEW",
+		"Hierarchy_system_1=POWER",
+		"Hierarchy_system_2=SENSORS",
+		"Hierarchy_system_3=PROPULSION",
+		"Hierarchy_system_5=DIRECTED-ENERGY WEAPONS",
+		"Hierarchy_repairs=REPAIRS  [1 !]",
+	])
+	assert_object(_find_engineering_action_button(screen, "prioritize:4")).is_null()
+	assert_object(_find_engineering_action_button(screen, "repair:4")).is_null()
+	assert_array(_section_rows(engineering.get_node("%ConnectedLoadsContent"))).is_equal([
+		"CONNECTED LOADS",
+		"SENSORS=44 units",
+		"IMPULSE PROPULSION=31 units",
+		"DIRECTED-ENERGY WEAPONS=0 units",
+	])
+
+	screen.call("ShowCommandWorkspace")
+	screen.call("ShowTacticalView")
+	var combat_text := _collect_control_text(_command_deck(screen))
+	assert_str(combat_text).contains("SHIELD CONDITION")
+	assert_str(combat_text).contains("WEAPON CONDITION")
+	assert_int(combat_text.count("UNAVAILABLE")).is_greater(0)
+
+
+func test_quick_load_rejects_save_missing_a_still_referenced_definition() -> void:
+	# The malformed counterpart of the absence fixture: deleting the definition row while ships still reference it
+	# must refuse the load and leave the live game and its presentation untouched.
+	var screen := _create_screen()
+	screen.call("ShowEngineeringWorkspace")
+	screen.call("QuickSave")
+	var saved := FileAccess.get_file_as_string(TEST_QUICK_SAVE_PATH)
+	var row := RegEx.new()
+	assert_int(
+		row.compile(',?\\s*\\{\\s*"definitionId"\\s*:\\s*"pathfinder\\.shields"\\s*,\\s*"semantics"\\s*:\\s*"[^"]*"\\s*\\}')
+	).is_equal(OK)
+	var removed := row.search(saved)
+	assert_object(removed).is_not_null()
+	# The row is last in the sorted definition list, so removing its leading comma keeps the JSON well formed.
+	assert_str(removed.get_string().strip_edges().left(1)).is_equal(",")
+	_write_text(TEST_QUICK_SAVE_PATH, row.sub(saved, "", false))
+	(_find_engineering_action_button(screen, "prioritize:2") as Button).emit_signal("pressed")
+	var identity: int = screen.get_meta("simulation_identity", 0)
+
+	screen.call("QuickLoad")
+	assert_str(screen.get_meta("quick_save_status", "")).is_equal("load_failed")
+	assert_int(screen.get_meta("simulation_identity", 0)).is_equal(identity)
+	assert_int(screen.get_meta("engineering_sensor_allocation", -1)).is_equal(70)
+	assert_str(screen.get_meta("engineering_system_ids", "")).is_equal("1,2,3,4,5")
+	assert_object(_find_engineering_action_button(screen, "prioritize:4")).is_not_null()
+
+
+func test_stale_engineering_control_is_refused_after_load_changes_the_owner() -> void:
+	# Owner half of Codex disposition 1: the loaded player ship has a different instance id, yet exposes the
+	# identical "prioritize:4" key. The captured control must not act; the freshly presented one does.
+	var screen := _create_screen()
+	screen.call("ShowEngineeringWorkspace")
+	screen.call("QuickSave")
+	_write_text(TEST_QUICK_SAVE_PATH, _shift_ship_ids(FileAccess.get_file_as_string(TEST_QUICK_SAVE_PATH), 10))
+	var stale := _find_engineering_action_button(screen, "prioritize:4") as Button
+	assert_int(screen.get_meta("player_ship_id", -1)).is_equal(1)
+
+	screen.call("QuickLoad")
+	assert_str(screen.get_meta("quick_save_status", "")).is_equal("loaded")
+	assert_int(screen.get_meta("player_ship_id", -1)).is_equal(11)
+	var current := _find_engineering_action_button(screen, "prioritize:4") as Button
+	assert_bool(current == stale).is_false()
+	stale.emit_signal("pressed")
+	assert_str(screen.get_meta("last_refused_action", "")).is_equal("prioritize:4")
+	assert_int(screen.get_meta("engineering_shield_allocation", -1)).is_equal(0)
+	assert_str(screen.get_meta("last_engineering_command", "")).is_empty()
+	current.emit_signal("pressed")
+	assert_str(screen.get_meta("last_engineering_command", "")).is_equal("Prioritize:4:Accepted")
+	assert_int(screen.get_meta("engineering_shield_allocation", -1)).is_equal(40)
+
+
+func test_stale_engineering_control_is_refused_after_load_changes_installation_meaning() -> void:
+	# Meaning half of Codex disposition 1: in the loaded save installation 4 is the weapon and 5 the shield, so
+	# "prioritize:4" now names a different system. The captured shield control must not prioritize the weapon.
+	var screen := _create_screen()
+	screen.call("ShowEngineeringWorkspace")
+	screen.call("QuickSave")
+	var saved := FileAccess.get_file_as_string(TEST_QUICK_SAVE_PATH)
+	var edited := _regex_replace_first(
+		saved,
+		'"installedSystemId"(\\s*):(\\s*)4(\\s*),(\\s*)"definitionId"(\\s*):(\\s*)"pathfinder\\.shields"',
+		'"installedSystemId"$1:${2}4$3,$4"definitionId"$5:$6"pathfinder.directed-energy-weapons"'
+	)
+	edited = _regex_replace_first(
+		edited,
+		'"installedSystemId"(\\s*):(\\s*)5(\\s*),(\\s*)"definitionId"(\\s*):(\\s*)"pathfinder\\.directed-energy-weapons"',
+		'"installedSystemId"$1:${2}5$3,$4"definitionId"$5:$6"pathfinder.shields"'
+	)
+	# Weapon readiness belongs to the installed weapon, which is now installation 4.
+	edited = _regex_replace_first(edited, '"weaponInstalledSystemId"(\\s*):(\\s*)5', '"weaponInstalledSystemId"$1:${2}4')
+	_write_text(TEST_QUICK_SAVE_PATH, edited)
+	var stale := _find_engineering_action_button(screen, "prioritize:4") as Button
+	assert_str(stale.text).is_equal("Prioritize shields")
+
+	screen.call("QuickLoad")
+	assert_str(screen.get_meta("quick_save_status", "")).is_equal("loaded")
+	var current := _find_engineering_action_button(screen, "prioritize:4") as Button
+	assert_bool(current == stale).is_false()
+	assert_str(current.text).is_equal("Prioritize weapons")
+	# Prioritize actions follow Core's common order: shields (now 5) before weapons (now 4).
+	var actions := _button_texts(_engineering_workspace(screen).get_node("%EngineeringActionsContent"))
+	assert_int(actions.find("Action_prioritize_5=Prioritize shields")).is_less(
+		actions.find("Action_prioritize_4=Prioritize weapons")
+	)
+	stale.emit_signal("pressed")
+	assert_str(screen.get_meta("last_refused_action", "")).is_equal("prioritize:4")
+	assert_int(screen.get_meta("engineering_weapon_allocation", -1)).is_equal(0)
+	current.emit_signal("pressed")
+	assert_str((screen.get_node("%Message") as Label).text).is_equal("Weapon-priority allocation applied.")
+	assert_int(screen.get_meta("engineering_weapon_allocation", -1)).is_equal(30)
+
+
 func test_sensor_priority_refreshes_command_contacts_without_revealing_hidden_identity() -> void:
 	var screen := _create_screen()
 	assert_int(screen.get_meta("sensor_contact_count", -1)).is_equal(0)
@@ -2255,6 +2417,33 @@ func _find_action_button(screen: Node, action_id: String) -> Button:
 		if child is Button and child.name == "Action_" + action_id:
 			return child
 	return null
+
+
+func _regex_replace_first(source: String, pattern: String, replacement: String) -> String:
+	var regex := RegEx.new()
+	assert_int(regex.compile(pattern)).is_equal(OK)
+	assert_object(regex.search(source)).is_not_null()
+	return regex.sub(source, replacement, false)
+
+
+func _shift_ship_ids(source: String, offset: int) -> String:
+	# Renumbers every ship identity and ship reference in raw save text, keeping ship order and integer tokens.
+	# Every ship-reference member of the save DTOs is listed; null references (faction targets) do not match.
+	var regex := RegEx.new()
+	assert_int(
+		regex.compile('"(instanceId|playerShipId|targetShipId|observerShipId|responderShipId|assignedShipId|shipAllocatorNextId)"(\\s*):(\\s*)(\\d+)')
+	).is_equal(OK)
+	var shifted := ""
+	var cursor := 0
+	var matches := regex.search_all(source)
+	assert_int(matches.size()).is_greater(0)
+	for found in matches:
+		shifted += source.substr(cursor, found.get_start() - cursor)
+		shifted += '"%s"%s:%s%d' % [
+			found.get_string(1), found.get_string(2), found.get_string(3), int(found.get_string(4)) + offset
+		]
+		cursor = found.get_end()
+	return shifted + source.substr(cursor)
 
 
 func _button_texts(container: Node) -> Array[String]:

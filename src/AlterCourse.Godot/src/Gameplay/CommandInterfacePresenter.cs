@@ -112,7 +112,11 @@ public static class CommandInterfacePresenter
             new CommandInterfaceSystemRow(
                 "sensors",
                 "SENSORS",
-                Available("INTEGRITY", FormatPercent(projection.Ship.Sensors.Integrity), sensorTone)
+                // Absent sensors are stated, not shown as a 0% damaged reading.
+                projection.Ship.Sensors.SensorInstallation
+                    is null
+                    ? Available("INTEGRITY", "UNAVAILABLE", CommandInterfaceTone.Muted)
+                    : Available("INTEGRITY", FormatPercent(projection.Ship.Sensors.Integrity), sensorTone)
             ),
             new("weapons", "WEAPONS", CombatCondition(projection.Ship.Combat.Weapon)),
             SystemUnavailable("computer", "COMPUTER"),

@@ -1384,6 +1384,7 @@ public partial class GameScreen : Control
     {
         SetMeta("simulation_time_milliseconds", projection.SimulationTime.Milliseconds);
         SetMeta("ship_name", projection.Ship.DisplayName);
+        SetMeta("player_ship_id", projection.Ship.InstanceId.Value);
         SetMeta("sensor_integrity", projection.Ship.Sensors.Integrity);
         SetMeta("sensor_repair_progress", projection.Ship.Sensors.RepairProgress);
         SetMeta("sensor_repairing", projection.Ship.Sensors.IsRepairing);

@@ -1932,7 +1932,8 @@ public sealed partial class GameSimulation
                     ))
                 ),
                 activeScan?.TargetContactId,
-                ActiveScanProgressAt(state.Time, activeScan)
+                ActiveScanProgressAt(state.Time, activeScan),
+                sensors?.Id
             ),
             ProjectEngineering(state, playerShip),
             ProjectCombat(state, playerShip, catalog)

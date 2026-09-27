@@ -1,9 +1,11 @@
 using AlterCourse.Core.Content;
 using AlterCourse.Core.Gameplay;
+using AlterCourse.Core.Identity;
 using AlterCourse.Core.Player;
 using AlterCourse.Core.Quantities;
 using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
+using AlterCourse.Core.Strategic;
 using AlterCourse.Core.Tests.Gameplay;
 using AlterCourse.Core.Tests.Support;
 
@@ -87,6 +89,7 @@ public sealed class EngineeringProjectionTests
         PlayerShipProjection ship = game.GetPlayerProjection().Ship;
 
         Assert.Equal([1L, 2L], ship.Engineering.Systems.Select(row => row.Id.Value));
+        Assert.Equal(TestShipContent.Sensors, ship.Sensors.SensorInstallation);
         Assert.Equal(
             [
                 (EngineeringOperation.Balance, (long?)null),
@@ -100,6 +103,42 @@ public sealed class EngineeringProjectionTests
         Assert.Null(ship.Combat.Weapon);
         Assert.Null(ship.Combat.NextDirectedEnergyReadyAt);
         Assert.Equal(new SimulationDuration(0), ship.Combat.RemainingCooldown);
+    }
+
+    /// <summary>
+    /// A ship with an explicit empty loadout projects no rows, only the ship-level actions, and null sensor and
+    /// combat installations, so no panel can mistake absence for a zero-condition system.
+    /// </summary>
+    [Fact]
+    public void EmptyLoadoutProjectsNoRowsAndNoSpecializedInstallations()
+    {
+        var location = new LocationId("empty");
+        var start = new ShipStart(
+            new ShipInstanceId(1),
+            new ShipDefinitionId("pathfinder"),
+            "Empty vessel",
+            default,
+            default,
+            new AtLocationStart(location),
+            ShipSystemsStart.Explicit(1, [])
+        );
+        GameSimulation game = new GameBootstrap(
+            default,
+            new StrategicMap([new StrategicLocation(location, "Empty", default)], []),
+            start.InstanceId,
+            [start]
+        ).CreateSimulation(Catalog);
+        PlayerShipProjection ship = game.GetPlayerProjection().Ship;
+
+        Assert.Empty(ship.Engineering.Systems);
+        Assert.Equal(
+            [EngineeringOperation.Balance, EngineeringOperation.ReturnToCommand],
+            ship.Engineering.Actions.Select(action => action.Operation)
+        );
+        Assert.Null(ship.Sensors.SensorInstallation);
+        Assert.Equal(0, ship.Sensors.Integrity);
+        Assert.Null(ship.Combat.Shields);
+        Assert.Null(ship.Combat.Weapon);
     }
 
     /// <summary>Installed combat systems are projected by identity from the player's own installations.</summary>
