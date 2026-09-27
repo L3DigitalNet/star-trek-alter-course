@@ -1,3 +1,4 @@
+using AlterCourse.Core.Gameplay;
 using AlterCourse.Core.Identity;
 using AlterCourse.Core.Quantities;
 using AlterCourse.Core.Ships;
@@ -241,13 +242,34 @@ public sealed class CombatFoundationTests
             new DirectedEnergyWeaponDefinition(new DistanceKilometers(range), damage, new SimulationDuration(cooldown))
         );
 
-    /// <summary>Confirms shield satisfaction handles zero and capped power.</summary>
+    /// <summary>
+    /// Confirms shield satisfaction spans zero to full demand and that an over-demand allocation is structurally
+    /// rejected rather than capped.
+    /// </summary>
+    /// <remarks>
+    /// Before the substrate an allocation of 80 against demand 40 reached the satisfaction formula and was capped at
+    /// 1. Exact allocation validation now refuses any allocation above an installed consumer's demand, both as the
+    /// engineering invariant and as the player command outcome, so that cap is unreachable and the over-demand case
+    /// pins the refusal instead.
+    /// </remarks>
     [Fact]
-    public void ShieldPowerSatisfactionHasSafeEndpoints()
+    public void ShieldSatisfactionSpansZeroToFullDemandAndOverDemandIsRejected()
     {
         Assert.Equal(0, Satisfaction(State(1, Allocation(0, 0, 0, 0))));
         Assert.Equal(0.5, Satisfaction(State(1, Allocation(0, 0, 20, 0))));
         Assert.Equal(1, Satisfaction(State(1, Allocation(0, 0, 40, 0))));
+
+        InvalidOperationException invariant = Assert.Throws<InvalidOperationException>(() =>
+            State(1, Allocation(0, 0, 80, 0)).Validate()
+        );
+        Assert.Contains("exceeds authored demand of installed system 4", invariant.Message, StringComparison.Ordinal);
+
+        GameSimulation game = FirstGameSetup.Create(TestShipContent.Production());
+        SimulationState before = game.CaptureState();
+        PowerAllocationResult command = game.SetPowerAllocation(Allocation(0, 0, 41, 0));
+        Assert.Equal(PowerAllocationOutcome.ConsumerDemandExceeded, command.Outcome);
+        Assert.Equal(TestShipContent.Shields, command.Consumer);
+        Assert.Same(before, game.CaptureState());
     }
 
     private static double Satisfaction(ShipEngineeringState state) =>

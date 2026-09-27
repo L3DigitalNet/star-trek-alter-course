@@ -159,7 +159,16 @@ public sealed class GamePersistenceV10CompatibilityTests
         Assert.Equal(5, player["combat"]!["directedEnergyReadiness"]![0]!["weaponInstalledSystemId"]!.GetValue<long>());
     }
 
-    /// <summary>A V9 ship whose design has no frozen mapping fails closed with the actionable diagnostic.</summary>
+    /// <summary>
+    /// A V9 ship whose design has no frozen history fails closed as incompatible content with the actionable
+    /// historical-tuning diagnostic.
+    /// </summary>
+    /// <remarks>
+    /// V9 input passes the V1–V9 validators before the V9→V10 map runs, and those validators already need the frozen
+    /// <c>HistoricalShipContentV5</c> tuning for every ship, so the reachable refusal is that table's message. The
+    /// map's own ship-naming message cannot be reached by a document that names an unknown design; this test pins
+    /// which boundary actually refuses so a reordering of the chain is noticed.
+    /// </remarks>
     [Fact]
     public void V9ShipWithoutFrozenMappingIsIncompatibleContent()
     {
@@ -175,8 +184,12 @@ public sealed class GamePersistenceV10CompatibilityTests
             fixture.Catalog
         );
 
-        Assert.Contains("frigate", failure.Message, StringComparison.Ordinal);
-        Assert.Contains("start a new game", failure.Message, StringComparison.Ordinal);
+        Assert.Equal(
+            "Save 'incompatible.json' uses historical ship definition 'frigate', which has no frozen V1–V9 tuning; "
+                + "load it with a build that supports it or start a new game.",
+            failure.Message
+        );
+        Assert.DoesNotContain("installed-system mapping", failure.Message, StringComparison.Ordinal);
     }
 
     /// <summary>The frozen V9 map is literal: installed ids 1–5, pathfinder definitions, and pinned descriptors.</summary>

@@ -126,35 +126,49 @@ public sealed class GamePersistenceV10SubstrateTests
         Assert.Equal(saved, GamePersistence.Serialize(loaded.Simulation, loaded.Metadata));
     }
 
-    /// <summary>Malformed V10 documents fail as invalid data and leave the live simulation byte-for-byte unchanged.</summary>
+    /// <summary>
+    /// Malformed V10 documents fail as invalid data for the reason each case names, and leave the live simulation
+    /// byte-for-byte unchanged.
+    /// </summary>
+    /// <remarks>
+    /// The diagnostic fragment pins which rule refused the document, so a case cannot pass because an unrelated,
+    /// earlier check happens to reject its mutated JSON. Duplicate and unsorted installations share one canonical
+    /// ordering rule and therefore one message; repair-wrong-work is refused by the runtime scheduler correlation.
+    /// </remarks>
     [Theory]
-    [InlineData("unknown-member")]
-    [InlineData("missing-allocation-member")]
-    [InlineData("duplicate-installation")]
-    [InlineData("unsorted-installations")]
-    [InlineData("zero-installed-id")]
-    [InlineData("nonconsumer-allocation")]
-    [InlineData("consumer-without-allocation")]
-    [InlineData("over-demand")]
-    [InlineData("allocator-behind")]
-    [InlineData("allocator-overflow")]
-    [InlineData("repair-missing-target")]
-    [InlineData("repair-wrong-kind")]
-    [InlineData("repair-wrong-work")]
-    [InlineData("scan-wrong-kind")]
-    [InlineData("scan-missing-sensor")]
-    [InlineData("readiness-missing")]
-    [InlineData("readiness-wrong-kind")]
-    [InlineData("readiness-misaligned")]
-    [InlineData("definition-not-in-table")]
-    [InlineData("unreferenced-definition")]
-    [InlineData("unsorted-definitions")]
-    [InlineData("malformed-semantics")]
-    [InlineData("malformed-aim-vocabulary")]
-    [InlineData("duplicate-aim-kind")]
-    [InlineData("bad-enum")]
-    [InlineData("unsorted-ships")]
-    public void MalformedV10FailsAsInvalidDataWithoutTouchingLiveGame(string mutation)
+    [InlineData("unknown-member", "'kind' could not be mapped")]
+    [InlineData("missing-allocation-member", "missing required properties, including the following: allocation")]
+    [InlineData("duplicate-installation", "Installed systems must be unique and in ascending identity order")]
+    [InlineData("unsorted-installations", "Installed systems must be unique and in ascending identity order")]
+    [InlineData("zero-installed-id", "Installed system identity must be from 1 through")]
+    [InlineData(
+        "nonconsumer-allocation",
+        "installation 1 must carry an allocation exactly when its definition consumes power"
+    )]
+    [InlineData(
+        "consumer-without-allocation",
+        "installation 2 must carry an allocation exactly when its definition consumes power"
+    )]
+    [InlineData("over-demand", "exceeds authored demand of installed system 2")]
+    [InlineData("allocator-behind", "allocator must follow every installed identity")]
+    [InlineData("allocator-overflow", "nextInstalledSystemId': The JSON value could not be converted to System.Int64")]
+    [InlineData("repair-missing-target", "Active repair must target an installation on the same ship")]
+    [InlineData("repair-wrong-kind", "Active repair must target a repairable installation")]
+    [InlineData("repair-wrong-work", "lacks exactly one correlated scheduled work item")]
+    [InlineData("scan-wrong-kind", "source installation must be a sensor")]
+    [InlineData("scan-missing-sensor", "must name a sensor installed on the same ship")]
+    [InlineData("readiness-missing", "must list exactly the installed weapons")]
+    [InlineData("readiness-wrong-kind", "keyed by directed-energy weapon installations")]
+    [InlineData("readiness-misaligned", "Weapon readiness must be fixed-step aligned")]
+    [InlineData("definition-not-in-table", "which the V10 system-definition table does not list")]
+    [InlineData("unreferenced-definition", "lists an unreferenced definition")]
+    [InlineData("unsorted-definitions", "System definition references must be unique and in ascending ordinal order")]
+    [InlineData("malformed-semantics", "has a malformed semantics descriptor")]
+    [InlineData("malformed-aim-vocabulary", "names unknown kind 'warp-core'")]
+    [InlineData("duplicate-aim-kind", "lists 'sensors' twice")]
+    [InlineData("bad-enum", "Scheduled work kind is unknown")]
+    [InlineData("unsorted-ships", "V10 ships must be unique and in ascending identity order")]
+    public void MalformedV10FailsAsInvalidDataWithoutTouchingLiveGame(string mutation, string diagnostic)
     {
         GameSimulation live = CreateActive();
         byte[] before = GamePersistence.Serialize(live, Metadata);
@@ -168,6 +182,7 @@ public sealed class GamePersistenceV10SubstrateTests
         );
 
         Assert.Equal(GamePersistenceFailure.InvalidData, failure.Failure);
+        Assert.Contains(diagnostic, failure.Message, StringComparison.Ordinal);
         Assert.Equal(before, GamePersistence.Serialize(live, Metadata));
     }
 
