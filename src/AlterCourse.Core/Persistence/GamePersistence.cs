@@ -12,6 +12,7 @@ using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
 using AlterCourse.Core.Tactical;
+using Microsoft.Extensions.Logging;
 using FiniteDoubleJsonConverter = AlterCourse.Core.Persistence.SaveModelsV1.FiniteDoubleJsonConverter;
 using HoldUntilOrderSnapshotV3 = AlterCourse.Core.Persistence.SaveModelsV3.HoldUntilOrderSnapshotV3;
 using PatrolRouteOrderSnapshotV3 = AlterCourse.Core.Persistence.SaveModelsV3.PatrolRouteOrderSnapshotV3;
@@ -168,15 +169,17 @@ public static partial class GamePersistence
     public static LoadedGameSave Deserialize(
         ReadOnlySpan<byte> utf8Json,
         ShipDefinitionCatalog catalog,
-        string sourceIdentity
-    ) => Deserialize(utf8Json, catalog, FactionDefinitionCatalog.Empty, sourceIdentity);
+        string sourceIdentity,
+        ILogger<GameSimulation>? logger = null
+    ) => Deserialize(utf8Json, catalog, FactionDefinitionCatalog.Empty, sourceIdentity, logger);
 
     /// <summary>Loads bounded untrusted UTF-8 JSON with both immutable content catalogs.</summary>
     public static LoadedGameSave Deserialize(
         ReadOnlySpan<byte> utf8Json,
         ShipDefinitionCatalog catalog,
         FactionDefinitionCatalog factionCatalog,
-        string sourceIdentity
+        string sourceIdentity,
+        ILogger<GameSimulation>? logger = null
     )
     {
         ArgumentNullException.ThrowIfNull(catalog);
@@ -201,16 +204,16 @@ public static partial class GamePersistence
 
             return version switch
             {
-                V1SchemaVersion => LoadV1(documentBytes, catalog, factionCatalog, sourceIdentity),
-                V2SchemaVersion => LoadV2(documentBytes, catalog, factionCatalog, sourceIdentity),
-                V3SchemaVersion => LoadV3(documentBytes, catalog, factionCatalog, sourceIdentity),
-                V4SchemaVersion => LoadV4(documentBytes, catalog, factionCatalog, sourceIdentity),
-                V5SchemaVersion => LoadV5(documentBytes, catalog, factionCatalog, sourceIdentity),
-                V6SchemaVersion => LoadV6(documentBytes, catalog, factionCatalog, sourceIdentity),
-                V7SchemaVersion => LoadV7(documentBytes, catalog, factionCatalog, sourceIdentity),
-                V8SchemaVersion => LoadV8(documentBytes, catalog, factionCatalog, sourceIdentity),
-                V9SchemaVersion => LoadV9(documentBytes, catalog, factionCatalog, sourceIdentity),
-                CurrentSchemaVersion => LoadV10(documentBytes, catalog, factionCatalog, sourceIdentity),
+                V1SchemaVersion => LoadV1(documentBytes, catalog, factionCatalog, sourceIdentity, logger),
+                V2SchemaVersion => LoadV2(documentBytes, catalog, factionCatalog, sourceIdentity, logger),
+                V3SchemaVersion => LoadV3(documentBytes, catalog, factionCatalog, sourceIdentity, logger),
+                V4SchemaVersion => LoadV4(documentBytes, catalog, factionCatalog, sourceIdentity, logger),
+                V5SchemaVersion => LoadV5(documentBytes, catalog, factionCatalog, sourceIdentity, logger),
+                V6SchemaVersion => LoadV6(documentBytes, catalog, factionCatalog, sourceIdentity, logger),
+                V7SchemaVersion => LoadV7(documentBytes, catalog, factionCatalog, sourceIdentity, logger),
+                V8SchemaVersion => LoadV8(documentBytes, catalog, factionCatalog, sourceIdentity, logger),
+                V9SchemaVersion => LoadV9(documentBytes, catalog, factionCatalog, sourceIdentity, logger),
+                CurrentSchemaVersion => LoadV10(documentBytes, catalog, factionCatalog, sourceIdentity, logger),
                 _ => throw Failure(
                     GamePersistenceFailure.UnsupportedVersion,
                     sourceIdentity,
@@ -311,7 +314,8 @@ public static partial class GamePersistence
     public static LoadedGameSave Load(
         string path,
         ShipDefinitionCatalog catalog,
-        FactionDefinitionCatalog factionCatalog
+        FactionDefinitionCatalog factionCatalog,
+        ILogger<GameSimulation>? logger = null
     )
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
@@ -342,7 +346,7 @@ public static partial class GamePersistence
                 );
             }
 
-            return Deserialize(json, catalog, factionCatalog, sourceIdentity);
+            return Deserialize(json, catalog, factionCatalog, sourceIdentity, logger);
         }
         catch (GamePersistenceException)
         {
@@ -678,7 +682,8 @@ public static partial class GamePersistence
         byte[] json,
         ShipDefinitionCatalog catalog,
         FactionDefinitionCatalog factionCatalog,
-        string sourceIdentity
+        string sourceIdentity,
+        ILogger<GameSimulation>? logger
     )
     {
         try
@@ -697,7 +702,7 @@ public static partial class GamePersistence
             ValidateCandidateV5(migratedV5, catalog);
             SaveEnvelopeV6 migratedV6 = MigrateV5ToV6(migratedV5);
             ValidateCandidateV6(migratedV6, catalog);
-            return RestoreMigratedV7(MigrateV6ToV7(migratedV6), catalog, factionCatalog);
+            return RestoreMigratedV7(MigrateV6ToV7(migratedV6), catalog, factionCatalog, logger);
         }
         catch (GamePersistenceException)
         {
@@ -728,7 +733,8 @@ public static partial class GamePersistence
         byte[] json,
         ShipDefinitionCatalog catalog,
         FactionDefinitionCatalog factionCatalog,
-        string sourceIdentity
+        string sourceIdentity,
+        ILogger<GameSimulation>? logger
     )
     {
         try
@@ -745,7 +751,7 @@ public static partial class GamePersistence
             ValidateCandidateV5(migratedV5, catalog);
             SaveEnvelopeV6 migratedV6 = MigrateV5ToV6(migratedV5);
             ValidateCandidateV6(migratedV6, catalog);
-            return RestoreMigratedV7(MigrateV6ToV7(migratedV6), catalog, factionCatalog);
+            return RestoreMigratedV7(MigrateV6ToV7(migratedV6), catalog, factionCatalog, logger);
         }
         catch (GamePersistenceException)
         {
@@ -776,7 +782,8 @@ public static partial class GamePersistence
         byte[] json,
         ShipDefinitionCatalog catalog,
         FactionDefinitionCatalog factionCatalog,
-        string sourceIdentity
+        string sourceIdentity,
+        ILogger<GameSimulation>? logger
     )
     {
         try
@@ -791,7 +798,7 @@ public static partial class GamePersistence
             ValidateCandidateV5(migratedV5, catalog);
             SaveEnvelopeV6 migratedV6 = MigrateV5ToV6(migratedV5);
             ValidateCandidateV6(migratedV6, catalog);
-            return RestoreMigratedV7(MigrateV6ToV7(migratedV6), catalog, factionCatalog);
+            return RestoreMigratedV7(MigrateV6ToV7(migratedV6), catalog, factionCatalog, logger);
         }
         catch (GamePersistenceException)
         {
@@ -822,7 +829,8 @@ public static partial class GamePersistence
         byte[] json,
         ShipDefinitionCatalog catalog,
         FactionDefinitionCatalog factionCatalog,
-        string sourceIdentity
+        string sourceIdentity,
+        ILogger<GameSimulation>? logger
     )
     {
         try
@@ -835,7 +843,7 @@ public static partial class GamePersistence
             ValidateCandidateV5(migratedV5, catalog);
             SaveEnvelopeV6 migratedV6 = MigrateV5ToV6(migratedV5);
             ValidateCandidateV6(migratedV6, catalog);
-            return RestoreMigratedV7(MigrateV6ToV7(migratedV6), catalog, factionCatalog);
+            return RestoreMigratedV7(MigrateV6ToV7(migratedV6), catalog, factionCatalog, logger);
         }
         catch (GamePersistenceException)
         {
@@ -866,7 +874,8 @@ public static partial class GamePersistence
         byte[] json,
         ShipDefinitionCatalog catalog,
         FactionDefinitionCatalog factionCatalog,
-        string sourceIdentity
+        string sourceIdentity,
+        ILogger<GameSimulation>? logger
     )
     {
         try
@@ -877,7 +886,7 @@ public static partial class GamePersistence
             ValidateCandidateV5(envelope, catalog);
             SaveEnvelopeV6 migratedV6 = MigrateV5ToV6(envelope);
             ValidateCandidateV6(migratedV6, catalog);
-            return RestoreMigratedV7(MigrateV6ToV7(migratedV6), catalog, factionCatalog);
+            return RestoreMigratedV7(MigrateV6ToV7(migratedV6), catalog, factionCatalog, logger);
         }
         catch (GamePersistenceException)
         {
@@ -908,7 +917,8 @@ public static partial class GamePersistence
         byte[] json,
         ShipDefinitionCatalog catalog,
         FactionDefinitionCatalog factionCatalog,
-        string sourceIdentity
+        string sourceIdentity,
+        ILogger<GameSimulation>? logger
     )
     {
         try
@@ -917,7 +927,7 @@ public static partial class GamePersistence
                 JsonSerializer.Deserialize<SaveEnvelopeV6>(json, SerializerOptions)
                 ?? throw new JsonException("The save root must be an object.");
             ValidateCandidateV6(envelope, catalog);
-            return RestoreMigratedV7(MigrateV6ToV7(envelope), catalog, factionCatalog);
+            return RestoreMigratedV7(MigrateV6ToV7(envelope), catalog, factionCatalog, logger);
         }
         catch (GamePersistenceException)
         {
@@ -948,7 +958,8 @@ public static partial class GamePersistence
         byte[] json,
         ShipDefinitionCatalog catalog,
         FactionDefinitionCatalog factionCatalog,
-        string sourceIdentity
+        string sourceIdentity,
+        ILogger<GameSimulation>? logger
     )
     {
         try
@@ -956,7 +967,7 @@ public static partial class GamePersistence
             SaveEnvelopeV7 envelope =
                 JsonSerializer.Deserialize<SaveEnvelopeV7>(json, SerializerOptions)
                 ?? throw new JsonException("The save root must be an object.");
-            return RestoreMigratedV7(envelope, catalog, factionCatalog);
+            return RestoreMigratedV7(envelope, catalog, factionCatalog, logger);
         }
         catch (GamePersistenceException)
         {
@@ -987,7 +998,8 @@ public static partial class GamePersistence
         byte[] json,
         ShipDefinitionCatalog catalog,
         FactionDefinitionCatalog factionCatalog,
-        string sourceIdentity
+        string sourceIdentity,
+        ILogger<GameSimulation>? logger
     )
     {
         try
@@ -996,7 +1008,7 @@ public static partial class GamePersistence
                 JsonSerializer.Deserialize<SaveEnvelopeV8>(json, SerializerOptions)
                 ?? throw new JsonException("The save root must be an object.");
             ValidateCandidateV8(envelope, catalog);
-            return RestoreThroughV10(MigrateV8ToV9(envelope), catalog, factionCatalog);
+            return RestoreThroughV10(MigrateV8ToV9(envelope), catalog, factionCatalog, logger);
         }
         catch (GamePersistenceException)
         {
@@ -1564,13 +1576,14 @@ public static partial class GamePersistence
     private static LoadedGameSave RestoreMigratedV7(
         SaveEnvelopeV7 envelope,
         ShipDefinitionCatalog catalog,
-        FactionDefinitionCatalog factionCatalog
+        FactionDefinitionCatalog factionCatalog,
+        ILogger<GameSimulation>? logger
     )
     {
         ValidateCandidateV7(envelope, catalog);
         SaveEnvelopeV8 migrated = MigrateV7ToV8(envelope);
         ValidateCandidateV8(migrated, catalog);
-        return RestoreThroughV10(MigrateV8ToV9(migrated), catalog, factionCatalog);
+        return RestoreThroughV10(MigrateV8ToV9(migrated), catalog, factionCatalog, logger);
     }
 
     private static void ValidateCandidateV2(SaveEnvelopeV2 envelope, ShipDefinitionCatalog catalog)

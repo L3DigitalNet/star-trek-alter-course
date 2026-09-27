@@ -7,6 +7,7 @@ using AlterCourse.Core.Sensors;
 using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Tactical;
+using Microsoft.Extensions.Logging;
 using SaveEnvelopeV10 = AlterCourse.Core.Persistence.SaveModelsV10.SaveEnvelopeV10;
 using SaveEnvelopeV9 = AlterCourse.Core.Persistence.SaveModelsV9.SaveEnvelopeV9;
 using SaveMetadataV2 = AlterCourse.Core.Persistence.SaveModelsV2.SaveMetadataV2;
@@ -212,7 +213,8 @@ public static partial class GamePersistence
         byte[] json,
         ShipDefinitionCatalog catalog,
         FactionDefinitionCatalog factionCatalog,
-        string sourceIdentity
+        string sourceIdentity,
+        ILogger<GameSimulation>? logger
     )
     {
         try
@@ -221,7 +223,7 @@ public static partial class GamePersistence
                 JsonSerializer.Deserialize<SaveEnvelopeV10>(json, SerializerOptions)
                 ?? throw new JsonException("The save root must be an object.");
             ValidateCandidateV10(envelope, catalog.SystemDefinitions, "V10");
-            return RestoreV10(envelope, catalog, factionCatalog);
+            return RestoreV10(envelope, catalog, factionCatalog, logger);
         }
         catch (Exception exception)
             when (exception
@@ -247,13 +249,14 @@ public static partial class GamePersistence
     private static LoadedGameSave RestoreThroughV10(
         SaveEnvelopeV9 envelope,
         ShipDefinitionCatalog catalog,
-        FactionDefinitionCatalog factionCatalog
+        FactionDefinitionCatalog factionCatalog,
+        ILogger<GameSimulation>? logger
     )
     {
         ValidateCandidateV9(envelope, catalog);
         SaveEnvelopeV10 migrated = MigrateV9ToV10(envelope, catalog.SystemDefinitions);
         ValidateCandidateV10(migrated, catalog.SystemDefinitions, "migrated V9");
-        return RestoreV10(migrated, catalog, factionCatalog);
+        return RestoreV10(migrated, catalog, factionCatalog, logger);
     }
 
     /// <summary>
@@ -893,7 +896,8 @@ public static partial class GamePersistence
     private static LoadedGameSave RestoreV10(
         SaveEnvelopeV10 envelope,
         ShipDefinitionCatalog catalog,
-        FactionDefinitionCatalog factionCatalog
+        FactionDefinitionCatalog factionCatalog,
+        ILogger<GameSimulation>? logger
     )
     {
         SimulationSnapshotV10 snapshot = envelope.Simulation;
@@ -914,7 +918,7 @@ public static partial class GamePersistence
             envelope.Metadata.CreatedAtUtc,
             envelope.Metadata.SavedAtUtc
         );
-        return new LoadedGameSave(metadata, GameSimulation.RestoreState(state, catalog, factionCatalog));
+        return new LoadedGameSave(metadata, GameSimulation.RestoreState(state, catalog, factionCatalog, logger));
     }
 
     private static ShipState RestoreShipV10(ShipSnapshotV10 snapshot, SystemDefinitionCatalog systems)

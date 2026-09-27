@@ -2,6 +2,7 @@ using System.Text.Json;
 using AlterCourse.Core.Content;
 using AlterCourse.Core.Gameplay;
 using AlterCourse.Core.Ships;
+using Microsoft.Extensions.Logging;
 using SaveEnvelopeV8 = AlterCourse.Core.Persistence.SaveModelsV8.SaveEnvelopeV8;
 using SaveEnvelopeV9 = AlterCourse.Core.Persistence.SaveModelsV9.SaveEnvelopeV9;
 using ShipSnapshotV7 = AlterCourse.Core.Persistence.SaveModelsV7.ShipSnapshotV7;
@@ -80,7 +81,8 @@ public static partial class GamePersistence
         byte[] json,
         ShipDefinitionCatalog catalog,
         FactionDefinitionCatalog factionCatalog,
-        string sourceIdentity
+        string sourceIdentity,
+        ILogger<GameSimulation>? logger
     )
     {
         try
@@ -88,7 +90,7 @@ public static partial class GamePersistence
             SaveEnvelopeV9 envelope =
                 JsonSerializer.Deserialize<SaveEnvelopeV9>(json, SerializerOptions)
                 ?? throw new JsonException("The save root must be an object.");
-            return RestoreThroughV10(envelope, catalog, factionCatalog);
+            return RestoreThroughV10(envelope, catalog, factionCatalog, logger);
         }
         catch (Exception exception)
             when (exception

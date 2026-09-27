@@ -50,7 +50,7 @@ public sealed class GamePersistenceAdmissionTests
         Assert.Contains("256", failure.Message, StringComparison.Ordinal);
     }
 
-    private static JsonObject HistoricalDocument(byte[] current, int version)
+    internal static JsonObject HistoricalDocument(byte[] current, int version)
     {
         JsonObject root = JsonNode.Parse(current)!.AsObject();
         GamePersistenceV9CombatTests.StripCombat(root);
