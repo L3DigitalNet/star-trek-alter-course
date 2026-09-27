@@ -6,6 +6,13 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<PackageReference Include="CsCheck" PrivateAssets="all" />
+		<PackageReference Include="TngTech.ArchUnitNET" PrivateAssets="all" />
+		<PackageReference Include="Microsoft.Extensions.Logging" />
+		<PackageReference Include="Serilog" />
+		<PackageReference Include="Serilog.Extensions.Logging" />
+		<PackageReference Include="Serilog.Sinks.Console" />
+		<PackageReference Include="Serilog.Sinks.File" />
 		<PackageReference Include="Microsoft.NET.Test.Sdk" />
 		<PackageReference Include="xunit" />
 		<PackageReference Include="xunit.runner.visualstudio">
@@ -16,5 +23,10 @@
 
 	<ItemGroup>
 		<ProjectReference Include="../../src/AlterCourse.Core/AlterCourse.Core.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Compile Include="../../src/AlterCourse.Godot/src/Gameplay/Logging/GameDiagnostics.cs" Link="Gameplay/Logging/GameDiagnostics.cs" />
+		<Compile Include="../../src/AlterCourse.Godot/src/Gameplay/Logging/GameplayLogging.cs" Link="Gameplay/Logging/GameplayLogging.cs" />
 	</ItemGroup>
 </Project>

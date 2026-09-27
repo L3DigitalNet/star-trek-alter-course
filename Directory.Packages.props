@@ -5,6 +5,8 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<PackageVersion Include="CsCheck" Version="4.9.1" />
+		<PackageVersion Include="TngTech.ArchUnitNET" Version="0.13.4" />
 		<PackageVersion Include="Meziantou.Analyzer" Version="3.0.200" />
 		<PackageVersion Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="5.6.0" />
 		<PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
