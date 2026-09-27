@@ -6,7 +6,7 @@ description: 'Actor-local sensor knowledge, contact operations, and the determin
 doc_type: 'concept'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-26'
+updated: '2026-09-27'
 tags:
   - 'ai'
   - 'sensors'
@@ -46,7 +46,7 @@ An unidentified Current contact selects Withdraw at 0.5 km/s, clamped by effecti
 
 Contact-sensitive local work uses the fixed 100 ms grid only when motion or changing sensor condition can alter observation. At a boundary Core snapshots world truth, evaluates observer/target pairs in observer-ID then target-ID order, applies contact changes in that order, and schedules same-time decision wakes in observer order. Contact loss, scan completion, repair, and decisions use exact correlations and revalidate prerequisites. Inactive strategic work remains event-to-event: no global polling sweep or future range-crossing solver.
 
-`AdvanceUntilNextPlayerRelevantEvent` processes hidden NPC observation/decision work without reporting it. It can stop at player-safe lifecycle or scan events. Events carry exact simulation occurrence time and optional local contact ID, preserving chronology without reconstruction from final projection. Released V8 and current unreleased V9 continuation belong to [content, assets, and persistence](content-assets-and-persistence.md); former V4 sensor schema/migration are historical evidence.
+`AdvanceUntilNextPlayerRelevantEvent` processes hidden NPC observation/decision work without reporting it. It can stop at player-safe lifecycle or scan events. Events carry exact simulation occurrence time and optional local contact ID, preserving chronology without reconstruction from final projection. Active-scan continuation is now keyed to the installed sensor rather than a fixed field, following [Issue #121's substrate migration](ship-system-substrate.md); the observation-boundary and completion rules above are unchanged. Released V8 and current unreleased V10 continuation belong to [content, assets, and persistence](content-assets-and-persistence.md); former V4/V9 sensor schemas/migrations are historical evidence.
 
 ## Deferrals and evidence
 

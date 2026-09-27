@@ -27,7 +27,7 @@ Load this skill before project implementation. The design wiki under `docs/wiki/
 
 ## Ship-system conformance
 
-Before any ship-system expansion, read ADR 0014 and `docs/wiki/ship-system-substrate.md`. Issue #121 implements the selected substrate migration; adoption of the ADR alone is not runtime conformance. Damage Control gameplay and additional system kinds must not be folded into that migration.
+Before any ship-system expansion, read ADR 0014 and `docs/wiki/ship-system-substrate.md`. Issue #121's substrate migration is implemented on the development branch (Final PR #123, unreleased): runtime, content, persistence, and Godot's generic Engineering presentation use installed systems. Damage Control gameplay and additional system kinds must not be folded into that migration.
 
 Common state, condition, repair, allocation, current snapshots, and generic Engineering controls use installed-system identity. Kind, reusable definition, and installation are distinct. Live ship loadouts are authoritative; a class default is only bootstrap input. Specialized behavior stays typed. Historical DTO fields and isolated legacy translators are permitted; parallel current mutable fields behind a collection facade are not.
 
