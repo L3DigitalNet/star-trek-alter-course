@@ -49,14 +49,14 @@
 
 ## Ship-system substrate (Issue #121)
 
-- [ADR 0014](../adr/0014-use-an-extensible-bounded-ship-system-substrate.md)'s installed-system substrate is implemented on the feature branch.
-- Draft Final PR #123 admits the migration; it is not yet Ready or merged.
+- [ADR 0014](../adr/0014-use-an-extensible-bounded-ship-system-substrate.md)'s installed-system substrate is implemented and merged into `dev`.
+- Final PR #123 merged the migration into `dev` as `17637dd`; unreleased.
 - Five ship-system kinds migrated via `content/systems/pathfinder-systems.json` (system-definition V1), ship content V6, and saves V10.
 - Persistence rules identity is `installed-ship-system-substrate-v1`. V9-to-V10 migration is strict, via a frozen map in `Persistence/HistoricalShipSystemsV9.cs`.
 - `ShipSystemId` was renamed `ShipSystemKind`. `IncompatibleContent` descriptors bind definition and aim-vocabulary compatibility for installed systems.
 - Measured save-shape bounds are 109,030,603 bytes and a conservative 114,536,452 bytes, both under the 128 MiB ceiling; the 69,120 work ceiling is unchanged.
 - Engineering's projection and actions are now generic over installed systems, keyed by installed id with explicit owner and load-generation binding.
-- PR #123's integrated proof tests and final gate are complete; it is not yet merged, and this section is pre-merge state.
+- PR #123's integrated proof tests and final gate passed; the merge tree `17637dd` equals the tested head `d209446`.
 
 ## Standing backlog
 
