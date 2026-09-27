@@ -1,4 +1,7 @@
+using System.Buffers;
+using System.Text;
 using System.Text.Json;
+using AlterCourse.Core.Content;
 using AlterCourse.Core.Factions;
 using AlterCourse.Core.Gameplay;
 using AlterCourse.Core.Orders;
@@ -11,27 +14,40 @@ namespace AlterCourse.Core.Persistence;
 
 public static partial class GamePersistence
 {
-    /// <summary>Checks existing collection ceilings without materializing untrusted JSON arrays or strings.</summary>
-    internal static void ValidateCollectionBounds(ReadOnlySpan<byte> json, string sourceIdentity)
+    /// <summary>Checks existing collection and string ceilings before materializing untrusted JSON values.</summary>
+    internal static void ValidateInputBounds(ReadOnlySpan<byte> json, string sourceIdentity)
     {
         var reader = new Utf8JsonReader(json, new JsonReaderOptions { MaxDepth = MaximumJsonDepth });
         if (!reader.Read())
             throw new JsonException("The save root must be an object.");
-        ReadBoundedValue(ref reader, int.MaxValue, "array", sourceIdentity);
+        ReadBoundedValue(ref reader, int.MaxValue, int.MaxValue, "array", sourceIdentity);
         if (reader.Read())
             throw new JsonException("The save contains data after its root value.");
     }
 
-    private static void ReadBoundedValue(ref Utf8JsonReader reader, int maximum, string label, string sourceIdentity)
+    private static void ReadBoundedValue(
+        ref Utf8JsonReader reader,
+        int maximum,
+        int maximumText,
+        string label,
+        string sourceIdentity
+    )
     {
         if (reader.TokenType == JsonTokenType.StartObject)
         {
             while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
             {
                 (int childMaximum, string childLabel) = CollectionBound(ref reader);
+                (int childTextMaximum, string textLabel) = StringBound(ref reader);
                 if (!reader.Read())
                     throw new JsonException("A save member has no value.");
-                ReadBoundedValue(ref reader, childMaximum, childLabel, sourceIdentity);
+                ReadBoundedValue(
+                    ref reader,
+                    childMaximum,
+                    childTextMaximum,
+                    childTextMaximum == int.MaxValue ? childLabel : textLabel,
+                    sourceIdentity
+                );
             }
             if (reader.TokenType != JsonTokenType.EndObject)
                 throw new JsonException("A save object is incomplete.");
@@ -47,11 +63,100 @@ public static partial class GamePersistence
                         sourceIdentity,
                         $"{label} exceeds the {maximum}-entry collection limit."
                     );
-                ReadBoundedValue(ref reader, int.MaxValue, "array", sourceIdentity);
+                ReadBoundedValue(ref reader, int.MaxValue, maximumText, label, sourceIdentity);
             }
             if (reader.TokenType != JsonTokenType.EndArray)
                 throw new JsonException("A save array is incomplete.");
         }
+        else if (reader.TokenType == JsonTokenType.String && maximumText != int.MaxValue)
+        {
+            ValidateStringToken(ref reader, maximumText, label, sourceIdentity);
+        }
+    }
+
+    private static void ValidateStringToken(ref Utf8JsonReader reader, int maximum, string label, string sourceIdentity)
+    {
+        ReadOnlySpan<byte> encoded = reader.ValueSpan;
+        int length = 0;
+        for (int offset = 0; offset < encoded.Length; )
+        {
+            if (encoded[offset] == (byte)'\\')
+            {
+                // A Unicode escape denotes one UTF-16 code unit, including each half of a
+                // surrogate pair. This matches the existing string.Length validators exactly.
+                offset += encoded[offset + 1] == (byte)'u' ? 6 : 2;
+                length++;
+            }
+            else if (encoded[offset] < 0x80)
+            {
+                offset++;
+                length++;
+            }
+            else
+            {
+                if (Rune.DecodeFromUtf8(encoded[offset..], out Rune rune, out int consumed) != OperationStatus.Done)
+                    throw new JsonException("A save string contains invalid UTF-8.");
+                offset += consumed;
+                length += rune.Utf16SequenceLength;
+            }
+            if (length > maximum)
+                throw Failure(
+                    GamePersistenceFailure.InvalidData,
+                    sourceIdentity,
+                    $"{label} exceeds the {maximum}-character string limit."
+                );
+        }
+    }
+
+    // Shared wire names use the largest existing ceiling of their supported contexts. Exact
+    // ship/system/metadata limits remain in semantic validation; admission must not narrow saves.
+    private static (int Maximum, string Label) StringBound(ref Utf8JsonReader reader)
+    {
+        if (reader.ValueTextEquals("saveId"u8))
+            return (MaximumMetadataTextLength, "saveId");
+        if (reader.ValueTextEquals("displayName"u8))
+            return (
+                Math.Max(
+                    MaximumMetadataTextLength,
+                    Math.Max(ShipState.MaximumVesselDisplayNameLength, StrategicLocation.MaximumDisplayNameLength)
+                ),
+                "displayName"
+            );
+        if (reader.ValueTextEquals("definitionId"u8))
+            return (
+                Math.Max(
+                    ShipDefinitionId.MaximumLength,
+                    Math.Max(FactionDefinitionId.MaximumLength, SystemDefinitionId.MaximumLength)
+                ),
+                "definitionId"
+            );
+        if (reader.ValueTextEquals("id"u8))
+            return (LocationId.MaximumLength, "id");
+        if (reader.ValueTextEquals("locationId"u8))
+            return (LocationId.MaximumLength, "locationId");
+        if (reader.ValueTextEquals("observedAtLocationId"u8))
+            return (LocationId.MaximumLength, "observedAtLocationId");
+        if (reader.ValueTextEquals("targetLocationId"u8))
+            return (LocationId.MaximumLength, "targetLocationId");
+        if (reader.ValueTextEquals("origin"u8))
+            return (LocationId.MaximumLength, "origin");
+        if (reader.ValueTextEquals("destination"u8))
+            return (LocationId.MaximumLength, "destination");
+        if (reader.ValueTextEquals("originLocationId"u8))
+            return (LocationId.MaximumLength, "originLocationId");
+        if (reader.ValueTextEquals("destinationLocationId"u8))
+            return (LocationId.MaximumLength, "destinationLocationId");
+        if (reader.ValueTextEquals("waypoints"u8))
+            return (LocationId.MaximumLength, "waypoints");
+        if (reader.ValueTextEquals("knownVesselDisplayName"u8))
+            return (ShipState.MaximumVesselDisplayNameLength, "knownVesselDisplayName");
+        if (reader.ValueTextEquals("knownDesignDisplayName"u8))
+            return (ShipDefinition.MaximumDesignDisplayNameLength, "knownDesignDisplayName");
+        if (reader.ValueTextEquals("semantics"u8))
+            return (SystemDefinitionSemantics.MaximumLength, "semantics");
+        if (reader.ValueTextEquals("aimVocabulary"u8))
+            return (AimVocabularySemantics.MaximumLength, "aimVocabulary");
+        return (int.MaxValue, "string");
     }
 
     // Property tokens are compared in place: allocating a property-name string here would itself

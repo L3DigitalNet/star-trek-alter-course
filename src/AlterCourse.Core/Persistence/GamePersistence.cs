@@ -196,7 +196,7 @@ public static partial class GamePersistence
 
         try
         {
-            ValidateCollectionBounds(utf8Json, sourceIdentity);
+            ValidateInputBounds(utf8Json, sourceIdentity);
             byte[] documentBytes = utf8Json.ToArray();
             using var document = JsonDocument.Parse(documentBytes, DocumentOptions);
             RejectDuplicateMembers(document.RootElement, sourceIdentity, "$", 0);

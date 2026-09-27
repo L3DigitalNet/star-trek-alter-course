@@ -23,9 +23,9 @@ public sealed class GamePersistenceCollectionBoundsTests
     [InlineData("directedEnergyReadiness", 16)]
     public void BoundsEveryKnownCollectionAtItsExactCeiling(string member, int maximum)
     {
-        GamePersistence.ValidateCollectionBounds(Document(member, maximum), "boundary.json");
+        GamePersistence.ValidateInputBounds(Document(member, maximum), "boundary.json");
         GamePersistenceException failure = Assert.Throws<GamePersistenceException>(() =>
-            GamePersistence.ValidateCollectionBounds(Document(member, maximum + 1), "boundary.json")
+            GamePersistence.ValidateInputBounds(Document(member, maximum + 1), "boundary.json")
         );
         Assert.Equal(GamePersistenceFailure.InvalidData, failure.Failure);
         Assert.Contains(
@@ -41,9 +41,9 @@ public sealed class GamePersistenceCollectionBoundsTests
     {
         string entries = string.Join(',', Enumerable.Repeat("{\"nested\":[1,2,3]}", 16));
         byte[] legal = Encoding.UTF8.GetBytes("{\"installedSyste\\u006ds\":[" + entries + "]}");
-        GamePersistence.ValidateCollectionBounds(legal, "escaped.json");
+        GamePersistence.ValidateInputBounds(legal, "escaped.json");
         byte[] excess = Encoding.UTF8.GetBytes("{\"installedSyste\\u006ds\":[" + entries + ",{}]}");
-        Assert.Throws<GamePersistenceException>(() => GamePersistence.ValidateCollectionBounds(excess, "escaped.json"));
+        Assert.Throws<GamePersistenceException>(() => GamePersistence.ValidateInputBounds(excess, "escaped.json"));
     }
 
     private static byte[] Document(string member, int count) =>
