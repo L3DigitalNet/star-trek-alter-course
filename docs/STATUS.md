@@ -4,7 +4,7 @@
 
 - Initiative #127 ADR conformance source proof passed at `c199792`; canonical verification passed with Core 1199, AssetCtl 324, Godot 95, smoke, and zero warnings or errors.
 - The [register](reviews/adr-conformance-2026-09-27.md) records 148 scoped-compliant obligations, 41 future triggers, one approved UnitsNet exception, and one N/A.
-- Supporting PR #132 remains unmerged. Issues #127 and #128-#131 remain open for owner review and governed completion; its receipt owns exact hosted checks and lifecycle.
+- PR #132 remains unmerged; #127-#131 remain open pending verified integration and acceptance-based closure. PR receipts own exact hosted checks and lifecycle.
 - [Issue #121](https://github.com/L3DigitalNet/star-trek-alter-course/issues/121)'s [substrate migration](wiki/ship-system-substrate.md) merged into `dev` through Final PR #123.
 - The merge commit is `17637dd`; unreleased.
 - The merged tree `17637dd` equals the tested head `d209446`; integrated proof tests and the final gate passed. Issue #121 is Done.
