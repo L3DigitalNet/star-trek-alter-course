@@ -3,7 +3,7 @@
 ## Current snapshot
 
 - [Issue #121](https://github.com/L3DigitalNet/star-trek-alter-course/issues/121)'s [substrate migration](wiki/ship-system-substrate.md) is implemented on its feature branch.
-- Draft Final PR #123 targets `dev`; it is unmerged, and its integrated proof tests and final gate remain in progress.
+- Final PR #123 targets `dev` with integrated proof tests and a green final gate; it is unmerged.
 - Five ship-system kinds moved to the ADR 0014 installed-system substrate: system-definition V1, ship content V6, saves V10.
 - Rules identity is `installed-ship-system-substrate-v1`; V9-to-V10 migration is strict, via a frozen map in `HistoricalShipSystemsV9.cs`.
 - `ShipSystemId` was renamed `ShipSystemKind`; new `IncompatibleContent` descriptors bind definition and aim-vocabulary compatibility.

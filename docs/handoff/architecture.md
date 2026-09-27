@@ -56,7 +56,7 @@
 - `ShipSystemId` was renamed `ShipSystemKind`. `IncompatibleContent` descriptors bind definition and aim-vocabulary compatibility for installed systems.
 - Measured save-shape bounds are 109,030,603 bytes and a conservative 114,536,452 bytes, both under the 128 MiB ceiling; the 69,120 work ceiling is unchanged.
 - Engineering's projection and actions are now generic over installed systems, keyed by installed id with explicit owner and load-generation binding.
-- PR #123's integrated proof tests and final gate are still in progress; it is not yet Ready or merged, and this section is pre-merge state.
+- PR #123's integrated proof tests and final gate are complete; it is not yet merged, and this section is pre-merge state.
 
 ## Standing backlog
 

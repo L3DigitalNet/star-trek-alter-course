@@ -6,7 +6,7 @@
 
 ## Agent tasks
 
-- Land draft Final PR #123 for [Issue #121](https://github.com/L3DigitalNet/star-trek-alter-course/issues/121): finish proof tests and the final gate.
+- Merge Final PR #123 for [Issue #121](https://github.com/L3DigitalNet/star-trek-alter-course/issues/121) on green checks, then record the merge SHA.
 - Do not start Damage Control or tactical refinement until PR #123 merges; that work is separately governed and not automatic.
 - Preserve the bounded faction slice; do not expand into deferred intelligence, organizations, hierarchy, RNG, or political UI.
 - Treat Q-02/Q-03 and the unresolved portion of Q-04 as future design work. Keep supported historical migrations noninventive.
