@@ -1,14 +1,12 @@
 # Contributing to Star Trek: Alter Course
 
-Thanks for considering a contribution. The project is in early development, so an issue is the best place to align on significant work before investing in an implementation.
+The project is in early development. Align significant work through a typed issue before implementation, with an intended outcome and concrete acceptance criteria.
 
 ## Before you start
 
-Search the open issues and pull requests for related work. Create or join a typed issue for a feature, bug, or substantial maintenance change, and make its intended outcome and acceptance criteria concrete.
+Search open issues and pull requests for related work. Create or join a typed issue for a feature, bug, or substantial maintenance change. Small, low-risk maintenance may use a Standalone PR. Trivial prose-only corrections may qualify for T0; architectural decisions, specifications, and other protected surfaces do not. Agent Handoff admission is reserved for maintainer operational state, not general contributions.
 
-Small, low-risk maintenance may use a Standalone pull request. Trivial prose-only corrections may qualify for the repository's T0 path. Agent Handoff admission is reserved for project-maintainer operational state and is not a general contribution route.
-
-Do not submit copyrighted Star Trek artwork, audio, dialogue, scripts, data, or other third-party material unless you have the right to contribute it and preserve every required notice. Read [`LICENSE.md`](LICENSE.md) and [`LEGAL.md`](LEGAL.md) before adding content derived from an external source.
+Do not submit copyrighted Star Trek artwork, audio, dialogue, scripts, data, or other third-party material without the right to contribute it and preserve required notices. Read [LICENSE](LICENSE.md) and [LEGAL](LEGAL.md) before adding external content.
 
 ## Branch and commit workflow
 
@@ -19,9 +17,9 @@ Start from current `dev`. Use the governing issue number and a lowercase hyphena
 - `task/<issue>-<slug>`
 - `docs/<issue>-<slug>`
 
-Bounded low-risk maintenance without a governing issue uses `standalone/<slug>` from current `dev` and targets only `dev`. The branch name grants no admission: the Branch policy check requires the installed GitHub workflow package to report a `Standalone` relationship and pass its Ready contract, including acceptance coverage, verification, and its canonical risk declaration. Maintainers still judge whether the work fits the bounded low-risk scope; a clear automated result does not make significant work eligible.
+Qualifying bounded low-risk maintenance without a governing issue uses `standalone/<slug>` and targets only `dev`. The branch name grants no admission: Branch policy requires the installed workflow package to report a Standalone relationship and pass its Ready contract, including acceptance coverage, verification, and canonical risk declaration. Maintainers still judge whether the work fits; a clear automated result does not make significant work eligible.
 
-Maintainers reserve `hotfix/<issue>-<slug>` for urgent work based on `main`. Do not open ordinary development pull requests against `main`.
+Maintainers reserve `hotfix/<issue>-<slug>` for urgent work based on `main`. Do not target `main` for ordinary development.
 
 Configure the tracked hooks once per checkout:
 
@@ -29,23 +27,23 @@ Configure the tracked hooks once per checkout:
 ./scripts/setup-git-hooks.sh
 ```
 
-Commit subjects use Conventional Commit form, such as `feat: add sector navigation`, `fix(sensors): retain contact confidence`, or `docs: clarify setup`.
+Use Conventional Commit subjects, such as `feat: add sector navigation`, `fix(sensors): preserve contact history`, or `docs: clarify setup`.
 
 ## Architecture boundaries
 
-Keep pure simulation and domain behavior in `AlterCourse.Core`, independent of Godot. Godot nodes, resources, scenes, and presentation belong in `AlterCourse.Godot`. Add behavior and regression tests at the lowest layer that can prove the change.
+Keep simulation and domain behavior in `AlterCourse.Core`, independent of Godot. Scenes, nodes, resources, and presentation belong in `AlterCourse.Godot`; AssetCtl remains independent from both. Add behavior and regression tests at the lowest layer that can prove the change.
 
-The architecture decisions in [`docs/adr/`](docs/adr/) are active project constraints. [ADR 0013](docs/adr/0013-use-dev-for-development-and-main-for-releases.md) defines branch, pull-request, hotfix, and release governance.
+Read the [ADR catalog](docs/adr/README.md) and affected records. In particular, preserve staged command outcomes, actor-owned information, bounded asset publication, and session/action lifetime under ADRs 0015–0018. These records do not approve deferred gameplay or require speculative frameworks. ADR 0013 owns branch, pull-request, hotfix, and release governance.
 
 ## Design changes
 
-The [design wiki](docs/wiki/README.md) is the single source of truth for the game's design. Read the relevant wiki page before proposing work that changes how a system behaves, and record the design change on that page in the same pull request as the implementation. Keep detailed rules, formulas, failure behavior, and milestone acceptance contracts inside the wiki. Do not create a parallel game-design or specification tree; an implementation plan or issue references the owning contracts instead of redefining them.
+The [design wiki](docs/wiki/README.md) owns gameplay. Read the relevant page before changing behavior and reconcile it in the same PR as implementation. Keep rules, formulas, failure behavior, and milestone acceptance contracts there. An issue or implementation plan links the owning contract instead of creating a parallel specification.
 
-A design idea the owner has not approved belongs in [open questions](docs/wiki/open-questions.md), not on a wiki system page. An architectural boundary changes only through a new or amended ADR; the wiki then reflects it.
+An unapproved idea belongs in [open questions](docs/wiki/open-questions.md). Architectural boundaries change through new or amended ADRs; the wiki then reflects the decision. Use the existing [ADR template](docs/adr/adr.template.md) and [maintenance guidance](docs/adr/README.md#adding-or-changing-a-record), preserving stable IDs and accepted historical rationale.
 
-Follow the [recurring design reconciliation procedure](docs/wiki/development-and-governance.md#recurring-design-reconciliation) at task start, each behavior or bug-fix checkpoint, before Ready, and at merge/release closeout. Check the [review record](docs/wiki/sources.md#review-record) for an overdue seven-day full sweep. Reconcile unforeseen implementation constraints with approved design before treating the change as complete.
+Follow [recurring design reconciliation](docs/wiki/development-and-governance.md#recurring-design-reconciliation) at task start, behavior/bug checkpoints, before Ready, and at landing/release. Check the [review record](docs/wiki/sources.md#review-record) for an overdue seven-day sweep. An implementation constraint does not silently amend approved design.
 
-In the PR's Acceptance coverage, name the wiki pages reviewed, link the relevant source/tests, and record corrections or why the existing contract remains accurate. For work with no game-design impact, state the concrete reason. A green automated gate or an updated date does not replace this review.
+PR Acceptance coverage names the reviewed pages, relevant source/tests, corrections, and any unchanged contract that remains exact. For no gameplay impact, state the concrete reason. A green gate or updated date is not semantic review; an old conformance run does not certify later ADRs.
 
 ## Verify the change
 
@@ -56,15 +54,17 @@ Run formatting when appropriate, then the canonical gate:
 ./scripts/verify.sh
 ```
 
-The gate checks formatting, static analysis, repository policy, secret scanning, a warning-free Release build, Core tests, Godot integration, and headless startup. Fix failures at their cause; do not weaken central settings or add suppressions merely to pass.
+The gate checks formatting, static analysis, repository policies, secret scanning, warning-free builds, Core and AssetCtl tests, offline asset validation, Godot integration, and headless startup. Complementary managed Project Standards checks validate their adopted Markdown/frontmatter policy. [Development quality](docs/development-quality.md) owns the complete command and toolchain contract.
+
+Fix failures at their cause. Do not weaken central settings, suppress diagnostics, alter policy, or claim an unexecuted check passed to admit the work. Distinguish local runs, hosted runs, inspected tests, and inherited evidence.
 
 ## Open the pull request
 
-Open the pull request as a draft against `dev`. Keep the repository template's exact headings and replace its comments with:
+Open a draft against `dev`. Keep the exact required headings and supply:
 
-- a concise summary of what changed and why;
-- exactly one governing declaration: `Final: #N`, `Supporting: #N`, or `Standalone` with its required risk line;
-- acceptance coverage tied to the issue or Standalone outcome;
-- commands and checks that actually ran, with their outcomes.
+- **Summary:** what changed and why.
+- **Governing work:** exactly one `Final: #N`, `Supporting: #N`, or qualifying `Standalone` with its required risk line.
+- **Acceptance coverage:** how the change satisfies its issue or Standalone outcome.
+- **Verification:** commands/checks actually executed and their results, with unresolved limitations explicit.
 
-Maintainers use the repository's GitHub workflow to admit, ready, and merge changes. Topic pull requests normally squash into `dev`, and merged topic branches are deleted automatically.
+Maintainers use the installed GitHub workflow for typed work state, readiness, merge, and lifecycle synchronization. A missing local capability does not authorize a substitute route or bypass. Topic PRs normally squash into `dev`; merged topic branches are deleted automatically.

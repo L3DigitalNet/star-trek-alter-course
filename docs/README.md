@@ -2,7 +2,7 @@
 schema_version: '1.1'
 id: 'index-l97l7i-documentation'
 title: 'Project Documentation'
-description: 'Entry point to the design wiki, the single source of truth for design.'
+description: 'Routes game design, architectural decisions, development guidance, and operational evidence to their owning sources.'
 doc_type: 'index'
 status: 'active'
 created: '2026-09-06'
@@ -12,28 +12,26 @@ tags:
 aliases: []
 related:
   - 'docs/wiki/README.md'
+  - 'docs/adr/README.md'
   - 'ROADMAP.md'
 ---
 
 # Project documentation
 
-Start with the [project design wiki](wiki/README.md). It is the single source of truth for the game's design: vision, implemented and planned systems, architecture, approved decisions such as the political model, and remaining questions.
+Start with the [design wiki](wiki/README.md) for game behavior and with the [ADR catalog](adr/README.md) for architectural decisions. Both live in this repository and use the same reviewed version history as the game; there is no separate GitHub Wiki or deployed documentation service.
 
-The wiki is stored in this repository so changes use the same review and version history as the game. It is not a second GitHub Wiki repository or a separately deployed documentation service.
+## Choose the owning source
 
-Game-design contracts, detailed rules, and [milestone proofs](wiki/milestone-proofs.md) live inside the wiki. The former design/specification documents have been consolidated there; the [source catalog](wiki/sources.md#consolidation-map) records where their content went.
+- **Game design:** the [wiki](wiki/README.md) owns intended behavior, detailed rules, [milestone proofs](wiki/milestone-proofs.md), approved design, and unresolved questions. Its [implementation status](wiki/implementation-status.md) distinguishes reviewed behavior from future intent.
+- **Architecture:** [ADRs](adr/README.md) own significant boundaries and their rationale. They do not introduce a second set of gameplay formulas or certify implementation merely by being active.
+- **Work state:** [STATUS](STATUS.md), [TODO](TODO.md), and [handoff](handoff/) own operational facts and session history, not new game-design decisions.
+- **Onboarding and sequence:** the [root README](../README.md), [contribution guide](../CONTRIBUTING.md), and [roadmap](../ROADMAP.md) route readers to contracts rather than duplicate them.
+- **Development:** [Development quality](development-quality.md) and [agent setup](development-agent-skills.md) own tool setup, verification, and harness maintenance. [Dependency admissions](dependency-admission/) record bounded package evidence under ADR 0003, not blanket permission for future usage.
+- **Review evidence:** the [source catalog](wiki/sources.md#review-record) indexes dated coverage. The [ADR conformance register](reviews/adr-conformance-2026-09-27.md) records the original 14-ADR review; it is not an amendment, release record, or certification of later ADRs.
+- **Rights:** [License](../LICENSE.md) and [legal notice](../LEGAL.md) own licensing boundaries. Design references and automated asset review do not establish legal clearance.
 
-The remaining documents have distinct authority:
+## Preserve one contract per subject
 
-| Location | Owns | Does not own |
-| --- | --- | --- |
-| [Wiki](wiki/README.md) | Intended game behavior, implemented contracts, future design, decisions and questions | Live task or deployment state |
-| [ADRs](adr/) | Architectural decisions and their rationale | A separate set of gameplay rules |
-| [STATUS](STATUS.md), [TODO](TODO.md), [handoff](handoff/) | Work state, operational facts and historical session evidence | New game-design decisions |
-| [Roadmap](../ROADMAP.md), [root README](../README.md) | Sequence and onboarding pointers | Detailed game contracts |
-| [Development quality](development-quality.md), [agent skills](development-agent-skills.md) | Tool setup, verification and harness maintenance | Gameplay semantics |
-| [Dependency admission](dependency-admission/) | Package-admission evidence under ADR 0003 | Game features or blanket approval of future dependencies |
-| [ADR conformance review](reviews/adr-conformance-2026-09-27.md) | Point-in-time evidence that implementation and documentation were checked against active ADRs | An ADR amendment or a replacement for source, tests, or release evidence |
-| [License](../LICENSE.md), [legal notice](../LEGAL.md) | Licensing and rights boundaries | Game-design authority |
+Detailed game contracts formerly spread across design/specification files are consolidated in the wiki. The [consolidation map](wiki/sources.md#consolidation-map) preserves their destinations, and [historical provenance](wiki/sources.md#historical-provenance) links fixed revisions rather than maintaining competing copies.
 
-Historical discussions are linked to fixed Git revisions in the wiki's [provenance record](wiki/sources.md#historical-provenance), rather than maintained as competing design files. Source/schema/tests establish what the implementation actually does; they do not silently approve a change to intended design.
+Source, schemas, and tests establish what the implementation actually does. They do not silently approve a change to intended design. Reconcile a mismatch through the owning contract and the [review procedure](wiki/development-and-governance.md#recurring-design-reconciliation), keeping inspected evidence separate from freshly executed checks.

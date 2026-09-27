@@ -2,16 +2,17 @@
 schema_version: '1.1'
 id: 'index-223j5h-decision-register'
 title: 'Design Decision Register'
-description: 'Stable index of architectural decisions, approved implementation/design directions, political principles, and nonapproved proposals.'
+description: 'Stable index of architectural records, approved gameplay directions, political principles, and nonapproved proposals.'
 doc_type: 'index'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-26'
+updated: '2026-09-27'
 tags:
   - 'design'
   - 'architecture'
 aliases: []
 related:
+  - 'docs/adr/README.md'
   - 'docs/wiki/strategic-contact-reporting.md'
   - 'docs/wiki/faction-intent-and-autonomous-assignment.md'
   - 'docs/wiki/observation-driven-faction-response.md'
@@ -22,13 +23,24 @@ related:
 
 # Design decision register
 
-[Wiki home](README.md) · [Source catalog](sources.md) · [Open questions](open-questions.md)
+[Wiki home](README.md) · [ADR catalog](../adr/README.md) · [Source catalog](sources.md) · [Open questions](open-questions.md)
 
 ## Architectural decisions already adopted
 
-ADRs 0001-0014 remain active architectural constraints. Their complete titles, links, and topic coverage are in [Sources](sources.md). Adoption of an ADR is not proof that every future component or preferred package it discusses has been installed.
+ADRs 0001–0018 are active architectural records. The [ADR catalog](../adr/README.md) owns their complete navigation and scope map. Adoption does not prove that every conditional future component or preferred package has been installed.
 
-The governing themes are pure Core authority; one canonical gate; native-first, demand-driven dependencies; semantic spatial scales; strict ordinary JSON content; explicit versioned snapshot saves; deterministic time/scheduling/randomness; structured nonauthoritative diagnostics; layered tests; explainable information-limited AI; explicit units; subordinate narrative; development/release branch separation; and an extensible bounded ship-system substrate that separates system kind, reusable definition, and installed instance while keeping system-specific behavior typed.
+ADRs 0001–0014 cover pure Core authority, one canonical gate, demand-driven dependencies, semantic spatial scales, strict JSON content, versioned snapshots, deterministic time/scheduling/randomness, nonauthoritative diagnostics, layered tests, explainable information-limited AI, explicit units, subordinate narrative, development/release separation, and the extensible bounded ship-system substrate.
+
+### Cross-cutting boundary records — September 27, 2026
+
+The owner selected four supplementary records after the additional-ADR review:
+
+- [ADR 0015](../adr/0015-use-staged-core-command-application-and-explicit-commit-outcomes.md) owns staged command application, correlated changes, and explicit commitment/failure outcomes. ADR 0007's separately specified safely incremental alternative remains available.
+- [ADR 0016](../adr/0016-own-actor-knowledge-and-share-immutable-observation-reports.md) owns information provenance, actor-local ownership, historical transfer, and indirect disclosure. It does not resolve broader vessel identity, affiliation learning, or sharing.
+- [ADR 0017](../adr/0017-generate-assets-outside-the-game-through-bounded-validated-publication.md) formalizes D-06's AssetCtl isolation, bounded external operations, recoverable publication, and owner approval.
+- [ADR 0018](../adr/0018-separate-simulation-session-lifetime-from-workspaces.md) formalizes D-05's session lifetime and context-bound actions, without prescribing another workspace or permanent ownership by one class.
+
+These records do not renumber the D/P decisions, change detailed gameplay, select the next development slice, or extend the historical 14-ADR conformance result to new obligations. Their owning wiki contracts remain below.
 
 ## Existing implementation and presentation decisions
 
@@ -38,17 +50,17 @@ The governing themes are pure Core authority; one canonical gate; native-first, 
 
 **D-03 — Information-limited local contact.** M3A establishes observer-local contacts, hidden target correlation, scan, hail, and cautious AI. It does not complete all of M3. See [Sensors, knowledge, and AI](sensors-knowledge-and-ai.md).
 
-**D-04 — Concrete Engineering, not a universal component framework.** M4 introduced power, condition, sensor/impulse capability, and one repair. D-19 extends that behavior for M6A. ADR 0014 subsequently requires the shared ship-system substrate to become extensible before additional ship-system depth while preserving typed domain behavior and rejecting a universal component/ECS framework. See [Engineering](engineering-and-combat.md).
+**D-04 — Concrete Engineering, not a universal component framework.** M4 introduced power, condition, sensor/impulse capability, and one repair. D-19 extends that behavior for M6A. ADR 0014 subsequently required an extensible shared substrate while preserving typed domain behavior and rejecting a universal component/ECS framework; Issue #121 implements that migration. See [Engineering](engineering-and-combat.md) and [Ship-system substrate](ship-system-substrate.md).
 
-**D-05 — Persistent native Command Deck and Engineering workspace.** Godot adapts Core projections; the runtime Theme owns visual styling; preview fixtures never become production truth. [Interface](interface-and-player-commands.md) owns the consolidated UI decision, references, and interaction contract.
+**D-05 — Persistent native Command Deck and Engineering workspace.** Godot adapts Core projections; the runtime Theme owns styling; preview fixtures never become production truth. [Interface](interface-and-player-commands.md) owns controls and presentation references; ADR 0018 owns the cross-cutting session/action-lifetime boundary.
 
-**D-06 — Independent asset tooling.** AssetCtl is a separate .NET tool with configuration-driven providers, validated assets, provenance, local fallback, and owner-controlled approval. See [Content, assets, and persistence](content-assets-and-persistence.md) and the [full tool contract](asset-pipeline-tool.md).
+**D-06 — Independent asset tooling.** AssetCtl is a separate .NET tool with configuration-driven providers, validated assets, provenance, local fallback, and owner-controlled approval. ADR 0017 records the architecture; [Content, assets, and persistence](content-assets-and-persistence.md) and the [full tool contract](asset-pipeline-tool.md) retain their detailed responsibilities.
 
 ## Completed sequencing decision — September 6, 2026
 
-**D-07 — Strategic Contact Reporting before faction autonomy.** Selected as the next development slice after v0.4.0 and implemented in v0.5.0, this extends M3A's local actor-safe contact knowledge into bounded, durable, reference-frame-qualified last-known strategic contact information. It reuses observer-local `SensorContactId` without global known-vessel identity, affiliation/intent learning, faction knowledge sharing, faction runtime, or faction AI. See [Implementation status](implementation-status.md) and [Strategic Contact Reporting](strategic-contact-reporting.md).
+**D-07 — Strategic Contact Reporting before faction autonomy.** Selected after v0.4.0 and implemented in v0.5.0, this extends M3A's local contact knowledge into bounded, durable, reference-frame-qualified last-known strategic information. It reuses observer-local `SensorContactId` without global known-vessel identity, affiliation/intent learning, faction sharing, faction runtime, or faction AI. See [Implementation status](implementation-status.md) and [Strategic Contact Reporting](strategic-contact-reporting.md).
 
-D-07 resolved Q-01. The slice is not canonically named `M3B`, did not complete M3, and did not itself begin M5. It left Q-02 through Q-05 unresolved at its completion. The later D-08 through D-13 approvals below selected the next slice without retroactively changing D-07's scope.
+D-07 resolved Q-01. The slice is not canonically named `M3B`, did not complete M3, and did not itself begin M5. It left Q-02 through Q-05 unresolved at its completion. D-08 through D-13 later selected the next slice without retroactively changing that scope.
 
 ## Approved faction-assignment decisions — September 6, 2026
 
@@ -62,35 +74,35 @@ All six decisions below are owner-approved. [Faction Intent and Autonomous Assig
 
 **D-11 — Closed Ship/Faction work targets and typed bootstrap.** Extend the existing deterministic scheduler with two explicit typed target domains, preserving stable ordering, exact correlation, validation, and budgets. Faction state, controller links, and initial wakes enter through typed bootstrap, not post-construction proof mutations. This implements ADR 0007 without changing its boundary or adding a framework.
 
-**D-12 — V7 and non-inventive migration.** Implemented in `dev`, this uses ordinary validated JSON faction definitions and explicit mutable runtime state. Its adjacent V6→V7 migration produces zero factions, null historical ship controllers, and no faction state or wakes. Existing ship work retains its semantics and ordering as explicitly ship-targeted work. Zero-faction worlds remain valid; no new-game political history is injected into old saves.
+**D-12 — V7 and non-inventive migration.** This slice uses ordinary validated JSON faction definitions and explicit mutable runtime state. Its adjacent V6→V7 migration produces zero factions, null historical ship controllers, and no faction state or wakes. Existing ship work retains its semantics and ordering as explicitly ship-targeted work. Zero-faction worlds remain valid; no new-game political history is injected into old saves.
 
 **D-13 — No randomness in this policy.** Use deterministic candidates, constraints, selection, tie-breaking, and explanations. Q-14's next migration was selected for that slice and this policy consumes no RNG; the eventual versioned random algorithm and later compatibility decisions remain open.
 
-The slice added no faction/affiliation UI, political hierarchy runtime, organizations, treaties, diplomacy, combat, economy, or intelligence network. Broader political principles remain approved; they are not all required by this first consumer.
+The slice added no faction/affiliation UI, political hierarchy runtime, organizations, treaties, diplomacy, combat, economy, or intelligence network. Broader political principles remain approved; they were not all required by this first consumer.
 
 ## Approved next-development decisions — September 7, 2026
 
-The owner selected [Observation-Driven Faction Response](observation-driven-faction-response.md) before its implementation and selected M6 Tactical Combat Foundation as the next major development family after it. Feature #93 / Final PR #94 implements the response contract and v0.6.0 releases it with V8. v0.5.0 remains the historical V6 release.
+The owner selected [Observation-Driven Faction Response](observation-driven-faction-response.md) before its implementation and M6 Tactical Combat Foundation as the next major family after it. Feature #93 / Final PR #94 implements the response contract and v0.6.0 releases it with V8. v0.5.0 remains the historical V6 release.
 
-**D-14 — Observation must drive faction action before combat.** This approved slice closes one information-to-action loop: a legitimate NPC observation produces a bounded delayed report to its direct controlling faction, the received information changes an explainable faction decision, an eligible ordinary NPC ship investigates the reported location, and ordinary local sensing establishes the outcome. It is implemented as a bounded M5 contribution and partial Q-04 resolution, not completion of M3/M5 or a general intelligence architecture.
+**D-14 — Observation must drive faction action before combat.** This slice closes one loop: legitimate NPC observation produces a bounded delayed report to its direct controlling faction; received information changes an explainable decision; an eligible ordinary NPC investigates the reported location; ordinary sensing establishes the outcome. It is a bounded M5 contribution and partial Q-04 resolution, not completion of M3/M5 or a general intelligence architecture.
 
-**D-15 — Direct historical reports, not shared live sensors.** The first reporting channel is directly controlled NPC ship → direct controlling faction only. Reports are immutable historical observation snapshots preserving observer provenance and observer-local `SensorContactId`; they do not carry hidden target identity/controller, infer affiliation/intent, or correlate contacts across observers. Delivery is deterministic after 2,000 ms of simulation time. Player, ally, hierarchy, organization, and communications-network propagation remain future work.
+**D-15 — Direct historical reports, not shared live sensors.** The first channel is directly controlled NPC ship → direct controlling faction only. Immutable historical snapshots preserve observer provenance and observer-local `SensorContactId`; they do not carry hidden target identity/controller, infer affiliation/intent, or correlate observers' contacts. Delivery occurs after 2,000 ms of simulation time. Player, ally, hierarchy, organization, and communications-network propagation remain future work.
 
-**D-16 — One bounded deterministic investigation response.** Factions may investigate a fresh reported strategic location using only received reports, already-approved own-asset administrative facts, and legitimately known routes. The policy never preempts existing orders or commands the player, excludes the reporting observer as its own responder, uses stable report/candidate tie-breaks, allows at most one active investigation per faction, and treats arrival plus ordinary sensing as completion even when the originally observed vessel is gone. The slice caps each faction at 8 in-flight and 16 received reports and uses a 60,000 ms observation freshness window with location-based completion suppression to prevent feedback loops. Existing presence intent is processed first and keeps its one-shot meaning.
+**D-16 — One bounded deterministic investigation response.** Factions may investigate a fresh reported strategic location using received reports, approved own-asset administrative facts, and legitimately known routes. The policy never preempts orders or commands the player, excludes the reporting observer as its own responder, uses stable tie-breaks, allows one active investigation per faction, and treats arrival plus ordinary sensing as completion even when the observed vessel is gone. The slice caps each faction at 8 in-flight and 16 received reports, with a 60,000 ms freshness window and location-based completion suppression. Presence intent is processed first and keeps its one-shot meaning.
 
-**D-17 — Adjacent non-inventive persistence for reported knowledge.** v0.6.0 advances V7 to released V8 under rules identity `observation-driven-faction-response-v1`. It persists only consequential queued/received knowledge, exact delivery/response continuation, bounded handling state, posture, and required identity continuation. Migration creates no reports, investigations, or delivery work and disables the new posture for migrated factions. New-game bootstrap enables it explicitly for the proof. The derived V8 scheduler bounds were 68,864 stored work items, 68,853 same-instant consequence executions, and 78,853 total consequence executions. Compact V8's tested conservative persistence ceiling is 113,024,376 bytes, below the unchanged 128 MiB envelope. [Persistence](content-assets-and-persistence.md) owns later V9 limits. No database or unbounded event history is admitted.
+**D-17 — Adjacent non-inventive persistence for reported knowledge.** v0.6.0 advances V7 to released V8 under `observation-driven-faction-response-v1`. It persists consequential queued/received knowledge, exact delivery/response continuation, bounded handling state, posture, and identity continuation. Migration creates no reports, investigations, delivery work, or history and disables the new posture for migrated factions. New-game bootstrap enables it explicitly. Historical V8 bounds were 68,864 stored work items, 68,853 same-instant executions, and 78,853 total executions; compact V8's conservative persistence ceiling is 113,024,376 bytes within 128 MiB. [Persistence](content-assets-and-persistence.md) owns later development formats and bounds. No database or unbounded event history is admitted.
 
-**D-18 — Tactical combat follows this slice; Engineering grows through combat consumers.** In this September 7 decision, M6 first combat engagement was the next major development family and Q-10 remained open for later refinement. Full M3 or M5 completion is not a prerequisite. The first M6 refinement should compose one bounded directed-energy/shield/targeting/damage/withdrawal interaction with existing sensing, motion, Engineering, AI, and persistence. Ship-system depth is added when it creates or materially changes a command decision rather than through an exhaustive pre-combat subsystem catalog. D-19 subsequently resolves M6A's bounded mechanics.
+**D-18 — Tactical combat follows this slice; Engineering grows through combat consumers.** In this September 7 decision, first combat was the next major family and Q-10 remained open. Full M3 or M5 completion was not a prerequisite. The first M6 refinement should compose a bounded directed-energy/shield/targeting/damage/withdrawal interaction with existing sensing, motion, Engineering, AI, and persistence. System depth is added when it materially changes a command decision, not through an exhaustive pre-combat catalog. D-19 subsequently resolves M6A's bounded mechanics.
 
 ## M6A first-engagement decision — September 26, 2026
 
-**D-19 — Bounded M6A first engagement.** Q-10 is resolved and this approved interaction is implemented on `dev` through [Feature #111 / Final PR #112](https://github.com/L3DigitalNet/star-trek-alter-course/pull/112): one all-aspect directed-energy/shield interaction uses Current, Identified local contacts; four-consumer power allocation; direct concrete-system condition loss after shield absorption; deterministic brownout/reconciliation; one delayed defensive ship wake; and adjacent V8→V9 persistence. M6A has no RNG, hull pool, recharge, broader geometry/facings, periodic weapon work, faction-driven combat policy, or travel/order preemption. [Engineering and combat](engineering-and-combat.md) owns its detailed contract; M6A remains unreleased development toward partial M6.
+**D-19 — Bounded M6A first engagement.** Q-10 is resolved for this implemented interaction through [Feature #111 / Final PR #112](https://github.com/L3DigitalNet/star-trek-alter-course/pull/112): one all-aspect directed-energy/shield interaction uses Current, Identified local contacts; four-consumer allocation; direct subsystem condition loss after absorption; deterministic brownout/reconciliation; one delayed defensive wake; and adjacent V8→V9 persistence. M6A has no RNG, hull pool, recharge, broader geometry/facings, periodic weapon work, faction-driven combat policy, or travel/order preemption. [Engineering and combat](engineering-and-combat.md) owns its detail; M6A remains unreleased toward partial M6.
 
-This is the later first-combat refinement, not an approval made by the September 7 sequencing decision. No detailed post-M6A recovery or tactical slice is selected merely by D-18's general Engineering direction.
+This is the September 26 first-combat refinement, not a detailed approval made on September 7. D-18's general Engineering direction does not select a post-M6A recovery or tactical slice. The later installed-system migration changes representation, not this historical decision's scope.
 
 ## Political decisions approved September 6, 2026
 
-The following identifiers provide stable references to the approved political design. The broader model remains future work; the bounded root-faction and direct-control subset is implemented through D-08–D-13. [Factions and organizations](factions-and-organizations.md) owns their full meaning and implementation limits; these summaries do not introduce additional mechanics.
+These stable IDs index approved political design. The broader model remains future work; D-08–D-13 implement the root-faction/direct-control subset. [Factions and organizations](factions-and-organizations.md) owns their full meaning and implementation limits.
 
 - **P-01 — Autonomous actors at every depth.** Subordinate factions possess independent political will, not just modifiers on a parent.
 - **P-02 — Hierarchy does not grant every action.** Legitimate/practical interactions depend on authority and capabilities, not depth alone.
@@ -115,16 +127,16 @@ The following identifiers provide stable references to the approved political de
 - **P-21 — Government separate from enduring polity.** A new ruling faction does not automatically create a new state identity.
 - **P-22 — Polity interests survive government change.** Rulers influence an autonomous polity constrained by its institutions, obligations, and interests.
 
-P-10/P-17/P-19 must be read together: no mandatory Polity→member-state→movement template and no powers inferred from display labels. Exact presentation of atypical branches remains an open UI detail. D-08's root-only proof is a scope choice, not a replacement of these principles.
+P-10/P-17/P-19 do not prescribe a mandatory Polity→member-state→movement template or powers inferred from labels. Atypical-branch presentation remains open. The root-only proof is a scope choice, not a replacement of these principles.
 
 ## Discussed but not approved
 
-A separate durable `KnownShipId`, cross-observer known-vessel correlation, political affiliation-learning rules, a final campaign year, and a specific random algorithm remain future questions. D-15 approves only the direct NPC ship-to-direct-faction historical reporting subset; broader report distribution, hierarchy propagation, and intelligence fusion remain unapproved. The closed Ship/Faction scheduler target is approved by D-11; D-17 reuses that boundary rather than adding a generic target registry.
+A separate durable `KnownShipId`, cross-observer correlation, affiliation learning, final campaign year, and specific random algorithm remain future questions. D-15 approves only direct historical reporting; broader distribution, hierarchy propagation, and intelligence fusion remain unapproved. ADR 0016 preserves those exclusions. D-11's closed Ship/Faction work targets do not authorize a generic target registry.
 
-The earlier proposed `M3B→M5→M6` sequence is not the governing plan: D-07 selected Strategic Contact Reporting without canonically naming it M3B, D-08 selected the bounded assignment slice, and D-14 selected the bounded report-driven response slice before D-18 moved the main development axis to M6. Neither M3 nor M5 had to be declared complete before that first combat refinement.
+The earlier proposed `M3B→M5→M6` sequence is not the governing plan. D-07 selected Strategic Contact Reporting without naming it M3B; D-08 selected bounded assignment; D-14 selected response; D-18 moved the main development axis to M6. Neither M3 nor M5 had to be complete first.
 
-The [open-question register](open-questions.md) retains the unresolved portions. No detailed permission matrix, treaty engine, general political scoring system, economic resource catalog, complete organization taxonomy, or combat refinements beyond M6A are approved by these decisions.
+[Open questions](open-questions.md) retains unresolved permissions, treaties, political scoring, economy, organizations, recovery, and combat refinements beyond M6A. ADRs 0015–0018 do not answer them or reopen completed substrate implementation.
 
 ## Maintaining the register
 
-Keep existing decision IDs stable. When a decision changes, update its owning record and state the supersession or refinement rather than silently altering historical meaning. Use a new ADR when an architectural boundary changes; not every gameplay tuning choice requires one. Implementation claims belong in [Implementation status](implementation-status.md), not in the approval labels above.
+Keep decision IDs stable. Change an owning record explicitly and describe supersession or refinement instead of silently changing historical meaning. Use an ADR for an architectural boundary, not every tuning choice. Record implementation in [Implementation status](implementation-status.md) and actual verification in the governing PR; approval labels are not test or release evidence.

@@ -2,7 +2,7 @@
 schema_version: '1.1'
 id: 'index-5oz149-wiki'
 title: 'Star Trek Alter Course Design Wiki'
-description: 'Single source of truth for the design of the game: decisions, implemented systems, future design, and references.'
+description: 'Single source of truth for game design, with current implementation, architectural decisions, and unresolved choices clearly separated.'
 doc_type: 'index'
 status: 'active'
 created: '2026-09-06'
@@ -14,6 +14,7 @@ aliases: []
 related:
   - 'ROADMAP.md'
   - 'docs/STATUS.md'
+  - 'docs/adr/README.md'
   - 'docs/wiki/decision-register.md'
   - 'docs/wiki/strategic-contact-reporting.md'
   - 'docs/wiki/faction-intent-and-autonomous-assignment.md'
@@ -26,66 +27,66 @@ related:
 
 ## Purpose and baseline
 
-This wiki is the single source of truth for the design of the game: what it is intended to become, what the code actually does, which decisions are settled, and which questions remain open. Detailed game rules and milestone acceptance contracts live here. [Documents outside the wiki](../README.md) have distinct architectural, operational, onboarding, or legal roles; they do not introduce additional gameplay rules.
+This wiki is the single source of truth for game design: intended behavior, reviewed implementation, approved decisions, and open questions. Detailed rules and milestone acceptance contracts live here. [Documents outside the wiki](../README.md) have distinct architectural, operational, onboarding, or legal roles; they do not introduce competing gameplay rules.
 
-The initial implementation review is against `dev` commit `42481ca7fbc6c5c9da96985e02565f78a236cab7`, reviewed September 6, 2026. The current source-only release is [v0.6.2](https://github.com/L3DigitalNet/star-trek-alter-course/releases/tag/v0.6.2), at `255eaedc8e27b483b0fd4e2fe0bccf050486b3bf`; its latest gameplay baseline is [v0.6.0](https://github.com/L3DigitalNet/star-trek-alter-course/releases/tag/v0.6.0), Faction Observation and Response, at `d00460e`. It includes both Feature #86 faction assignment and Feature #93 observation response. Strategic Contact Reporting remains the v0.5.0 historical V6 release; it does not complete Milestone 3 and does not itself begin Milestone 5.
+The current source-only release is [v0.6.2](https://github.com/L3DigitalNet/star-trek-alter-course/releases/tag/v0.6.2), at `255eaedc8e27b483b0fd4e2fe0bccf050486b3bf`. Its gameplay baseline remains [v0.6.0 — Faction Observation and Response](https://github.com/L3DigitalNet/star-trek-alter-course/releases/tag/v0.6.0), using V8 saves. Development additionally contains unreleased M6A combat and the completed installed-system migration, using ship content V6, system-definition content V1, and V10 saves. M3, M5, and M6 remain partial; no packaged game artifact is published.
 
-[Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) is the first implemented contribution toward M5, delivered by Feature #86 / Final PR #87 and merged into `dev` as `0217296`. Its era-neutral proof implements the six selected boundary decisions and introduced V7 saves with faction content V1. The v0.6.0 release uses V8; v0.5.0 remains the historical V6 release and V4 remains its ship-content baseline. This does not declare M3 or M5 complete.
+Use [Implementation status](implementation-status.md) for the release/development distinction and verification evidence, [Content, assets, and persistence](content-assets-and-persistence.md) for format compatibility, and the [roadmap](../../ROADMAP.md) for sequence. Historical V5/V9 M6A and V6/V7/V8 faction/reporting admissions are not the current development format.
 
-[Observation-Driven Faction Response](observation-driven-faction-response.md) is implemented by Feature #93 / Final PR #94 and released in v0.6.0. V8 uses `observation-driven-faction-response-v1`; v0.5.0 remains the historical V6 release. It connects legitimate NPC sensor observations to delayed direct-faction reports and deterministic investigation assignments while preserving observer-local identity, information limits, existing orders, and bounded persistence. Its reviewed evidence includes Core scenario/horizon coverage, actor-safe Godot coverage, and the V8 persistence bound. M6A First Combat Engagement is implemented on `dev` as an unreleased contribution, admitted using V5 content and V9 saves; full M3 or M5 completion was not a prerequisite. The development branch has since implemented [Issue #121's installed-system substrate migration](ship-system-substrate.md), superseding V5/V9 with ship content V6, system-definition content V1, and V10 saves.
-
-The [recurring design-reconciliation procedure](development-and-governance.md#recurring-design-reconciliation) governs review of these claims. The [source catalog review record](sources.md#review-record) identifies the latest full and targeted reviews.
+The [recurring reconciliation procedure](development-and-governance.md#recurring-design-reconciliation) governs review. The [source catalog](sources.md#review-record) records the initial September 6 baseline, later full and targeted reviews, their limitations, and the next full-sweep date.
 
 ## Implemented substrate migration (development branch)
 
-[Issue #121](https://github.com/L3DigitalNet/star-trek-alter-course/issues/121) implements the [ship-system substrate migration](ship-system-substrate.md) required by [ADR 0014](../adr/0014-use-an-extensible-bounded-ship-system-substrate.md). Runtime, content, persistence (ship content V6, system-definition content V1, save schema V10), and Godot's generic Engineering presentation are implemented on `dev` through merged Final PR #123, unreleased. Read the owning contract before changing ship systems. Further systems and Damage Control gameplay remain future work; this is not M6B or a release. Earlier recovery prompts are superseded, and detailed recovery semantics remain open.
+[Issue #121](https://github.com/L3DigitalNet/star-trek-alter-course/issues/121) completed the [ship-system substrate migration](ship-system-substrate.md) required by [ADR 0014](../adr/0014-use-an-extensible-bounded-ship-system-substrate.md), through Final PR #123. Runtime, content, persistence, and generic Engineering presentation are implemented and unreleased. Read that contract before changing ship systems.
+
+Recovery, refit gameplay, and multi-instance aggregation remain separate future decisions. The migration is not M6B or a release, and earlier recovery prompts are not the current work order. ADRs 0015–0018 formalize command, information, asset, and session boundaries; they do not select the next gameplay slice.
 
 ## Start here
 
 - [Vision and scope](vision-and-scope.md): captain-level play, persistent consequences, simulation priorities, and non-goals.
-- [Implementation status](implementation-status.md): implemented, preview-only, approved-not-implemented, and absent systems; milestone and release boundaries.
-- [Milestone proofs](milestone-proofs.md): detailed acceptance criteria for completed and future milestones; [the roadmap](../../ROADMAP.md) owns sequence.
+- [Implementation status](implementation-status.md): implemented, preview-only, approved-not-implemented, and absent systems.
+- [Milestone proofs](milestone-proofs.md): detailed acceptance criteria; [the roadmap](../../ROADMAP.md) owns sequence.
 
 ## Implemented systems and their contracts
 
-- [World, navigation, and time](world-navigation-and-time.md): ship identity, bootstrap, strategic orders, tactical space, and scheduling.
-- [Sensors, knowledge, and AI](sensors-knowledge-and-ai.md): actor-local observations, scan/hail, explainable decisions, and current versus approved information boundaries.
-- [Strategic Contact Reporting](strategic-contact-reporting.md): implemented durable, reference-frame-qualified actor-safe last-known contact information.
-- [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md): implemented bounded M5 contribution: direct NPC assignment, own-asset knowledge, typed scheduling, V7 migration, and no RNG.
-- [Engineering and combat](engineering-and-combat.md): implemented power, condition, repair, and bounded first-combat engagement rules.
-- [Interface and player commands](interface-and-player-commands.md): Command Deck, Engineering, presentation authority, controls, and preview boundaries.
-- [Content, assets, and persistence](content-assets-and-persistence.md): JSON definitions, released V8 and unreleased V10 snapshots, historical adjacent migrations, and the independent AssetCtl pipeline.
+- [World, navigation, and time](world-navigation-and-time.md): identity, bootstrap, strategic orders, tactical space, and scheduling.
+- [Sensors, knowledge, and AI](sensors-knowledge-and-ai.md): local observations, scan/hail, explainable decisions, and information boundaries.
+- [Strategic Contact Reporting](strategic-contact-reporting.md): durable, reference-frame-qualified last-known information.
+- [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md): direct NPC assignment, own-asset administrative knowledge, and bounded continuation.
+- [Observation-Driven Faction Response](observation-driven-faction-response.md): delayed historical reports and deterministic investigation through ordinary orders and sensing.
+- [Engineering and combat](engineering-and-combat.md): power, condition, repairs, and bounded first-engagement rules.
+- [Ship-system substrate](ship-system-substrate.md): installed-system identity, heterogeneous live loadouts, compatibility, and generic common mechanics.
+- [Interface and player commands](interface-and-player-commands.md): Command Deck, Engineering, Combat, controls, session lifetime, and preview boundaries.
+- [Content, assets, and persistence](content-assets-and-persistence.md): definitions, snapshots, migrations, and the independent AssetCtl pipeline.
 
 ## Implemented response and future design
 
-- [Ship-system substrate](ship-system-substrate.md): implemented migration of existing systems to heterogeneous live loadouts on the development branch (runtime, persistence, and Godot presentation), with compatibility, information safety, and conformance evidence.
-- [Observation-Driven Faction Response](observation-driven-faction-response.md): implemented delayed direct ship-to-faction reporting and bounded investigation response with bounded V8 persistence proof.
-- [Factions and organizations](factions-and-organizations.md): owner-approved political framework; the root-faction/direct-control subset is implemented while broader political runtime remains future work.
-- [Diplomacy, economy, and campaigns](diplomacy-economy-and-campaigns.md): political consequences, history, trade, canon, and later campaign work.
-- [Decision register](decision-register.md): settled decisions and their owning pages.
-- [Open questions](open-questions.md): unresolved choices and the consumers that would justify resolving them.
+The faction assignment and observation-response contracts are bounded implemented contributions toward M5, not the complete political model. Strategic Contact Reporting retains its original scope; it is not a renamed M3B and did not itself introduce faction autonomy.
+
+- [Factions and organizations](factions-and-organizations.md): owner-approved political principles; hierarchy and organizations remain future runtime work.
+- [Diplomacy, economy, and campaigns](diplomacy-economy-and-campaigns.md): later political consequences, history, trade, and campaign work.
+- [Decision register](decision-register.md): stable approved decision IDs and owning contracts.
+- [Open questions](open-questions.md): unresolved choices and the concrete consumers that would justify resolving them.
 
 ## Architecture, development, and evidence
 
-- [Architecture](architecture.md): authority, project boundaries, dependencies, testing, and the ADR map.
-- [Development and governance](development-and-governance.md): toolchain, quality gate, branch/release workflow, agent guidance, and legal references.
-- [Asset pipeline tool](asset-pipeline-tool.md): the full development-tool contract, separately labeled from gameplay and implementation status.
-- [Source catalog](sources.md): implementation evidence, consolidation map, historical provenance, and dated review coverage.
+- [Architecture](architecture.md) and the [ADR catalog](../adr/README.md): authority, dependencies, command commitment, information ownership, asset publication, and session boundaries.
+- [Development and governance](development-and-governance.md): toolchain, quality gate, branch/release workflow, and documentation discipline.
+- [Asset pipeline tool](asset-pipeline-tool.md): detailed development-tool contract, not proof that every planned provider operation exists.
+- [Source catalog](sources.md): source/test entry points, consolidation map, historical provenance, and dated coverage.
 
-Read the system page first and follow its specialized contract links when needed. Strategic Contact Reporting owns last-known-report rules; Faction Intent and Autonomous Assignment owns first-slice assignment rules; Observation-Driven Faction Response owns the implemented direct report-delivery/investigation extension. The ship-system substrate page owns Issue #121's migration contract without duplicating M6A's Engineering formulas. Their summary links elsewhere do not redefine those contracts.
+Read a system's owning page first. Summaries link contracts rather than redefining them; the substrate contract does not duplicate M6A formulas, and an architectural record does not turn deferred design into implemented gameplay.
 
 ## Status vocabulary
 
-**Implemented** means the reviewed source has the behavior; supporting tests or release evidence are linked where available. **Approved design, not implemented** means the owner or an active ADR has selected a direction, not that a corresponding runtime type exists. **Planned** means the roadmap or a specification describes a future slice. **Proposed/open** means an option was discussed but not approved. **Historical** means a record explains earlier intent or an earlier implementation boundary.
+**Implemented** means reviewed source provides the behavior, with linked tests or release evidence where available. **Approved design, not implemented** means a direction was selected but corresponding runtime behavior is not established. **Planned** describes a future slice. **Proposed/open** has not been approved. **Historical** explains earlier intent or an earlier implementation boundary.
 
-A document frontmatter value of `status: active` describes the document, not feature completion. A mockup, selected package candidate, accepted political principle, approved next slice, or future milestone is not evidence of implemented gameplay.
+Frontmatter `status: active` describes the document, not feature completion. An accepted ADR, mockup, preferred package candidate, or milestone proof is not evidence that its conditional future capabilities exist.
 
 ## Authority and change discipline
 
-This wiki governs design. When a wiki page and any other design document, roadmap passage, archived conversation, or agent instruction disagree about design, the wiki is correct and the other document is a defect to fix. Active ADRs remain the record of architectural decisions: an architectural boundary changes only through a new or amended ADR, and the wiki then reflects that decision. Implementation claims are checked against source and tests. The roadmap describes sequence and scope, not design, and defers to this wiki wherever it describes a system.
+The wiki governs gameplay design; active ADRs govern architectural decisions. Change an architectural boundary through a new or amended ADR and reconcile the wiki in the same governed work. Resolve disagreement between intended behavior and source explicitly rather than silently rewriting either to match the other.
 
-The released contact-reporting decision is owned by [Strategic Contact Reporting](strategic-contact-reporting.md). The implemented first M5 slice is owned by [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md). The implemented information-to-action slice is owned by [Observation-Driven Faction Response](observation-driven-faction-response.md). The broader political principles remain owned by [Factions and organizations](factions-and-organizations.md). Other pages summarize or link these records rather than redefining them. Assistant recommendations that the owner did not approve remain in the open-question register.
+Keep rules, formulas, state transitions, edge cases, and acceptance contracts in the owning wiki page. Update implementation claims when behavior lands. Keep operational facts in STATUS/TODO/handoff, and preserve historical decisions through stable IDs and fixed-revision references. Do not recreate a parallel design/specification tree.
 
-Record a design change on its wiki page in the same governed work that implements it. Keep detailed rules, formulas, state transitions, edge cases, and acceptance contracts inside the wiki, and update [implementation status](implementation-status.md) when behavior lands. Change a decision explicitly rather than silently overwriting its meaning. Keep operational handoff state in its existing files. Do not recreate a parallel design/specification tree; implementation plans and issues link the owning wiki contracts.
-
-A useful system page explains purpose and current scope, state and invariants, legal actions and rejection behavior, time/order semantics, actor-knowledge and presentation boundaries, persistence implications, proof values where material, and source/test evidence. Cover only the headings that the system needs. Future sections explicitly distinguish approved intent from unanswered choices; they do not need invented implementation detail. Split a long specialized contract into another linked wiki page when it has a distinct consumer, preserving existing topic URLs where possible.
+A useful system page covers purpose and current scope, state and invariants, actions and refusal behavior, timing/order, actor knowledge, persistence, and evidence. Use only the sections the system needs. Split a specialized contract when it has a distinct consumer, preserving established topic URLs and anchors. Future sections separate approved intent from unanswered choices instead of inventing implementation detail.
