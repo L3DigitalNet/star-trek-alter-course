@@ -14,6 +14,10 @@ internal static class PlayerEngineeringTestExtensions
     internal static InstalledSystemProjection System(this EngineeringProjection engineering, ShipSystemKind kind) =>
         engineering.Systems.Single(row => row.Kind == kind);
 
+    /// <summary>Returns the condition value of the single projected row of a kind.</summary>
+    internal static double ConditionOf(this EngineeringProjection engineering, ShipSystemKind kind) =>
+        engineering.System(kind).Condition.Value;
+
     /// <summary>Returns the player's single installed identity of a kind from the current projection.</summary>
     internal static InstalledSystemId PlayerInstallation(this GameSimulation game, ShipSystemKind kind) =>
         game.GetPlayerProjection().Ship.Engineering.System(kind).Id;

@@ -320,12 +320,8 @@ public sealed class EngineeringBackboneTests
 
         SimulationAdvanceResult midpoint = uninterrupted.AdvanceFixedSteps(30);
         Assert.Equal(new SimulationTime(3_000), midpoint.FinalTime);
-        Assert.Equal(0.5, midpoint.Projection.Ship.Engineering.System(ShipSystemKind.Sensors).Condition.Value, 12);
-        Assert.Equal(
-            0.75,
-            midpoint.Projection.Ship.Engineering.System(ShipSystemKind.ImpulsePropulsion).Condition.Value,
-            12
-        );
+        Assert.Equal(0.5, midpoint.Projection.Ship.Engineering.ConditionOf(ShipSystemKind.Sensors), 12);
+        Assert.Equal(0.75, midpoint.Projection.Ship.Engineering.ConditionOf(ShipSystemKind.ImpulsePropulsion), 12);
         Assert.Equal(0.5, midpoint.Projection.Ship.Engineering.ActiveRepair!.Progress, 12);
 
         GameSaveMetadata metadata = ImpulseRepairMetadata();
@@ -344,11 +340,8 @@ public sealed class EngineeringBackboneTests
         Assert.Equal(new SimulationTime(6_000), resolved.OccurredAt);
         Assert.Equal(ShipSystemKind.ImpulsePropulsion, resolved.SystemKind);
         Assert.Equal(TestShipContent.Impulse, resolved.InstalledSystemId);
-        Assert.Equal(0.5, completion.Projection.Ship.Engineering.System(ShipSystemKind.Sensors).Condition.Value, 12);
-        Assert.Equal(
-            1,
-            completion.Projection.Ship.Engineering.System(ShipSystemKind.ImpulsePropulsion).Condition.Value
-        );
+        Assert.Equal(0.5, completion.Projection.Ship.Engineering.ConditionOf(ShipSystemKind.Sensors), 12);
+        Assert.Equal(1, completion.Projection.Ship.Engineering.ConditionOf(ShipSystemKind.ImpulsePropulsion));
         Assert.Null(completion.Projection.Ship.Engineering.ActiveRepair);
         Assert.DoesNotContain(
             uninterrupted.CaptureState().Scheduler.OutstandingWork,
