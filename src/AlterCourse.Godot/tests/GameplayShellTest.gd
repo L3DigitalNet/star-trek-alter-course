@@ -5,6 +5,12 @@ const TEST_QUICK_SAVE_PATH := "user://gameplay-shell-test-quick-save.json"
 const DEFAULT_QUICK_SAVE_PATH := "user://quick-save.json"
 const LEGACY_DEFAULT_QUICK_SAVE_PATH := "user://quick-save-v1.json"
 const INVALID_CONTENT_PATH := "user://gameplay-shell-invalid-content.json"
+# Installed identities of the canonical production loadout (content/ships/pathfinder.json). Test-only convenience: the
+# shell publishes engineering hooks by installed identity and never by kind, so this mapping must not move into it.
+const SENSORS_ID := 2
+const IMPULSE_ID := 3
+const SHIELDS_ID := 4
+const WEAPONS_ID := 5
 
 var _screens_to_free: Array[Node] = []
 
@@ -94,10 +100,10 @@ func test_live_combat_exposes_core_refusal_and_four_consumer_engineering() -> vo
 	assert_object(_command_deck(screen).get_node_or_null("%TargetSystemSelector")).is_instanceof(OptionButton)
 	screen.call("ShowEngineeringWorkspace")
 	(_find_engineering_action_button(screen, "balance") as Button).emit_signal("pressed")
-	assert_int(screen.get_meta("engineering_sensor_allocation", -1)).is_equal(28)
-	assert_int(screen.get_meta("engineering_impulse_allocation", -1)).is_equal(20)
-	assert_int(screen.get_meta("engineering_shield_allocation", -1)).is_equal(16)
-	assert_int(screen.get_meta("engineering_weapon_allocation", -1)).is_equal(11)
+	assert_int(screen.get_meta(_installation_meta("allocation", SENSORS_ID), -1)).is_equal(28)
+	assert_int(screen.get_meta(_installation_meta("allocation", IMPULSE_ID), -1)).is_equal(20)
+	assert_int(screen.get_meta(_installation_meta("allocation", SHIELDS_ID), -1)).is_equal(16)
+	assert_int(screen.get_meta(_installation_meta("allocation", WEAPONS_ID), -1)).is_equal(11)
 	var text := _collect_control_text(_engineering_workspace(screen))
 	assert_str(text).contains("SHIELDS")
 	assert_str(text).contains("DIRECTED-ENERGY WEAPONS")
@@ -150,7 +156,7 @@ func test_public_controls_approach_identify_stop_allocate_and_fire_with_stable_s
 	fire.emit_signal("pressed")
 	assert_int(screen.get_meta("combat_next_ready_at", -1)).is_equal(ready_at)
 	_advance_fixed_steps(screen, 1)
-	assert_float(screen.get_meta("engineering_shield_condition", 1.0)).is_less(1.0)
+	assert_float(screen.get_meta(_installation_meta("condition", SHIELDS_ID), 1.0)).is_less(1.0)
 	assert_str(_collect_control_text(screen.get_node("%EventLogContent"))).contains("Own Shields damaged")
 	screen.call("ShowEngineeringWorkspace")
 	var repair := _find_engineering_action_button(screen, "repair:4") as Button
@@ -208,7 +214,7 @@ func test_public_combat_damage_disables_weapon_and_weapon_repair_restores_capabi
 			break
 		fire.emit_signal("pressed")
 		_advance_fixed_steps(screen, 20)
-	assert_float(screen.get_meta("engineering_weapon_condition", -1.0)).is_equal(0.0)
+	assert_float(screen.get_meta(_installation_meta("condition", WEAPONS_ID), -1.0)).is_equal(0.0)
 	assert_str(screen.get_meta("combat_target_outcome", "")).is_equal("WeaponOffline")
 	assert_bool((_find_action_button(screen, "fire-phasers") as Button).disabled).is_true()
 	assert_str(_collect_control_text(_command_deck(screen))).contains("Weapon is offline")
@@ -217,13 +223,13 @@ func test_public_combat_damage_disables_weapon_and_weapon_repair_restores_capabi
 	assert_str(screen.get_meta("engineering_repair_target", "")).is_equal("directed-energy-weapons")
 	assert_str((screen.get_node("%Message") as Label).text).is_equal("Directed-energy weapon repair started.")
 	_advance_fixed_steps(screen, 60)
-	assert_float(screen.get_meta("engineering_weapon_condition", -1.0)).is_equal(1.0)
+	assert_float(screen.get_meta(_installation_meta("condition", WEAPONS_ID), -1.0)).is_equal(1.0)
 	assert_str(screen.get_meta("engineering_repair_target", "")).is_empty()
 	(_find_engineering_action_button(screen, "prioritize:5") as Button).emit_signal("pressed")
-	assert_int(screen.get_meta("engineering_weapon_allocation", -1)).is_equal(30)
-	assert_int(screen.get_meta("engineering_impulse_allocation", -1)).is_equal(0)
+	assert_int(screen.get_meta(_installation_meta("allocation", WEAPONS_ID), -1)).is_equal(30)
+	assert_int(screen.get_meta(_installation_meta("allocation", IMPULSE_ID), -1)).is_equal(0)
 	(_find_engineering_action_button(screen, "prioritize:4") as Button).emit_signal("pressed")
-	assert_int(screen.get_meta("engineering_shield_allocation", -1)).is_equal(40)
+	assert_int(screen.get_meta(_installation_meta("allocation", SHIELDS_ID), -1)).is_equal(40)
 
 
 func test_combat_quick_save_restores_readiness_and_reaction_continuation() -> void:
@@ -249,8 +255,8 @@ func test_combat_quick_save_restores_readiness_and_reaction_continuation() -> vo
 			assert_int(int(stimulus.get("dueTimeMilliseconds", -1))).is_equal(fired_at + 100)
 	assert_int(pending_count).is_equal(1)
 	_advance_fixed_steps(screen, 20)
-	var shield_condition: float = screen.get_meta("engineering_shield_condition", -1.0)
-	var weapon_condition: float = screen.get_meta("engineering_weapon_condition", -1.0)
+	var shield_condition: float = screen.get_meta(_installation_meta("condition", SHIELDS_ID), -1.0)
+	var weapon_condition: float = screen.get_meta(_installation_meta("condition", WEAPONS_ID), -1.0)
 	assert_float(shield_condition).is_less(1.0)
 	screen.call("QuickLoad")
 	assert_str(screen.get_meta("quick_save_status", "")).is_equal("loaded")
@@ -263,8 +269,8 @@ func test_combat_quick_save_restores_readiness_and_reaction_continuation() -> vo
 	assert_dict(loaded.get("simulation", {})).is_equal(simulation)
 	_advance_fixed_steps(screen, 20)
 	assert_int(screen.get_meta("combat_remaining_cooldown", -1)).is_equal(0)
-	assert_float(screen.get_meta("engineering_shield_condition", -1.0)).is_equal_approx(shield_condition, 0.000001)
-	assert_float(screen.get_meta("engineering_weapon_condition", -1.0)).is_equal_approx(weapon_condition, 0.000001)
+	assert_float(screen.get_meta(_installation_meta("condition", SHIELDS_ID), -1.0)).is_equal_approx(shield_condition, 0.000001)
+	assert_float(screen.get_meta(_installation_meta("condition", WEAPONS_ID), -1.0)).is_equal_approx(weapon_condition, 0.000001)
 	assert_bool((_find_action_button(screen, "fire-phasers") as Button).disabled).is_false()
 
 
@@ -796,8 +802,8 @@ func test_live_engineering_projects_authoritative_power_capability_and_repair_st
 
 	assert_int(screen.get_meta("engineering_nominal_power", -1)).is_equal(120)
 	assert_int(screen.get_meta("engineering_available_power", -1)).is_equal(75)
-	assert_int(screen.get_meta("engineering_sensor_allocation", -1)).is_equal(44)
-	assert_int(screen.get_meta("engineering_impulse_allocation", -1)).is_equal(31)
+	assert_int(screen.get_meta(_installation_meta("allocation", SENSORS_ID), -1)).is_equal(44)
+	assert_int(screen.get_meta(_installation_meta("allocation", IMPULSE_ID), -1)).is_equal(31)
 	assert_str(screen.get_meta("engineering_repair_target", "")).is_equal("sensors")
 	assert_bool((_find_engineering_action_button(screen, "balance") as Button).disabled).is_false()
 	assert_bool((_find_engineering_action_button(screen, "repair:2") as Button).disabled).is_true()
@@ -811,25 +817,25 @@ func test_live_engineering_allocation_presets_submit_core_choices_and_refresh_pr
 	screen.call("ShowEngineeringWorkspace")
 
 	(_find_engineering_action_button(screen, "prioritize:2") as Button).emit_signal("pressed")
-	assert_int(screen.get_meta("engineering_sensor_allocation", -1)).is_equal(70)
-	assert_int(screen.get_meta("engineering_impulse_allocation", -1)).is_equal(5)
+	assert_int(screen.get_meta(_installation_meta("allocation", SENSORS_ID), -1)).is_equal(70)
+	assert_int(screen.get_meta(_installation_meta("allocation", IMPULSE_ID), -1)).is_equal(5)
 	assert_str(screen.get_meta("last_engineering_command", "")).is_equal(
 		"Prioritize:2:Accepted"
 	)
 	assert_str((screen.get_node("%Message") as Label).text).contains("Sensor-priority allocation applied")
 
 	(_find_engineering_action_button(screen, "prioritize:3") as Button).emit_signal("pressed")
-	assert_int(screen.get_meta("engineering_sensor_allocation", -1)).is_equal(25)
-	assert_int(screen.get_meta("engineering_impulse_allocation", -1)).is_equal(50)
+	assert_int(screen.get_meta(_installation_meta("allocation", SENSORS_ID), -1)).is_equal(25)
+	assert_int(screen.get_meta(_installation_meta("allocation", IMPULSE_ID), -1)).is_equal(50)
 	assert_str(screen.get_meta("last_engineering_command", "")).is_equal(
 		"Prioritize:3:Accepted"
 	)
 
 	(_find_engineering_action_button(screen, "balance") as Button).emit_signal("pressed")
-	assert_int(screen.get_meta("engineering_sensor_allocation", -1)).is_equal(28)
-	assert_int(screen.get_meta("engineering_impulse_allocation", -1)).is_equal(20)
-	assert_int(screen.get_meta("engineering_shield_allocation", -1)).is_equal(16)
-	assert_int(screen.get_meta("engineering_weapon_allocation", -1)).is_equal(11)
+	assert_int(screen.get_meta(_installation_meta("allocation", SENSORS_ID), -1)).is_equal(28)
+	assert_int(screen.get_meta(_installation_meta("allocation", IMPULSE_ID), -1)).is_equal(20)
+	assert_int(screen.get_meta(_installation_meta("allocation", SHIELDS_ID), -1)).is_equal(16)
+	assert_int(screen.get_meta(_installation_meta("allocation", WEAPONS_ID), -1)).is_equal(11)
 	assert_int(screen.get_meta("engineering_reserve", -1)).is_equal(0)
 	assert_str(screen.get_meta("last_engineering_command", "")).is_equal(
 		"Balance:-:Accepted"
@@ -937,7 +943,7 @@ func test_stale_engineering_control_is_refused_after_quick_load_but_acts_after_r
 	assert_bool(_find_engineering_action_button(screen, "prioritize:2") == refreshed).is_true()
 	refreshed.emit_signal("pressed")
 	assert_str(screen.get_meta("last_engineering_command", "")).is_equal("Prioritize:2:Accepted")
-	assert_int(screen.get_meta("engineering_sensor_allocation", -1)).is_equal(70)
+	assert_int(screen.get_meta(_installation_meta("allocation", SENSORS_ID), -1)).is_equal(70)
 
 	var stale := _find_engineering_action_button(screen, "prioritize:3") as Button
 	stale.grab_focus()
@@ -946,12 +952,12 @@ func test_stale_engineering_control_is_refused_after_quick_load_but_acts_after_r
 	var current := _find_engineering_action_button(screen, "prioritize:3") as Button
 	assert_object(current).is_not_null()
 	assert_bool(current == stale).is_false()
-	assert_int(screen.get_meta("engineering_sensor_allocation", -1)).is_equal(44)
+	assert_int(screen.get_meta(_installation_meta("allocation", SENSORS_ID), -1)).is_equal(44)
 
 	stale.emit_signal("pressed")
 	assert_str(screen.get_meta("last_engineering_command", "")).is_equal("Prioritize:2:Accepted")
-	assert_int(screen.get_meta("engineering_sensor_allocation", -1)).is_equal(44)
-	assert_int(screen.get_meta("engineering_impulse_allocation", -1)).is_equal(31)
+	assert_int(screen.get_meta(_installation_meta("allocation", SENSORS_ID), -1)).is_equal(44)
+	assert_int(screen.get_meta(_installation_meta("allocation", IMPULSE_ID), -1)).is_equal(31)
 	assert_str(screen.get_meta("last_refused_action", "")).is_equal("prioritize:3")
 	assert_str((screen.get_node("%Message") as Label).text).contains("no longer available")
 	# The stale button's queued focus restore is dropped; the load's own focus request wins.
@@ -960,7 +966,7 @@ func test_stale_engineering_control_is_refused_after_quick_load_but_acts_after_r
 
 	current.emit_signal("pressed")
 	assert_str(screen.get_meta("last_engineering_command", "")).is_equal("Prioritize:3:Accepted")
-	assert_int(screen.get_meta("engineering_impulse_allocation", -1)).is_equal(50)
+	assert_int(screen.get_meta(_installation_meta("allocation", IMPULSE_ID), -1)).is_equal(50)
 
 
 func test_stale_command_deck_control_is_refused_after_quick_load() -> void:
@@ -992,13 +998,13 @@ func test_live_quick_load_round_trips_v10_installations_into_engineering() -> vo
 	var saved := FileAccess.get_file_as_string(TEST_QUICK_SAVE_PATH)
 	assert_int(int((JSON.parse_string(saved) as Dictionary).get("schemaVersion", -1))).is_equal(10)
 	(_find_engineering_action_button(screen, "prioritize:2") as Button).emit_signal("pressed")
-	assert_int(screen.get_meta("engineering_sensor_allocation", -1)).is_equal(70)
+	assert_int(screen.get_meta(_installation_meta("allocation", SENSORS_ID), -1)).is_equal(70)
 
 	screen.call("QuickLoad")
 	assert_str(screen.get_meta("quick_save_status", "")).is_equal("loaded")
 	assert_str(screen.get_meta("engineering_system_ids", "")).is_equal("1,2,3,4,5")
-	assert_int(screen.get_meta("engineering_sensor_allocation", -1)).is_equal(44)
-	assert_int(screen.get_meta("engineering_impulse_allocation", -1)).is_equal(31)
+	assert_int(screen.get_meta(_installation_meta("allocation", SENSORS_ID), -1)).is_equal(44)
+	assert_int(screen.get_meta(_installation_meta("allocation", IMPULSE_ID), -1)).is_equal(31)
 	assert_str(screen.get_meta("engineering_repair_target_id", "")).is_equal("2")
 	assert_array(_section_rows(_engineering_workspace(screen).get_node("%ConnectedLoadsContent"))).contains(
 		["SENSORS=44 units"]
@@ -1022,7 +1028,7 @@ func test_quick_load_without_player_shields_presents_only_actual_installations()
 	assert_str(screen.get_meta("quick_save_status", "")).is_equal("loaded")
 	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(0)
 	assert_str(screen.get_meta("engineering_system_ids", "")).is_equal("1,2,3,5")
-	assert_bool(screen.has_meta("engineering_shield_condition")).is_false()
+	assert_bool(screen.has_meta(_installation_meta("condition", SHIELDS_ID))).is_false()
 	var deck_shields := _command_deck(screen).get_node("%SystemRows").get_node("System_shields")
 	assert_str((deck_shields.get_child(1) as Label).text).is_equal("UNAVAILABLE")
 
@@ -1075,7 +1081,7 @@ func test_quick_load_rejects_save_missing_a_still_referenced_definition() -> voi
 	screen.call("QuickLoad")
 	assert_str(screen.get_meta("quick_save_status", "")).is_equal("load_failed")
 	assert_int(screen.get_meta("simulation_identity", 0)).is_equal(identity)
-	assert_int(screen.get_meta("engineering_sensor_allocation", -1)).is_equal(70)
+	assert_int(screen.get_meta(_installation_meta("allocation", SENSORS_ID), -1)).is_equal(70)
 	assert_str(screen.get_meta("engineering_system_ids", "")).is_equal("1,2,3,4,5")
 	assert_object(_find_engineering_action_button(screen, "prioritize:4")).is_not_null()
 
@@ -1097,11 +1103,11 @@ func test_stale_engineering_control_is_refused_after_load_changes_the_owner() ->
 	assert_bool(current == stale).is_false()
 	stale.emit_signal("pressed")
 	assert_str(screen.get_meta("last_refused_action", "")).is_equal("prioritize:4")
-	assert_int(screen.get_meta("engineering_shield_allocation", -1)).is_equal(0)
+	assert_int(screen.get_meta(_installation_meta("allocation", SHIELDS_ID), -1)).is_equal(0)
 	assert_str(screen.get_meta("last_engineering_command", "")).is_empty()
 	current.emit_signal("pressed")
 	assert_str(screen.get_meta("last_engineering_command", "")).is_equal("Prioritize:4:Accepted")
-	assert_int(screen.get_meta("engineering_shield_allocation", -1)).is_equal(40)
+	assert_int(screen.get_meta(_installation_meta("allocation", SHIELDS_ID), -1)).is_equal(40)
 
 
 func test_stale_engineering_control_is_refused_after_load_changes_installation_meaning() -> void:
@@ -1139,10 +1145,118 @@ func test_stale_engineering_control_is_refused_after_load_changes_installation_m
 	)
 	stale.emit_signal("pressed")
 	assert_str(screen.get_meta("last_refused_action", "")).is_equal("prioritize:4")
-	assert_int(screen.get_meta("engineering_weapon_allocation", -1)).is_equal(0)
+	# In this save installation 4 is the weapon, so the canonical WEAPONS_ID mapping does not apply.
+	assert_int(screen.get_meta(_installation_meta("allocation", 4), -1)).is_equal(0)
 	current.emit_signal("pressed")
 	assert_str((screen.get_node("%Message") as Label).text).is_equal("Weapon-priority allocation applied.")
-	assert_int(screen.get_meta("engineering_weapon_allocation", -1)).is_equal(30)
+	assert_int(screen.get_meta(_installation_meta("allocation", 4), -1)).is_equal(30)
+
+
+func test_binding_owner_check_refuses_a_different_ship_under_the_current_generation() -> void:
+	# Review F2: every quick-load bumps the generation, so the load fixtures above can never isolate the owner half
+	# of the binding check. The hook runs the production comparison with each half varied on its own.
+	var screen := _create_screen()
+	var generation: int = screen.get_meta("simulation_generation", -1)
+	var owner: int = screen.get_meta("player_ship_id", -1)
+	assert_int(generation).is_greater(0)
+	assert_bool(screen.call("IsBindingCurrent", owner, generation)).is_true()
+	assert_bool(screen.call("IsBindingCurrent", owner + 10, generation)).is_false()
+	assert_bool(screen.call("IsBindingCurrent", owner, generation - 1)).is_false()
+
+
+func test_pre_load_engineering_selection_and_focus_do_not_apply_after_owner_changing_load() -> void:
+	# Review F1: hierarchy rows are keyed "system:<id>" and installed ids are ship-local, so after a load that
+	# changes the player ship a selection, row button, or queued focus restore captured before it must not carry
+	# over onto the loaded ship's installation with the same id. The same-ship reload that keeps a still-valid
+	# selection is pinned by test_live_engineering_identity_selection_current_payload_and_traversal_survive_refresh.
+	var screen := _create_screen()
+	screen.call("ShowEngineeringWorkspace")
+	screen.call("QuickSave")
+	_write_text(TEST_QUICK_SAVE_PATH, _shift_ship_ids(FileAccess.get_file_as_string(TEST_QUICK_SAVE_PATH), 10))
+	var engineering := _engineering_workspace(screen)
+	var hierarchy := engineering.get_node("%EngineeringHierarchy")
+	var stale := hierarchy.get_node("Hierarchy_system_4") as Button
+	stale.emit_signal("pressed")
+	stale.grab_focus()
+	assert_str(engineering.get_meta("selected_component_id", "")).is_equal("system:4")
+	# An ordinary refresh queues the workspace's deferred focus restore for the focused row; the load then
+	# replaces the world before that deferred call flushes.
+	assert_int(screen.call("ProcessSyntheticDelta", 0.1)).is_equal(1)
+	screen.call("QuickLoad")
+	assert_str(screen.get_meta("quick_save_status", "")).is_equal("loaded")
+	assert_int(screen.get_meta("player_ship_id", -1)).is_equal(11)
+
+	assert_str(engineering.get_meta("selected_component_id", "")).is_equal("overview")
+	var current := hierarchy.get_node_or_null("Hierarchy_system_4") as Button
+	assert_object(current).is_not_null()
+	assert_bool(current == stale).is_false()
+	assert_bool(current.button_pressed).is_false()
+	stale.emit_signal("pressed")
+	assert_str(engineering.get_meta("selected_component_id", "")).is_equal("overview")
+	await get_tree().process_frame
+	assert_bool(is_instance_valid(stale) and stale.has_focus()).is_false()
+	assert_object(get_viewport().gui_get_focus_owner()).is_same(screen.get_node("%EngineeringStationButton"))
+
+	current.emit_signal("pressed")
+	assert_str(engineering.get_meta("selected_component_id", "")).is_equal("system:4")
+
+
+func test_course_draft_authored_before_owner_changing_load_is_rederived_from_loaded_ship() -> void:
+	# Review F3: the course inputs are persistent shell controls, so their draft outlives a quick-load. A heading
+	# and speed typed for the pre-load ship must not be submitted to the loaded player ship; the draft is
+	# re-derived from the loaded projection, and the same persistent button keeps working afterwards.
+	var screen := _create_screen()
+	screen.call("ShowTacticalView")
+	screen.call("QuickSave")
+	_write_text(TEST_QUICK_SAVE_PATH, _shift_ship_ids(FileAccess.get_file_as_string(TEST_QUICK_SAVE_PATH), 10))
+	var heading := screen.get_node("%CourseHeading") as SpinBox
+	var speed := screen.get_node("%CourseSpeed") as SpinBox
+	heading.value = 270
+	speed.value = 3
+
+	screen.call("QuickLoad")
+	assert_str(screen.get_meta("quick_save_status", "")).is_equal("loaded")
+	assert_int(screen.get_meta("player_ship_id", -1)).is_equal(11)
+	var loaded_heading: float = screen.get_meta("tactical_heading", -1.0)
+	var loaded_speed: float = screen.get_meta("tactical_speed", -1.0)
+	assert_float(heading.value).is_equal_approx(loaded_heading, 0.0001)
+	assert_float(speed.value).is_equal_approx(loaded_speed, 0.0001)
+	var course_button := screen.get_node("%CourseButton") as Button
+	course_button.emit_signal("pressed")
+	assert_float(screen.get_meta("tactical_heading", -1.0)).is_equal_approx(loaded_heading, 0.0001)
+	assert_float(screen.get_meta("tactical_speed", -1.0)).is_equal_approx(loaded_speed, 0.0001)
+
+	heading.value = 90
+	speed.value = 1
+	course_button.emit_signal("pressed")
+	assert_float(screen.get_meta("tactical_heading", -1.0)).is_equal_approx(90.0, 0.0001)
+	assert_float(screen.get_meta("tactical_speed", -1.0)).is_equal_approx(1.0, 0.0001)
+
+
+func test_engineering_telemetry_hooks_are_keyed_by_installed_identity() -> void:
+	# Review F4: telemetry hooks name installations, not kinds, so they never pick "the" row of a kind; removing an
+	# installation on load removes its hooks (the absence fixture covers that path).
+	var screen := _create_screen()
+	assert_str(screen.get_meta("engineering_system_ids", "")).is_equal("1,2,3,4,5")
+	for installed_id in [1, 2, 3, 4, 5]:
+		assert_bool(screen.has_meta(_installation_meta("condition", installed_id))).is_true()
+	# Power generation is the supplier, not a consumer, so it has no allocation hook.
+	assert_bool(screen.has_meta(_installation_meta("allocation", 1))).is_false()
+	assert_int(screen.get_meta(_installation_meta("allocation", SENSORS_ID), -1)).is_equal(44)
+	assert_int(screen.get_meta(_installation_meta("allocation", IMPULSE_ID), -1)).is_equal(31)
+	assert_int(screen.get_meta(_installation_meta("allocation", SHIELDS_ID), -1)).is_equal(0)
+	assert_int(screen.get_meta(_installation_meta("allocation", WEAPONS_ID), -1)).is_equal(0)
+	for kind_hook in [
+		"engineering_sensor_allocation",
+		"engineering_impulse_allocation",
+		"engineering_shield_allocation",
+		"engineering_weapon_allocation",
+		"engineering_shield_condition",
+		"engineering_weapon_condition",
+		"engineering_sensor_capability",
+		"engineering_impulse_capability",
+	]:
+		assert_bool(screen.has_meta(kind_hook)).is_false()
 
 
 func test_sensor_priority_refreshes_command_contacts_without_revealing_hidden_identity() -> void:
@@ -1277,19 +1391,19 @@ func test_removed_live_engineering_action_cannot_fire_stale_intent_in_preview() 
 	live_action.grab_focus()
 	assert_bool(live_action.has_focus()).is_true()
 	var command_before: String = screen.get_meta("last_engineering_command", "")
-	var allocation_before: int = screen.get_meta("engineering_sensor_allocation", -1)
+	var allocation_before: int = screen.get_meta(_installation_meta("allocation", SENSORS_ID), -1)
 
 	screen.call("ShowPreview", 3)
 	assert_object(_find_engineering_action_button(screen, "prioritize:2")).is_null()
 	assert_bool(get_viewport().gui_get_focus_owner() == live_action).is_false()
 	live_action.emit_signal("pressed")
 	assert_str(screen.get_meta("last_engineering_command", "")).is_equal(command_before)
-	assert_int(screen.get_meta("engineering_sensor_allocation", -1)).is_equal(allocation_before)
+	assert_int(screen.get_meta(_installation_meta("allocation", SENSORS_ID), -1)).is_equal(allocation_before)
 	assert_str(screen.get_meta("data_mode", "")).is_equal("EngineeringPreview")
 
 	screen.call("RestoreLiveMode")
 	assert_str(screen.get_meta("data_mode", "")).is_equal("Live")
-	assert_int(screen.get_meta("engineering_sensor_allocation", -1)).is_equal(allocation_before)
+	assert_int(screen.get_meta(_installation_meta("allocation", SENSORS_ID), -1)).is_equal(allocation_before)
 	assert_bool(
 		(_find_engineering_action_button(screen, "prioritize:2") as Button).disabled
 	).is_false()
@@ -1300,7 +1414,7 @@ func test_space_pause_does_not_activate_focused_engineering_action() -> void:
 	screen.call("ShowEngineeringWorkspace")
 	var action := _find_engineering_action_button(screen, "prioritize:2") as Button
 	action.grab_focus()
-	var allocation_before: int = screen.get_meta("engineering_sensor_allocation", -1)
+	var allocation_before: int = screen.get_meta(_installation_meta("allocation", SENSORS_ID), -1)
 	var command_before: String = screen.get_meta("last_engineering_command", "")
 
 	var press := InputEventKey.new()
@@ -1313,7 +1427,7 @@ func test_space_pause_does_not_activate_focused_engineering_action() -> void:
 	screen.call("_Input", release)
 
 	assert_float(screen.get_meta("simulation_rate", -1.0)).is_equal(0.0)
-	assert_int(screen.get_meta("engineering_sensor_allocation", -1)).is_equal(allocation_before)
+	assert_int(screen.get_meta(_installation_meta("allocation", SENSORS_ID), -1)).is_equal(allocation_before)
 	assert_str(screen.get_meta("last_engineering_command", "")).is_equal(command_before)
 	assert_bool(action.has_focus()).is_true()
 
@@ -2417,6 +2531,10 @@ func _find_action_button(screen: Node, action_id: String) -> Button:
 		if child is Button and child.name == "Action_" + action_id:
 			return child
 	return null
+
+
+func _installation_meta(field: String, installed_id: int) -> String:
+	return "engineering_%s_%d" % [field, installed_id]
 
 
 func _regex_replace_first(source: String, pattern: String, replacement: String) -> String:

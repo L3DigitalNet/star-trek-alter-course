@@ -34,6 +34,11 @@ public partial class EngineeringWorkspace : Control
     private readonly Dictionary<string, CommandInterfaceHierarchyRow> _presentedHierarchy = new(StringComparer.Ordinal);
     private CommandInterfacePresentation? _presentation;
     private OwnShipActionBinding? _presentedBinding;
+
+    // The last non-null (live) binding and live presentation. Preview snapshots carry no binding, so a live -> preview
+    // -> live round trip must not look like a load; only a change between two live bindings is a world boundary.
+    private OwnShipActionBinding? _liveBinding;
+    private CommandInterfacePresentation? _livePresentation;
     private VBoxContainer _actions = null!;
     private Label _actionsHeading = null!;
     private VBoxContainer _connectedLoads = null!;
@@ -80,6 +85,17 @@ public partial class EngineeringWorkspace : Control
         bool restoreOwnedFocus =
             retainedFocus is Button focusedButton
             && (_actionButtons.ContainsValue(focusedButton) || _hierarchyButtons.ContainsValue(focusedButton));
+        if (presentation.Binding is { } binding)
+        {
+            if (_liveBinding is not null && _liveBinding != binding)
+            {
+                CrossWorldBoundary(presentation);
+            }
+
+            _liveBinding = binding;
+            _livePresentation = presentation;
+        }
+
         _presentation = presentation;
         CurrentDataMode = presentation.DataMode;
         SetMeta("data_mode", presentation.DataMode.ToString());
@@ -109,9 +125,45 @@ public partial class EngineeringWorkspace : Control
         _pendingFocusRestore = restoreOwnedFocus && focusStillRetained ? retainedFocus as Button : null;
         if (_pendingFocusRestore is not null)
         {
-            Callable.From(RestorePendingFocus).CallDeferred();
+            OwnShipActionBinding? queuedFor = _presentedBinding;
+            Callable.From(() => RestorePendingFocus(queuedFor)).CallDeferred();
         }
     }
+
+    /// <summary>
+    /// Handles a live presentation whose owner or simulation generation differs from the previous live one — a
+    /// quick-load replaced the world. Installed identities are ship-local, so every hierarchy button and
+    /// the <c>system:&lt;id&gt;</c> selection may now name another installation or another ship's installation.
+    /// </summary>
+    /// <remarks>
+    /// All hierarchy buttons are discarded, so a row button captured (or focused) before the load is no longer
+    /// registered: pressing it is ignored by <see cref="SelectCurrentComponent"/>, and no deferred focus restore can
+    /// land on it. The selection survives only when the loaded world demonstrably presents the same component — same
+    /// owner, same key, same authored component title — which keeps a same-ship reload of the running game stable;
+    /// otherwise it is re-derived from the loaded presentation's defaults. Rejected: keeping selection by key alone
+    /// (the defect: <c>system:4</c> silently retargets from shields to weapons, or onto another ship); resetting on
+    /// every load (discards a still-valid same-ship selection for no safety gain).
+    /// </remarks>
+    private void CrossWorldBoundary(CommandInterfacePresentation loaded)
+    {
+        string? retained =
+            SelectedComponentId is string selectedId
+            && _liveBinding?.Owner == loaded.Binding?.Owner
+            && ComponentTitle(_livePresentation, selectedId) is string before
+            && string.Equals(before, ComponentTitle(loaded, selectedId), StringComparison.Ordinal)
+                ? selectedId
+                : null;
+        RemoveAllHierarchyButtons();
+        SelectedComponentId = retained;
+        _pendingFocusRestore = null;
+    }
+
+    private static string? ComponentTitle(CommandInterfacePresentation? presentation, string componentId) =>
+        presentation
+            ?.Engineering?.Components.FirstOrDefault(component =>
+                string.Equals(component.Id, componentId, StringComparison.Ordinal)
+            )
+            ?.Title;
 
     /// <summary>Returns whether the named engineering action currently submits authoritative intent.</summary>
     public bool IsActionEnabled(string actionId) =>
@@ -237,7 +289,8 @@ public partial class EngineeringWorkspace : Control
                 FocusMode = FocusModeEnum.All,
                 ToggleMode = true,
             };
-            button.Pressed += () => SelectCurrentComponent(rowId);
+            Button pressed = button;
+            button.Pressed += () => SelectCurrentComponent(pressed, rowId);
             _hierarchy.AddChild(button);
             _hierarchyButtons.Add(row.Id, button);
         }
@@ -262,10 +315,14 @@ public partial class EngineeringWorkspace : Control
         }
     }
 
-    private void SelectCurrentComponent(string componentId)
+    // A button discarded at a world boundary still exists (QueueFree) and may still be signalled; only the button
+    // currently registered for the key may select, so a pre-load row cannot select the loaded world's same key.
+    private void SelectCurrentComponent(Button button, string componentId)
     {
         if (
-            _presentedHierarchy.TryGetValue(componentId, out CommandInterfaceHierarchyRow? row)
+            _hierarchyButtons.TryGetValue(componentId, out Button? current)
+            && current == button
+            && _presentedHierarchy.TryGetValue(componentId, out CommandInterfaceHierarchyRow? row)
             && row.Availability == CommandInterfaceAvailability.Available
         )
         {
@@ -459,8 +516,16 @@ public partial class EngineeringWorkspace : Control
         )
         && value > 0;
 
-    private void RestorePendingFocus()
+    // Deferred, so it captures the binding it was queued under: a restore queued before a quick-load flushes after
+    // the load and must not move focus onto a control of the replaced world. A stale call returns without clearing
+    // the field, which may already hold a restore queued by the loaded world's own presentation.
+    private void RestorePendingFocus(OwnShipActionBinding? queuedFor)
     {
+        if (queuedFor != _presentedBinding)
+        {
+            return;
+        }
+
         Button? button = _pendingFocusRestore;
         _pendingFocusRestore = null;
         if (

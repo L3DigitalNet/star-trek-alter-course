@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Runtime.CompilerServices;
 using AlterCourse.Core.Content;
 using AlterCourse.Core.Gameplay;
+using AlterCourse.Core.Identity;
 using AlterCourse.Core.Persistence;
 using AlterCourse.Core.Player;
 using AlterCourse.Core.Quantities;
@@ -53,6 +54,10 @@ public partial class GameScreen : Control
     private ShipDefinitionCatalog? _shipCatalog;
     private FactionDefinitionCatalog? _factionCatalog;
     private PlayerProjection? _projection;
+
+    // Installed identities whose engineering_*_<id> test hooks are currently published, so a load that drops an
+    // installation also drops its hooks instead of leaving the replaced world's values readable.
+    private HashSet<long> _publishedInstallationMeta = [];
     private LocationId? _selectedDestination;
     private SensorContactId? _selectedContact;
     private DateTimeOffset? _quickSaveCreatedAtUtc;
@@ -381,6 +386,7 @@ public partial class GameScreen : Control
             // because presentation time accumulated before the snapshot must not advance restored truth.
             _rateController.ResetAccumulatedTime();
             RefreshProjection();
+            ResetCourseDraft(_projection!);
             _messageLabel.Text =
                 $"Quick load restored time {loaded.Simulation.GetPlayerProjection().SimulationTime.Milliseconds / 1000.0:0.0} s.";
             SetMeta("quick_save_status", "loaded");
@@ -514,6 +520,18 @@ public partial class GameScreen : Control
     public void SetDemonstrationCourse()
     {
         SubmitCourse(_courseHeading.Value, _courseSpeed.Value);
+    }
+
+    // The persistent course inputs are the one shell draft that outlives a world replacement: the travel destination
+    // and contact selection are cleared by QuickLoad, and every other shell button reads the current projection when
+    // pressed. A heading and speed typed for the pre-load ship would otherwise be submitted, unreviewed, to whatever
+    // ship the loaded save makes the player's, so the draft is re-derived from the loaded ship's current motion.
+    // Pressing Set Course immediately afterwards therefore re-commands the loaded course and changes nothing. An
+    // ordinary refresh never calls this, so a draft being edited survives the running simulation's refreshes.
+    private void ResetCourseDraft(PlayerProjection loaded)
+    {
+        _courseHeading.Value = loaded.Ship.Tactical.HeadingDegrees;
+        _courseSpeed.Value = loaded.Ship.Tactical.SpeedKilometersPerSecond;
     }
 
     private void StopCourse()
@@ -833,6 +851,7 @@ public partial class GameScreen : Control
         SetMeta("active_workspace", presentation.Mode == CommandInterfaceMode.Engineering ? "engineering" : "command");
         SetMeta("active_view", activeView);
         SetMeta("simulation_identity", SimulationIdentity);
+        SetMeta("simulation_generation", _simulationGeneration);
 
         if (live)
         {
@@ -1171,6 +1190,19 @@ public partial class GameScreen : Control
             projection.Ship.Engineering.Systems.SingleOrDefault(row => row.Id == consumer)?.Kind
         );
 
+    /// <summary>
+    /// Test hook: reports whether a binding for player ship <paramref name="ownerShipId"/> presented under
+    /// <paramref name="simulationGeneration"/> would be accepted now, through the same comparison every own-ship
+    /// submission uses. Every quick-load bumps the generation, so no load fixture can hold the generation while
+    /// changing the owner; this is the only way to prove the owner half of the check on its own.
+    /// </summary>
+    public bool IsBindingCurrent(long ownerShipId, long simulationGeneration) =>
+        _simulation is not null
+        && IsCurrentBinding(
+            new OwnShipActionBinding(new ShipInstanceId(ownerShipId), simulationGeneration),
+            _simulation.GetPlayerProjection()
+        );
+
     private bool IsCurrentBinding(OwnShipActionBinding? binding, PlayerProjection current) =>
         binding is not null
         && binding.SimulationGeneration == _simulationGeneration
@@ -1410,32 +1442,21 @@ public partial class GameScreen : Control
     }
 
     /// <summary>
-    /// Publishes test hooks. The kind-named hooks read the production loadout's single row of each kind and are
-    /// removed when the player has no such installation; they are observation only and feed no decision.
+    /// Publishes engineering test hooks. Per-installation values are keyed by installed identity —
+    /// <c>engineering_condition_&lt;id&gt;</c>, <c>engineering_allocation_&lt;id&gt;</c> (consumers only) and
+    /// <c>engineering_capability_&lt;id&gt;</c> (where projected) — for every row Core projects, so no hook presumes
+    /// one installation per kind. Observation only; nothing reads them back.
     /// </summary>
+    /// <remarks>
+    /// Rejected: kind-named hooks such as <c>engineering_sensor_allocation</c>. They must pick "the" row of a kind
+    /// (a <c>SingleOrDefault</c> over kind), which is exactly the singleton selection the substrate contract forbids
+    /// outside typed admission. A canonical-loadout kind-to-id mapping, where a test wants one, lives in test code.
+    /// </remarks>
     private void SetEngineeringMetadata(EngineeringProjection engineering)
     {
         SetMeta("engineering_nominal_power", engineering.NominalGeneration.Value);
         SetMeta("engineering_available_power", engineering.AvailablePower.Value);
-        SetRowAllocationMeta(engineering, ShipSystemKind.Sensors, "engineering_sensor_allocation");
-        SetRowAllocationMeta(engineering, ShipSystemKind.ImpulsePropulsion, "engineering_impulse_allocation");
-        SetRowAllocationMeta(engineering, ShipSystemKind.Shields, "engineering_shield_allocation");
-        SetRowAllocationMeta(engineering, ShipSystemKind.DirectedEnergyWeapons, "engineering_weapon_allocation");
-        SetRowMeta(engineering, ShipSystemKind.Shields, "engineering_shield_condition", row => row.Condition.Value);
-        SetRowMeta(
-            engineering,
-            ShipSystemKind.DirectedEnergyWeapons,
-            "engineering_weapon_condition",
-            row => row.Condition.Value
-        );
         SetMeta("engineering_reserve", engineering.Reserve.Value);
-        SetRowMeta(engineering, ShipSystemKind.Sensors, "engineering_sensor_capability", row => row.Capability);
-        SetRowMeta(
-            engineering,
-            ShipSystemKind.ImpulsePropulsion,
-            "engineering_impulse_capability",
-            row => row.Capability
-        );
         SetMeta("engineering_repair_target", engineering.ActiveRepair?.TargetKind.Value ?? string.Empty);
         SetMeta(
             "engineering_repair_target_id",
@@ -1445,36 +1466,44 @@ public partial class GameScreen : Control
             "engineering_system_ids",
             string.Join(',', engineering.Systems.Select(row => row.Id.Value.ToString(CultureInfo.InvariantCulture)))
         );
+
+        var published = new HashSet<long>();
+        foreach (InstalledSystemProjection row in engineering.Systems)
+        {
+            long id = row.Id.Value;
+            published.Add(id);
+            SetMeta(InstallationMetaName("condition", id), row.Condition.Value);
+            if (row.Allocation is { } allocation)
+            {
+                SetMeta(InstallationMetaName("allocation", id), allocation.Value);
+            }
+            else
+            {
+                RemoveMeta(InstallationMetaName("allocation", id));
+            }
+
+            if (row.Capability is { } capability)
+            {
+                SetMeta(InstallationMetaName("capability", id), capability);
+            }
+            else
+            {
+                RemoveMeta(InstallationMetaName("capability", id));
+            }
+        }
+
+        foreach (long removed in _publishedInstallationMeta.Where(id => !published.Contains(id)))
+        {
+            RemoveMeta(InstallationMetaName("condition", removed));
+            RemoveMeta(InstallationMetaName("allocation", removed));
+            RemoveMeta(InstallationMetaName("capability", removed));
+        }
+
+        _publishedInstallationMeta = published;
     }
 
-    private void SetRowMeta(
-        EngineeringProjection engineering,
-        ShipSystemKind kind,
-        string name,
-        Func<InstalledSystemProjection, double?> value
-    )
-    {
-        if (engineering.Systems.SingleOrDefault(row => row.Kind == kind) is { } row && value(row) is { } present)
-        {
-            SetMeta(name, present);
-        }
-        else
-        {
-            RemoveMeta(name);
-        }
-    }
-
-    private void SetRowAllocationMeta(EngineeringProjection engineering, ShipSystemKind kind, string name)
-    {
-        if (engineering.Systems.SingleOrDefault(row => row.Kind == kind)?.Allocation is { } allocation)
-        {
-            SetMeta(name, allocation.Value);
-        }
-        else
-        {
-            RemoveMeta(name);
-        }
-    }
+    private static StringName InstallationMetaName(string field, long installedId) =>
+        string.Create(CultureInfo.InvariantCulture, $"engineering_{field}_{installedId}");
 
     private void SetContactMetadata(PlayerProjection projection)
     {
