@@ -3,6 +3,7 @@ using AlterCourse.Core.Identity;
 using AlterCourse.Core.Persistence;
 using AlterCourse.Core.Player;
 using AlterCourse.Core.Sensors;
+using AlterCourse.Core.Ships;
 
 namespace AlterCourse.Core.Tests;
 
@@ -104,6 +105,99 @@ public sealed class ArchitectureBoundaryTests
                     break;
             }
         }
+    }
+
+    /// <summary>Confirms the actor-safe walk and immutability rule cover every installed-system projection type.</summary>
+    /// <remarks>
+    /// The walk selects types by namespace, so a new projection placed elsewhere would silently escape both
+    /// <see cref="ActorSafeProjectionsExposeNoHiddenIdentityOrPersistenceTypes"/> and
+    /// <see cref="ActorSafeProjectionsAreImmutable"/>. Pinning the substrate projection types keeps them inside.
+    /// </remarks>
+    [Fact]
+    public void ActorSafeWalkCoversInstalledSystemProjections()
+    {
+        Type[] covered = [.. ActorSafeMembers().Select(member => member.DeclaringType!).Distinct()];
+
+        Assert.Contains(typeof(EngineeringProjection), covered);
+        Assert.Contains(typeof(InstalledSystemProjection), covered);
+        Assert.Contains(typeof(EngineeringActionProjection), covered);
+        Assert.Contains(typeof(SystemRepairProjection), covered);
+        Assert.Contains(typeof(CombatSystemStatusProjection), covered);
+        Assert.Contains(typeof(CombatTargetProjection), covered);
+    }
+
+    /// <summary>Confirms knowledge about another ship cannot reach that ship's installed loadout.</summary>
+    /// <remarks>
+    /// Contact, target, and report projections describe a remote vessel through observer-local knowledge only. An
+    /// installed identity, definition, installation, condition, or allocation reachable from them would be the
+    /// hidden-inventory oracle ADR 0014 forbids (the aim list is catalog-derived kinds, never the victim's
+    /// installations). Own-ship projections legitimately carry the player's own installed identities and are not
+    /// walked here.
+    /// </remarks>
+    [Fact]
+    public void RemoteKnowledgeProjectionsCannotReachInstalledLoadout()
+    {
+        foreach (
+            Type remote in new[]
+            {
+                typeof(CombatTargetProjection),
+                typeof(SensorContactActionProjection),
+                typeof(StrategicContactReportProjection),
+                typeof(SensorContactSnapshot),
+            }
+        )
+        {
+            string? violation = FindLoadoutLeak(remote, remote.Name, [], 0);
+            Assert.True(violation is null, violation);
+        }
+
+        Assert.Contains(
+            "installed loadout",
+            FindLoadoutLeak(typeof(RemoteLoadoutLeakProbe), nameof(RemoteLoadoutLeakProbe), [], 0),
+            StringComparison.Ordinal
+        );
+    }
+
+    private static readonly Type[] InstalledLoadoutTypes =
+    [
+        typeof(InstalledSystemId),
+        typeof(SystemDefinitionId),
+        typeof(SystemDefinition),
+        typeof(InstalledSystem),
+        typeof(InstalledSystemCollection),
+        typeof(SystemCondition),
+        typeof(PowerAllocation),
+    ];
+
+    private static string? FindLoadoutLeak(Type type, string path, HashSet<Type> descended, int depth)
+    {
+        if (InstalledLoadoutTypes.Any(leak => leak.IsAssignableFrom(type)))
+        {
+            return $"{path} exposes installed loadout ({type.Name}).";
+        }
+
+        if (depth >= MaxProjectionWalkDepth || !descended.Add(type))
+        {
+            return null;
+        }
+
+        IEnumerable<(Type Type, string Path)> children = ContainedTypes(type)
+            .Select(argument => (argument, $"{path} -> {argument.Name}"))
+            .Concat(
+                IsInspectableProjectionType(type)
+                    ? PublicInstanceMembers(type).Select(child => (MemberType(child), $"{path}.{child.Name}"))
+                    : []
+            );
+        foreach ((Type childType, string childPath) in children)
+        {
+            string? violation = FindLoadoutLeak(childType, childPath, descended, depth + 1);
+            if (violation is not null)
+            {
+                return violation;
+            }
+        }
+
+        return null;
     }
 
     private static IEnumerable<MemberInfo> ActorSafeMembers()
@@ -251,6 +345,9 @@ public sealed class ArchitectureBoundaryTests
 
     /// <summary>Stands in for a projection that hands a save-transport record to an actor-safe consumer.</summary>
     private sealed record PersistenceLeakProbe(IReadOnlyList<GameSaveMetadata> Saves);
+
+    /// <summary>Stands in for a contact projection that leaks the remote ship's installed identities.</summary>
+    private sealed record RemoteLoadoutLeakProbe(SensorContactId ContactId, IReadOnlyList<InstalledSystemId?> Systems);
 
     /// <summary>Pins that a self-referential projection graph terminates instead of recursing forever.</summary>
     private sealed record SelfReferentialProbe(SelfReferentialProbe? Next, string Label);
