@@ -191,9 +191,10 @@ public static partial class GamePersistence
             );
         }
 
-        byte[] documentBytes = utf8Json.ToArray();
         try
         {
+            ValidateCollectionBounds(utf8Json, sourceIdentity);
+            byte[] documentBytes = utf8Json.ToArray();
             using var document = JsonDocument.Parse(documentBytes, DocumentOptions);
             RejectDuplicateMembers(document.RootElement, sourceIdentity, "$", 0);
             int version = ReadSchemaVersion(document.RootElement, sourceIdentity);
@@ -241,7 +242,15 @@ public static partial class GamePersistence
     /// Writes a complete candidate beside the target, durably flushes it where supported, then uses
     /// same-filesystem atomic replacement visibility; this does not promise universal power-loss durability.
     /// </summary>
-    public static void Save(string path, GameSimulation simulation, GameSaveMetadata metadata)
+    public static void Save(string path, GameSimulation simulation, GameSaveMetadata metadata) =>
+        Save(path, simulation, metadata, new SaveFileOperations());
+
+    internal static void Save(
+        string path,
+        GameSimulation simulation,
+        GameSaveMetadata metadata,
+        SaveFileOperations operations
+    )
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         byte[] json = Serialize(simulation, metadata);
@@ -258,14 +267,14 @@ public static partial class GamePersistence
 
         try
         {
-            using (var stream = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            using (Stream stream = operations.CreateCandidate(temporaryPath))
             {
                 temporaryCreated = true;
-                stream.Write(json);
-                stream.Flush(flushToDisk: true);
+                operations.Write(stream, json);
+                operations.Flush(stream);
             }
 
-            File.Move(temporaryPath, targetPath, overwrite: true);
+            operations.Replace(temporaryPath, targetPath);
             temporaryCreated = false;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
@@ -279,11 +288,11 @@ public static partial class GamePersistence
         }
         finally
         {
-            if (temporaryCreated && File.Exists(temporaryPath))
+            if (temporaryCreated)
             {
                 try
                 {
-                    File.Delete(temporaryPath);
+                    operations.DeleteCandidate(temporaryPath);
                 }
                 catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
                 {
@@ -2144,6 +2153,13 @@ public static partial class GamePersistence
         if (snapshot.Ships is null || snapshot.Scheduler is null || snapshot.StrategicMap is null)
         {
             throw new InvalidOperationException("Required V5 simulation members cannot be null.");
+        }
+
+        // The historical projection filters work by kind before the full scheduler pass. Reject
+        // missing entries here so untrusted JSON cannot escape the typed semantic-failure boundary.
+        if (snapshot.Scheduler.OutstandingWork is null || snapshot.Scheduler.OutstandingWork.Any(work => work is null))
+        {
+            throw new InvalidOperationException("Outstanding scheduler work and its entries are required.");
         }
 
         SimulationSnapshotV3 baseSnapshot = ToBaseSnapshotV3(snapshot);
