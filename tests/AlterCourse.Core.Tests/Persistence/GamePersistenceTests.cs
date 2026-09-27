@@ -438,7 +438,7 @@ public sealed class GamePersistenceTests
         byte[] maximum = MutateV2(root => Ship(root, 1)["tacticalMotion"]!["speedKilometersPerSecond"] = 10);
         LoadedGameSave loaded = LoadV2(maximum);
 
-        Assert.Equal(10, loaded.Simulation.GetPlayerProjection().Ship.Tactical.SpeedKilometersPerSecond);
+        Assert.Equal(10, loaded.Simulation.GetPlayerProjection().Ship.Tactical.SpeedKilometersPerSecond.Value);
         Assert.Equal(
             GamePersistence.Serialize(loaded.Simulation, loaded.Metadata),
             GamePersistence.Serialize(

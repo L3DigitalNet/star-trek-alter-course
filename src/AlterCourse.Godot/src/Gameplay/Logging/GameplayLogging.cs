@@ -3,6 +3,7 @@ using AlterCourse.Core.Gameplay;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Serilog;
+using Serilog.Events;
 using Serilog.Formatting.Json;
 
 namespace AlterCourse.Godot.Gameplay.Logging;
@@ -30,12 +31,16 @@ internal sealed class GameplayLogging : IDisposable
     internal static GameplayLogging Create(
         Func<string> logDirectory,
         Action fallback,
-        Func<string, ILoggerFactory>? factory = null
+        Func<string, ILoggerFactory>? factory = null,
+        LogEventLevel minimumLevel = LogEventLevel.Information
     )
     {
         try
         {
-            return new GameplayLogging((factory ?? CreateFactory)(logDirectory()), fallback);
+            return new GameplayLogging(
+                factory is null ? CreateFactory(logDirectory(), minimumLevel) : factory(logDirectory()),
+                fallback
+            );
         }
         catch (Exception)
         {
@@ -44,11 +49,14 @@ internal sealed class GameplayLogging : IDisposable
         }
     }
 
-    private static Serilog.Extensions.Logging.SerilogLoggerFactory CreateFactory(string directory)
+    private static Serilog.Extensions.Logging.SerilogLoggerFactory CreateFactory(
+        string directory,
+        LogEventLevel minimumLevel
+    )
     {
         Directory.CreateDirectory(directory);
         Serilog.Core.Logger backend = new LoggerConfiguration()
-            .MinimumLevel.Information()
+            .MinimumLevel.Is(minimumLevel)
             .Enrich.WithProperty("SessionCorrelation", Guid.NewGuid().ToString("N"))
             .WriteTo.Console(formatProvider: CultureInfo.InvariantCulture)
             .WriteTo.File(

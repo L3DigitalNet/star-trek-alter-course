@@ -634,10 +634,7 @@ public sealed partial class GameSimulation
                 ShipState ship = movingShips[index];
                 movingShips[index] = ship with
                 {
-                    TacticalPosition = ship.TacticalPosition.Advance(
-                        ship.TacticalMotion,
-                        SimulationFixedStep.Duration.Milliseconds / 1000.0
-                    ),
+                    TacticalPosition = ship.TacticalPosition.Advance(ship.TacticalMotion, SimulationFixedStep.Duration),
                 };
             }
         }
@@ -1919,12 +1916,9 @@ public sealed partial class GameSimulation
             playerShip.DefinitionId,
             playerShip.VesselDisplayName,
             new TacticalProjection(
-                new TacticalPositionProjection(
-                    playerShip.TacticalPosition.XKilometers,
-                    playerShip.TacticalPosition.YKilometers
-                ),
-                playerShip.TacticalMotion.Heading.Value,
-                playerShip.TacticalMotion.Speed.Value
+                new TacticalPositionProjection(playerShip.TacticalPosition),
+                playerShip.TacticalMotion.Heading,
+                playerShip.TacticalMotion.Speed
             ),
             new SensorProjection(
                 sensors?.Condition.Value ?? 0,

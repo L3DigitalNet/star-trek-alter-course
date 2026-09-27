@@ -16,7 +16,7 @@ internal sealed partial class GameDiagnostics(ILogger<GameDiagnostics> logger, A
     internal void Failure(FailureOperation operation, Exception exception, long? simulationTime, long? actorId) =>
         Emit(() => FailureLog(logger, operation, Classify(exception), simulationTime, actorId));
 
-    internal void PersistenceCompleted(bool loading, long simulationTime, long actorId) =>
+    internal void PersistenceCompleted(bool loading, long? simulationTime, long? actorId) =>
         Emit(() => PersistenceLog(logger, loading ? "Load" : "Save", simulationTime, actorId));
 
     internal void Consequence(PlayerAdvanceEvent value, long actorId) =>
@@ -60,8 +60,8 @@ internal sealed partial class GameDiagnostics(ILogger<GameDiagnostics> logger, A
     private static partial void PersistenceLog(
         ILogger logger,
         string operation,
-        long simulationTimeMilliseconds,
-        long actorId
+        long? simulationTimeMilliseconds,
+        long? actorId
     );
 
     [LoggerMessage(

@@ -9,7 +9,9 @@ using AlterCourse.Core.Quantities;
 using AlterCourse.Core.Sensors;
 using AlterCourse.Core.Ships;
 using AlterCourse.Core.Strategic;
+using AlterCourse.Godot.Gameplay.Logging;
 using Godot;
+using Serilog.Events;
 using GodotFile = Godot.FileAccess;
 
 namespace AlterCourse.Godot.Gameplay;
@@ -46,6 +48,7 @@ public partial class GameScreen : Control
     private readonly SimulationRateController _rateController = new();
     private readonly List<CommandInterfacePresenter.ActivityEvent> _recentActivity = [];
     private GameSimulation? _simulation;
+    private GameplayLogging? _logging;
 
     // Incremented on every assignment or clearing of _simulation (bootstrap, failed bootstrap, quick-load), never by
     // an ordinary refresh. Own-ship actions and deferred callbacks capture it so nothing presented or queued for one
@@ -102,6 +105,10 @@ public partial class GameScreen : Control
     private Button _doubleRateButton = null!;
     private Button _quadRateButton = null!;
 
+    /// <summary>Gets or sets whether development diagnostics include actor-safe decision candidates and constraints.</summary>
+    [Export]
+    public bool EnableDecisionTraceDiagnostics { get; set; }
+
     /// <summary>Gets whether canonical content produced a complete playable simulation.</summary>
     public bool IsGameplayReady => _simulation is not null;
 
@@ -134,6 +141,12 @@ public partial class GameScreen : Control
     /// <inheritdoc />
     public override void _Ready()
     {
+        _logging = GameplayLogging.Create(
+            () => ProjectSettings.GlobalizePath("user://logs"),
+            () => GD.PrintErr("Gameplay diagnostics unavailable."),
+            minimumLevel: EnableDecisionTraceDiagnostics ? LogEventLevel.Debug : LogEventLevel.Information
+        );
+        _logging.Diagnostics.Lifecycle(true, null, null);
         BindScene();
         try
         {
@@ -170,7 +183,7 @@ public partial class GameScreen : Control
             SetGameplayEnabled(false);
             _messageLabel.Text = "Gameplay content is unavailable. Check the local installation and restart.";
             SetMeta("load_error", _messageLabel.Text);
-            LogDiagnostic("Gameplay bootstrap failed", exception);
+            LogDiagnostic(GameDiagnostics.FailureOperation.Content, exception);
         }
     }
 
@@ -345,6 +358,11 @@ public partial class GameScreen : Control
             _quickSaveCreatedAtUtc = createdAtUtc;
             _messageLabel.Text = "Quick save complete.";
             SetMeta("quick_save_status", "saved");
+            _logging?.Diagnostics.PersistenceCompleted(
+                false,
+                _projection?.SimulationTime.Milliseconds,
+                _projection?.Ship.InstanceId.Value
+            );
             SetMeta("quick_save_created_at_utc", createdAtUtc.ToString("O"));
             SetMeta("quick_save_saved_at_utc", savedAtUtc.ToString("O"));
         }
@@ -371,7 +389,12 @@ public partial class GameScreen : Control
         try
         {
             string loadPath = ResolveQuickLoadPath();
-            LoadedGameSave loaded = GamePersistence.Load(loadPath, _shipCatalog, _factionCatalog);
+            LoadedGameSave loaded = GamePersistence.Load(
+                loadPath,
+                _shipCatalog,
+                _factionCatalog,
+                _logging?.SimulationLogger
+            );
 
             // Core constructs and validates the candidate in isolation. Assignment stays after that
             // boundary so an unreadable or invalid save cannot damage the playable aggregate.
@@ -390,6 +413,11 @@ public partial class GameScreen : Control
             _messageLabel.Text =
                 $"Quick load restored time {loaded.Simulation.GetPlayerProjection().SimulationTime.Milliseconds / 1000.0:0.0} s.";
             SetMeta("quick_save_status", "loaded");
+            _logging?.Diagnostics.PersistenceCompleted(
+                true,
+                _projection!.SimulationTime.Milliseconds,
+                _projection.Ship.InstanceId.Value
+            );
             DeferFocus(CurrentWorkspaceButton());
         }
         catch (Exception exception)
@@ -530,14 +558,14 @@ public partial class GameScreen : Control
     // ordinary refresh never calls this, so a draft being edited survives the running simulation's refreshes.
     private void ResetCourseDraft(PlayerProjection loaded)
     {
-        _courseHeading.Value = loaded.Ship.Tactical.HeadingDegrees;
-        _courseSpeed.Value = loaded.Ship.Tactical.SpeedKilometersPerSecond;
+        _courseHeading.Value = loaded.Ship.Tactical.HeadingDegrees.Value;
+        _courseSpeed.Value = loaded.Ship.Tactical.SpeedKilometersPerSecond.Value;
     }
 
     private void StopCourse()
     {
         if (_projection is not null && !_stopCourseButton.Disabled)
-            SubmitCourse(_projection.Ship.Tactical.HeadingDegrees, 0);
+            SubmitCourse(_projection.Ship.Tactical.HeadingDegrees.Value, 0);
     }
 
     private void SubmitCourse(double heading, double speed)
@@ -722,7 +750,11 @@ public partial class GameScreen : Control
             FactionDefinitionContent.FromText(FactionAPath, ReadRequiredText(FactionAPath)),
             FactionDefinitionContent.FromText(FactionBPath, ReadRequiredText(FactionBPath)),
         ]);
-        return (shipCatalog, factionCatalog, FirstGameSetup.Create(shipCatalog, factionCatalog));
+        return (
+            shipCatalog,
+            factionCatalog,
+            FirstGameSetup.Create(shipCatalog, factionCatalog, _logging?.SimulationLogger)
+        );
     }
 
     private static string ReadRequiredText(string path)
@@ -730,13 +762,13 @@ public partial class GameScreen : Control
         using var file = GodotFile.Open(path, GodotFile.ModeFlags.Read);
         if (file is null)
         {
-            throw new InvalidOperationException($"Godot could not open required file '{path}'.");
+            throw new IOException($"Godot could not open required file '{path}'.");
         }
 
         string text = file.GetAsText();
         if (file.GetError() != Error.Ok)
         {
-            throw new InvalidOperationException($"Godot could not read required file '{path}'.");
+            throw new IOException($"Godot could not read required file '{path}'.");
         }
 
         return text;
@@ -1436,8 +1468,8 @@ public partial class GameScreen : Control
         SetMeta("travel_eta_milliseconds", projection.Strategic.Travel?.ExpectedArrival.Milliseconds ?? -1);
         SetMeta("tactical_x", projection.Ship.Tactical.Position.XKilometers);
         SetMeta("tactical_y", projection.Ship.Tactical.Position.YKilometers);
-        SetMeta("tactical_heading", projection.Ship.Tactical.HeadingDegrees);
-        SetMeta("tactical_speed", projection.Ship.Tactical.SpeedKilometersPerSecond);
+        SetMeta("tactical_heading", projection.Ship.Tactical.HeadingDegrees.Value);
+        SetMeta("tactical_speed", projection.Ship.Tactical.SpeedKilometersPerSecond.Value);
         SetContactMetadata(projection);
     }
 
@@ -1789,6 +1821,7 @@ public partial class GameScreen : Control
 
         foreach (PlayerAdvanceEvent @event in events)
         {
+            _logging?.Diagnostics.Consequence(@event, _projection?.Ship.InstanceId.Value ?? 0);
             AppendRecentActivity(
                 new CommandInterfacePresenter.ResolvedActivityEvent(@event.OccurredAt.Milliseconds, @event)
             );
@@ -1865,13 +1898,18 @@ public partial class GameScreen : Control
     {
         _messageLabel.Text = $"{operation} failed: {category}.";
         SetMeta("quick_save_status", status);
-        LogDiagnostic($"{operation} failed", exception);
+        LogDiagnostic(
+            string.Equals(status, "save_failed", StringComparison.Ordinal)
+                ? GameDiagnostics.FailureOperation.Save
+                : GameDiagnostics.FailureOperation.Load,
+            exception
+        );
     }
 
     private void ReportCommandFailure(string playerMessage, Exception exception)
     {
         _messageLabel.Text = playerMessage;
-        LogDiagnostic(playerMessage, exception);
+        LogDiagnostic(GameDiagnostics.FailureOperation.Command, exception);
     }
 
     private void ReportAdvanceFailure(Exception exception)
@@ -1882,11 +1920,26 @@ public partial class GameScreen : Control
         _rateStatusLabel.Text = "RATE PAUSED";
         _messageLabel.Text = "Time advancement failed safely; simulation is paused.";
         SetMeta("advance_status", "failed");
-        LogDiagnostic("Simulation advancement failed", exception);
+        LogDiagnostic(GameDiagnostics.FailureOperation.Simulation, exception);
     }
 
-    private static void LogDiagnostic(string operation, Exception exception)
+    private void LogDiagnostic(GameDiagnostics.FailureOperation operation, Exception exception) =>
+        _logging?.Diagnostics.Failure(
+            operation,
+            exception,
+            _projection?.SimulationTime.Milliseconds,
+            _projection?.Ship.InstanceId.Value
+        );
+
+    /// <inheritdoc />
+    public override void _ExitTree()
     {
-        GD.PrintErr($"{operation}: {exception.GetType().Name}: {exception.Message}");
+        _logging?.Diagnostics.Lifecycle(
+            false,
+            _projection?.SimulationTime.Milliseconds,
+            _projection?.Ship.InstanceId.Value
+        );
+        _logging?.Dispose();
+        _logging = null;
     }
 }
