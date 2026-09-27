@@ -30,6 +30,75 @@ func after_test() -> void:
 	_remove_file(INVALID_CONTENT_PATH)
 
 
+func test_committed_advance_survives_presentation_failure() -> void:
+	var screen := _create_screen()
+	# Free a retained status label after bootstrap so only the post-commit projection fails.
+	screen.get_node("%SimulationTime").free()
+	assert_int(screen.call("ProcessSyntheticDelta", 0.1)).is_equal(1)
+	assert_str(screen.get_meta("advance_status", "")).is_equal("advanced")
+	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(100)
+	assert_float(float(screen.get_meta("simulation_rate", 0.0))).is_equal(1.0)
+	assert_str(screen.get_meta("presentation_status", "")).is_equal("failed")
+
+
+func test_committed_advance_until_survives_presentation_failure() -> void:
+	var screen := _create_screen()
+	screen.get_node("%SimulationTime").free()
+	screen.call("AdvanceUntilNextPlayerRelevantEvent")
+	assert_str(screen.get_meta("advance_status", "")).is_equal("advanced")
+	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(8000)
+	assert_str(screen.get_meta("last_advance_event", "")).contains("sensor repair complete")
+	assert_str(screen.get_meta("presentation_status", "")).is_equal("failed")
+
+
+func test_committed_quick_load_survives_presentation_failure() -> void:
+	var screen := _create_screen()
+	screen.call("QuickSave")
+	_advance_fixed_steps(screen, 1)
+	var prior_identity: int = screen.get("SimulationIdentity")
+	screen.get_node("%SimulationTime").free()
+	screen.call("QuickLoad")
+	assert_str(screen.get_meta("quick_save_status", "")).is_equal("loaded")
+	assert_int(screen.get("SimulationIdentity")).is_not_equal(prior_identity)
+	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(0)
+	assert_str((screen.get_node("%Message") as Label).text).contains("Quick load restored time")
+	assert_str(screen.get_meta("presentation_status", "")).is_equal("failed")
+
+
+func test_committed_course_survives_presentation_failure() -> void:
+	var screen := _create_screen()
+	screen.call("ShowTacticalView")
+	(screen.get_node("%CourseHeading") as SpinBox).value = 90
+	(screen.get_node("%CourseSpeed") as SpinBox).value = 1
+	screen.get_node("%SimulationTime").free()
+	screen.call("SetDemonstrationCourse")
+	assert_float(screen.get_meta("tactical_heading", -1.0)).is_equal(90.0)
+	assert_float(screen.get_meta("tactical_speed", -1.0)).is_equal(1.0)
+	assert_str((screen.get_node("%Message") as Label).text).contains("Tactical course set")
+	assert_str(screen.get_meta("presentation_status", "")).is_equal("failed")
+
+
+func test_committed_allocation_survives_presentation_failure() -> void:
+	var screen := _create_screen()
+	screen.call("ShowEngineeringWorkspace")
+	var balance := _find_engineering_action_button(screen, "balance") as Button
+	screen.get_node("%SimulationTime").free()
+	balance.emit_signal("pressed")
+	assert_str(screen.get_meta("last_engineering_command", "")).contains("Accepted")
+	assert_int(screen.get_meta(_installation_meta("allocation", SENSORS_ID), -1)).is_equal(28)
+	assert_str((screen.get_node("%Message") as Label).text).not_contains("failed safely")
+	assert_str(screen.get_meta("presentation_status", "")).is_equal("failed")
+
+
+func test_committed_quick_save_survives_message_failure() -> void:
+	var screen := _create_screen()
+	screen.get_node("%Message").free()
+	screen.call("QuickSave")
+	assert_str(screen.get_meta("quick_save_status", "")).is_equal("saved")
+	assert_bool(FileAccess.file_exists(TEST_QUICK_SAVE_PATH)).is_true()
+	assert_str(screen.get_meta("presentation_status", "")).is_equal("failed")
+
+
 func test_main_scene_constructs_gameplay_shell() -> void:
 	var screen := _create_screen()
 
