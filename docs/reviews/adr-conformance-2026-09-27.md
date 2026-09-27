@@ -4,7 +4,7 @@ id: 'reference-xjdwtp-adr-conformance-2026-09-27'
 title: 'ADR Conformance — September 27, 2026'
 description: 'Baseline findings, scoped ADR obligations, remediation and verification evidence for Issue 127.'
 doc_type: 'reference'
-status: 'draft'
+status: 'active'
 created: '2026-09-27'
 updated: '2026-09-27'
 tags: []
@@ -730,7 +730,7 @@ Result: exit 0, **90.65%**; 126 killed, 11 survived, two no-coverage, nine compi
 
 The initial configuration attempt rejected an unsupported `output` key (exit 1); using the documented CLI option corrected it. An earlier broad instrumented test-selection attempt was canceled for excessive runtime and returned rexec transport exit 23; its own remote processes were confirmed gone and `rexec doctor` passed before the bounded retry. That canceled attempt supplies neither a passing nor failing repository result. Detailed JSON reports and command logs are local scratch evidence; the counts, scope and survivor dispositions above are the maintained record.
 
-## Final coverage and delivery verdict
+## Pre-integration coverage and delivery verdict
 
 | Status                         | Baseline | Final |
 | ------------------------------ | -------: | ----: |
@@ -755,4 +755,18 @@ All five hosted checks passed on source head `c199792a44c35596a7db7af15b028792d9
 
 The closeout began from unchanged PR head `c70d8b5ecc1f79ca58dfb3376c2237cd1198b2c9` and `dev` baseline `2ef6c77aa4587719aac0b59cfda3d6ee7c560e5a`. Corrected stale intermediate wording in ADR-0009-R14/R16/R17 and ADR-0011-R15, and ADR-0013-R04/R18 authorization/baseline wording, removed transient draft claims, replaced local-only evidence references and the private skill path, and aligned current work-state wording. Original findings, baseline statuses, failed attempts and execution revisions remain intact. No source, test, enforcement, ADR decision or gameplay behavior changes in this closeout. Fresh candidate and post-merge receipts are additive on PR #132; integration is recorded only after it occurs.
 
-A bounded Claude cross-agent review (`e69cecbe-f5e8-4346-8578-25afd213a278`) independently recounted all 191 rows and found no blocker. Five advisories were addressed: current work-state authorization, failure/skip wording instead of universal flake evidence, tracked evidence links, complete correction scope, and a standing per-revision verification rule. The peer did not run tests or read live GitHub; the caller verified those receipts. Its snapshot predates the advisory wording fixes; source drift records the intervening commit, not changed production. The initial fresh gate at `e44edac` was canceled to incorporate these findings (rexec transport exit 23); it supplies no repository pass/fail result. The corrected candidate receives a new complete gate.
+A bounded Claude cross-agent review (`e69cecbe-f5e8-4346-8578-25afd213a278`) independently recounted all 191 rows and found no blocker. Five advisories were addressed: current work-state authorization, failure/skip wording instead of universal flake evidence, tracked evidence links, complete correction scope, and a standing per-revision verification rule. The peer did not run tests or read live GitHub; the caller verified those receipts. Its snapshot predates the advisory wording fixes; source drift records the intervening commit, not changed production. The initial fresh gate at `e44edac` was canceled to incorporate these findings (rexec transport exit 23); it supplies no repository pass/fail result. The replacement gate at `5a2712cacad0bde681f2dcf726f8d8eb90f49b64` passed locally and in hosted run 36333222372; [the additive closeout receipt](https://github.com/L3DigitalNet/star-trek-alter-course/pull/132#issuecomment-5857693816) records actual results.
+
+## Integration addendum — 2026-09-27
+
+[PR #132](https://github.com/L3DigitalNet/star-trek-alter-course/pull/132) was squash-merged into `dev` at 2026-09-27 16:31:49 UTC as `9b4f6a7d6182c0c4dd281dc1eba15cff5f10a610`, through the packaged merge operation after clear structural, Ready and Merge gates. Its final reviewed and freshly tested head was `5a2712cacad0bde681f2dcf726f8d8eb90f49b64`; its synthetic PR test-merge was `33a58ae1dc99881b64d58cc32b78ec3d7df2b3bc`. All three trees equal `1e65da2a9a948ed38614a5bff0d2291e18bb2fad`. `git diff --quiet` between final head and actual squash exited 0, and the squash is an ancestor of fetched `origin/dev`. Feature-head ancestry is not required for a squash merge.
+
+The fresh local `rexec -- ./scripts/verify.sh` and [PR canonical run 36333222372](https://github.com/L3DigitalNet/star-trek-alter-course/actions/runs/36333222372) passed: 1,199 Core, 324 AssetCtl and 95 Godot cases (92 gameplay, one integration, two asset-import), zero failures/skips, zero Release/Debug warnings/errors, smoke and all normal gates. [The pre-merge receipt](https://github.com/L3DigitalNet/star-trek-alter-course/pull/132#issuecomment-5857693816) contains the remaining hosted run/job IDs, document checks and independent review disposition. These are fresh closeout results, separate from the earlier `c199792`/`c70d8b5` receipts and the four-file mutation proof at `a883126`.
+
+Actual post-merge push [Verify run 36333582412](https://github.com/L3DigitalNet/star-trek-alter-course/actions/runs/36333582412), job 108660054678, passed on squash `9b4f6a7d6182c0c4dd281dc1eba15cff5f10a610`. `gh run watch 36333582412 --exit-status` and packaged `check --pr 132 --through post-merge` exited 0. Inspected logs repeat 1,199 Core, 324 AssetCtl, 95 Godot, smoke, zero failures/skips and zero C# build warnings/errors. GitHub also emitted action/runner migration advisories (setup-node v4 forced to Node 24; upcoming ubuntu-latest image change); the actual repository Node 24 contract passed. Those annotations are retained separately from build/test results.
+
+Landing reconciliation inspected wiki home, architecture, implementation status, content/persistence, source catalog, README and roadmap. Their V10 saves, ship V6/system-definition V1, five-kind substrate, singleton behavior restrictions and unreleased partial-M6 boundaries remain accurate. Only this evidence register, the targeted source-review record and operational summaries need integration updates. The September 26 full semantic sweep and October 3 due date are unchanged. No production, test, enforcement, architectural selection or gameplay behavior changes in the documentation closeout.
+
+The accounting remains **191 obligations: 148 scoped-compliant, 41 explicit future triggers, one owner-approved exception and one not applicable**. There is no newly accepted risk or unresolved current obligation. This records verified integration into development, not released gameplay or unrestricted compliance. Supported-platform, manual-playtest, historical UnitsNet provenance, mutation and filesystem durability limits remain as stated above.
+
+PR #132 remains Supporting and its merge did not close Initiative #127. A single governed documentation-closeout PR records these observed facts; its final SHA/checks/merge and the acceptance-based closure of Tasks #128–#131 and Initiative #127 are recorded additively in their PR/issue receipts. This avoids claiming future issue closure or placing a document’s own future commit SHA in itself.
