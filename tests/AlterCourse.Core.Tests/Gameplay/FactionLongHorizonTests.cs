@@ -3,6 +3,8 @@ using AlterCourse.Core.Gameplay;
 using AlterCourse.Core.Identity;
 using AlterCourse.Core.Persistence;
 using AlterCourse.Core.Simulation;
+using AlterCourse.Core.Tests.Support;
+using Xunit.Abstractions;
 using FactionTestWorld = AlterCourse.Core.Tests.Gameplay.FactionBootstrapTests.FactionTestWorld;
 
 namespace AlterCourse.Core.Tests.Gameplay;
@@ -13,20 +15,27 @@ public sealed class FactionLongHorizonTests
     private const int HorizonDays = 30;
     private const long DayMilliseconds = 86_400_000;
     private readonly FactionAssignmentProofFixture _fixture = new();
+    private readonly ITestOutputHelper _output;
+
+    /// <summary>Captures bounded replay context in the test result, including assertion failures.</summary>
+    public FactionLongHorizonTests(ITestOutputHelper output) => _output = output;
 
     /// <summary>Confirms a satisfied objective remains dormant with stable scheduler counters for thirty days.</summary>
     [Fact]
     public void SatisfiedObjectiveHasNoReassignmentOrWorkGrowthForThirtyDays()
     {
-        GameSimulation completed = _fixture.ContinueTo(
-            _fixture.Assign(_fixture.Create()),
-            FactionAssignmentProofFixture.ArrivalTime
+        using var context = new LongHorizonTestContext(
+            _output,
+            nameof(SatisfiedObjectiveHasNoReassignmentOrWorkGrowthForThirtyDays),
+            "FactionAssignmentProofFixture production catalogs; assign then arrival; daily advances; fixed fixture, no RNG seed"
         );
+        GameSimulation completed = CompleteAssignment(context);
         SimulationState starting = completed.CaptureState();
+        context.Checkpoint(starting, "satisfied objective at arrival");
         long workCounter = starting.Scheduler.NextWorkId;
         long sequenceCounter = starting.Scheduler.NextSequence;
 
-        GameSimulation continued = ContinueByDays(completed, HorizonDays);
+        GameSimulation continued = ContinueByDays(completed, HorizonDays, context, "uninterrupted");
         SimulationState final = continued.CaptureState();
 
         Assert.Equal(
@@ -41,28 +50,34 @@ public sealed class FactionLongHorizonTests
             final.Ships.Where(ship => ship.DirectControllerFactionId is not null),
             ship => Assert.Contains(final.Factions, faction => faction.Id == ship.DirectControllerFactionId)
         );
-        AssertRoundTripContinuation(continued);
+        AssertRoundTripContinuation(continued, context);
     }
 
     /// <summary>Confirms perpetual patrol can cross two days without faction polling or scheduler growth beyond its own arrival.</summary>
     [Fact]
     public void PerpetuallyCommittedCandidateKeepsFactionDormantForTwoDays()
     {
+        using var context = new LongHorizonTestContext(
+            _output,
+            nameof(PerpetuallyCommittedCandidateKeepsFactionDormantForTwoDays),
+            "FactionTestWorld cyclic Alpha/Beta/Gamma; two perpetual patrols; hourly advances; fixed fixture, no RNG seed"
+        );
         GameSimulation game = CreatePatrolWorld();
-        SimulationState initial = GameSimulation
-            .AdvanceTo(
-                game.CaptureState(),
-                new SimulationTime(0),
-                FactionTestWorld.ShipCatalog,
-                FactionTestWorld.FactionCatalog
-            )
-            .State;
+        context.Checkpoint(game.CaptureState(), "initial patrols before due work");
+        SimulationAdvanceTraceResult initialTrace = GameSimulation.AdvanceTo(
+            game.CaptureState(),
+            new SimulationTime(0),
+            FactionTestWorld.ShipCatalog,
+            FactionTestWorld.FactionCatalog
+        );
+        context.Record(initialTrace);
+        SimulationState initial = initialTrace.State;
         Assert.Null(initial.Factions[0].PendingDecisionWake);
         Assert.Equal(2, initial.Scheduler.OutstandingWork.Count(work => work.Kind == ScheduledWorkKind.TravelArrival));
 
         const int patrolDays = 2;
         const long arrivals = patrolDays * DayMilliseconds / 1_000;
-        SimulationState advanced = AdvanceInHourChunks(initial, patrolDays);
+        SimulationState advanced = AdvanceInHourChunks(initial, patrolDays, context);
 
         Assert.Equal(FactionObjectiveStatus.Pending, advanced.Factions[0].PresenceObjective!.Status);
         Assert.Null(advanced.Factions[0].PendingDecisionWake);
@@ -106,26 +121,51 @@ public sealed class FactionLongHorizonTests
         Assert.Single(assigned.Scheduler.OutstandingWork, work => work.Target.Kind == ScheduledWorkTargetKind.Faction);
     }
 
-    private GameSimulation ContinueByDays(GameSimulation game, int days)
+    private GameSimulation CompleteAssignment(LongHorizonTestContext context)
+    {
+        GameSimulation assigned = _fixture.Assign(_fixture.Create());
+        context.Checkpoint(assigned.CaptureState(), "assigned objective before arrival");
+        context.BeforeAdvance(assigned.CaptureState(), FactionAssignmentProofFixture.ArrivalTime);
+        SimulationAdvanceTraceResult arrived = GameSimulation.AdvanceTo(
+            assigned.CaptureState(),
+            FactionAssignmentProofFixture.ArrivalTime,
+            _fixture.ShipCatalog,
+            _fixture.FactionCatalog
+        );
+        context.Record(arrived);
+        return GameSimulation.RestoreState(arrived.State, _fixture.ShipCatalog, _fixture.FactionCatalog);
+    }
+
+    private GameSimulation ContinueByDays(GameSimulation game, int days, LongHorizonTestContext context, string branch)
     {
         GameSimulation current = game;
         for (int day = 0; day < days; day++)
         {
             SimulationTime target = current.CaptureState().Time.AdvanceBy(new SimulationDuration(DayMilliseconds));
-            current = _fixture.ContinueTo(current, target);
+            context.Checkpoint(current.CaptureState(), $"branch={branch}; day={day + 1}/{days}");
+            context.BeforeAdvance(current.CaptureState(), target);
+            SimulationAdvanceTraceResult advanced = GameSimulation.AdvanceTo(
+                current.CaptureState(),
+                target,
+                _fixture.ShipCatalog,
+                _fixture.FactionCatalog
+            );
+            context.Record(advanced);
+            current = GameSimulation.RestoreState(advanced.State, _fixture.ShipCatalog, _fixture.FactionCatalog);
         }
         return current;
     }
 
-    private void AssertRoundTripContinuation(GameSimulation game)
+    private void AssertRoundTripContinuation(GameSimulation game, LongHorizonTestContext context)
     {
+        context.Checkpoint(game.CaptureState(), "roundtrip faction-thirty-day-v7.json");
         GameSimulation loaded = _fixture.RoundTrip(game, "faction-thirty-day-v7.json");
         Assert.Equal(
             GamePersistence.Serialize(game, FactionAssignmentProofFixture.Metadata),
             GamePersistence.Serialize(loaded, FactionAssignmentProofFixture.Metadata)
         );
-        GameSimulation expected = ContinueByDays(game, 1);
-        GameSimulation actual = ContinueByDays(loaded, 1);
+        GameSimulation expected = ContinueByDays(game, 1, context, "uninterrupted-after-save");
+        GameSimulation actual = ContinueByDays(loaded, 1, context, "resumed-after-save");
         Assert.Equal(
             GamePersistence.Serialize(expected, FactionAssignmentProofFixture.Metadata),
             GamePersistence.Serialize(actual, FactionAssignmentProofFixture.Metadata)
@@ -162,18 +202,25 @@ public sealed class FactionLongHorizonTests
         ).CreateSimulation(FactionTestWorld.ShipCatalog, FactionTestWorld.FactionCatalog);
     }
 
-    private static SimulationState AdvanceInHourChunks(SimulationState initial, int days)
+    private static SimulationState AdvanceInHourChunks(
+        SimulationState initial,
+        int days,
+        LongHorizonTestContext context
+    )
     {
         SimulationState current = initial;
         const long hour = 3_600_000;
         for (int index = 0; index < days * 24; index++)
         {
+            context.Checkpoint(current, $"hour={index + 1}/{days * 24}");
+            context.BeforeAdvance(current, current.Time.AdvanceBy(new SimulationDuration(hour)));
             SimulationAdvanceTraceResult chunk = GameSimulation.AdvanceTo(
                 current,
                 current.Time.AdvanceBy(new SimulationDuration(hour)),
                 FactionTestWorld.ShipCatalog,
                 FactionTestWorld.FactionCatalog
             );
+            context.Record(chunk);
             current = chunk.State;
         }
         return current;
