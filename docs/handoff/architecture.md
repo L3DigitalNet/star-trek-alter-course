@@ -2,62 +2,69 @@
 
 ## Component map
 
-- The [design wiki](../wiki/architecture.md) is the single source of truth for design; this map is an operational summary of the component graph and must match it.
-- `AlterCourse.Core` owns pure simulation and domain behavior. It targets ordinary .NET, has no Godot reference, and remains testable without engine startup.
-- `AlterCourse.Godot` owns nodes, scenes, resources, input, UI, and engine adapters. It may reference `AlterCourse.Core`; the reverse dependency is prohibited.
-- `AlterCourse.Core.Tests` exercises the pure assembly with xUnit and verifies that its compiled assembly references no `Godot*` assembly.
-- GdUnit4 tests under `src/AlterCourse.Godot/tests/` exercise the managed node and scene boundary through the actual Godot runtime.
-- `GameSimulation` owns immutable definitions and active Core state. It advances explicit simulation time in deterministic 100 ms tactical quanta.
-- World state holds ships in `ShipInstanceId` order, an explicit `PlayerShipId`, and per-ship strategic, tactical, sensor, and repair state.
-- Scheduled work uses closed Ship/Faction targets; travel and repairs remain ship-scoped. Public commands resolve `PlayerShipId` only.
-- Ship iteration is stable; [current simulation bounds](../wiki/engineering-and-combat.md) are design-owned and not duplicated here.
-- Finite-long numeric exhaustion fails atomically; it is an explicit limitation rather than an indefinite-successor promise.
-- V9 persistence bounds world state, definitions, scheduler data, orders, Engineering, combat, and contact knowledge backing derived reports.
-- Loading resolves references through the supplied immutable catalog. The adjacent chain migrates V1 through V9 before candidate validation.
-- Definitions are not serialized. V1 migration creates one ship, targets old work to the player, and uses its design label for the missing vessel name.
-- World construction and persistence admit at most 256 ships to bound untrusted input and fixed-step work; this is not a final capacity target.
-- Authored strategic-map order remains observable.
-- Ship collections and scheduled work are insertion-order independent and canonically ordered.
-- Godot projects player-visible state without NPC omniscience.
-- The tactical plot is player-centered and local, so legitimate sustained movement keeps marker and direction visible while numeric Core coordinates remain status truth.
-- Ordinary ships may have one optional stable `ShipOrder`: `TravelTo`, `PatrolRoute`, or `HoldUntil`; old travel remains orderless.
-- Order execution shares the internal travel application with player travel. Cancellation removes only the identified order and its exact hold wake.
-- Strategic-only intervals jump event-to-event. Only at-location ships with nonzero tactical motion take fixed steps; repairs materialize analytically.
-- Ship Engineering state owns bounded conditions, available power, allocations, effective capability for four consumers, and one exact repair.
-- [Engineering and combat](../wiki/engineering-and-combat.md) owns current bounds, four Engineering consumers, and five concrete conditions.
-- Combat is a Core-owned atomic operation; Godot submits typed intent and projects Combat with the shared session-lifetime Engineering state.
-- Sensor contacts, scans, tactical courses, and cautious AI consume actor-owned effective capability; strategic travel remains unchanged.
-- Player-relevant advance processes hidden NPC work but reports and stops only on `PlayerShipId`; Godot results stay filtered.
-- Public advancement outcomes use player-semantic event names at the Godot boundary; scheduler consequences and proof traces remain internal surfaces.
-- The Godot command shell owns stable player controls and projections, while `GameSimulation` remains the command and state authority.
-- `GameScreen` owns one session-lifetime `GameSimulation`; Command and Engineering workspaces are persistent views over that same state.
-- Command Deck map views reuse the strategic and tactical adapters. Godot owns display transforms, selection, and context presentation.
-- Command-interface fixtures are deterministic presentation data only. They cannot submit commands, persist state, or invent Core truth.
-- `scripts/launch-game.sh` is the safe direct-launch boundary: it restores and builds the Godot project before starting the editor.
+This is the current operational component map, not an alternate design contract. The [wiki architecture](../wiki/architecture.md) owns design context; the [ADR catalog](../adr/README.md) owns architectural navigation and scope. Update this map when component ownership changes, not by appending contradictory snapshots.
 
-## Implemented faction boundaries
+- `AlterCourse.Core` owns pure simulation, immutable definitions, command application, and snapshot mapping. It has no Godot reference and remains independently testable.
+- `AlterCourse.Godot` owns nodes, scenes, resources, input, UI, rendering, and adapters. It references Core; the reverse dependency is prohibited.
+- `AlterCourse.AssetCtl` is independent development tooling with no references to/from either game assembly. Godot consumes selected asset files rather than provider APIs.
+- Core tests use xUnit with focused architecture/property checks; current Godot integration uses vendored GdUnit4 against the engine runtime. Package admission and exact versions remain in their owning records/configuration.
 
-- [Faction assignment](../wiki/faction-intent-and-autonomous-assignment.md) is implemented on `dev`: direct idle-NPC assignment through existing orders.
-- One asset-side faction controller is authoritative; the roster is derived. Presence policy sees only approved own-asset administrative facts, not sensor reports.
-- Closed Ship/Faction targets extend the existing scheduler; typed bootstrap admits complete ship and faction state with initial work.
-- V7 migration preserves ship work and creates no factions or controller history; zero-faction worlds remain valid.
-- Investigation policy reads fresh received reports and bounded own-asset/routes; direct control authorizes application.
-- V8 persists bounded reports, in-flight delivery, active investigations, and per-location completion watermarks.
-- V9 adds first-combat persistence; the adjacent V8 migration initializes new combat systems offline and unpowered without inventing combat.
-- V7→V8 migration creates no response history and does not mine historical contacts. Released v0.6.0 uses V8.
-- No RNG, organization/hierarchy runtime, generic actor framework, political UI, or player-command override belongs to the first slice.
+## World, commands, and time
+
+`GameSimulation` owns live authoritative state. `SimulationState` retains canonically ordered ships/factions, map, scheduler, player identity, and identity allocators. Player identity selects an ordinary vessel rather than a separate encounter model.
+
+Core mutations stage correlated candidates and validate the complete boundary before commitment. Expected refusal of an atomic command preserves state, time, IDs, and work. Post-commit diagnostic or presentation failure does not make the operation unapplied. [ADR 0015](../adr/0015-use-staged-core-command-application-and-explicit-commit-outcomes.md) owns this contract while preserving ADR 0007's separately specified safely incremental alternative.
+
+The scheduler uses closed Ship/Faction targets, known data-only work kinds, exact ownership/correlation, stable same-time sequence, and finite budgets. Strategic-only intervals advance event-to-event; tactical/contact-sensitive work uses 100 ms boundaries when required, and repairs materialize analytically. Wall-clock time and scene lifecycle are not simulation authority. Numeric exhaustion fails explicitly rather than promising an indefinite successor.
+
+Ordinary ships may own `TravelTo`, `PatrolRoute`, or `HoldUntil` orders. Orders and physical travel are distinct. Execution reuses targetable travel; cancellation removes only the order and exact work it owns, not a voyage already underway. Collection ordering and scheduler sequence are deterministic; authored map ordering retains its defined meaning.
+
+[World, navigation, and time](../wiki/world-navigation-and-time.md) owns current capacities, work budgets, bootstrap, and detailed progression. Prototype bounds are not final galaxy-scale promises. There is no current authoritative RNG consumer; the first consumer requires ADR 0007's complete versioned source/state/continuation contract.
+
+## Knowledge and faction boundaries
+
+[ADR 0016](../adr/0016-own-actor-knowledge-and-share-immutable-observation-reports.md) separates world truth, actor-local contacts, own-asset administrative facts, and historical received reports. Hidden target correlation does not escape into policy inputs, projections, reports, or command feedback. Local contact IDs do not establish global or cross-observer vessel identity.
+
+The implemented faction-assignment slice commands eligible idle directly controlled NPC ships through ordinary orders. One asset-side controller is authoritative; the roster is derived. Presence policy sees admitted own-asset facts rather than sensor knowledge. Investigation uses fresh immutable received reports and approved own-asset/routes, not current hidden target state.
+
+Typed bootstrap constructs complete faction/ship state and work. Historical V7 migration created no factions/controllers; V7→V8 created no reports, investigations, or response history. Released v0.6.0 uses V8. These historical admissions remain part of the migration chain, not the current capture format.
+
+Player-relevant advancement may process hidden work without exposing it. Results are player-semantic events; scheduler traces, NPC objectives, received faction reports, and pending intent remain private. Broader hierarchy, organizations, affiliation learning, political UI, or player-command override are not implied by the bounded implemented faction slices.
 
 ## Ship-system substrate (Issue #121)
 
-- [ADR 0014](../adr/0014-use-an-extensible-bounded-ship-system-substrate.md)'s installed-system substrate is implemented and merged into `dev`.
-- Final PR #123 merged the migration into `dev` as `17637dd`; unreleased.
-- Five ship-system kinds migrated via `content/systems/pathfinder-systems.json` (system-definition V1), ship content V6, and saves V10.
-- Persistence rules identity is `installed-ship-system-substrate-v1`. V9-to-V10 migration is strict, via a frozen map in `Persistence/HistoricalShipSystemsV9.cs`.
-- `ShipSystemId` was renamed `ShipSystemKind`. `IncompatibleContent` descriptors bind definition and aim-vocabulary compatibility for installed systems.
-- Measured save-shape bounds are 109,030,603 bytes and a conservative 114,536,452 bytes, both under the 128 MiB ceiling; the 69,120 work ceiling is unchanged.
-- Engineering's projection and actions are now generic over installed systems, keyed by installed id with explicit owner and load-generation binding.
-- PR #123's integrated proof tests and final gate passed; the merge tree `17637dd` equals the tested head `d209446`.
+[ADR 0014](../adr/0014-use-an-extensible-bounded-ship-system-substrate.md)'s substrate is implemented through Final PR #123, merged as `17637dd` and unreleased. Kind, reusable definition, and installed identity are distinct. Five existing kinds use common installed storage with typed specialized behavior and cardinality rules.
+
+A ship definition supplies an initial loadout; each live vessel owns actual installations independently of later defaults. Common condition, allocation, repair, damage, projection, and snapshots use installed identity rather than five parallel mutable fields. Engineering owns the installed set and one exact repair; readiness and scan continuation reference their actual installations.
+
+The current production loadout reproduces M6A's five kinds and four consumers, but those counts are not the storage model. Remote semantic aim remains actor-safe and does not disclose inventory. Own-ship Engineering can expose its legitimate installed inventory and actions. Recovery, refit gameplay, aggregation, and further kinds remain separate decisions.
+
+The [substrate contract](../wiki/ship-system-substrate.md) and [Engineering/combat](../wiki/engineering-and-combat.md) own mechanics and proof. PR #123 retains the integrated gate and tested-tree equivalence; this map is not a fresh execution record.
+
+## Content and persistence
+
+Current development uses ship content V6, system-definition content V1, and save V10 under `installed-ship-system-substrate-v1`. Snapshot capture reads current installations directly. It does not flatten through V9 fields or reconstruct live loadouts from class defaults.
+
+The adjacent supported migration chain extends V1 through V10. Frozen historical validators and the V9→V10 table preserve earlier semantics; definitions and whole-catalog aim vocabulary must pass compatibility checks. Mismatch fails as `IncompatibleContent`, not silent reinterpretation. A zero-condition installation remains installed, not absent.
+
+Loading constructs and validates a separate candidate before live installation. Definitions are supplied by the compatible immutable catalog rather than serialized live objects. Historical V1 name reconstruction and later non-inventive faction/combat additions remain version-specific migration facts. [Content, assets, and persistence](../wiki/content-assets-and-persistence.md) owns exact bounds, compatibility, failure handling, and historical measurements; this operational map does not duplicate those numbers.
+
+## Godot session and presentation
+
+`GameScreen` currently owns one session-lifetime simulation. Command, Engineering, and Combat are views, not separate worlds. [ADR 0018](../adr/0018-separate-simulation-session-lifetime-from-workspaces.md) permits a focused ownership extraction for a concrete consumer without requiring a global manager.
+
+Successful replacement advances the presentation generation and invalidates retained actionable context even when IDs match. Own-ship Engineering uses owner/generation binding and current payload resolution. Ordinary refresh preserves valid selection/focus; deferred work rechecks target lifetime. Failed load preserves the playable world. Rate preference and fractional pre-load time carry have distinct replacement rules.
+
+Godot owns display transforms, selection, input, and formatting. The tactical plot is player-centered; numeric Core coordinates remain truth. Preview fixtures are explicit, frozen presentation and cannot submit live commands, persist state, or substitute for unavailable Core data. [Interface](../wiki/interface-and-player-commands.md) owns concrete controls and lifecycle behavior.
+
+`scripts/launch-game.sh` restores/builds before starting Godot to avoid stale local assemblies after branch changes. The canonical verifier separately covers integration and smoke.
+
+## Asset tooling and diagnostics
+
+[ADR 0017](../adr/0017-generate-assets-outside-the-game-through-bounded-validated-publication.md) owns bounded AssetCtl external operations, output validation, recoverable paired publication, and owner approval. Offline verification makes no paid generation calls. Approved replacement uses new semantic identity and supersession; provider output or AI review does not establish approval or legal clearance.
+
+Serilog composition and Microsoft logging abstractions remain nonauthoritative under ADR 0008. Core diagnostics are allowlisted and post-commit. Logs are neither persistence nor a substitute for typed decision explanations or asset provenance.
 
 ## Standing backlog
 
-- Add simulation behavior to `AlterCourse.Core` and its test project as gameplay systems are introduced; preserve the boundary defined by ADR 0001.
+Add new simulation behavior to Core and its tests as governed gameplay consumers are selected. Preserve existing ADR boundaries and update owning wiki contracts in the same work. The completed fourteen-ADR conformance review is historical evidence, not automatic certification of ADRs 0015–0018 or future behavior.
