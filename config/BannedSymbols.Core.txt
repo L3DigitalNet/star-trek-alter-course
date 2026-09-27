@@ -3,6 +3,7 @@
 # Persistence may use Path.GetRandomFileName for temporary files because their names do not affect world state.
 P:System.DateTime.Now; Inject deterministic simulation time instead.
 P:System.DateTime.UtcNow; Inject deterministic simulation time instead.
+P:System.DateTime.Today; Supply explicit simulation dates instead of the process-local date.
 P:System.Random.Shared; Supply randomness explicitly at the simulation boundary.
 T:System.Random; Supply randomness explicitly at the simulation boundary.
 M:System.Threading.Thread.Sleep(System.Int32); Simulation code must not block wall-clock time.
@@ -19,5 +20,13 @@ M:System.Threading.Tasks.Task.Delay(System.TimeSpan,System.Threading.Cancellatio
 M:System.Threading.Tasks.Task.Delay(System.TimeSpan,System.TimeProvider); Schedule explicit simulation work instead.
 M:System.Threading.Tasks.Task.Delay(System.TimeSpan,System.TimeProvider,System.Threading.CancellationToken); Schedule explicit simulation work instead.
 M:System.TimeProvider.GetUtcNow; TimeProvider is an application clock, not simulation authority.
+M:System.TimeProvider.GetLocalNow; Supply explicit simulation time instead of the application clock.
+M:System.TimeProvider.GetTimestamp; Supply explicit simulation time instead of the application counter.
+# The two-endpoint overload converts supplied timestamps without reading the current counter.
+M:System.TimeProvider.GetElapsedTime(System.Int64); Supply both timestamps instead of reading the application counter.
+M:System.TimeProvider.CreateTimer(System.Threading.TimerCallback,System.Object,System.TimeSpan,System.TimeSpan); Schedule explicit simulation work instead of application timer callbacks.
+T:System.Threading.Timer; Schedule explicit simulation work instead of runtime timer callbacks.
+T:System.Threading.PeriodicTimer; Schedule explicit simulation work instead of runtime timer ticks.
+T:System.Timers.Timer; Schedule explicit simulation work instead of runtime timer events.
 T:System.Diagnostics.Stopwatch; Supply explicit simulation time instead of elapsed wall-clock time.
 T:System.Security.Cryptography.RandomNumberGenerator; Supply deterministic randomness explicitly at the simulation boundary.

@@ -35,6 +35,7 @@ internal static class Probe
     {
         _ = System.DateTime.Now; // banned
         _ = System.DateTime.UtcNow; // banned
+        _ = System.DateTime.Today; // banned
         _ = System.DateTimeOffset.Now; // banned
         _ = System.DateTimeOffset.UtcNow; // banned
         _ = new System.Random(); // banned
@@ -51,6 +52,14 @@ internal static class Probe
         _ = System.Threading.Tasks.Task.Delay(System.TimeSpan.Zero, time); // banned
         _ = System.Threading.Tasks.Task.Delay(System.TimeSpan.Zero, time, System.Threading.CancellationToken.None); // banned
         _ = time.GetUtcNow(); // banned
+        _ = time.GetLocalNow(); // banned
+        _ = time.GetTimestamp(); // banned
+        _ = time.GetElapsedTime(0); // banned
+        using System.Threading.ITimer providerTimer = time.CreateTimer(_ => { }, null, System.TimeSpan.Zero, System.Threading.Timeout.InfiniteTimeSpan); // banned
+        using var threadingTimer = new System.Threading.Timer(_ => { }); // banned
+        using var periodicTimer = new System.Threading.PeriodicTimer(System.TimeSpan.FromSeconds(1)); // banned
+        using var suppliedClockPeriodicTimer = new System.Threading.PeriodicTimer(System.TimeSpan.FromSeconds(1), time); // banned
+        using var componentTimer = new System.Timers.Timer(); // banned
         _ = System.Diagnostics.Stopwatch.GetTimestamp(); // banned
         _ = System.Diagnostics.Stopwatch.StartNew(); // banned
         _ = System.Security.Cryptography.RandomNumberGenerator.GetInt32(10); // banned
@@ -73,12 +82,17 @@ if grep ': error ' "${fixture}/negative.log" | grep -v ': error RS0030:'; then
 fi
 # Each marked invocation must independently produce the banned-API diagnostic;
 # an unrelated compiler or analyzer failure cannot satisfy this negative proof.
+missing_lines=()
 while read -r line; do
   if ! grep -Eq "Probe.cs\(${line},[0-9]+\): error RS0030:" "${fixture}/negative.log"; then
-    cat "${fixture}/negative.log" >&2
-    fail "missing RS0030 for Probe.cs line ${line}"
+    missing_lines+=("${line}")
   fi
 done < <(awk '/\/\/ banned/ { print NR }' "${fixture}/Probe.cs")
+if [[ "${#missing_lines[@]}" -gt 0 ]]; then
+  cat "${fixture}/negative.log" >&2
+  printf 'Missing RS0030 for Probe.cs line %s\n' "${missing_lines[@]}" >&2
+  fail 'ambient API enforcement is incomplete'
+fi
 printf 'Core rejects every ambient authority probe.\n'
 
 cat > "${fixture}/Probe.cs" << 'CS'
@@ -88,6 +102,10 @@ internal static class Probe
 {
     internal static string TemporarySavePath(string directory, System.DateTimeOffset suppliedTimestamp)
         => System.IO.Path.Combine(directory, suppliedTimestamp.Year.ToString(System.Globalization.CultureInfo.InvariantCulture) + System.IO.Path.GetRandomFileName());
+
+    internal static (System.DateTime, System.DateTimeOffset, System.TimeSpan) TransformSuppliedValues(
+        System.DateTime timestamp, System.TimeSpan duration, System.TimeProvider provider)
+        => (timestamp.Add(duration), new System.DateTimeOffset(timestamp, System.TimeSpan.Zero), provider.GetElapsedTime(0, 1));
 }
 CS
 if ! dotnet build "${fixture}/AlterCourse.Core.csproj" --no-restore --disable-build-servers > "${fixture}/allowed.log" 2>&1; then
