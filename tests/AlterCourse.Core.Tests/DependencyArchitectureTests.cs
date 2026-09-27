@@ -32,32 +32,35 @@ public sealed class DependencyArchitectureTests
     [InlineData("AlterCourse.Core.Tests")]
     [InlineData("AlterCourse.AssetCtl")]
     [InlineData("Serilog")]
+    [InlineData("CsCheck")]
+    [InlineData("ArchUnitNET")]
+    [InlineData("Xunit")]
     public void CoreHasNoForbiddenDependencies(string forbiddenNamespace) =>
         AssertConforms(NoDependency("AlterCourse.Core", forbiddenNamespace), ProductionArchitecture);
 
-    /// <summary>Domain state and scheduled work remain independent from save transport and persistence adapters.</summary>
-    [Theory]
-    [InlineData("AlterCourse.Core.Ships")]
-    [InlineData("AlterCourse.Core.Simulation")]
-    [InlineData("AlterCourse.Core.AI")]
-    public void DomainNamespacesDoNotDependOnPersistence(string domainNamespace)
-    {
-        Assert.Contains(
-            typeof(CoreAssemblyMarker).Assembly.GetTypes(),
-            type => type.Namespace?.StartsWith(domainNamespace, StringComparison.Ordinal) == true
-        );
-        AssertConforms(NoDependency(domainNamespace, "AlterCourse.Core.Persistence"), ProductionArchitecture);
-    }
+    /// <summary>Only persistence adapters may depend on save transport types.</summary>
+    [Fact]
+    public void CoreOutsidePersistenceDoesNotDependOnPersistence() =>
+        AssertConforms(OutsideAdapters("AlterCourse.Core", "Persistence"), ProductionArchitecture);
 
-    /// <summary>Logging abstractions remain at orchestration boundaries rather than pure domain rules.</summary>
+    /// <summary>Only Gameplay and Persistence orchestration may depend on logging abstractions.</summary>
+    [Fact]
+    public void PureCoreDoesNotDependOnLogging() =>
+        AssertConforms(OutsideAdapters("AlterCourse.Core", "Microsoft.Extensions.Logging"), ProductionArchitecture);
+
+    /// <summary>New domain namespaces are covered while explicit orchestration adapters remain valid.</summary>
     [Theory]
-    [InlineData("AlterCourse.Core.Ships")]
-    [InlineData("AlterCourse.Core.Simulation")]
-    [InlineData("AlterCourse.Core.AI")]
-    [InlineData("AlterCourse.Core.Quantities")]
-    [InlineData("AlterCourse.Core.Tactical")]
-    public void PureDomainNamespacesDoNotDependOnLogging(string domainNamespace) =>
-        AssertConforms(NoDependency(domainNamespace, "Microsoft.Extensions.Logging"), ProductionArchitecture);
+    [InlineData("Persistence")]
+    [InlineData("Microsoft.Extensions.Logging")]
+    public void AdapterExclusionsRejectDomainViolations(string target)
+    {
+        const string root = "AlterCourse.ArchitectureProbes.CoreBoundary";
+        Xunit.Sdk.XunitException failure = Assert.ThrowsAny<Xunit.Sdk.XunitException>(() =>
+            AssertConforms(OutsideAdapters(root + ".Invalid", target), ProbeArchitecture)
+        );
+        Assert.Contains("Factions.Violation", failure.Message, StringComparison.Ordinal);
+        AssertConforms(OutsideAdapters(root + ".Valid", target), ProbeArchitecture);
+    }
 
     /// <summary>Actual logging package types are visible to enforcement across assembly boundaries.</summary>
     [Theory]
@@ -97,6 +100,41 @@ public sealed class DependencyArchitectureTests
         Assert.Contains(target, failure.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>Referenced target types remain enforceable when their defining assembly is not loaded.</summary>
+    [Fact]
+    public void RuleDetectsDependenciesOnAnUnloadedAssembly()
+    {
+        Architecture unloaded = new ArchLoader().LoadAssemblies(typeof(DependencyArchitectureTests).Assembly).Build();
+        AssertConforms(NoDependency("AlterCourse.ArchitectureProbes.Valid", "CsCheck"), unloaded);
+        Assert.ThrowsAny<Xunit.Sdk.XunitException>(() =>
+            AssertConforms(NoDependency("AlterCourse.Core.Tests", "CsCheck"), unloaded)
+        );
+    }
+
+    private static TypesShouldConjunction OutsideAdapters(string root, string target)
+    {
+        bool persistence = string.Equals(target, "Persistence", StringComparison.Ordinal);
+        string excluded =
+            "^"
+            + System.Text.RegularExpressions.Regex.Escape(root)
+            + (persistence ? @"\.Persistence($|\.)" : @"\.(Gameplay|Persistence)($|\.)");
+        return Types()
+            .That()
+            .ResideInNamespaceMatching("^" + System.Text.RegularExpressions.Regex.Escape(root) + @"($|\.)")
+            .And()
+            .DoNotResideInNamespaceMatching(excluded)
+            .Should()
+            .NotDependOnAny(
+                Types(true)
+                    .That()
+                    .ResideInNamespaceMatching(
+                        "^"
+                            + System.Text.RegularExpressions.Regex.Escape(persistence ? root + ".Persistence" : target)
+                            + @"($|\.)"
+                    )
+            );
+    }
+
     private static void AssertConforms(TypesShouldConjunction rule, Architecture architecture) =>
         Assert.True(
             rule.HasNoViolations(architecture),
@@ -109,7 +147,7 @@ public sealed class DependencyArchitectureTests
             .ResideInNamespaceMatching("^" + System.Text.RegularExpressions.Regex.Escape(originNamespace) + "($|\\.)")
             .Should()
             .NotDependOnAny(
-                Types()
+                Types(true)
                     .That()
                     .ResideInNamespaceMatching(
                         "^" + System.Text.RegularExpressions.Regex.Escape(targetNamespace) + "($|\\.)"
