@@ -271,12 +271,9 @@ public static partial class GamePersistence
 
         try
         {
-            using (Stream stream = operations.CreateCandidate(temporaryPath))
-            {
-                temporaryCreated = true;
-                operations.Write(stream, json);
-                operations.Flush(stream);
-            }
+            Stream stream = operations.CreateCandidate(temporaryPath);
+            temporaryCreated = true;
+            WriteAndCloseCandidate(stream, json, operations);
 
             operations.Replace(temporaryPath, targetPath);
             temporaryCreated = false;
@@ -303,6 +300,29 @@ public static partial class GamePersistence
                     // Cleanup is secondary to the typed write failure already in flight. The
                     // isolated candidate may remain, but it must never replace that primary error.
                 }
+            }
+        }
+    }
+
+    private static void WriteAndCloseCandidate(Stream stream, byte[] json, SaveFileOperations operations)
+    {
+        bool written = false;
+        try
+        {
+            operations.Write(stream, json);
+            operations.Flush(stream);
+            written = true;
+        }
+        finally
+        {
+            try
+            {
+                stream.Dispose();
+            }
+            catch (Exception exception) when (!written && exception is IOException or UnauthorizedAccessException)
+            {
+                // Preserve a write/flush failure already in flight. A lone close failure still
+                // propagates and prevents replacement of the previously valid save.
             }
         }
     }

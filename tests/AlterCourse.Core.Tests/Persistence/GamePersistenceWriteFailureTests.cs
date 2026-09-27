@@ -15,7 +15,14 @@ public sealed class GamePersistenceWriteFailureTests
     [InlineData("write", true)]
     [InlineData("flush", true)]
     [InlineData("replace", true)]
-    public void FailedSavePreservesPreviousFileAndPrimaryFailure(string stage, bool cleanupFails)
+    [InlineData("write", false, true)]
+    [InlineData("flush", false, true)]
+    [InlineData("dispose", false, true)]
+    public void FailedSavePreservesPreviousFileAndPrimaryFailure(
+        string stage,
+        bool cleanupFails,
+        bool disposalFails = false
+    )
     {
         string directory = Path.Combine(Path.GetTempPath(), "save-failure-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
@@ -25,7 +32,7 @@ public sealed class GamePersistenceWriteFailureTests
             var fixture = new Milestone3ProofFixture();
             GamePersistence.Save(path, fixture.CreateDefault(), Milestone3ProofFixture.Metadata);
             byte[] previous = File.ReadAllBytes(path);
-            var operations = new FailingOperations(stage, cleanupFails);
+            var operations = new FailingOperations(stage, cleanupFails, disposalFails);
 
             GamePersistenceException failure = Assert.Throws<GamePersistenceException>(() =>
                 GamePersistence.Save(path, fixture.CreateDefault(), Milestone3ProofFixture.Metadata, operations)
@@ -43,14 +50,21 @@ public sealed class GamePersistenceWriteFailureTests
         }
     }
 
-    private sealed class FailingOperations(string stage, bool cleanupFails) : SaveFileOperations
+    private sealed class FailingOperations(string stage, bool cleanupFails, bool disposalFails) : SaveFileOperations
     {
         internal IOException PrimaryFailure { get; } = new("injected " + stage);
 
         internal override Stream CreateCandidate(string path)
         {
             Fail("create");
-            return base.CreateCandidate(path);
+            return disposalFails
+                ? new FailingDisposeStream(
+                    path,
+                    string.Equals(stage, "dispose", StringComparison.Ordinal)
+                        ? PrimaryFailure
+                        : new IOException("secondary disposal failure")
+                )
+                : base.CreateCandidate(path);
         }
 
         internal override void Write(Stream stream, ReadOnlySpan<byte> json)
@@ -86,6 +100,17 @@ public sealed class GamePersistenceWriteFailureTests
         {
             if (string.Equals(stage, operation, StringComparison.Ordinal))
                 throw PrimaryFailure;
+        }
+    }
+
+    private sealed class FailingDisposeStream(string path, IOException failure)
+        : FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None)
+    {
+        protected override void Dispose(bool disposing)
+        {
+            base.Dispose(disposing);
+            if (disposing)
+                throw failure;
         }
     }
 }
