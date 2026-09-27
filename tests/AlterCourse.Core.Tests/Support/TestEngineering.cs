@@ -107,7 +107,9 @@ internal static class TestEngineering
 
     /// <summary>Gets the capability of the sole installation of a kind, or 0 when absent.</summary>
     internal static double CapabilityOf(ShipEngineeringState engineering, ShipSystemKind kind) =>
-        engineering.Systems.OfKind(kind).SingleOrDefault() is { } system ? ShipEngineeringState.Capability(system) : 0;
+        engineering.Systems.OfKind(kind).SingleOrDefault() is { } system
+            ? ShipEngineeringState.Capability(system).Value
+            : 0;
 
     /// <summary>Replaces the condition of the sole installation of a kind.</summary>
     internal static ShipEngineeringState WithCondition(

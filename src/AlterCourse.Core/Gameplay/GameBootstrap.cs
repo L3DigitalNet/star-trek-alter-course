@@ -6,6 +6,7 @@ using AlterCourse.Core.Orders;
 using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
+using Microsoft.Extensions.Logging;
 
 namespace AlterCourse.Core.Gameplay;
 
@@ -181,11 +182,15 @@ public sealed class GameBootstrap
     }
 
     /// <summary>Validates catalog-dependent declarations and creates a new live simulation.</summary>
-    public GameSimulation CreateSimulation(ShipDefinitionCatalog catalog) =>
-        CreateSimulation(catalog, FactionDefinitionCatalog.Empty);
+    public GameSimulation CreateSimulation(ShipDefinitionCatalog catalog, ILogger<GameSimulation>? logger = null) =>
+        CreateSimulation(catalog, FactionDefinitionCatalog.Empty, logger);
 
     /// <summary>Validates both definition catalogs and creates a faction-aware live simulation.</summary>
-    public GameSimulation CreateSimulation(ShipDefinitionCatalog catalog, FactionDefinitionCatalog factionCatalog)
+    public GameSimulation CreateSimulation(
+        ShipDefinitionCatalog catalog,
+        FactionDefinitionCatalog factionCatalog,
+        ILogger<GameSimulation>? logger = null
+    )
     {
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(factionCatalog);
@@ -212,7 +217,7 @@ public sealed class GameBootstrap
             orderIdAllocator,
             factions
         );
-        return GameSimulation.RestoreState(candidate, catalog, factionCatalog);
+        return GameSimulation.RestoreState(candidate, catalog, factionCatalog, logger);
     }
 
     private ShipState CreateShip(

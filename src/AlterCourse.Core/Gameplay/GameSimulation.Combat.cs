@@ -67,7 +67,7 @@ public sealed partial class GameSimulation
             weapon?.Id,
             (weapon?.Definition as DirectedEnergyWeaponSystemDefinition)?.Weapon,
             weapon?.Condition ?? default,
-            weapon is null ? 0 : ShipEngineeringState.Capability(weapon),
+            weapon is null ? default : ShipEngineeringState.Capability(weapon),
             weapon is null ? new SimulationTime(0) : ship.Combat.ReadinessOf(weapon.Id)!.ReadyAt
         );
     }
@@ -139,7 +139,7 @@ public sealed partial class GameSimulation
             ?.Id;
         ShipEngineeringState before = victim.Engineering;
         (ShipEngineeringState damaged, ShieldDamageResult impact, InstalledSystem? shield, InstalledSystem? receiver) =
-            ResolveHit(before, own.Weapon!.BaseNormalizedDamage * own.WeaponCapability, intent.TargetSystem);
+            ResolveHit(before, own.Weapon!.BaseNormalizedDamage * own.WeaponCapability.Value, intent.TargetSystem);
         DamageRepairResolution repairResult = CancelHitRepair(
             state,
             victim,
@@ -204,7 +204,7 @@ public sealed partial class GameSimulation
         ShieldDamageResult impact = ShieldDamage.Resolve(
             damage,
             shield?.Condition ?? default,
-            shield is null ? 0 : ShipEngineeringState.PowerSatisfaction(shield)
+            shield is null ? default : ShipEngineeringState.PowerSatisfaction(shield)
         );
         ShipEngineeringState damaged = shield is null
             ? before

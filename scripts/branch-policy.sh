@@ -12,6 +12,7 @@ cd "${root}"
 
 readonly zero_sha='0000000000000000000000000000000000000000'
 readonly topic_pattern='^(feature|fix|task|docs|hotfix)/[1-9][0-9]*-[a-z0-9]+(-[a-z0-9]+)*$'
+readonly standalone_pattern='^standalone/[a-z0-9]+(-[a-z0-9]+)*$'
 readonly conventional_pattern='^(feat|fix|docs|chore|refactor|test|build|ci|perf|revert)(\([a-z0-9][a-z0-9._/-]*\))?!?:[[:space:]][^[:space:]].*$'
 readonly semver_pattern='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
 readonly branch_governance_marker='docs/adr/0013-use-dev-for-development-and-main-for-releases.md'
@@ -23,10 +24,10 @@ fail() {
 
 validate_branch_name() {
   local branch=$1
-  if [[ "${branch}" == 'main' || "${branch}" == 'dev' || "${branch}" =~ ${topic_pattern} ]]; then
+  if [[ "${branch}" == 'main' || "${branch}" == 'dev' || "${branch}" =~ ${topic_pattern} || "${branch}" =~ ${standalone_pattern} ]]; then
     return
   fi
-  fail "branch '${branch}' must be main, dev, or <feature|fix|task|docs|hotfix>/<issue>-<slug>."
+  fail "branch '${branch}' must be main, dev, <feature|fix|task|docs|hotfix>/<issue>-<slug>, or standalone/<slug>."
 }
 
 validate_conventional_subject() {
@@ -61,12 +62,24 @@ validate_pull_request() {
   local base_repo=${6:-}
   local head_repo=${7:-}
   local dev_sha=${8:-}
+  local pull_number=${9:-}
   local release_version
   local shared_base
 
   validate_branch_name "${base}"
   validate_branch_name "${head}"
   validate_conventional_subject "${title}"
+
+  # A Standalone name grants no admission: the package must validate the live PR
+  # contract, bound to this head by check-standalone-admission.sh.
+  if [[ "${base}" =~ ${standalone_pattern} || "${head}" =~ ${standalone_pattern} ]]; then
+    [[ "${base}" == 'dev' && "${head}" =~ ${standalone_pattern} ]] ||
+      fail 'Standalone pull requests may target only dev.'
+    [[ -n "${base_repo}" && -n "${head_sha}" && "${pull_number}" =~ ^[1-9][0-9]*$ ]] ||
+      fail 'Standalone admission requires repository, head SHA, and PR number.'
+    "${root}/scripts/check-standalone-admission.sh" "${base_repo}" "${pull_number}" "${head_sha}" "${head}" "${base_sha}" ||
+      fail 'Standalone package admission evidence is missing or invalid.'
+  fi
 
   case "${base}" in
     dev)
@@ -258,14 +271,14 @@ validate_repository() {
   branch="$(git branch --show-current)"
   [[ -z "${branch}" ]] || validate_branch_name "${branch}"
 
-  for path in .githooks/commit-msg .githooks/pre-push scripts/branch-policy.sh scripts/setup-git-hooks.sh scripts/test-branch-policy.sh; do
+  for path in .githooks/commit-msg .githooks/pre-push scripts/branch-policy.sh scripts/check-standalone-admission.sh scripts/setup-git-hooks.sh scripts/test-branch-policy.sh; do
     mode="$(git ls-files --stage -- "${path}" | awk 'NR == 1 {print $1}')"
     [[ "${mode}" == '100755' ]] || fail "${path} must be tracked and executable."
   done
 }
 
 usage() {
-  printf 'Usage: %s branch NAME | commit-message FILE | pull-request BASE HEAD TITLE [BASE_SHA HEAD_SHA BASE_REPO HEAD_REPO DEV_SHA] | range BRANCH BEFORE AFTER | pre-push | repository\n' "${0##*/}" >&2
+  printf 'Usage: %s branch NAME | commit-message FILE | pull-request BASE HEAD TITLE [BASE_SHA HEAD_SHA BASE_REPO HEAD_REPO DEV_SHA [PR_NUMBER]] | range BRANCH BEFORE AFTER | pre-push | repository\n' "${0##*/}" >&2
   exit 2
 }
 
@@ -279,8 +292,8 @@ case "${1:-}" in
     validate_commit_message_file "$2"
     ;;
   pull-request)
-    (($# == 4 || $# == 6 || $# == 9)) || usage
-    validate_pull_request "$2" "$3" "$4" "${5:-}" "${6:-}" "${7:-}" "${8:-}" "${9:-}"
+    (($# == 4 || $# == 6 || $# == 9 || $# == 10)) || usage
+    validate_pull_request "$2" "$3" "$4" "${5:-}" "${6:-}" "${7:-}" "${8:-}" "${9:-}" "${10:-}"
     ;;
   range)
     (($# == 4)) || usage

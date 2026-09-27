@@ -10,6 +10,7 @@ using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
 using AlterCourse.Core.Tactical;
+using Microsoft.Extensions.Logging;
 
 namespace AlterCourse.Core.Gameplay;
 
@@ -39,17 +40,20 @@ public sealed partial class GameSimulation
     private readonly ShipDefinitionCatalog _shipCatalog;
     private readonly FactionDefinitionCatalog _factionCatalog;
     private SimulationState _state;
+    private readonly ILogger<GameSimulation>? _diagnosticLogger;
 
     private GameSimulation(
         SimulationState state,
         ShipDefinitionCatalog shipCatalog,
-        FactionDefinitionCatalog factionCatalog
+        FactionDefinitionCatalog factionCatalog,
+        ILogger<GameSimulation>? logger = null
     )
     {
         ArgumentNullException.ThrowIfNull(shipCatalog);
         ArgumentNullException.ThrowIfNull(factionCatalog);
         state.Validate(shipCatalog, factionCatalog);
         _state = state;
+        _diagnosticLogger = logger;
         _shipCatalog = shipCatalog;
         _factionCatalog = factionCatalog;
     }
@@ -215,6 +219,7 @@ public sealed partial class GameSimulation
         SimulationState candidate = ApplyContactDecision(informedState, informedTarget, _shipCatalog, decision);
         Commit(candidate);
         LastContactDecisionExplanation = decision;
+        LogContactDecision(decision);
         return new HailResult(HailOutcome.Acknowledged);
     }
 
@@ -327,6 +332,7 @@ public sealed partial class GameSimulation
         SimulationTime target = _state.Time.AdvanceBy(new SimulationDuration(milliseconds));
         SimulationAdvanceTraceResult advance = AdvanceTo(_state, target, _shipCatalog, _factionCatalog);
         Commit(advance.State);
+        LogDecisionTraces(advance.Traces);
         RememberLatestContactDecision(advance.Traces);
         RememberLatestCombatDecision(advance.Traces);
         RememberLatestFactionDecision(advance.Traces);
@@ -371,6 +377,7 @@ public sealed partial class GameSimulation
             if (advance.PlayerEvents.Count == 0)
                 continue;
             Commit(candidate);
+            LogDecisionTraces(lookaheadTraces);
             RememberLatestContactDecision(lookaheadTraces);
             RememberLatestCombatDecision(lookaheadTraces);
             RememberLatestFactionDecision(lookaheadTraces);
@@ -420,8 +427,9 @@ public sealed partial class GameSimulation
     internal static GameSimulation RestoreState(
         SimulationState restoredState,
         ShipDefinitionCatalog shipCatalog,
-        FactionDefinitionCatalog factionCatalog
-    ) => new(restoredState, shipCatalog, factionCatalog);
+        FactionDefinitionCatalog factionCatalog,
+        ILogger<GameSimulation>? logger = null
+    ) => new(restoredState, shipCatalog, factionCatalog, logger);
 
     internal FactionDefinitionCatalog FactionCatalog => _factionCatalog;
 
@@ -626,10 +634,7 @@ public sealed partial class GameSimulation
                 ShipState ship = movingShips[index];
                 movingShips[index] = ship with
                 {
-                    TacticalPosition = ship.TacticalPosition.Advance(
-                        ship.TacticalMotion,
-                        SimulationFixedStep.Duration.Milliseconds / 1000.0
-                    ),
+                    TacticalPosition = ship.TacticalPosition.Advance(ship.TacticalMotion, SimulationFixedStep.Duration),
                 };
             }
         }
@@ -1911,12 +1916,9 @@ public sealed partial class GameSimulation
             playerShip.DefinitionId,
             playerShip.VesselDisplayName,
             new TacticalProjection(
-                new TacticalPositionProjection(
-                    playerShip.TacticalPosition.XKilometers,
-                    playerShip.TacticalPosition.YKilometers
-                ),
-                playerShip.TacticalMotion.Heading.Value,
-                playerShip.TacticalMotion.Speed.Value
+                new TacticalPositionProjection(playerShip.TacticalPosition),
+                playerShip.TacticalMotion.Heading,
+                playerShip.TacticalMotion.Speed
             ),
             new SensorProjection(
                 sensors?.Condition.Value ?? 0,

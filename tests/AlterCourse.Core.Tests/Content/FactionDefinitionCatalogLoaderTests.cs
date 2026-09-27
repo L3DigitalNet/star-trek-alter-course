@@ -152,6 +152,29 @@ public sealed class FactionDefinitionCatalogLoaderTests
         Assert.Contains("displayName", exception.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>Malformed syntax and excessive nesting fail before schema or domain mapping.</summary>
+    [Theory]
+    [InlineData("{ /* comment */ \"schemaVersion\": 1, \"id\": \"faction-a\", \"displayName\": \"A\" }")]
+    [InlineData("{ \"schemaVersion\": 1, \"id\": \"faction-a\", \"displayName\": \"A\", }")]
+    public void RejectsNoncanonicalJsonSyntax(string json)
+    {
+        FactionContentValidationException exception = Assert.Throws<FactionContentValidationException>(() =>
+            CreateLoader().LoadText(json, "syntax.json")
+        );
+        Assert.Equal("json.invalid", exception.Diagnostics.Single().Code);
+    }
+
+    /// <summary>The parser bounds nesting before a malicious unknown value can be materialized.</summary>
+    [Fact]
+    public void RejectsExcessiveNestingBeforeSchemaEvaluation()
+    {
+        string nested = new string('[', 65) + "0" + new string(']', 65);
+        FactionContentValidationException exception = Assert.Throws<FactionContentValidationException>(() =>
+            CreateLoader().LoadText(nested, "nested.json")
+        );
+        Assert.Equal("json.invalid", exception.Diagnostics.Single().Code);
+    }
+
     /// <summary>Confirms unknown members and unsupported schema versions cannot enter the authored contract.</summary>
     [Theory]
     [InlineData("\"schemaVersion\": 1,", "\"schemaVersion\": 1,\n  \"objective\": \"expand\",")]

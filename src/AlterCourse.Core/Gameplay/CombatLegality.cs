@@ -50,7 +50,7 @@ internal static class CombatLegality
             return FireDirectedEnergyOutcome.NotAtSameLocation;
         if (own.Weapon is null || own.WeaponCondition.Value == 0)
             return FireDirectedEnergyOutcome.WeaponOffline;
-        if (own.WeaponCapability <= 0)
+        if (own.WeaponCapability.Value <= 0)
             return FireDirectedEnergyOutcome.WeaponUnpowered;
         if (own.Time.Milliseconds < own.ReadyAt.Milliseconds)
             return FireDirectedEnergyOutcome.CooldownActive;

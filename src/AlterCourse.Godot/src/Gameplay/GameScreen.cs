@@ -9,7 +9,9 @@ using AlterCourse.Core.Quantities;
 using AlterCourse.Core.Sensors;
 using AlterCourse.Core.Ships;
 using AlterCourse.Core.Strategic;
+using AlterCourse.Godot.Gameplay.Logging;
 using Godot;
+using Serilog.Events;
 using GodotFile = Godot.FileAccess;
 
 namespace AlterCourse.Godot.Gameplay;
@@ -46,6 +48,7 @@ public partial class GameScreen : Control
     private readonly SimulationRateController _rateController = new();
     private readonly List<CommandInterfacePresenter.ActivityEvent> _recentActivity = [];
     private GameSimulation? _simulation;
+    private GameplayLogging? _logging;
 
     // Incremented on every assignment or clearing of _simulation (bootstrap, failed bootstrap, quick-load), never by
     // an ordinary refresh. Own-ship actions and deferred callbacks capture it so nothing presented or queued for one
@@ -102,6 +105,10 @@ public partial class GameScreen : Control
     private Button _doubleRateButton = null!;
     private Button _quadRateButton = null!;
 
+    /// <summary>Gets or sets whether development diagnostics include actor-safe decision candidates and constraints.</summary>
+    [Export]
+    public bool EnableDecisionTraceDiagnostics { get; set; }
+
     /// <summary>Gets whether canonical content produced a complete playable simulation.</summary>
     public bool IsGameplayReady => _simulation is not null;
 
@@ -134,6 +141,12 @@ public partial class GameScreen : Control
     /// <inheritdoc />
     public override void _Ready()
     {
+        _logging = GameplayLogging.Create(
+            () => ProjectSettings.GlobalizePath("user://logs"),
+            () => GD.PrintErr("Gameplay diagnostics unavailable."),
+            minimumLevel: EnableDecisionTraceDiagnostics ? LogEventLevel.Debug : LogEventLevel.Information
+        );
+        _logging.Diagnostics.Lifecycle(true, null, null);
         BindScene();
         try
         {
@@ -170,7 +183,7 @@ public partial class GameScreen : Control
             SetGameplayEnabled(false);
             _messageLabel.Text = "Gameplay content is unavailable. Check the local installation and restart.";
             SetMeta("load_error", _messageLabel.Text);
-            LogDiagnostic("Gameplay bootstrap failed", exception);
+            LogDiagnostic(GameDiagnostics.FailureOperation.Content, exception);
         }
     }
 
@@ -268,13 +281,16 @@ public partial class GameScreen : Control
         {
             SimulationAdvanceResult result = _simulation.AdvanceFixedSteps(steps);
             SetMeta("advance_status", "advanced");
-            if (result.ResolvedEvents.Any(@event => @event.Kind == PlayerAdvanceEventKind.TravelArrived))
+            PresentOperationResult(() =>
             {
-                ClearSelectedDestination();
-            }
+                if (result.ResolvedEvents.Any(@event => @event.Kind == PlayerAdvanceEventKind.TravelArrived))
+                {
+                    ClearSelectedDestination();
+                }
 
-            PresentResolvedEvents(result.ResolvedEvents, announce: false);
-            RefreshProjection();
+                PresentResolvedEvents(result.ResolvedEvents, announce: false);
+                RefreshProjection();
+            });
             return steps;
         }
         catch (Exception exception)
@@ -343,10 +359,15 @@ public partial class GameScreen : Control
         {
             GamePersistence.Save(_quickSavePath, _simulation, metadata);
             _quickSaveCreatedAtUtc = createdAtUtc;
-            _messageLabel.Text = "Quick save complete.";
             SetMeta("quick_save_status", "saved");
+            _logging?.Diagnostics.PersistenceCompleted(
+                false,
+                _projection?.SimulationTime.Milliseconds,
+                _projection?.Ship.InstanceId.Value
+            );
             SetMeta("quick_save_created_at_utc", createdAtUtc.ToString("O"));
             SetMeta("quick_save_saved_at_utc", savedAtUtc.ToString("O"));
+            PresentOperationResult(() => _messageLabel.Text = "Quick save complete.");
         }
         catch (Exception exception)
         {
@@ -371,26 +392,39 @@ public partial class GameScreen : Control
         try
         {
             string loadPath = ResolveQuickLoadPath();
-            LoadedGameSave loaded = GamePersistence.Load(loadPath, _shipCatalog, _factionCatalog);
+            LoadedGameSave loaded = GamePersistence.Load(
+                loadPath,
+                _shipCatalog,
+                _factionCatalog,
+                _logging?.SimulationLogger
+            );
 
             // Core constructs and validates the candidate in isolation. Assignment stays after that
             // boundary so an unreadable or invalid save cannot damage the playable aggregate.
             _simulation = loaded.Simulation;
             _simulationGeneration++;
             _quickSaveCreatedAtUtc = loaded.Metadata.CreatedAtUtc;
-            _recentActivity.Clear();
-            ClearSelectedDestination();
-            ClearSelectedContact();
-
+            SetMeta("quick_save_status", "loaded");
             // Rate is a current player preference, so it survives load. Fractional carry is dropped
             // because presentation time accumulated before the snapshot must not advance restored truth.
             _rateController.ResetAccumulatedTime();
-            RefreshProjection();
-            ResetCourseDraft(_projection!);
-            _messageLabel.Text =
-                $"Quick load restored time {loaded.Simulation.GetPlayerProjection().SimulationTime.Milliseconds / 1000.0:0.0} s.";
-            SetMeta("quick_save_status", "loaded");
-            DeferFocus(CurrentWorkspaceButton());
+            PlayerProjection restored = loaded.Simulation.GetPlayerProjection();
+            _logging?.Diagnostics.PersistenceCompleted(
+                true,
+                restored.SimulationTime.Milliseconds,
+                restored.Ship.InstanceId.Value
+            );
+            PresentOperationResult(() =>
+            {
+                _recentActivity.Clear();
+                ClearSelectedDestination();
+                ClearSelectedContact();
+
+                ResetCourseDraft(restored);
+                _messageLabel.Text = $"Quick load restored time {restored.SimulationTime.Milliseconds / 1000.0:0.0} s.";
+                RefreshProjection();
+                DeferFocus(CurrentWorkspaceButton());
+            });
         }
         catch (Exception exception)
         {
@@ -470,16 +504,19 @@ public partial class GameScreen : Control
         try
         {
             TravelRequestResult result = _simulation.RequestTravel(new TravelIntent(destination));
-            _messageLabel.Text = result.Outcome switch
+            PresentOperationResult(() =>
             {
-                TravelOutcome.Accepted => $"Travel engaged for {FindLocationName(destination)}.",
-                TravelOutcome.AlreadyTraveling => "Travel unavailable: vessel is already underway.",
-                TravelOutcome.SameLocation => "Travel unavailable: vessel is already at that location.",
-                TravelOutcome.RouteUnavailable => "Travel unavailable: no direct route is known.",
-                _ => "Travel request was not accepted.",
-            };
-            PresentResolvedEvents(result.ResolvedEvents, announce: false);
-            RefreshProjection();
+                _messageLabel.Text = result.Outcome switch
+                {
+                    TravelOutcome.Accepted => $"Travel engaged for {FindLocationName(destination)}.",
+                    TravelOutcome.AlreadyTraveling => "Travel unavailable: vessel is already underway.",
+                    TravelOutcome.SameLocation => "Travel unavailable: vessel is already at that location.",
+                    TravelOutcome.RouteUnavailable => "Travel unavailable: no direct route is known.",
+                    _ => "Travel request was not accepted.",
+                };
+                PresentResolvedEvents(result.ResolvedEvents, announce: false);
+                RefreshProjection();
+            });
         }
         catch (Exception exception)
         {
@@ -498,17 +535,20 @@ public partial class GameScreen : Control
         try
         {
             AdvanceUntilResult result = _simulation.AdvanceUntilNextPlayerRelevantEvent();
-            if (result.ResolvedEvents.Any(@event => @event.Kind == PlayerAdvanceEventKind.TravelArrived))
-            {
-                ClearSelectedDestination();
-            }
-
-            PresentResolvedEvents(result.ResolvedEvents, announce: false);
-            RefreshProjection();
-            string resolved = DescribeAdvanceResult(result);
-            _messageLabel.Text = resolved;
             SetMeta("advance_status", "advanced");
-            SetMeta("last_advance_event", resolved);
+            PresentOperationResult(() =>
+            {
+                if (result.ResolvedEvents.Any(@event => @event.Kind == PlayerAdvanceEventKind.TravelArrived))
+                {
+                    ClearSelectedDestination();
+                }
+
+                PresentResolvedEvents(result.ResolvedEvents, announce: false);
+                string resolved = DescribeAdvanceResult(result);
+                SetMeta("last_advance_event", resolved);
+                _messageLabel.Text = resolved;
+                RefreshProjection();
+            });
         }
         catch (Exception exception)
         {
@@ -530,14 +570,14 @@ public partial class GameScreen : Control
     // ordinary refresh never calls this, so a draft being edited survives the running simulation's refreshes.
     private void ResetCourseDraft(PlayerProjection loaded)
     {
-        _courseHeading.Value = loaded.Ship.Tactical.HeadingDegrees;
-        _courseSpeed.Value = loaded.Ship.Tactical.SpeedKilometersPerSecond;
+        _courseHeading.Value = loaded.Ship.Tactical.HeadingDegrees.Value;
+        _courseSpeed.Value = loaded.Ship.Tactical.SpeedKilometersPerSecond.Value;
     }
 
     private void StopCourse()
     {
         if (_projection is not null && !_stopCourseButton.Disabled)
-            SubmitCourse(_projection.Ship.Tactical.HeadingDegrees, 0);
+            SubmitCourse(_projection.Ship.Tactical.HeadingDegrees.Value, 0);
     }
 
     private void SubmitCourse(double heading, double speed)
@@ -552,18 +592,21 @@ public partial class GameScreen : Control
             SetTacticalCourseResult result = _simulation.SetTacticalCourse(
                 new SetTacticalCourseIntent(new HeadingDegrees(heading), new SpeedKilometersPerSecond(speed))
             );
-            _messageLabel.Text = result.Outcome switch
+            PresentOperationResult(() =>
             {
-                SetTacticalCourseOutcome.Accepted =>
-                    $"Tactical course set: heading {heading:0.0}°, speed {speed:0.0} km/s.",
-                SetTacticalCourseOutcome.UnavailableWhileTraveling =>
-                    "Course unavailable while strategic travel is active.",
-                SetTacticalCourseOutcome.PropulsionOffline => "Course unavailable: impulse propulsion is offline.",
-                SetTacticalCourseOutcome.SpeedExceedsCurrentCapability =>
-                    "Course unavailable: requested speed exceeds current propulsion capability.",
-                _ => "Tactical course was not accepted.",
-            };
-            RefreshProjection();
+                _messageLabel.Text = result.Outcome switch
+                {
+                    SetTacticalCourseOutcome.Accepted =>
+                        $"Tactical course set: heading {heading:0.0}°, speed {speed:0.0} km/s.",
+                    SetTacticalCourseOutcome.UnavailableWhileTraveling =>
+                        "Course unavailable while strategic travel is active.",
+                    SetTacticalCourseOutcome.PropulsionOffline => "Course unavailable: impulse propulsion is offline.",
+                    SetTacticalCourseOutcome.SpeedExceedsCurrentCapability =>
+                        "Course unavailable: requested speed exceeds current propulsion capability.",
+                    _ => "Tactical course was not accepted.",
+                };
+                RefreshProjection();
+            });
         }
         catch (Exception exception)
         {
@@ -722,7 +765,11 @@ public partial class GameScreen : Control
             FactionDefinitionContent.FromText(FactionAPath, ReadRequiredText(FactionAPath)),
             FactionDefinitionContent.FromText(FactionBPath, ReadRequiredText(FactionBPath)),
         ]);
-        return (shipCatalog, factionCatalog, FirstGameSetup.Create(shipCatalog, factionCatalog));
+        return (
+            shipCatalog,
+            factionCatalog,
+            FirstGameSetup.Create(shipCatalog, factionCatalog, _logging?.SimulationLogger)
+        );
     }
 
     private static string ReadRequiredText(string path)
@@ -730,13 +777,13 @@ public partial class GameScreen : Control
         using var file = GodotFile.Open(path, GodotFile.ModeFlags.Read);
         if (file is null)
         {
-            throw new InvalidOperationException($"Godot could not open required file '{path}'.");
+            throw new IOException($"Godot could not open required file '{path}'.");
         }
 
         string text = file.GetAsText();
         if (file.GetError() != Error.Ok)
         {
-            throw new InvalidOperationException($"Godot could not read required file '{path}'.");
+            throw new IOException($"Godot could not read required file '{path}'.");
         }
 
         return text;
@@ -813,9 +860,9 @@ public partial class GameScreen : Control
             mode,
             new OwnShipActionBinding(_projection.Ship.InstanceId, _simulationGeneration)
         );
+        SetProjectionMetadata(_projection);
         PresentWorkspace(presentation);
         PresentShell(presentation);
-        SetProjectionMetadata(_projection);
         if (priorFocus is not null && !IsFocusable(priorFocus))
         {
             Control fallback = !_engineeringWorkspaceActive
@@ -1139,7 +1186,7 @@ public partial class GameScreen : Control
                 )
             )
             {
-                RefuseLapsedControl(action);
+                PresentOperationResult(() => RefuseLapsedControl(action));
                 return;
             }
 
@@ -1163,8 +1210,11 @@ public partial class GameScreen : Control
                     BeginSystemRepair(target, action);
                     break;
                 case EngineeringOperation.ReturnToCommand:
-                    ShowCommandWorkspace();
-                    _messageLabel.Text = "Returned to Command Deck.";
+                    PresentOperationResult(() =>
+                    {
+                        ShowCommandWorkspace();
+                        _messageLabel.Text = "Returned to Command Deck.";
+                    });
                     break;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(action), operation, "Unknown Engineering action.");
@@ -1222,19 +1272,22 @@ public partial class GameScreen : Control
         PlayerProjection before
     )
     {
-        PresentResolvedEvents(result.ResolvedEvents, announce: false);
-        RefreshProjection();
-        _messageLabel.Text = result.Outcome switch
-        {
-            PowerAllocationOutcome.Accepted => $"{label} applied.",
-            PowerAllocationOutcome.CurrentSpeedExceedsResultingMaximum =>
-                "Allocation unavailable: reduce current speed before lowering propulsion power.",
-            PowerAllocationOutcome.ConsumerDemandExceeded => DemandRefusal(before, result.Consumer),
-            PowerAllocationOutcome.AvailablePowerExceeded =>
-                "Allocation unavailable: requested load exceeds available power.",
-            _ => "Power allocation was not accepted.",
-        };
         SetMeta("last_engineering_command", EngineeringCommandMeta(action, result.Outcome.ToString()));
+        PresentOperationResult(() =>
+        {
+            PresentResolvedEvents(result.ResolvedEvents, announce: false);
+            _messageLabel.Text = result.Outcome switch
+            {
+                PowerAllocationOutcome.Accepted => $"{label} applied.",
+                PowerAllocationOutcome.CurrentSpeedExceedsResultingMaximum =>
+                    "Allocation unavailable: reduce current speed before lowering propulsion power.",
+                PowerAllocationOutcome.ConsumerDemandExceeded => DemandRefusal(before, result.Consumer),
+                PowerAllocationOutcome.AvailablePowerExceeded =>
+                    "Allocation unavailable: requested load exceeds available power.",
+                _ => "Power allocation was not accepted.",
+            };
+            RefreshProjection();
+        });
     }
 
     private void BeginSystemRepair(InstalledSystemProjection target, CommandInterfaceAction action)
@@ -1242,18 +1295,21 @@ public partial class GameScreen : Control
         // Each projected repair action means a complete repair; Core still validates the nominal target against
         // current condition and the one-repair constraint at submission time.
         SystemRepairResult result = _simulation!.BeginSystemRepair(target.Id, new SystemCondition(1));
-        RefreshProjection();
-        _messageLabel.Text = result.Outcome switch
-        {
-            SystemRepairOutcome.Accepted =>
-                $"{EngineeringKindPresentation.MessageNoun(target.Kind, target.ComponentLabel)} repair started.",
-            SystemRepairOutcome.RepairAlreadyActive => "Repair unavailable: another system repair is active.",
-            SystemRepairOutcome.NotRepairable => "Repair unavailable: that system is unsupported.",
-            SystemRepairOutcome.TargetDoesNotImproveCondition =>
-                "Repair unavailable: the selected system is already nominal.",
-            _ => "System repair was not accepted.",
-        };
         SetMeta("last_engineering_command", EngineeringCommandMeta(action, result.Outcome.ToString()));
+        PresentOperationResult(() =>
+        {
+            _messageLabel.Text = result.Outcome switch
+            {
+                SystemRepairOutcome.Accepted =>
+                    $"{EngineeringKindPresentation.MessageNoun(target.Kind, target.ComponentLabel)} repair started.",
+                SystemRepairOutcome.RepairAlreadyActive => "Repair unavailable: another system repair is active.",
+                SystemRepairOutcome.NotRepairable => "Repair unavailable: that system is unsupported.",
+                SystemRepairOutcome.TargetDoesNotImproveCondition =>
+                    "Repair unavailable: the selected system is already nominal.",
+                _ => "System repair was not accepted.",
+            };
+            RefreshProjection();
+        });
     }
 
     // Test hook "<operation>:<installed id or ->:<outcome>", e.g. "Prioritize:2:Accepted" or "Balance:-:Accepted".
@@ -1337,18 +1393,22 @@ public partial class GameScreen : Control
         try
         {
             ActiveSensorScanResult result = _simulation.RequestActiveSensorScan(contactId);
-            _messageLabel.Text = result.Outcome switch
+            PresentOperationResult(() =>
             {
-                ActiveSensorScanOutcome.Accepted => $"Active scan started on {DescribeContact(contactId)}.",
-                ActiveSensorScanOutcome.ContactNotFound => "Active scan unavailable: contact is no longer present.",
-                ActiveSensorScanOutcome.ContactNotCurrent => "Active scan unavailable: contact is not current.",
-                ActiveSensorScanOutcome.AlreadyIdentified => "Active scan unavailable: contact is already identified.",
-                ActiveSensorScanOutcome.SensorsUnavailable => "Active scan unavailable: sensors are offline.",
-                ActiveSensorScanOutcome.ScanAlreadyActive => "Active scan unavailable: another scan is active.",
-                _ => "Active scan request was not accepted.",
-            };
-            SetMeta("last_contact_command", $"active-scan:{result.Outcome}");
-            RefreshProjection();
+                _messageLabel.Text = result.Outcome switch
+                {
+                    ActiveSensorScanOutcome.Accepted => $"Active scan started on {DescribeContact(contactId)}.",
+                    ActiveSensorScanOutcome.ContactNotFound => "Active scan unavailable: contact is no longer present.",
+                    ActiveSensorScanOutcome.ContactNotCurrent => "Active scan unavailable: contact is not current.",
+                    ActiveSensorScanOutcome.AlreadyIdentified =>
+                        "Active scan unavailable: contact is already identified.",
+                    ActiveSensorScanOutcome.SensorsUnavailable => "Active scan unavailable: sensors are offline.",
+                    ActiveSensorScanOutcome.ScanAlreadyActive => "Active scan unavailable: another scan is active.",
+                    _ => "Active scan request was not accepted.",
+                };
+                SetMeta("last_contact_command", $"active-scan:{result.Outcome}");
+                RefreshProjection();
+            });
         }
         catch (Exception exception)
         {
@@ -1365,13 +1425,16 @@ public partial class GameScreen : Control
             FireDirectedEnergyResult result = _simulation.FireDirectedEnergy(
                 new FireDirectedEnergyIntent(contactId, system)
             );
-            SetMeta("last_fire_outcome", result.Outcome.ToString());
-            PresentResolvedEvents(result.ResolvedEvents, false);
-            RefreshProjection();
-            _messageLabel.Text =
-                result.Outcome == FireDirectedEnergyOutcome.Accepted
-                    ? "Directed-energy shot fired."
-                    : CommandInterfacePresenter.FireReason(result.Outcome);
+            PresentOperationResult(() =>
+            {
+                SetMeta("last_fire_outcome", result.Outcome.ToString());
+                PresentResolvedEvents(result.ResolvedEvents, false);
+                _messageLabel.Text =
+                    result.Outcome == FireDirectedEnergyOutcome.Accepted
+                        ? "Directed-energy shot fired."
+                        : CommandInterfacePresenter.FireReason(result.Outcome);
+                RefreshProjection();
+            });
         }
         catch (Exception exception)
         {
@@ -1390,18 +1453,21 @@ public partial class GameScreen : Control
         {
             string contactLabel = DescribeContact(contactId);
             HailResult result = _simulation.RequestHail(contactId);
-            _messageLabel.Text = result.Outcome switch
+            PresentOperationResult(() =>
             {
-                HailOutcome.Acknowledged => $"{contactLabel} acknowledged the hail.",
-                HailOutcome.NoResponse => $"{contactLabel} did not respond.",
-                HailOutcome.ContactNotFound => "Hail unavailable: contact is no longer present.",
-                HailOutcome.ContactNotCurrent => "Hail unavailable: contact is not current.",
-                HailOutcome.ContactNotIdentified => "Hail unavailable: identify the contact first.",
-                _ => "Hail request was not accepted.",
-            };
-            PresentHailOutcome(contactId, contactLabel, result.Outcome);
-            SetMeta("last_contact_command", $"hail:{result.Outcome}");
-            RefreshProjection();
+                _messageLabel.Text = result.Outcome switch
+                {
+                    HailOutcome.Acknowledged => $"{contactLabel} acknowledged the hail.",
+                    HailOutcome.NoResponse => $"{contactLabel} did not respond.",
+                    HailOutcome.ContactNotFound => "Hail unavailable: contact is no longer present.",
+                    HailOutcome.ContactNotCurrent => "Hail unavailable: contact is not current.",
+                    HailOutcome.ContactNotIdentified => "Hail unavailable: identify the contact first.",
+                    _ => "Hail request was not accepted.",
+                };
+                PresentHailOutcome(contactId, contactLabel, result.Outcome);
+                SetMeta("last_contact_command", $"hail:{result.Outcome}");
+                RefreshProjection();
+            });
         }
         catch (Exception exception)
         {
@@ -1436,8 +1502,8 @@ public partial class GameScreen : Control
         SetMeta("travel_eta_milliseconds", projection.Strategic.Travel?.ExpectedArrival.Milliseconds ?? -1);
         SetMeta("tactical_x", projection.Ship.Tactical.Position.XKilometers);
         SetMeta("tactical_y", projection.Ship.Tactical.Position.YKilometers);
-        SetMeta("tactical_heading", projection.Ship.Tactical.HeadingDegrees);
-        SetMeta("tactical_speed", projection.Ship.Tactical.SpeedKilometersPerSecond);
+        SetMeta("tactical_heading", projection.Ship.Tactical.HeadingDegrees.Value);
+        SetMeta("tactical_speed", projection.Ship.Tactical.SpeedKilometersPerSecond.Value);
         SetContactMetadata(projection);
     }
 
@@ -1789,6 +1855,7 @@ public partial class GameScreen : Control
 
         foreach (PlayerAdvanceEvent @event in events)
         {
+            _logging?.Diagnostics.Consequence(@event, _projection?.Ship.InstanceId.Value);
             AppendRecentActivity(
                 new CommandInterfacePresenter.ResolvedActivityEvent(@event.OccurredAt.Milliseconds, @event)
             );
@@ -1861,17 +1928,41 @@ public partial class GameScreen : Control
             : $"Contact {contactId.Value}";
     }
 
+    // Core and persistence have already returned. A projection fault cannot turn their committed result into
+    // a failed command or a failed save/load; the scene may be stale, but authoritative state remains intact.
+    private void PresentOperationResult(Action present)
+    {
+        try
+        {
+            present();
+        }
+        catch (Exception exception)
+        {
+            SetMeta("presentation_status", "failed");
+            if (GodotObject.IsInstanceValid(_messageLabel))
+            {
+                _messageLabel.Text += " Presentation refresh unavailable; simulation state is retained.";
+            }
+            LogDiagnostic(GameDiagnostics.FailureOperation.Presentation, exception);
+        }
+    }
+
     private void ReportPersistenceFailure(string operation, string status, string category, Exception exception)
     {
         _messageLabel.Text = $"{operation} failed: {category}.";
         SetMeta("quick_save_status", status);
-        LogDiagnostic($"{operation} failed", exception);
+        LogDiagnostic(
+            string.Equals(status, "save_failed", StringComparison.Ordinal)
+                ? GameDiagnostics.FailureOperation.Save
+                : GameDiagnostics.FailureOperation.Load,
+            exception
+        );
     }
 
     private void ReportCommandFailure(string playerMessage, Exception exception)
     {
         _messageLabel.Text = playerMessage;
-        LogDiagnostic(playerMessage, exception);
+        LogDiagnostic(GameDiagnostics.FailureOperation.Command, exception);
     }
 
     private void ReportAdvanceFailure(Exception exception)
@@ -1882,11 +1973,26 @@ public partial class GameScreen : Control
         _rateStatusLabel.Text = "RATE PAUSED";
         _messageLabel.Text = "Time advancement failed safely; simulation is paused.";
         SetMeta("advance_status", "failed");
-        LogDiagnostic("Simulation advancement failed", exception);
+        LogDiagnostic(GameDiagnostics.FailureOperation.Simulation, exception);
     }
 
-    private static void LogDiagnostic(string operation, Exception exception)
+    private void LogDiagnostic(GameDiagnostics.FailureOperation operation, Exception exception) =>
+        _logging?.Diagnostics.Failure(
+            operation,
+            exception,
+            _projection?.SimulationTime.Milliseconds,
+            _projection?.Ship.InstanceId.Value
+        );
+
+    /// <inheritdoc />
+    public override void _ExitTree()
     {
-        GD.PrintErr($"{operation}: {exception.GetType().Name}: {exception.Message}");
+        _logging?.Diagnostics.Lifecycle(
+            false,
+            _projection?.SimulationTime.Milliseconds,
+            _projection?.Ship.InstanceId.Value
+        );
+        _logging?.Dispose();
+        _logging = null;
     }
 }

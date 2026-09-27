@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using AlterCourse.Core.Simulation;
 
 namespace AlterCourse.Core.Tactical;
 
@@ -29,8 +30,9 @@ public readonly record struct TacticalPosition
     /// <summary>Gets the north-positive coordinate in kilometers.</summary>
     public double YKilometers { get; }
 
-    internal TacticalPosition Advance(TacticalMotion motion, double seconds)
+    internal TacticalPosition Advance(TacticalMotion motion, SimulationDuration duration)
     {
+        double seconds = duration.Milliseconds / 1000.0;
         double radians = motion.Heading.Value * Math.PI / 180;
         double distance = motion.Speed.Value * seconds;
         return new TacticalPosition(

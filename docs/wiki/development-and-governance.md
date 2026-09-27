@@ -35,7 +35,7 @@ Exact tool and package versions belong in their existing configuration and lock 
 
 The canonical path covers locked restore/build, Core and AssetCtl tests, offline asset validation, Godot integration/smoke, formatting, shell/workflow analysis, secret scanning, and repository policies. Managed Project Standards checks complement it with Markdown/frontmatter policy; they are not silently reimplemented in another gate.
 
-Use ordinary xUnit tests for pure behavior and vendored GdUnit4 for current engine integration. ADR-selected additional testing tools remain demand-driven. `./scripts/test-mutation.sh` is a separate deep-validation path without an invented mutation-score threshold.
+Use ordinary xUnit tests for pure behavior and vendored GdUnit4 for current engine integration. The reviewed ADR-conformance implementation adds Core-test-only ArchUnitNET 0.13.4 for durable namespace dependency rules and CsCheck 4.9.1 for bounded generated invariants; they are not runtime dependencies or a new test service. GdUnit4Net remains conditional until a C# Godot integration subject exists. ADR 0011 permits selective UnitsNet use only within its bounded physical-quantity proof and persistence boundary. `./scripts/test-mutation.sh` is a separate deep-validation path without an invented mutation-score threshold.
 
 The launcher restores/builds before running Godot and handles source asset preparation. A stale Debug assembly or unimported asset is not evidence that the current Core rules are wrong; consult the [recorded gotchas](../handoff/bugs/INDEX.md).
 

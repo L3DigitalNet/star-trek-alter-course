@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using AlterCourse.Core.AI;
@@ -12,6 +13,7 @@ using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
 using AlterCourse.Core.Tactical;
+using Microsoft.Extensions.Logging;
 using FiniteDoubleJsonConverter = AlterCourse.Core.Persistence.SaveModelsV1.FiniteDoubleJsonConverter;
 using HoldUntilOrderSnapshotV3 = AlterCourse.Core.Persistence.SaveModelsV3.HoldUntilOrderSnapshotV3;
 using PatrolRouteOrderSnapshotV3 = AlterCourse.Core.Persistence.SaveModelsV3.PatrolRouteOrderSnapshotV3;
@@ -168,15 +170,17 @@ public static partial class GamePersistence
     public static LoadedGameSave Deserialize(
         ReadOnlySpan<byte> utf8Json,
         ShipDefinitionCatalog catalog,
-        string sourceIdentity
-    ) => Deserialize(utf8Json, catalog, FactionDefinitionCatalog.Empty, sourceIdentity);
+        string sourceIdentity,
+        ILogger<GameSimulation>? logger = null
+    ) => Deserialize(utf8Json, catalog, FactionDefinitionCatalog.Empty, sourceIdentity, logger);
 
     /// <summary>Loads bounded untrusted UTF-8 JSON with both immutable content catalogs.</summary>
     public static LoadedGameSave Deserialize(
         ReadOnlySpan<byte> utf8Json,
         ShipDefinitionCatalog catalog,
         FactionDefinitionCatalog factionCatalog,
-        string sourceIdentity
+        string sourceIdentity,
+        ILogger<GameSimulation>? logger = null
     )
     {
         ArgumentNullException.ThrowIfNull(catalog);
@@ -191,25 +195,26 @@ public static partial class GamePersistence
             );
         }
 
-        byte[] documentBytes = utf8Json.ToArray();
         try
         {
+            ValidateInputBounds(utf8Json, sourceIdentity);
+            byte[] documentBytes = utf8Json.ToArray();
             using var document = JsonDocument.Parse(documentBytes, DocumentOptions);
-            RejectDuplicateMembers(document.RootElement, sourceIdentity, "$", 0);
+            RejectDuplicateMembers(document.RootElement, sourceIdentity, [], 0);
             int version = ReadSchemaVersion(document.RootElement, sourceIdentity);
 
             return version switch
             {
-                V1SchemaVersion => LoadV1(documentBytes, catalog, factionCatalog, sourceIdentity),
-                V2SchemaVersion => LoadV2(documentBytes, catalog, factionCatalog, sourceIdentity),
-                V3SchemaVersion => LoadV3(documentBytes, catalog, factionCatalog, sourceIdentity),
-                V4SchemaVersion => LoadV4(documentBytes, catalog, factionCatalog, sourceIdentity),
-                V5SchemaVersion => LoadV5(documentBytes, catalog, factionCatalog, sourceIdentity),
-                V6SchemaVersion => LoadV6(documentBytes, catalog, factionCatalog, sourceIdentity),
-                V7SchemaVersion => LoadV7(documentBytes, catalog, factionCatalog, sourceIdentity),
-                V8SchemaVersion => LoadV8(documentBytes, catalog, factionCatalog, sourceIdentity),
-                V9SchemaVersion => LoadV9(documentBytes, catalog, factionCatalog, sourceIdentity),
-                CurrentSchemaVersion => LoadV10(documentBytes, catalog, factionCatalog, sourceIdentity),
+                V1SchemaVersion => LoadV1(documentBytes, catalog, factionCatalog, sourceIdentity, logger),
+                V2SchemaVersion => LoadV2(documentBytes, catalog, factionCatalog, sourceIdentity, logger),
+                V3SchemaVersion => LoadV3(documentBytes, catalog, factionCatalog, sourceIdentity, logger),
+                V4SchemaVersion => LoadV4(documentBytes, catalog, factionCatalog, sourceIdentity, logger),
+                V5SchemaVersion => LoadV5(documentBytes, catalog, factionCatalog, sourceIdentity, logger),
+                V6SchemaVersion => LoadV6(documentBytes, catalog, factionCatalog, sourceIdentity, logger),
+                V7SchemaVersion => LoadV7(documentBytes, catalog, factionCatalog, sourceIdentity, logger),
+                V8SchemaVersion => LoadV8(documentBytes, catalog, factionCatalog, sourceIdentity, logger),
+                V9SchemaVersion => LoadV9(documentBytes, catalog, factionCatalog, sourceIdentity, logger),
+                CurrentSchemaVersion => LoadV10(documentBytes, catalog, factionCatalog, sourceIdentity, logger),
                 _ => throw Failure(
                     GamePersistenceFailure.UnsupportedVersion,
                     sourceIdentity,
@@ -241,7 +246,15 @@ public static partial class GamePersistence
     /// Writes a complete candidate beside the target, durably flushes it where supported, then uses
     /// same-filesystem atomic replacement visibility; this does not promise universal power-loss durability.
     /// </summary>
-    public static void Save(string path, GameSimulation simulation, GameSaveMetadata metadata)
+    public static void Save(string path, GameSimulation simulation, GameSaveMetadata metadata) =>
+        Save(path, simulation, metadata, new SaveFileOperations());
+
+    internal static void Save(
+        string path,
+        GameSimulation simulation,
+        GameSaveMetadata metadata,
+        SaveFileOperations operations
+    )
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         byte[] json = Serialize(simulation, metadata);
@@ -258,14 +271,11 @@ public static partial class GamePersistence
 
         try
         {
-            using (var stream = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-            {
-                temporaryCreated = true;
-                stream.Write(json);
-                stream.Flush(flushToDisk: true);
-            }
+            Stream stream = operations.CreateCandidate(temporaryPath);
+            temporaryCreated = true;
+            WriteAndCloseCandidate(stream, json, operations);
 
-            File.Move(temporaryPath, targetPath, overwrite: true);
+            operations.Replace(temporaryPath, targetPath);
             temporaryCreated = false;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
@@ -279,17 +289,40 @@ public static partial class GamePersistence
         }
         finally
         {
-            if (temporaryCreated && File.Exists(temporaryPath))
+            if (temporaryCreated)
             {
                 try
                 {
-                    File.Delete(temporaryPath);
+                    operations.DeleteCandidate(temporaryPath);
                 }
                 catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
                 {
                     // Cleanup is secondary to the typed write failure already in flight. The
                     // isolated candidate may remain, but it must never replace that primary error.
                 }
+            }
+        }
+    }
+
+    private static void WriteAndCloseCandidate(Stream stream, byte[] json, SaveFileOperations operations)
+    {
+        bool written = false;
+        try
+        {
+            operations.Write(stream, json);
+            operations.Flush(stream);
+            written = true;
+        }
+        finally
+        {
+            try
+            {
+                stream.Dispose();
+            }
+            catch (Exception exception) when (!written && exception is IOException or UnauthorizedAccessException)
+            {
+                // Preserve a write/flush failure already in flight. A lone close failure still
+                // propagates and prevents replacement of the previously valid save.
             }
         }
     }
@@ -302,7 +335,8 @@ public static partial class GamePersistence
     public static LoadedGameSave Load(
         string path,
         ShipDefinitionCatalog catalog,
-        FactionDefinitionCatalog factionCatalog
+        FactionDefinitionCatalog factionCatalog,
+        ILogger<GameSimulation>? logger = null
     )
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
@@ -333,7 +367,7 @@ public static partial class GamePersistence
                 );
             }
 
-            return Deserialize(json, catalog, factionCatalog, sourceIdentity);
+            return Deserialize(json, catalog, factionCatalog, sourceIdentity, logger);
         }
         catch (GamePersistenceException)
         {
@@ -669,7 +703,8 @@ public static partial class GamePersistence
         byte[] json,
         ShipDefinitionCatalog catalog,
         FactionDefinitionCatalog factionCatalog,
-        string sourceIdentity
+        string sourceIdentity,
+        ILogger<GameSimulation>? logger
     )
     {
         try
@@ -688,7 +723,7 @@ public static partial class GamePersistence
             ValidateCandidateV5(migratedV5, catalog);
             SaveEnvelopeV6 migratedV6 = MigrateV5ToV6(migratedV5);
             ValidateCandidateV6(migratedV6, catalog);
-            return RestoreMigratedV7(MigrateV6ToV7(migratedV6), catalog, factionCatalog);
+            return RestoreMigratedV7(MigrateV6ToV7(migratedV6), catalog, factionCatalog, logger);
         }
         catch (GamePersistenceException)
         {
@@ -719,7 +754,8 @@ public static partial class GamePersistence
         byte[] json,
         ShipDefinitionCatalog catalog,
         FactionDefinitionCatalog factionCatalog,
-        string sourceIdentity
+        string sourceIdentity,
+        ILogger<GameSimulation>? logger
     )
     {
         try
@@ -736,7 +772,7 @@ public static partial class GamePersistence
             ValidateCandidateV5(migratedV5, catalog);
             SaveEnvelopeV6 migratedV6 = MigrateV5ToV6(migratedV5);
             ValidateCandidateV6(migratedV6, catalog);
-            return RestoreMigratedV7(MigrateV6ToV7(migratedV6), catalog, factionCatalog);
+            return RestoreMigratedV7(MigrateV6ToV7(migratedV6), catalog, factionCatalog, logger);
         }
         catch (GamePersistenceException)
         {
@@ -767,7 +803,8 @@ public static partial class GamePersistence
         byte[] json,
         ShipDefinitionCatalog catalog,
         FactionDefinitionCatalog factionCatalog,
-        string sourceIdentity
+        string sourceIdentity,
+        ILogger<GameSimulation>? logger
     )
     {
         try
@@ -782,7 +819,7 @@ public static partial class GamePersistence
             ValidateCandidateV5(migratedV5, catalog);
             SaveEnvelopeV6 migratedV6 = MigrateV5ToV6(migratedV5);
             ValidateCandidateV6(migratedV6, catalog);
-            return RestoreMigratedV7(MigrateV6ToV7(migratedV6), catalog, factionCatalog);
+            return RestoreMigratedV7(MigrateV6ToV7(migratedV6), catalog, factionCatalog, logger);
         }
         catch (GamePersistenceException)
         {
@@ -813,7 +850,8 @@ public static partial class GamePersistence
         byte[] json,
         ShipDefinitionCatalog catalog,
         FactionDefinitionCatalog factionCatalog,
-        string sourceIdentity
+        string sourceIdentity,
+        ILogger<GameSimulation>? logger
     )
     {
         try
@@ -826,7 +864,7 @@ public static partial class GamePersistence
             ValidateCandidateV5(migratedV5, catalog);
             SaveEnvelopeV6 migratedV6 = MigrateV5ToV6(migratedV5);
             ValidateCandidateV6(migratedV6, catalog);
-            return RestoreMigratedV7(MigrateV6ToV7(migratedV6), catalog, factionCatalog);
+            return RestoreMigratedV7(MigrateV6ToV7(migratedV6), catalog, factionCatalog, logger);
         }
         catch (GamePersistenceException)
         {
@@ -857,7 +895,8 @@ public static partial class GamePersistence
         byte[] json,
         ShipDefinitionCatalog catalog,
         FactionDefinitionCatalog factionCatalog,
-        string sourceIdentity
+        string sourceIdentity,
+        ILogger<GameSimulation>? logger
     )
     {
         try
@@ -868,7 +907,7 @@ public static partial class GamePersistence
             ValidateCandidateV5(envelope, catalog);
             SaveEnvelopeV6 migratedV6 = MigrateV5ToV6(envelope);
             ValidateCandidateV6(migratedV6, catalog);
-            return RestoreMigratedV7(MigrateV6ToV7(migratedV6), catalog, factionCatalog);
+            return RestoreMigratedV7(MigrateV6ToV7(migratedV6), catalog, factionCatalog, logger);
         }
         catch (GamePersistenceException)
         {
@@ -899,7 +938,8 @@ public static partial class GamePersistence
         byte[] json,
         ShipDefinitionCatalog catalog,
         FactionDefinitionCatalog factionCatalog,
-        string sourceIdentity
+        string sourceIdentity,
+        ILogger<GameSimulation>? logger
     )
     {
         try
@@ -908,7 +948,7 @@ public static partial class GamePersistence
                 JsonSerializer.Deserialize<SaveEnvelopeV6>(json, SerializerOptions)
                 ?? throw new JsonException("The save root must be an object.");
             ValidateCandidateV6(envelope, catalog);
-            return RestoreMigratedV7(MigrateV6ToV7(envelope), catalog, factionCatalog);
+            return RestoreMigratedV7(MigrateV6ToV7(envelope), catalog, factionCatalog, logger);
         }
         catch (GamePersistenceException)
         {
@@ -939,7 +979,8 @@ public static partial class GamePersistence
         byte[] json,
         ShipDefinitionCatalog catalog,
         FactionDefinitionCatalog factionCatalog,
-        string sourceIdentity
+        string sourceIdentity,
+        ILogger<GameSimulation>? logger
     )
     {
         try
@@ -947,7 +988,7 @@ public static partial class GamePersistence
             SaveEnvelopeV7 envelope =
                 JsonSerializer.Deserialize<SaveEnvelopeV7>(json, SerializerOptions)
                 ?? throw new JsonException("The save root must be an object.");
-            return RestoreMigratedV7(envelope, catalog, factionCatalog);
+            return RestoreMigratedV7(envelope, catalog, factionCatalog, logger);
         }
         catch (GamePersistenceException)
         {
@@ -978,7 +1019,8 @@ public static partial class GamePersistence
         byte[] json,
         ShipDefinitionCatalog catalog,
         FactionDefinitionCatalog factionCatalog,
-        string sourceIdentity
+        string sourceIdentity,
+        ILogger<GameSimulation>? logger
     )
     {
         try
@@ -987,7 +1029,7 @@ public static partial class GamePersistence
                 JsonSerializer.Deserialize<SaveEnvelopeV8>(json, SerializerOptions)
                 ?? throw new JsonException("The save root must be an object.");
             ValidateCandidateV8(envelope, catalog);
-            return RestoreThroughV10(MigrateV8ToV9(envelope), catalog, factionCatalog);
+            return RestoreThroughV10(MigrateV8ToV9(envelope), catalog, factionCatalog, logger);
         }
         catch (GamePersistenceException)
         {
@@ -1555,13 +1597,14 @@ public static partial class GamePersistence
     private static LoadedGameSave RestoreMigratedV7(
         SaveEnvelopeV7 envelope,
         ShipDefinitionCatalog catalog,
-        FactionDefinitionCatalog factionCatalog
+        FactionDefinitionCatalog factionCatalog,
+        ILogger<GameSimulation>? logger
     )
     {
         ValidateCandidateV7(envelope, catalog);
         SaveEnvelopeV8 migrated = MigrateV7ToV8(envelope);
         ValidateCandidateV8(migrated, catalog);
-        return RestoreThroughV10(MigrateV8ToV9(migrated), catalog, factionCatalog);
+        return RestoreThroughV10(MigrateV8ToV9(migrated), catalog, factionCatalog, logger);
     }
 
     private static void ValidateCandidateV2(SaveEnvelopeV2 envelope, ShipDefinitionCatalog catalog)
@@ -2144,6 +2187,13 @@ public static partial class GamePersistence
         if (snapshot.Ships is null || snapshot.Scheduler is null || snapshot.StrategicMap is null)
         {
             throw new InvalidOperationException("Required V5 simulation members cannot be null.");
+        }
+
+        // The historical projection filters work by kind before the full scheduler pass. Reject
+        // missing entries here so untrusted JSON cannot escape the typed semantic-failure boundary.
+        if (snapshot.Scheduler.OutstandingWork is null || snapshot.Scheduler.OutstandingWork.Any(work => work is null))
+        {
+            throw new InvalidOperationException("Outstanding scheduler work and its entries are required.");
         }
 
         SimulationSnapshotV3 baseSnapshot = ToBaseSnapshotV3(snapshot);
@@ -3674,14 +3724,21 @@ public static partial class GamePersistence
         return version;
     }
 
-    private static void RejectDuplicateMembers(JsonElement element, string sourceIdentity, string path, int depth)
+    // Rendering a whole path at every child multiplies parent-name length by child count. Retain
+    // only bounded name/index segments during the walk and render them solely for a failure.
+    private static void RejectDuplicateMembers(
+        JsonElement element,
+        string sourceIdentity,
+        List<(string? Property, int Index)> path,
+        int depth
+    )
     {
         if (depth > MaximumJsonDepth)
         {
             throw Failure(
                 GamePersistenceFailure.InvalidData,
                 sourceIdentity,
-                $"exceeds the JSON depth limit at '{path}'."
+                $"exceeds the JSON depth limit at '{FormatJsonPath(path)}'."
             );
         }
 
@@ -3690,16 +3747,25 @@ public static partial class GamePersistence
             var names = new HashSet<string>(StringComparer.Ordinal);
             foreach (JsonProperty property in element.EnumerateObject())
             {
-                if (!names.Add(property.Name))
+                // ValidateInputBounds has already bounded and decoded every name before this walk.
+                string name = property.Name;
+                if (!names.Add(name))
                 {
                     throw Failure(
                         GamePersistenceFailure.InvalidData,
                         sourceIdentity,
-                        $"contains duplicate JSON member '{property.Name}' at '{path}'."
+                        $"contains duplicate JSON member '{name}' at '{FormatJsonPath(path)}'."
                     );
                 }
-
-                RejectDuplicateMembers(property.Value, sourceIdentity, $"{path}.{property.Name}", depth + 1);
+                path.Add((name, 0));
+                try
+                {
+                    RejectDuplicateMembers(property.Value, sourceIdentity, path, depth + 1);
+                }
+                finally
+                {
+                    path.RemoveAt(path.Count - 1);
+                }
             }
         }
         else if (element.ValueKind == JsonValueKind.Array)
@@ -3707,10 +3773,31 @@ public static partial class GamePersistence
             int index = 0;
             foreach (JsonElement item in element.EnumerateArray())
             {
-                RejectDuplicateMembers(item, sourceIdentity, $"{path}[{index}]", depth + 1);
+                path.Add((null, index));
+                try
+                {
+                    RejectDuplicateMembers(item, sourceIdentity, path, depth + 1);
+                }
+                finally
+                {
+                    path.RemoveAt(path.Count - 1);
+                }
                 index++;
             }
         }
+    }
+
+    private static string FormatJsonPath(List<(string? Property, int Index)> path)
+    {
+        var result = new StringBuilder("$");
+        foreach ((string? property, int index) in path)
+        {
+            if (property is null)
+                result.Append('[').Append(index).Append(']');
+            else
+                result.Append('.').Append(property);
+        }
+        return result.ToString();
     }
 
     private static void ValidateMetadata(GameSaveMetadata metadata)

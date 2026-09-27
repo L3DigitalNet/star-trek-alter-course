@@ -12,6 +12,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   branch-policy:
@@ -36,10 +37,12 @@ jobs:
           PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           git fetch --no-tags origin "$PR_BASE_SHA" '+refs/heads/dev:refs/remotes/origin/dev'
           PR_DEV_SHA="$(git rev-parse refs/remotes/origin/dev)"
-          ./scripts/branch-policy.sh pull-request "$PR_BASE" "$PR_HEAD" "$PR_TITLE" "$PR_BASE_SHA" "$PR_HEAD_SHA" "$PR_BASE_REPO" "$PR_HEAD_REPO" "$PR_DEV_SHA"
+          ./scripts/branch-policy.sh pull-request "$PR_BASE" "$PR_HEAD" "$PR_TITLE" "$PR_BASE_SHA" "$PR_HEAD_SHA" "$PR_BASE_REPO" "$PR_HEAD_REPO" "$PR_DEV_SHA" "$PR_NUMBER"
 
       - name: Validate repository policy
         if: github.event_name == 'workflow_dispatch'

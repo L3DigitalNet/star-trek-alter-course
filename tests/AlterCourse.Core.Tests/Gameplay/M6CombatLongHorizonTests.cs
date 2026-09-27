@@ -10,6 +10,7 @@ using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
 using AlterCourse.Core.Tactical;
 using AlterCourse.Core.Tests.Support;
+using Xunit.Abstractions;
 
 namespace AlterCourse.Core.Tests.Gameplay;
 
@@ -28,6 +29,10 @@ public sealed class M6CombatLongHorizonTests
     // 128 MiB, the retained V10 save envelope (content-assets-and-persistence; OP §13).
     private const long SaveEnvelopeBytes = 128L * 1024 * 1024;
     private readonly M6CombatProofFixture _fixture = new(lowDamage: true);
+    private readonly ITestOutputHelper _output;
+
+    /// <summary>Captures bounded replay context in the test result, including assertion failures.</summary>
+    public M6CombatLongHorizonTests(ITestOutputHelper output) => _output = output;
 
     private static SimulationTime ReadyAt(GameSimulation game) =>
         M6CombatProofFixture.Player(game).Combat.ReadinessOf(TestShipContent.Weapons)!.ReadyAt;
@@ -36,7 +41,13 @@ public sealed class M6CombatLongHorizonTests
     [Fact]
     public void RepeatedLegitimateDefenseRemainsBoundedAndConvergesAcrossMidStimulusSave()
     {
+        using var context = new LongHorizonTestContext(
+            _output,
+            nameof(RepeatedLegitimateDefenseRemainsBoundedAndConvergesAcrossMidStimulusSave),
+            "M6CombatProofFixture Pair lowDamage=true; fire at cooldown then resolve defense; midpoint save; fixed fixture, no RNG seed"
+        );
         GameSimulation game = _fixture.Pair();
+        context.Checkpoint(game.CaptureState(), "initial pair");
         GameSimulation? resumed = null;
         SensorContactId contact = M6CombatProofFixture.Contact(game, M6CombatProofFixture.Defender);
         long startedAt = game.CaptureState().Time.Milliseconds;
@@ -47,9 +58,10 @@ public sealed class M6CombatLongHorizonTests
         Assert.Empty(game.CaptureState().Scheduler.OutstandingWork);
         for (int shot = 0; shot < ShotCount; shot++)
         {
+            context.Checkpoint(game.CaptureState(), $"shot={shot + 1}/{ShotCount}");
             if (shot > 0)
             {
-                (game, resumed) = AdvanceTogether(game, resumed, ReadyAt(game), responding: false);
+                (game, resumed) = AdvanceTogether(game, resumed, ReadyAt(game), responding: false, context);
             }
             FireDirectedEnergyResult fired = game.FireDirectedEnergy(
                 new(contact, ShipSystemKind.DirectedEnergyWeapons)
@@ -58,6 +70,7 @@ public sealed class M6CombatLongHorizonTests
             if (resumed is not null)
                 Assert.Equal(fired, resumed.FireDirectedEnergy(new(contact, ShipSystemKind.DirectedEnergyWeapons)));
             SimulationState pending = game.CaptureState();
+            context.Checkpoint(pending, $"shot={shot + 1}/{ShotCount}; pending defense");
             CombatStimulus stimulus = pending.GetRequiredShip(M6CombatProofFixture.Defender).Combat.PendingStimulus!;
             AssertPendingCorrelation(pending, stimulus);
             maximumOutstanding = Math.Max(maximumOutstanding, pending.Scheduler.OutstandingWork.Length);
@@ -65,13 +78,25 @@ public sealed class M6CombatLongHorizonTests
                 resumed = _fixture.RoundTrip(game);
             if (resumed is not null)
                 _fixture.AssertEquivalent(game, resumed);
-            (game, resumed) = AdvanceTogether(game, resumed, stimulus.DueTime, responding: true);
+            (game, resumed) = AdvanceTogether(game, resumed, stimulus.DueTime, responding: true, context);
             decisions++;
         }
         Assert.Equal(ShotCount, decisions);
         Assert.Equal(1, maximumOutstanding);
         Assert.Equal(startingWorkId + ShotCount, game.CaptureState().Scheduler.NextWorkId);
         Assert.Equal(startingSequence + ShotCount, game.CaptureState().Scheduler.NextSequence);
+        AssertDefenseDamageConditions(game);
+        long elapsed = game.CaptureState().Time.Milliseconds - startedAt;
+        Assert.True(elapsed > 1_000_000);
+        _fixture.AssertEquivalent(game, Assert.IsType<GameSimulation>(resumed));
+        AssertDormantContinuation(game, resumed!, context);
+        Console.WriteLine(
+            $"shots={ShotCount}; decisions={decisions}; elapsedMs={elapsed}; maxOutstanding={maximumOutstanding}; workAllocated={game.CaptureState().Scheduler.NextWorkId - startingWorkId}"
+        );
+    }
+
+    private static void AssertDefenseDamageConditions(GameSimulation game)
+    {
         Assert.InRange(
             TestEngineering.ConditionOf(
                 M6CombatProofFixture.Player(game).Engineering,
@@ -86,13 +111,6 @@ public sealed class M6CombatLongHorizonTests
                 ShipSystemKind.Shields
             ) < 1
         );
-        long elapsed = game.CaptureState().Time.Milliseconds - startedAt;
-        Assert.True(elapsed > 1_000_000);
-        _fixture.AssertEquivalent(game, Assert.IsType<GameSimulation>(resumed));
-        AssertDormantContinuation(game, resumed!);
-        Console.WriteLine(
-            $"shots={ShotCount}; decisions={decisions}; elapsedMs={elapsed}; maxOutstanding={maximumOutstanding}; workAllocated={game.CaptureState().Scheduler.NextWorkId - startingWorkId}"
-        );
     }
 
     /// <summary>
@@ -104,8 +122,13 @@ public sealed class M6CombatLongHorizonTests
     [Fact]
     public void HeterogeneousMixedWorldStaysBoundedDeterministicAndResumable()
     {
-        MixedRun first = RunMixed(resumeAtShot: MixedShotCount / 2);
-        MixedRun second = RunMixed(resumeAtShot: null);
+        using var context = new LongHorizonTestContext(
+            _output,
+            nameof(HeterogeneousMixedWorldStaysBoundedDeterministicAndResumable),
+            "HeterogeneousCombatWorld baseDamage=0.0001 withFactions=true; cooldown fire and periodic repairs; midpoint V10 resume; fixed fixture, no RNG seed"
+        );
+        MixedRun first = RunMixed(resumeAtShot: MixedShotCount / 2, context, "midpoint-resume");
+        MixedRun second = RunMixed(resumeAtShot: null, context, "independent");
 
         Assert.Equal(first.FinalSave, second.FinalSave);
         Assert.Equal(first.EventLog, second.EventLog);
@@ -179,20 +202,25 @@ public sealed class M6CombatLongHorizonTests
         );
     }
 
-    private static MixedRun RunMixed(int? resumeAtShot)
+    private static MixedRun RunMixed(int? resumeAtShot, LongHorizonTestContext context, string branch)
     {
         var world = new HeterogeneousCombatWorld(baseDamage: 0.0001, withFactions: true);
         GameSimulation game = world.Engaged();
         GameSimulation? resumed = null;
         var run = new MixedRun();
+        context.Checkpoint(game.CaptureState(), $"branch={branch}; initial engagement");
         SensorContactId defender = HeterogeneousCombatWorld.ContactOf(game, HeterogeneousCombatWorld.Defender);
         for (int shot = 0; shot < MixedShotCount; shot++)
         {
+            context.Checkpoint(
+                game.CaptureState(),
+                $"branch={branch}; shot={shot + 1}/{MixedShotCount}; resumeAtShot={resumeAtShot}"
+            );
             if (shot > 0)
             {
                 SimulationTime readyAt = PlayerWeaponReadyAt(game);
-                game = AdvanceMixed(world, game, readyAt, run);
-                resumed = resumed is null ? null : AdvanceMixed(world, resumed, readyAt, null);
+                game = AdvanceMixed(world, game, readyAt, run, context);
+                resumed = resumed is null ? null : AdvanceMixed(world, resumed, readyAt, null, context);
                 FireAtDefender(game, defender);
                 if (resumed is not null)
                     FireAtDefender(resumed, defender);
@@ -218,8 +246,9 @@ public sealed class M6CombatLongHorizonTests
         // with no work beyond what the settled world already carried.
         SimulationTime dormantUntil = game.CaptureState()
             .Time.AdvanceBy(new SimulationDuration(MixedDormantMilliseconds));
-        game = AdvanceMixed(world, game, dormantUntil, run);
-        resumed = resumed is null ? null : AdvanceMixed(world, resumed, dormantUntil, null);
+        context.Checkpoint(game.CaptureState(), $"branch={branch}; dormant continuation");
+        game = AdvanceMixed(world, game, dormantUntil, run, context);
+        resumed = resumed is null ? null : AdvanceMixed(world, resumed, dormantUntil, null, context);
         run.DormantOutstanding = game.CaptureState().Scheduler.OutstandingWork.Length;
         run.FinalSave = GamePersistence.Serialize(game, HeterogeneousCombatWorld.Metadata);
         run.ResumedFinalSave = resumed is null
@@ -232,15 +261,18 @@ public sealed class M6CombatLongHorizonTests
         HeterogeneousCombatWorld world,
         GameSimulation game,
         SimulationTime target,
-        MixedRun? run
+        MixedRun? run,
+        LongHorizonTestContext context
     )
     {
+        context.BeforeAdvance(game.CaptureState(), target);
         SimulationAdvanceTraceResult advanced = GameSimulation.AdvanceTo(
             game.CaptureState(),
             target,
             world.Catalog,
             world.Factions
         );
+        context.Record(advanced);
         run?.Record(advanced);
         return world.Restore(advanced.State);
     }
@@ -427,10 +459,13 @@ public sealed class M6CombatLongHorizonTests
             + $"saveSizes=[{string.Join(",", SaveSizes)}]";
     }
 
-    private void AssertDormantContinuation(GameSimulation game, GameSimulation resumed)
+    private void AssertDormantContinuation(GameSimulation game, GameSimulation resumed, LongHorizonTestContext context)
     {
         SimulationTime dormantUntil = game.CaptureState().Time.AdvanceBy(new SimulationDuration(60_000));
+        context.Checkpoint(game.CaptureState(), "dormant continuation");
+        context.BeforeAdvance(game.CaptureState(), dormantUntil);
         SimulationAdvanceTraceResult dormant = _fixture.AdvanceTrace(game, dormantUntil);
+        context.Record(dormant);
         Assert.DoesNotContain(dormant.Traces, trace => trace.CombatDecision is not null);
         Assert.Empty(dormant.State.Scheduler.OutstandingWork);
         _fixture.AssertEquivalent(_fixture.Restore(dormant.State), _fixture.AdvanceTo(resumed, dormantUntil));
@@ -463,10 +498,13 @@ public sealed class M6CombatLongHorizonTests
         GameSimulation game,
         GameSimulation? resumed,
         SimulationTime time,
-        bool responding
+        bool responding,
+        LongHorizonTestContext context
     )
     {
+        context.BeforeAdvance(game.CaptureState(), time);
         SimulationAdvanceTraceResult advanced = _fixture.AdvanceTrace(game, time);
+        context.Record(advanced);
         if (responding)
         {
             ScheduledConsequenceTrace trace = Assert.Single(advanced.Traces, item => item.CombatDecision is not null);

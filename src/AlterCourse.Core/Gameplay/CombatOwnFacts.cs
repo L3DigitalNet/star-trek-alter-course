@@ -15,6 +15,6 @@ internal sealed record CombatOwnFacts(
     InstalledSystemId? WeaponId,
     DirectedEnergyWeaponDefinition? Weapon,
     SystemCondition WeaponCondition,
-    double WeaponCapability,
+    SystemCapability WeaponCapability,
     SimulationTime ReadyAt
 );

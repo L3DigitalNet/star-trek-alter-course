@@ -71,6 +71,18 @@ public sealed class ArchitectureBoundaryTests
         Assert.Null(FindActorSafetyViolation(ProbeMember<SelfReferentialProbe>(nameof(SelfReferentialProbe.Next))));
     }
 
+    /// <summary>The own-ship identity exemption remains attached to a live identity member in the scanned surface.</summary>
+    [Fact]
+    public void OwnIdentityExemptionMatchesALiveScannedIdentityMember()
+    {
+        PropertyInfo member = ProbeMember<PlayerShipProjection>(nameof(PlayerShipProjection.InstanceId));
+        Assert.Equal(typeof(ShipInstanceId), member.PropertyType);
+        Assert.Contains(member, ActorSafeMembers());
+        Assert.True(IsOwnIdentityMember(member));
+        Assert.Null(FindActorSafetyViolation(member));
+        Assert.False(IsOwnIdentityMember(ProbeMember<GenericLeakProbe>(nameof(GenericLeakProbe.Contacts))));
+    }
+
     /// <summary>Confirms every actor-safe projection member is read-only, so a consumer cannot rewrite knowledge.</summary>
     [Fact]
     public void ActorSafeProjectionsAreImmutable()

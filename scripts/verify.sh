@@ -66,6 +66,7 @@ gitleaks git --config .gitleaks.toml --redact --no-banner
 gitleaks dir . --config .gitleaks.toml --redact --no-banner
 ./scripts/check-policy.sh
 ./scripts/test-branch-policy.sh
+./scripts/test-core-boundaries.sh
 dotnet build AlterCourse.sln -c Release --no-restore --warnaserror --disable-build-servers
 dotnet test tests/AlterCourse.Core.Tests/AlterCourse.Core.Tests.csproj -c Release --no-build --no-restore --disable-build-servers
 dotnet test tests/AlterCourse.AssetCtl.Tests/AlterCourse.AssetCtl.Tests.csproj -c Release --no-build --no-restore --disable-build-servers

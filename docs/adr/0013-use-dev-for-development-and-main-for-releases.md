@@ -6,7 +6,7 @@ description: 'Defines branch roles, change admission, merge history, protection,
 doc_type: 'adr'
 status: 'active'
 created: '2026-09-01'
-updated: '2026-09-07'
+updated: '2026-09-27'
 reviewed: '2026-09-01'
 owner: 'project-maintainers'
 consumer: 'mix'
@@ -81,9 +81,10 @@ This decision governs all repository changes after adoption. Existing untagged h
 - `fix/<issue>-<slug>` for a defect based on `dev`;
 - `task/<issue>-<slug>` for maintenance, infrastructure, refactoring, or policy work;
 - `docs/<issue>-<slug>` for documentation work;
+- `standalone/<slug>` for eligible bounded low-risk maintenance without a governing issue;
 - `hotfix/<issue>-<slug>` for an urgent correction based on `main`.
 
-Slugs use lowercase letters, digits, and hyphens. The issue number is required. Short-lived branches are deleted after merge.
+Slugs use lowercase letters, digits, and hyphens. The issue number is required for numbered branches. Standalone branches target only `dev`, never a feature integration branch or `main`. Short-lived branches are deleted after merge.
 
 A major feature normally uses one `feature/` branch and a Final pull request. An Initiative may use that feature branch as a temporary integration target for Supporting pull requests only when its parts cannot land independently on `dev`. This does not create another permanent branch.
 
@@ -99,6 +100,8 @@ Standing release branches are not used. A temporary `release/vX.Y.Z` branch requ
 ### Admission and governing work
 
 Significant development begins with a typed issue and proceeds through a draft pull request carrying `Final: #N` or `Supporting: #N`. Bounded low-risk maintenance that does not warrant an issue may use a `Standalone` pull request under the adopted GitHub workflow.
+
+Standalone admission composes the installed package's parsed relationship receipt with its explicit Ready check. Missing, malformed, or contradictory relationship evidence and a nonpassing Ready verdict fail admission; a branch prefix or body marker alone is insufficient. Merge-phase findings remain the merge gate's responsibility, so pending CI does not make this check depend on itself. The package owns relationship parsing, required sections, and the risk vocabulary. The owner or reviewer remains responsible for judging bounded low-risk eligibility, as distinct from mechanically validating the declared contract. This introduces no repository-specific risk taxonomy or field-shadowing labels.
 
 All code, comments, tests, scripts, structured configuration, workflows, dependencies, schemas, release state, normative decisions, specifications, and enforcement material require a pull request. Direct admission is limited to:
 
@@ -126,6 +129,8 @@ GitHub protection for both permanent branches requires strict passing checks, re
 Both branches block deletion and force-pushes. `main` enforces protection for administrators and has no routine bypass. `dev` exempts the repository owner from administrator enforcement so approved direct admissions remain possible.
 
 Tracked `commit-msg` and `pre-push` hooks enforce Conventional Commit subjects, protected targets, admission trailers, allowed handoff paths, mechanical T0 bounds, and the prohibition on direct merge commits. A repository setup script configures `core.hooksPath`. Pull-request CI enforces branch names, base/head topology and ancestry, and title contracts. Canonical verification checks the enforcement scripts and hooks.
+
+For a Standalone PR, CI queries the explicit repository and PR number and requires the package receipt's `Standalone` relationship plus a clear Ready result. It selects the installed package executable, policy, and schema from the event's base commit, so proposed package changes cannot redefine this admission verdict. Live PR snapshots bracket those package reads and must match the event's head SHA and branch, with an unchanged body and state. PR metadata is data, never executable shell text. These checks validate the observed contract; they do not replace semantic review or claim a server-perfect authorization boundary. The existing workflow executes repository enforcement scripts from the proposed head, so changes to those scripts remain a protected review surface.
 
 GitHub cannot condition an actor bypass on changed paths. The owner can also skip local hooks. The direct-admission control is therefore defense in depth for the normal toolchain, not a server-perfect authorization boundary. This residual risk is accepted for a public repository with one routine owner and must not be described as impossible to bypass.
 

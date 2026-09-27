@@ -162,7 +162,7 @@ public sealed partial class GameSimulation
         ShipSystemAdmission.SupportedSingle(engineering.Systems, ShipSystemKind.ImpulsePropulsion) is { } impulse
             ? new(
                 ((ImpulsePropulsionSystemDefinition)impulse.Definition).MaximumTacticalSpeed.Value
-                    * ShipEngineeringState.Capability(impulse)
+                    * ShipEngineeringState.Capability(impulse).Value
             )
             : new(0);
 
@@ -171,7 +171,7 @@ public sealed partial class GameSimulation
         ShipSystemAdmission.SupportedSingle(engineering.Systems, ShipSystemKind.Sensors) is { } sensors
             ? new(
                 ((SensorSystemDefinition)sensors.Definition).PassiveRange.Value
-                    * ShipEngineeringState.Capability(sensors)
+                    * ShipEngineeringState.Capability(sensors).Value
             )
             : new(0);
 
@@ -179,7 +179,7 @@ public sealed partial class GameSimulation
     internal static bool HasEffectiveSensorCapability(ShipEngineeringState engineering) =>
         ShipSystemAdmission.SupportedSingle(engineering.Systems, ShipSystemKind.Sensors) is { } sensors
         && ((SensorSystemDefinition)sensors.Definition).PassiveRange.Value > 0
-        && ShipEngineeringState.Capability(sensors) > 0;
+        && ShipEngineeringState.Capability(sensors).Value > 0;
 
     /// <summary>
     /// Gets whether the ship's active repair targets an installation of <paramref name="kind"/>.

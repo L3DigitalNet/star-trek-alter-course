@@ -142,7 +142,7 @@ internal static class DefensiveCombatDecisionPolicy
                 ),
                 new DefensiveCombatConstraintEvaluation(
                     DefensiveCombatConstraint.WeaponPowered,
-                    input.Own.WeaponCapability > 0
+                    input.Own.WeaponCapability.Value > 0
                 ),
                 new DefensiveCombatConstraintEvaluation(
                     DefensiveCombatConstraint.WeaponReady,

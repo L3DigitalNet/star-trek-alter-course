@@ -18,7 +18,8 @@ This README is an onboarding guide. The wiki owns game rules, controls, persiste
 - Exact .NET SDK 10.0.111 with C# 12, targeting .NET 8 for Godot compatibility
 - A standalone .NET 10 `assetctl` development tool for validated visual placeholders and asset provenance
 - A pure `AlterCourse.Core` domain assembly with a one-way dependency from `AlterCourse.Godot`
-- xUnit for Core tests and GdUnit4 for Godot integration tests
+- Serilog through Microsoft logging abstractions for bounded, nonauthoritative gameplay diagnostics
+- xUnit for Core tests, GdUnit4 for current Godot integration tests, and reviewed Core-only ArchUnitNET/CsCheck additions for architecture and generated-invariant checks
 - One canonical `./scripts/verify.sh` quality gate shared by contributors and CI
 
 ## Getting started
