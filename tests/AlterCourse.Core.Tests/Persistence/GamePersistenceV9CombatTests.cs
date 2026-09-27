@@ -4,17 +4,20 @@ using AlterCourse.Core.AI;
 using AlterCourse.Core.Gameplay;
 using AlterCourse.Core.Identity;
 using AlterCourse.Core.Persistence;
-using AlterCourse.Core.Quantities;
 using AlterCourse.Core.Sensors;
 using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
 using AlterCourse.Core.Tactical;
 using AlterCourse.Core.Tests.Gameplay;
+using AlterCourse.Core.Tests.Support;
 
 namespace AlterCourse.Core.Tests.Persistence;
 
-/// <summary>Verifies that combat state survives the explicit V9 snapshot boundary.</summary>
+/// <summary>
+/// Verifies that combat state survives the save boundary: current worlds round-trip through V10, and historical V9
+/// documents (produced from a live pathfinder world by the test fixture writer) keep their V9 validation semantics.
+/// </summary>
 public sealed class GamePersistenceV9CombatTests
 {
     /// <summary>Current snapshots retain new-game conditions instead of silently dropping them.</summary>
@@ -25,9 +28,9 @@ public sealed class GamePersistenceV9CombatTests
         GameSimulation game = fixture.CreateDefault();
         byte[] json = GamePersistence.Serialize(game, Milestone3ProofFixture.Metadata);
         JsonObject root = JsonNode.Parse(json)!.AsObject();
-        Assert.Equal(9, root["schemaVersion"]!.GetValue<int>());
-        Assert.Equal("first-combat-engagement-v1", root["simulationRulesVersion"]!.GetValue<string>());
-        GameSimulation restored = GamePersistence.Deserialize(json, fixture.Catalog, "combat-v9.json").Simulation;
+        Assert.Equal(10, root["schemaVersion"]!.GetValue<int>());
+        Assert.Equal(SaveJsonV10.V10RulesVersion, root["simulationRulesVersion"]!.GetValue<string>());
+        GameSimulation restored = GamePersistence.Deserialize(json, fixture.Catalog, "combat-v10.json").Simulation;
         foreach (ShipState ship in game.CaptureState().Ships)
         {
             ShipState loaded = restored.CaptureState().GetRequiredShip(ship.InstanceId);
@@ -43,7 +46,7 @@ public sealed class GamePersistenceV9CombatTests
         (GameSimulation game, Milestone3ProofFixture fixture, SensorContactId contact) = Pair(15);
         Assert.Equal(
             FireDirectedEnergyOutcome.Accepted,
-            game.FireDirectedEnergy(new(contact, ShipSystemId.Sensors)).Outcome
+            game.FireDirectedEnergy(new(contact, ShipSystemKind.Sensors)).Outcome
         );
         byte[] saved = GamePersistence.Serialize(game, Milestone3ProofFixture.Metadata);
         GameSimulation resumed = GamePersistence.Deserialize(saved, fixture.Catalog, "pending-defense.json").Simulation;
@@ -78,20 +81,20 @@ public sealed class GamePersistenceV9CombatTests
         );
         Assert.Equal(
             FireDirectedEnergyOutcome.Accepted,
-            game.FireDirectedEnergy(new(contact, ShipSystemId.Sensors)).Outcome
+            game.FireDirectedEnergy(new(contact, ShipSystemKind.Sensors)).Outcome
         );
         GameSimulation restored = fixture.RoundTrip(game, "cooldown.json");
         restored.AdvanceFixedSteps(19);
         byte[] before = GamePersistence.Serialize(restored, Milestone3ProofFixture.Metadata);
         Assert.Equal(
             FireDirectedEnergyOutcome.CooldownActive,
-            restored.FireDirectedEnergy(new(contact, ShipSystemId.Sensors)).Outcome
+            restored.FireDirectedEnergy(new(contact, ShipSystemKind.Sensors)).Outcome
         );
         Assert.Equal(before, GamePersistence.Serialize(restored, Milestone3ProofFixture.Metadata));
         restored.AdvanceFixedSteps(1);
         Assert.Equal(
             FireDirectedEnergyOutcome.Accepted,
-            restored.FireDirectedEnergy(new(contact, ShipSystemId.Sensors)).Outcome
+            restored.FireDirectedEnergy(new(contact, ShipSystemKind.Sensors)).Outcome
         );
     }
 
@@ -104,11 +107,14 @@ public sealed class GamePersistenceV9CombatTests
         (GameSimulation game, Milestone3ProofFixture fixture, _) = Pair(0);
         SimulationState state = game.CaptureState();
         ShipState player = state.GetRequiredShip(state.PlayerShipId);
-        var system = ShipSystemId.Parse(systemName);
-        player = player with { Engineering = player.Engineering.WithCondition(system, new SystemCondition(0.25)) };
+        var system = ShipSystemKind.Parse(systemName);
+        player = player with { Engineering = TestEngineering.WithCondition(player.Engineering, system, 0.25) };
         state = state.ReplaceShip(player.InstanceId, player);
         game = GameSimulation.RestoreState(state, fixture.Catalog);
-        Assert.Equal(SystemRepairOutcome.Accepted, game.BeginSystemRepair(system, new SystemCondition(1)).Outcome);
+        Assert.Equal(
+            SystemRepairOutcome.Accepted,
+            game.BeginSystemRepair(game.PlayerInstallation(system), new SystemCondition(1)).Outcome
+        );
         game.AdvanceFixedSteps(7);
         GameSimulation restored = fixture.RoundTrip(game, "combat-repair.json");
         Assert.Equal(
@@ -124,7 +130,7 @@ public sealed class GamePersistenceV9CombatTests
         Assert.Null(restored.CaptureState().GetRequiredShip(player.InstanceId).Engineering.ActiveRepair);
         Assert.Equal(
             1,
-            restored.CaptureState().GetRequiredShip(player.InstanceId).Engineering.ConditionFor(system).Value
+            TestEngineering.ConditionOf(restored.CaptureState().GetRequiredShip(player.InstanceId).Engineering, system)
         );
     }
 
@@ -142,11 +148,11 @@ public sealed class GamePersistenceV9CombatTests
         GameSimulation migrated = GamePersistence.Deserialize(source, fixture.Catalog, "historical-v8.json").Simulation;
         foreach (ShipState ship in migrated.CaptureState().Ships)
         {
-            Assert.Equal(0, ship.Engineering.ShieldCondition.Value);
-            Assert.Equal(0, ship.Engineering.DirectedEnergyCondition.Value);
-            Assert.Equal(0, ship.Engineering.Allocation.Shields.Value);
-            Assert.Equal(0, ship.Engineering.Allocation.DirectedEnergyWeapons.Value);
-            Assert.Equal(ShipCombatState.Empty, ship.Combat);
+            Assert.Equal(0, TestEngineering.ConditionOf(ship.Engineering, ShipSystemKind.Shields));
+            Assert.Equal(0, TestEngineering.ConditionOf(ship.Engineering, ShipSystemKind.DirectedEnergyWeapons));
+            Assert.Equal(0, TestEngineering.AllocationOf(ship.Engineering, ShipSystemKind.Shields));
+            Assert.Equal(0, TestEngineering.AllocationOf(ship.Engineering, ShipSystemKind.DirectedEnergyWeapons));
+            Assert.Equal(ShipCombatState.InitialFor(ship.Engineering.Systems), ship.Combat);
         }
         Assert.DoesNotContain(
             migrated.CaptureState().Scheduler.OutstandingWork,
@@ -192,9 +198,10 @@ public sealed class GamePersistenceV9CombatTests
     public void RejectsMalformedV9(string mutation)
     {
         (GameSimulation game, Milestone3ProofFixture fixture, SensorContactId contact) = Pair(15);
-        game.FireDirectedEnergy(new(contact, ShipSystemId.Sensors));
+        game.FireDirectedEnergy(new(contact, ShipSystemKind.Sensors));
         byte[] valid = GamePersistence.Serialize(game, Milestone3ProofFixture.Metadata);
         JsonObject root = Parse(valid);
+        SaveJsonV10.ToV9(root);
         JsonObject npc = root["simulation"]!["ships"]![1]!.AsObject();
         if (!TryMutateEngineeringV9(npc, mutation))
             MutateStimulusV9(root, mutation);
@@ -352,15 +359,15 @@ public sealed class GamePersistenceV9CombatTests
     {
         (GameSimulation game, Milestone3ProofFixture fixture, SensorContactId contact) = Pair(15);
         if (string.Equals(token, "shipCombatDecisionWake", StringComparison.Ordinal))
-            game.FireDirectedEnergy(new(contact, ShipSystemId.Sensors));
+            game.FireDirectedEnergy(new(contact, ShipSystemKind.Sensors));
         else
         {
-            var system = ShipSystemId.Parse(token);
+            var system = ShipSystemKind.Parse(token);
             SimulationState state = game.CaptureState();
             ShipState player = state.GetRequiredShip(state.PlayerShipId);
-            player = player with { Engineering = player.Engineering.WithCondition(system, new SystemCondition(0.25)) };
+            player = player with { Engineering = TestEngineering.WithCondition(player.Engineering, system, 0.25) };
             game = GameSimulation.RestoreState(state.ReplaceShip(player.InstanceId, player), fixture.Catalog);
-            game.BeginSystemRepair(system, new SystemCondition(1));
+            game.BeginSystemRepair(game.PlayerInstallation(system), new SystemCondition(1));
         }
         JsonObject historical = Parse(GamePersistence.Serialize(game, Milestone3ProofFixture.Metadata));
         StripCombat(historical);
@@ -378,16 +385,20 @@ public sealed class GamePersistenceV9CombatTests
     public void RejectsMalformedCombatRepairs(string systemName)
     {
         (GameSimulation game, Milestone3ProofFixture fixture, _) = Pair(15);
-        var system = ShipSystemId.Parse(systemName);
+        var system = ShipSystemKind.Parse(systemName);
         SimulationState state = game.CaptureState();
         ShipState player = state.GetRequiredShip(state.PlayerShipId);
-        player = player with { Engineering = player.Engineering.WithCondition(system, new SystemCondition(0.25)) };
+        player = player with { Engineering = TestEngineering.WithCondition(player.Engineering, system, 0.25) };
         game = GameSimulation.RestoreState(state.ReplaceShip(player.InstanceId, player), fixture.Catalog);
-        Assert.Equal(SystemRepairOutcome.Accepted, game.BeginSystemRepair(system, new SystemCondition(1)).Outcome);
+        Assert.Equal(
+            SystemRepairOutcome.Accepted,
+            game.BeginSystemRepair(game.PlayerInstallation(system), new SystemCondition(1)).Outcome
+        );
         byte[] valid = GamePersistence.Serialize(game, Milestone3ProofFixture.Metadata);
         foreach (string mutation in new[] { "workId", "dueTime", "duration", "condition", "target", "owner", "orphan" })
         {
             JsonObject root = Parse(valid);
+            SaveJsonV10.ToV9(root);
             JsonObject engineering = root["simulation"]!["ships"]![0]!["engineering"]!.AsObject();
             JsonObject repair = engineering["activeRepair"]!.AsObject();
             JsonObject work = root["simulation"]!["scheduler"]!["outstandingWork"]!
@@ -439,7 +450,7 @@ public sealed class GamePersistenceV9CombatTests
     public void RequiresEveryNewField()
     {
         (GameSimulation game, Milestone3ProofFixture fixture, SensorContactId contact) = Pair(15);
-        game.FireDirectedEnergy(new(contact, ShipSystemId.Sensors));
+        game.FireDirectedEnergy(new(contact, ShipSystemKind.Sensors));
         byte[] valid = GamePersistence.Serialize(game, Milestone3ProofFixture.Metadata);
         foreach (
             (string parent, string field) in new[]
@@ -458,6 +469,7 @@ public sealed class GamePersistenceV9CombatTests
         )
         {
             JsonObject root = Parse(valid);
+            SaveJsonV10.ToV9(root);
             JsonObject ship = root["simulation"]!["ships"]![1]!.AsObject();
             JsonObject target = string.Equals(parent, "stimulus", StringComparison.Ordinal)
                 ? ship["combat"]!["pendingStimulus"]!.AsObject()
@@ -482,9 +494,13 @@ public sealed class GamePersistenceV9CombatTests
     public void RejectsMalformedCombatJson(string mutation)
     {
         (GameSimulation game, Milestone3ProofFixture fixture, SensorContactId contact) = Pair(15);
-        game.FireDirectedEnergy(new(contact, ShipSystemId.Sensors));
+        game.FireDirectedEnergy(new(contact, ShipSystemKind.Sensors));
         byte[] valid = GamePersistence.Serialize(game, Milestone3ProofFixture.Metadata);
-        string json = Encoding.UTF8.GetString(valid);
+        JsonObject historical = Parse(valid);
+        SaveJsonV10.ToV9(historical);
+        string validV9 = historical.ToJsonString();
+        GamePersistence.Deserialize(Encoding.UTF8.GetBytes(validV9), fixture.Catalog, "valid-v9-json.json");
+        string json = validV9;
         json = mutation switch
         {
             "duplicate" => json.Replace(
@@ -504,15 +520,21 @@ public sealed class GamePersistenceV9CombatTests
             ),
             _ => json.Replace("\"shieldCondition\":0.75", "\"shieldCondition\":" + mutation, StringComparison.Ordinal),
         };
-        Assert.False(string.Equals(Encoding.UTF8.GetString(valid), json, StringComparison.Ordinal));
+        Assert.False(string.Equals(validV9, json, StringComparison.Ordinal));
         Assert.Throws<GamePersistenceException>(() =>
             GamePersistence.Deserialize(Encoding.UTF8.GetBytes(json), fixture.Catalog, "malformed-v9-json.json")
         );
         Assert.Equal(valid, GamePersistence.Serialize(game, Milestone3ProofFixture.Metadata));
     }
 
+    /// <summary>
+    /// Reduces a written save to the V8 ship shape (no combat members): a current V10 save is first re-expressed as
+    /// its V9 equivalent through the test fixture writer, then the V9 combat additions are removed.
+    /// </summary>
     internal static void StripCombat(JsonObject root)
     {
+        if (root["schemaVersion"]!.GetValue<int>() == 10)
+            SaveJsonV10.ToV9(root);
         foreach (JsonNode? node in root["simulation"]!["ships"]!.AsArray())
         {
             JsonObject ship = node!.AsObject();
@@ -540,40 +562,27 @@ public sealed class GamePersistenceV9CombatTests
         var fixture = new Milestone3ProofFixture();
         var location = new LocationId("pair");
         var map = new StrategicMap([new StrategicLocation(location, "Pair", default)], []);
-        ShipStart Start(long id, double x, PowerAllocation allocation) =>
+        ShipStart Start(long id, double x, int impulsePower, int shieldPower) =>
             new(
                 new ShipInstanceId(id),
                 new ShipDefinitionId("pathfinder"),
                 "Ship " + id,
                 new TacticalPosition(x, 0),
                 default,
-                new SystemCondition(1),
-                new SystemCondition(1),
-                new SystemCondition(1),
-                allocation,
-                new AtLocationStart(location)
-            )
-            {
-                ShieldCondition = new SystemCondition(1),
-                DirectedEnergyCondition = new SystemCondition(1),
-            };
+                new AtLocationStart(location),
+                TestShipStarts.Pathfinder(
+                    impulsePower: impulsePower,
+                    shieldPower: shieldPower,
+                    weaponPower: 30,
+                    shields: 1,
+                    weapons: 1
+                )
+            );
         GameSimulation game = new GameBootstrap(
             new SimulationTime(6000),
             map,
             new ShipInstanceId(1),
-            [
-                Start(1, 0, new PowerAllocation(new PowerUnits(70), new PowerUnits(20), default, new PowerUnits(30))),
-                Start(
-                    2,
-                    10,
-                    new PowerAllocation(
-                        new PowerUnits(70),
-                        new PowerUnits(5),
-                        new PowerUnits(shieldPower),
-                        new PowerUnits(30)
-                    )
-                ),
-            ]
+            [Start(1, 0, impulsePower: 20, shieldPower: 0), Start(2, 10, impulsePower: 5, shieldPower: shieldPower)]
         ).CreateSimulation(fixture.Catalog);
         SimulationState initial = game.CaptureState();
         ShipState npc = initial.GetRequiredShip(new ShipInstanceId(2));

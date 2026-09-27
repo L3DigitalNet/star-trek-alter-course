@@ -11,7 +11,4 @@ public enum EngineeringActionUnavailableReason
 
     /// <summary>The target system is already nominal.</summary>
     SystemAlreadyNominal = 3,
-
-    /// <summary>The authored definition does not contain this repairable system.</summary>
-    UnsupportedSystem = 4,
 }

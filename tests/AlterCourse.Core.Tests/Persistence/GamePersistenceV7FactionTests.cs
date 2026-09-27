@@ -115,8 +115,8 @@ public sealed class GamePersistenceV7FactionTests
             "assigned-v8.json"
         );
 
-        Assert.Equal(9, root["schemaVersion"]!.GetValue<int>());
-        Assert.Equal("first-combat-engagement-v1", root["simulationRulesVersion"]!.GetValue<string>());
+        Assert.Equal(10, root["schemaVersion"]!.GetValue<int>());
+        Assert.Equal("installed-ship-system-substrate-v1", root["simulationRulesVersion"]!.GetValue<string>());
         Assert.Equal(2, root["simulation"]!["factions"]!.AsArray().Count);
         Assert.Contains(
             root["simulation"]!["scheduler"]!["outstandingWork"]!.AsArray(),

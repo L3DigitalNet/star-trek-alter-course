@@ -2,8 +2,13 @@
 
 ## Current snapshot
 
-- The selected next implementation is [Issue #121](https://github.com/L3DigitalNet/star-trek-alter-course/issues/121), the [ship-system substrate migration](wiki/ship-system-substrate.md), before further systems or Damage Control gameplay.
-- ADR 0014 was adopted through PR #120 at `e16e1a8`; the runtime substrate migration is not yet implemented. Expected V6/system-definition V1/V10 formats are targets, not current runtime formats.
+- [Issue #121](https://github.com/L3DigitalNet/star-trek-alter-course/issues/121)'s [substrate migration](wiki/ship-system-substrate.md) is implemented on its feature branch.
+- Final PR #123 targets `dev` with integrated proof tests and a green final gate; it is unmerged.
+- Five ship-system kinds moved to the ADR 0014 installed-system substrate: system-definition V1, ship content V6, saves V10.
+- Rules identity is `installed-ship-system-substrate-v1`; V9-to-V10 migration is strict, via a frozen map in `HistoricalShipSystemsV9.cs`.
+- `ShipSystemId` was renamed `ShipSystemKind`; new `IncompatibleContent` descriptors bind definition and aim-vocabulary compatibility.
+- Measured save bounds are 109,030,603 bytes and a conservative 114,536,452, both under 128 MiB; the 69,120 work ceiling is unchanged.
+- Engineering now projects and acts on installed systems generically, keyed by installed id with owner and load-generation binding.
 - The current immutable source-only GitHub Release is v0.6.2 (`255eaed`); see <https://github.com/L3DigitalNet/star-trek-alter-course/releases/latest>.
 - v0.6.2 is a source-only documentation release. v0.6.1 remains the historical build-process correction release at `f0af2653ca44f17b9f701f6271e199cda1429d16`.
 - Milestone 3A first observed contact, Milestone 4 Engineering Backbone, and Strategic Contact Reporting are released; Features #58, #62, and #77 are Done.
@@ -12,7 +17,8 @@
 - M6A first combat engagement merged into `dev` as `c2edae1` through Final PR #112; Feature #111 is Done.
 - M6A is unreleased: V5 ship content and V9 saves use `first-combat-engagement-v1`; no release, tag, or `main` mutation occurred.
 - Final M6A canonical verification passed at `42fba73`: 789 Core, 324 AssetCtl, 76 Godot, smoke, and zero C# build warnings or errors.
-- All five hosted checks passed on `42fba73`; native and Claude reviews confirmed the current-context correction. PR #117 later recorded a nonfatal Godot `grab_focus` diagnostic requiring investigation; passing tests are not an error-free runtime claim.
+- All five hosted checks passed on `42fba73`; native and Claude reviews confirmed the current-context correction.
+- PR #117's nonfatal Godot `grab_focus` diagnostic is fixed via `GameScreen.DeferFocus`, recorded under Issue #121's work.
 - Historically, Final PR #97 released v0.6.0 and Supporting PR #98 synchronized it to `dev`; their recorded checks remain release evidence.
 - Current `dev` contains the v0.6.2 release through PR #107's synchronization merge `1778634bd192ed393f40b30708fa88e049714a8a`.
 - v0.5.0 verification passed: Core 406, AssetCtl 324, Godot 1+2+63, smoke OK, and zero C# build warnings or errors; later PRs record their own checks.

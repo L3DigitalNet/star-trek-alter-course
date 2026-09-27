@@ -32,12 +32,13 @@ public partial class CommandDeckWorkspace : Control
     }
 
     private readonly Dictionary<string, Button> _actionButtons = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, CommandInterfaceAction> _presentedActions = new(StringComparer.Ordinal);
-    private readonly Dictionary<int, ShipSystemId> _targetSystems = [];
+    private readonly Dictionary<Button, ActionSlot> _actionSlots = [];
+    private OwnShipActionBinding? _presentedBinding;
+    private readonly Dictionary<int, ShipSystemKind> _targetSystems = [];
     private readonly Dictionary<string, int> _targetItemIds = new(StringComparer.Ordinal);
     private OptionButton _targetSelector = null!;
     private Label _targetSystemLabel = null!;
-    private ShipSystemId? _selectedTargetSystem;
+    private ShipSystemKind? _selectedTargetSystem;
     private VBoxContainer _systemRows = null!;
     private Label _systemsSummary = null!;
     private Label _mapTitle = null!;
@@ -119,6 +120,20 @@ public partial class CommandDeckWorkspace : Control
         PresentMap(presentation);
         PresentInspector(presentation);
         PresentTargetSystems(presentation);
+
+        // Same rule as EngineeringWorkspace: no action button survives a change of owner or simulation generation,
+        // so a control captured before a load keeps its old binding and the shell refuses it instead of the button
+        // being retargeted by key onto whatever the loaded game now calls the same local contact.
+        if (presentation.Binding != _presentedBinding)
+        {
+            foreach (string actionId in _actionButtons.Keys.ToArray())
+            {
+                RemoveActionButton(actionId);
+            }
+
+            _presentedBinding = presentation.Binding;
+        }
+
         PresentActions(presentation);
     }
 
@@ -149,14 +164,14 @@ public partial class CommandDeckWorkspace : Control
             presentation.DataMode == CommandInterfaceDataMode.Live && presentation.Mode == CommandInterfaceMode.Combat;
         _targetSelector.Visible = liveCombat;
         _targetSystemLabel.Visible = liveCombat;
-        ShipSystemId[] choices = liveCombat ? [.. presentation.CombatTarget?.SupportedSystems ?? []] : [];
+        ShipSystemKind[] choices = liveCombat ? [.. presentation.CombatTarget?.AimKinds ?? []] : [];
         bool retainedFocus = _targetSelector.HasFocus();
         bool changed = !_targetSystems.Values.SequenceEqual(choices);
         if (changed)
         {
             _targetSelector.Clear();
             _targetSystems.Clear();
-            foreach (ShipSystemId system in choices)
+            foreach (ShipSystemKind system in choices)
             {
                 // Item IDs are presentation-local handles, never domain enum ordinals or list positions.
                 if (!_targetItemIds.TryGetValue(system.Value, out int itemId))
@@ -188,23 +203,15 @@ public partial class CommandDeckWorkspace : Control
         )
             return;
         int itemId = _targetSelector.GetItemId((int)index);
-        if (_targetSystems.TryGetValue(itemId, out ShipSystemId system))
+        if (_targetSystems.TryGetValue(itemId, out ShipSystemKind system))
         {
             _selectedTargetSystem = system;
             SetMeta("selected_target_system", system.Value);
         }
     }
 
-    private static string TargetSystemLabel(ShipSystemId system) =>
-        system.Value switch
-        {
-            "power-generation" => "Power generation",
-            "sensors" => "Sensors",
-            "impulse-propulsion" => "Impulse propulsion",
-            "shields" => "Shields",
-            "directed-energy-weapons" => "Directed-energy weapons",
-            _ => system.Value,
-        };
+    private static string TargetSystemLabel(ShipSystemKind system) =>
+        EngineeringKindPresentation.TargetLabel(system, system.Value);
 
     private void PresentSystems(CommandInterfacePresentation presentation)
     {
@@ -345,12 +352,17 @@ public partial class CommandDeckWorkspace : Control
 
         foreach (string removedActionId in _actionButtons.Keys.Where(id => !retainedActionIds.Contains(id)).ToArray())
         {
-            Button button = _actionButtons[removedActionId];
-            _actionButtons.Remove(removedActionId);
-            _presentedActions.Remove(removedActionId);
-            _contextActions.RemoveChild(button);
-            button.QueueFree();
+            RemoveActionButton(removedActionId);
         }
+    }
+
+    private void RemoveActionButton(string actionId)
+    {
+        Button button = _actionButtons[actionId];
+        _actionButtons.Remove(actionId);
+        _actionSlots.Remove(button);
+        _contextActions.RemoveChild(button);
+        button.QueueFree();
     }
 
     private void ReconcileActionButton(CommandInterfaceAction action, CommandInterfaceDataMode dataMode, int index)
@@ -361,10 +373,13 @@ public partial class CommandDeckWorkspace : Control
         if (!_actionButtons.TryGetValue(action.Id, out Button? button))
         {
             string actionId = action.Id;
+            var slot = new ActionSlot(action);
             button = new Button { Name = $"Action_{actionId}", FocusMode = FocusModeEnum.All };
-            button.Pressed += () => OnActionPressed(actionId);
+            Button pressed = button;
+            button.Pressed += () => OnActionPressed(pressed, slot);
             _contextActions.AddChild(button);
             _actionButtons.Add(actionId, button);
+            _actionSlots.Add(button, slot);
         }
 
         string text = action.Label + ActionSuffix(action.Availability, canSubmit);
@@ -397,7 +412,7 @@ public partial class CommandDeckWorkspace : Control
             button.ThemeTypeVariation = variation;
         }
 
-        _presentedActions[action.Id] = action;
+        _actionSlots[button].Action = action;
         if (button.GetIndex() != index)
         {
             _contextActions.MoveChild(button, index);
@@ -425,19 +440,22 @@ public partial class CommandDeckWorkspace : Control
         ContactSelected?.Invoke(this, new ContactEventArgs(args.ContactId));
     }
 
-    private void OnActionPressed(string actionId)
+    // Emits the action this button was last presented with, so a button removed by a binding change still carries
+    // its old binding to the shell.
+    private void OnActionPressed(Button button, ActionSlot slot)
     {
+        CommandInterfaceAction action = slot.Action;
         if (
             CurrentDataMode == CommandInterfaceDataMode.Live
-            && IsActionEnabled(actionId)
-            && _presentedActions.TryGetValue(actionId, out CommandInterfaceAction? action)
+            && !button.Disabled
+            && action.Availability == CommandInterfaceActionAvailability.Submittable
         )
         {
             if (action.Intent == CommandInterfaceIntent.FireDirectedEnergy)
             {
                 if (_selectedTargetSystem is not { } system || !_targetSystems.ContainsValue(system))
                     return;
-                action = action with { FocusedSystemId = system };
+                action = action with { AimKind = system };
             }
             PresentationActionRequested?.Invoke(this, new ActionEventArgs(action));
         }
@@ -481,5 +499,11 @@ public partial class CommandDeckWorkspace : Control
             parent.RemoveChild(child);
             child.QueueFree();
         }
+    }
+
+    /// <summary>Holds the action a button currently represents; updated in place by an ordinary refresh.</summary>
+    private sealed class ActionSlot(CommandInterfaceAction action)
+    {
+        public CommandInterfaceAction Action { get; set; } = action;
     }
 }

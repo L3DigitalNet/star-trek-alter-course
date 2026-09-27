@@ -58,6 +58,12 @@ public sealed record CommandInterfacePresentation
     /// <summary>Gets engineering-only content, or null outside the engineering hierarchy.</summary>
     public CommandInterfaceEngineeringPresentation? Engineering { get; init; }
 
+    /// <summary>
+    /// Gets the owner and simulation generation every live own-ship action in this snapshot is bound to, or null for
+    /// illustrative previews.
+    /// </summary>
+    public OwnShipActionBinding? Binding { get; init; }
+
     /// <summary>Gets the selected contact's Core-computed target choices and fire legality.</summary>
     public CombatTargetProjection? CombatTarget { get; init; }
 }

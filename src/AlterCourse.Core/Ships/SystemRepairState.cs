@@ -7,7 +7,7 @@ namespace AlterCourse.Core.Ships;
 public sealed record SystemRepairState
 {
     internal SystemRepairState(
-        ShipSystemId targetSystem,
+        InstalledSystemId target,
         SystemCondition startingCondition,
         SystemCondition targetCondition,
         SimulationTime startedAt,
@@ -15,14 +15,9 @@ public sealed record SystemRepairState
         ScheduledWorkId scheduledCompletionId
     )
     {
-        if (
-            targetSystem != ShipSystemId.Sensors
-            && targetSystem != ShipSystemId.ImpulsePropulsion
-            && targetSystem != ShipSystemId.Shields
-            && targetSystem != ShipSystemId.DirectedEnergyWeapons
-        )
+        if (target.Value == 0)
         {
-            throw new ArgumentException("Only concrete consumer systems are repairable.", nameof(targetSystem));
+            throw new ArgumentException("Repair requires an initialized installed target.", nameof(target));
         }
 
         if (targetCondition.Value <= startingCondition.Value)
@@ -40,7 +35,7 @@ public sealed record SystemRepairState
             throw new ArgumentException("Repair requires initialized scheduled work.", nameof(scheduledCompletionId));
         }
 
-        TargetSystem = targetSystem;
+        Target = target;
         StartingCondition = startingCondition;
         TargetCondition = targetCondition;
         StartedAt = startedAt;
@@ -48,8 +43,11 @@ public sealed record SystemRepairState
         ScheduledCompletionId = scheduledCompletionId;
     }
 
-    /// <summary>Gets the repaired system identity.</summary>
-    public ShipSystemId TargetSystem { get; }
+    /// <summary>
+    /// Gets the repaired installation on the owning ship. Repairability comes from that installation's definition
+    /// (presence of repair capability), validated by the simulation, not from a kind list here.
+    /// </summary>
+    public InstalledSystemId Target { get; }
 
     /// <summary>Gets condition at repair start.</summary>
     public SystemCondition StartingCondition { get; }

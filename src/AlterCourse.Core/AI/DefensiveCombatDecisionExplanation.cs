@@ -10,7 +10,7 @@ internal sealed record DefensiveCombatDecisionExplanation(
     IReadOnlyList<DefensiveCombatDecisionCandidate> Candidates,
     DefensiveCombatDecisionAction SelectedAction,
     SensorContactId ContactId,
-    ShipSystemId TargetSystem,
+    ShipSystemKind TargetSystem,
     DefensiveCombatDecisionTieRule TieRule,
     SetTacticalCourseIntent? ResultingCourse,
     FireDirectedEnergyOutcome? ApplicationOutcome = null,

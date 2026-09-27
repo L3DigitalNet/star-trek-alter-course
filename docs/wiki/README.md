@@ -6,7 +6,7 @@ description: 'Single source of truth for the design of the game: decisions, impl
 doc_type: 'index'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-26'
+updated: '2026-09-27'
 tags:
   - 'design'
   - 'architecture'
@@ -32,13 +32,13 @@ The initial implementation review is against `dev` commit `42481ca7fbc6c5c9da969
 
 [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) is the first implemented contribution toward M5, delivered by Feature #86 / Final PR #87 and merged into `dev` as `0217296`. Its era-neutral proof implements the six selected boundary decisions and introduced V7 saves with faction content V1. The v0.6.0 release uses V8; v0.5.0 remains the historical V6 release and V4 remains its ship-content baseline. This does not declare M3 or M5 complete.
 
-[Observation-Driven Faction Response](observation-driven-faction-response.md) is implemented by Feature #93 / Final PR #94 and released in v0.6.0. V8 uses `observation-driven-faction-response-v1`; v0.5.0 remains the historical V6 release. It connects legitimate NPC sensor observations to delayed direct-faction reports and deterministic investigation assignments while preserving observer-local identity, information limits, existing orders, and bounded persistence. Its reviewed evidence includes Core scenario/horizon coverage, actor-safe Godot coverage, and the V8 persistence bound. M6A First Combat Engagement is now implemented on `dev` as an unreleased contribution using V5 content and V9 saves; full M3 or M5 completion was not a prerequisite.
+[Observation-Driven Faction Response](observation-driven-faction-response.md) is implemented by Feature #93 / Final PR #94 and released in v0.6.0. V8 uses `observation-driven-faction-response-v1`; v0.5.0 remains the historical V6 release. It connects legitimate NPC sensor observations to delayed direct-faction reports and deterministic investigation assignments while preserving observer-local identity, information limits, existing orders, and bounded persistence. Its reviewed evidence includes Core scenario/horizon coverage, actor-safe Godot coverage, and the V8 persistence bound. M6A First Combat Engagement is implemented on `dev` as an unreleased contribution, admitted using V5 content and V9 saves; full M3 or M5 completion was not a prerequisite. The development branch has since implemented [Issue #121's installed-system substrate migration](ship-system-substrate.md), superseding V5/V9 with ship content V6, system-definition content V1, and V10 saves.
 
 The [recurring design-reconciliation procedure](development-and-governance.md#recurring-design-reconciliation) governs review of these claims. The [source catalog review record](sources.md#review-record) identifies the latest full and targeted reviews.
 
-## Selected next implementation
+## Implemented substrate migration (development branch)
 
-[Issue #121](https://github.com/L3DigitalNet/star-trek-alter-course/issues/121) implements the [ship-system substrate migration](ship-system-substrate.md) required by [ADR 0014](../adr/0014-use-an-extensible-bounded-ship-system-substrate.md). The ADR is adopted; the runtime migration is not yet implemented. Read the owning contract before changing ship systems. Complete it before adding systems or Damage Control gameplay; it is not M6B or a release. Earlier recovery prompts are superseded, and detailed recovery semantics remain open.
+[Issue #121](https://github.com/L3DigitalNet/star-trek-alter-course/issues/121) implements the [ship-system substrate migration](ship-system-substrate.md) required by [ADR 0014](../adr/0014-use-an-extensible-bounded-ship-system-substrate.md). Runtime, content, persistence (ship content V6, system-definition content V1, save schema V10), and Godot's generic Engineering presentation are implemented on the development branch toward Final PR #123, unreleased. Read the owning contract before changing ship systems. Further systems and Damage Control gameplay remain future work; this is not M6B or a release. Earlier recovery prompts are superseded, and detailed recovery semantics remain open.
 
 ## Start here
 
@@ -54,11 +54,11 @@ The [recurring design-reconciliation procedure](development-and-governance.md#re
 - [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md): implemented bounded M5 contribution: direct NPC assignment, own-asset knowledge, typed scheduling, V7 migration, and no RNG.
 - [Engineering and combat](engineering-and-combat.md): implemented power, condition, repair, and bounded first-combat engagement rules.
 - [Interface and player commands](interface-and-player-commands.md): Command Deck, Engineering, presentation authority, controls, and preview boundaries.
-- [Content, assets, and persistence](content-assets-and-persistence.md): JSON definitions, released V8 and unreleased V9 snapshots, historical adjacent migrations, and the independent AssetCtl pipeline.
+- [Content, assets, and persistence](content-assets-and-persistence.md): JSON definitions, released V8 and unreleased V10 snapshots, historical adjacent migrations, and the independent AssetCtl pipeline.
 
 ## Implemented response and future design
 
-- [Ship-system substrate](ship-system-substrate.md): selected, not yet implemented migration of existing systems; heterogeneous live loadouts, compatibility, information safety, and conformance evidence.
+- [Ship-system substrate](ship-system-substrate.md): implemented migration of existing systems to heterogeneous live loadouts on the development branch (runtime, persistence, and Godot presentation), with compatibility, information safety, and conformance evidence.
 - [Observation-Driven Faction Response](observation-driven-faction-response.md): implemented delayed direct ship-to-faction reporting and bounded investigation response with bounded V8 persistence proof.
 - [Factions and organizations](factions-and-organizations.md): owner-approved political framework; the root-faction/direct-control subset is implemented while broader political runtime remains future work.
 - [Diplomacy, economy, and campaigns](diplomacy-economy-and-campaigns.md): political consequences, history, trade, canon, and later campaign work.

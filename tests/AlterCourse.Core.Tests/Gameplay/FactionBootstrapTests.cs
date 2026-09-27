@@ -2,10 +2,10 @@ using AlterCourse.Core.Content;
 using AlterCourse.Core.Factions;
 using AlterCourse.Core.Gameplay;
 using AlterCourse.Core.Identity;
-using AlterCourse.Core.Quantities;
 using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
+using AlterCourse.Core.Tests.Support;
 
 namespace AlterCourse.Core.Tests.Gameplay;
 
@@ -216,28 +216,22 @@ public sealed class FactionBootstrapTests
                 $"Ship {id}",
                 default,
                 default,
-                new SystemCondition(1),
-                new SystemCondition(1),
-                new SystemCondition(1),
-                new PowerAllocation(new PowerUnits(70), new PowerUnits(50)),
                 strategic ?? new AtLocationStart(location),
-                activeOrder: order,
-                directControllerFactionId: controller
+                TestShipStarts.Pathfinder(),
+                ActiveOrder: order,
+                DirectControllerFactionId: controller
             );
 
-        internal static ShipDefinitionCatalog CreateShipCatalog(string definitionIdentity = "test-ship")
-        {
-            var definition = new ShipDefinition(
-                new ShipDefinitionId(definitionIdentity),
-                "Test Ship",
-                new SpeedKilometersPerSecond(10),
-                new DistanceKilometers(10),
-                new SimulationDuration(100),
-                new SimulationDuration(1000)
+        internal static ShipDefinitionCatalog CreateShipCatalog(string definitionIdentity = "test-ship") =>
+            TestShipContent.Pathfinder(
+                PathfinderTuning.Production with
+                {
+                    PassiveRange = 10,
+                    ActiveScanMilliseconds = 100,
+                    SensorRepairMilliseconds = 1000,
+                },
+                definitionIdentity,
+                "Test Ship"
             );
-            return new ShipDefinitionCatalog(
-                new Dictionary<ShipDefinitionId, ShipDefinition> { [definition.Id] = definition }
-            );
-        }
     }
 }

@@ -135,105 +135,6 @@ public sealed partial class GameSimulation
         return new SetTacticalCourseResult(application.Outcome);
     }
 
-    /// <summary>Validates and atomically applies an exact player-ship power allocation.</summary>
-    public PowerAllocationResult SetPowerAllocation(PowerAllocation allocation) => ApplyPlayerAllocation(allocation);
-
-    /// <summary>Generates, validates, and atomically applies a Core-owned allocation preset.</summary>
-    public PowerAllocationResult ApplyPowerAllocationPreset(PowerAllocationPreset preset)
-    {
-        ShipState player = _state.GetRequiredShip(_state.PlayerShipId);
-        ShipDefinition definition = _shipCatalog.GetRequired(player.DefinitionId);
-        return ApplyPlayerAllocation(player.Engineering.AllocationFor(definition.Engineering, preset));
-    }
-
-    /// <summary>Validates and schedules one player-ship analytical system repair.</summary>
-    public SystemRepairResult BeginSystemRepair(ShipSystemId targetSystem, SystemCondition targetCondition)
-    {
-        ShipState player = _state.GetRequiredShip(_state.PlayerShipId);
-        if (player.Engineering.ActiveRepair is not null)
-        {
-            return new SystemRepairResult(SystemRepairOutcome.RepairAlreadyActive);
-        }
-
-        ShipDefinition definition = _shipCatalog.GetRequired(player.DefinitionId);
-        if (!SupportsRepair(definition.Engineering, targetSystem))
-            return new SystemRepairResult(SystemRepairOutcome.UnsupportedSystem);
-
-        SystemCondition starting = player.Engineering.ConditionFor(targetSystem);
-        if (targetCondition.Value <= starting.Value)
-        {
-            return new SystemRepairResult(SystemRepairOutcome.TargetDoesNotImproveCondition);
-        }
-
-        SimulationTime completion = _state.Time.AdvanceBy(definition.Engineering.RepairDurationFor(targetSystem));
-        (SimulationScheduler scheduler, ScheduledWork work) = _state.Scheduler.Schedule(
-            completion,
-            player.InstanceId,
-            ScheduledWorkKind.SystemRepairCompletion
-        );
-        var repair = new SystemRepairState(targetSystem, starting, targetCondition, _state.Time, completion, work.Id);
-        ShipState updated = player with { Engineering = player.Engineering with { ActiveRepair = repair } };
-        Commit(_state.ReplaceShip(player.InstanceId, updated) with { Scheduler = scheduler });
-        return new SystemRepairResult(SystemRepairOutcome.Accepted);
-    }
-
-    private PowerAllocationResult ApplyPlayerAllocation(PowerAllocation allocation)
-    {
-        ShipState player = _state.GetRequiredShip(_state.PlayerShipId);
-        ShipDefinition definition = _shipCatalog.GetRequired(player.DefinitionId);
-        PowerAllocationOutcome outcome = ValidateAllocation(player, definition, allocation);
-        if (outcome != PowerAllocationOutcome.Accepted)
-        {
-            return new PowerAllocationResult(outcome, new ReadOnlyValueList<PlayerAdvanceEvent>([]));
-        }
-
-        ShipState updated = player with { Engineering = player.Engineering with { Allocation = allocation } };
-        List<PlayerAdvanceEvent> playerEvents = [];
-        SimulationState candidate = ObserveAllShips(
-            _state.ReplaceShip(player.InstanceId, updated),
-            _shipCatalog,
-            playerEvents
-        );
-        Commit(candidate);
-        return new PowerAllocationResult(
-            PowerAllocationOutcome.Accepted,
-            new ReadOnlyValueList<PlayerAdvanceEvent>(playerEvents)
-        );
-    }
-
-    private static PowerAllocationOutcome ValidateAllocation(
-        ShipState ship,
-        ShipDefinition definition,
-        PowerAllocation allocation
-    )
-    {
-        if (allocation.Sensors > definition.Engineering.NominalSensorDemand)
-        {
-            return PowerAllocationOutcome.SensorDemandExceeded;
-        }
-
-        if (allocation.ImpulsePropulsion > definition.Engineering.NominalImpulseDemand)
-        {
-            return PowerAllocationOutcome.ImpulseDemandExceeded;
-        }
-
-        if (allocation.Shields > definition.Engineering.NominalShieldDemand)
-            return PowerAllocationOutcome.ShieldDemandExceeded;
-        if (allocation.DirectedEnergyWeapons > definition.Engineering.NominalDirectedEnergyDemand)
-            return PowerAllocationOutcome.DirectedEnergyDemandExceeded;
-        int allocated = allocation.Total;
-        if (allocated > ship.Engineering.AvailablePower(definition.Engineering).Value)
-        {
-            return PowerAllocationOutcome.AvailablePowerExceeded;
-        }
-
-        ShipEngineeringState proposed = ship.Engineering with { Allocation = allocation };
-        double effectiveMaximum = EffectiveMaximumTacticalSpeed(definition, proposed).Value;
-        return ship.TacticalMotion.Speed.Value > effectiveMaximum
-            ? PowerAllocationOutcome.CurrentSpeedExceedsResultingMaximum
-            : PowerAllocationOutcome.Accepted;
-    }
-
     /// <summary>Validates and sends the player's identity to one identified current contact.</summary>
     public HailResult RequestHail(SensorContactId contactId)
     {
@@ -329,8 +230,7 @@ public sealed partial class GameSimulation
             return new TacticalCourseApplicationResult(SetTacticalCourseOutcome.UnavailableWhileTraveling, state);
         }
 
-        ShipDefinition definition = shipCatalog.GetRequired(targetShip.DefinitionId);
-        SpeedKilometersPerSecond effectiveMaximum = EffectiveMaximumTacticalSpeed(definition, targetShip.Engineering);
+        SpeedKilometersPerSecond effectiveMaximum = EffectiveMaximumTacticalSpeed(targetShip.Engineering);
         if (effectiveMaximum.Value == 0 && command.Speed.Value > 0)
         {
             return new TacticalCourseApplicationResult(SetTacticalCourseOutcome.PropulsionOffline, state);
@@ -350,6 +250,15 @@ public sealed partial class GameSimulation
         );
         return new TacticalCourseApplicationResult(SetTacticalCourseOutcome.Accepted, candidate);
     }
+
+    /// <summary>
+    /// Gets the scan source: the ship's sole installed sensor when it can currently sense from a location, else null.
+    /// Its definition owns scan duration, and the scan records this installation so continuation never re-derives it.
+    /// </summary>
+    private static InstalledSystem? ScanSource(ShipState observer) =>
+        observer.StrategicState is AtLocationState && HasEffectiveSensorCapability(observer.Engineering)
+            ? ShipSystemAdmission.SupportedSingle(observer.Engineering.Systems, ShipSystemKind.Sensors)
+            : null;
 
     /// <summary>Validates and schedules an active scan of one player-local contact.</summary>
     public ActiveSensorScanResult RequestActiveSensorScan(SensorContactId contactId)
@@ -373,8 +282,8 @@ public sealed partial class GameSimulation
             return new ActiveSensorScanResult(ActiveSensorScanOutcome.AlreadyIdentified);
         }
 
-        ShipDefinition definition = _shipCatalog.GetRequired(observer.DefinitionId);
-        if (!HasEffectiveSensorCapability(observer, definition) || observer.StrategicState is not AtLocationState)
+        InstalledSystem? sensor = ScanSource(observer);
+        if (sensor is null)
         {
             return new ActiveSensorScanResult(ActiveSensorScanOutcome.SensorsUnavailable);
         }
@@ -384,7 +293,9 @@ public sealed partial class GameSimulation
             return new ActiveSensorScanResult(ActiveSensorScanOutcome.ScanAlreadyActive);
         }
 
-        SimulationTime completion = _state.Time.AdvanceBy(definition.ActiveScanDuration);
+        SimulationTime completion = _state.Time.AdvanceBy(
+            ((SensorSystemDefinition)sensor.Definition).ActiveScanDuration
+        );
         (SimulationScheduler scheduler, ScheduledWork work) = _state.Scheduler.Schedule(
             completion,
             observer.InstanceId,
@@ -392,7 +303,7 @@ public sealed partial class GameSimulation
         );
         SensorKnowledge knowledge = observer.SensorKnowledge with
         {
-            ActiveScan = new ActiveSensorScanState(contactId, _state.Time, completion, work.Id),
+            ActiveScan = new ActiveSensorScanState(contactId, sensor.Id, _state.Time, completion, work.Id),
         };
         SimulationState candidate = _state.ReplaceShip(
             observer.InstanceId,
@@ -513,6 +424,10 @@ public sealed partial class GameSimulation
     ) => new(restoredState, shipCatalog, factionCatalog);
 
     internal FactionDefinitionCatalog FactionCatalog => _factionCatalog;
+
+    // V10 capture persists the aim-vocabulary descriptor derived from the whole ship catalog, so the save writer
+    // needs the catalog this simulation was validated against (GamePersistence.CaptureV10).
+    internal ShipDefinitionCatalog ShipCatalog => _shipCatalog;
 
     internal void BootstrapHiddenCautiousContactObservation(ShipInstanceId observerId)
     {
@@ -739,7 +654,7 @@ public sealed partial class GameSimulation
             replacements[index] = ship.Engineering.ActiveRepair is SystemRepairState repair
                 ? ship with
                 {
-                    Engineering = ship.Engineering.WithCondition(repair.TargetSystem, repair.ConditionAt(boundary)),
+                    Engineering = ship.Engineering.WithCondition(repair.Target, repair.ConditionAt(boundary)),
                 }
                 : ship;
         }
@@ -768,7 +683,7 @@ public sealed partial class GameSimulation
                 hasLocalTarget
                 && (
                     observer.TacticalMotion.Speed.Value != 0
-                    || observer.Engineering.ActiveRepair?.TargetSystem == ShipSystemId.Sensors
+                    || IsRepairingKind(observer.Engineering, ShipSystemKind.Sensors)
                 )
             )
             {
@@ -793,10 +708,7 @@ public sealed partial class GameSimulation
         foreach (ShipState truthObserver in truth)
         {
             ShipState observer = current.GetRequiredShip(truthObserver.InstanceId);
-            ShipDefinition observerDefinition = shipCatalog.GetRequired(observer.DefinitionId);
-            double effectiveRange =
-                observerDefinition.PassiveSensorRange.Value
-                * observer.Engineering.SensorCapability(observerDefinition.Engineering);
+            double effectiveRange = EffectivePassiveSensorRange(observer.Engineering).Value;
             (HashSet<ShipInstanceId> observableTargets, LocationId? observerLocationId) = FindObservableTargets(
                 observer,
                 truth,
@@ -1482,10 +1394,7 @@ public sealed partial class GameSimulation
             ship.InstanceId,
             ship with
             {
-                Engineering = ship.Engineering.WithCondition(repair.TargetSystem, repair.TargetCondition) with
-                {
-                    ActiveRepair = null,
-                },
+                Engineering = ship.Engineering.WithCondition(repair.Target, repair.TargetCondition).WithRepair(null),
             }
         );
         return (
@@ -1497,7 +1406,8 @@ public sealed partial class GameSimulation
                 ScheduledConsequenceRule.SystemRepairCompletion,
                 ScheduledConsequenceAction.CompleteSystemRepair,
                 true,
-                systemId: repair.TargetSystem
+                systemId: repair.Target,
+                systemKind: ship.Engineering.Systems.GetRequired(repair.Target).Kind
             )
         );
     }
@@ -1756,12 +1666,11 @@ public sealed partial class GameSimulation
         IncomingHailFact? incomingHail = null
     )
     {
-        ShipDefinition definition = shipCatalog.GetRequired(ship.DefinitionId);
         var facts = new ShipContactDecisionFacts(
             ship.TacticalPosition,
             ship.TacticalMotion,
             ship.StrategicState is AtLocationState,
-            EffectiveMaximumTacticalSpeed(definition, ship.Engineering),
+            EffectiveMaximumTacticalSpeed(ship.Engineering),
             ship.SensorKnowledge.Contacts.Select(contact => contact.ToActorSafeSnapshot()),
             incomingHail
         );
@@ -1816,7 +1725,8 @@ public sealed partial class GameSimulation
         ScheduledConsequenceAction action,
         bool completed,
         SensorContactId? contactId = null,
-        ShipSystemId? systemId = null,
+        InstalledSystemId? systemId = null,
+        ShipSystemKind? systemKind = null,
         ShipContactDecisionExplanation? contactDecision = null,
         FactionAssignmentDecisionExplanation? factionDecision = null
     ) =>
@@ -1833,6 +1743,7 @@ public sealed partial class GameSimulation
             false,
             contactId,
             systemId,
+            systemKind,
             contactDecision,
             factionDecision
         );
@@ -1868,7 +1779,8 @@ public sealed partial class GameSimulation
             ScheduledWorkKind.SystemRepairCompletion => new PlayerAdvanceEvent(
                 PlayerAdvanceEventKind.SystemRepairCompleted,
                 trace.ResolutionTime,
-                ShipSystemId: trace.SystemId
+                SystemKind: trace.SystemKind,
+                InstalledSystemId: trace.SystemId
             ),
             ScheduledWorkKind.SensorContactLoss => new PlayerAdvanceEvent(
                 PlayerAdvanceEventKind.SensorContactLost,
@@ -1895,12 +1807,11 @@ public sealed partial class GameSimulation
     private PlayerProjection Project(SimulationState state)
     {
         ShipState playerShip = state.GetRequiredShip(state.PlayerShipId);
-        ShipDefinition playerDefinition = _shipCatalog.GetRequired(playerShip.DefinitionId);
         return new PlayerProjection(
             state.Time,
             ProjectStrategic(state, playerShip),
-            ProjectShip(state, playerShip, playerDefinition),
-            new ReadOnlyValueList<PlayerAction>(GetAvailableActions(playerShip, playerDefinition))
+            ProjectShip(state, playerShip, _shipCatalog),
+            new ReadOnlyValueList<PlayerAction>(GetAvailableActions(playerShip))
         );
     }
 
@@ -1980,13 +1891,16 @@ public sealed partial class GameSimulation
     private static PlayerShipProjection ProjectShip(
         SimulationState state,
         ShipState playerShip,
-        ShipDefinition playerDefinition
+        ShipDefinitionCatalog catalog
     )
     {
-        SystemRepairState? sensorRepair =
-            playerShip.Engineering.ActiveRepair is { TargetSystem: var target } repair && target == ShipSystemId.Sensors
-                ? repair
-                : null;
+        SystemRepairState? sensorRepair = IsRepairingKind(playerShip.Engineering, ShipSystemKind.Sensors)
+            ? playerShip.Engineering.ActiveRepair
+            : null;
+        InstalledSystem? sensors = ShipSystemAdmission.SupportedSingle(
+            playerShip.Engineering.Systems,
+            ShipSystemKind.Sensors
+        );
         ActiveSensorScanState? activeScan = playerShip.SensorKnowledge.ActiveScan;
         SensorContactTrack[] activeContacts =
         [
@@ -2005,7 +1919,7 @@ public sealed partial class GameSimulation
                 playerShip.TacticalMotion.Speed.Value
             ),
             new SensorProjection(
-                playerShip.Engineering.SensorCondition.Value,
+                sensors?.Condition.Value ?? 0,
                 sensorRepair?.ProgressAt(state.Time) ?? 1,
                 sensorRepair is not null,
                 new ReadOnlyValueList<SensorContactSnapshot>(
@@ -2014,152 +1928,17 @@ public sealed partial class GameSimulation
                 new ReadOnlyValueList<SensorContactActionProjection>(
                     activeContacts.Select(contact => new SensorContactActionProjection(
                         contact.Id,
-                        new ReadOnlyValueList<SensorContactAction>(
-                            GetAvailableContactActions(playerShip, playerDefinition, contact)
-                        )
+                        new ReadOnlyValueList<SensorContactAction>(GetAvailableContactActions(playerShip, contact))
                     ))
                 ),
                 activeScan?.TargetContactId,
-                ActiveScanProgressAt(state.Time, activeScan)
+                ActiveScanProgressAt(state.Time, activeScan),
+                sensors?.Id
             ),
-            ProjectEngineering(state, playerShip, playerDefinition),
-            ProjectCombat(state, playerShip, playerDefinition)
+            ProjectEngineering(state, playerShip),
+            ProjectCombat(state, playerShip, catalog)
         );
     }
-
-    private static EngineeringProjection ProjectEngineering(
-        SimulationState state,
-        ShipState ship,
-        ShipDefinition definition
-    )
-    {
-        ShipEngineeringState engineering = ship.Engineering;
-        SystemRepairState? repair = engineering.ActiveRepair;
-        return new EngineeringProjection(
-            definition.Engineering.NominalGeneration,
-            engineering.AvailablePower(definition.Engineering),
-            engineering.Allocation.Sensors,
-            engineering.Allocation.ImpulsePropulsion,
-            engineering.Reserve(definition.Engineering),
-            engineering.GenerationCondition,
-            engineering.SensorCondition,
-            engineering.ImpulseCondition,
-            engineering.SensorCapability(definition.Engineering),
-            engineering.ImpulseCapability(definition.Engineering),
-            EffectivePassiveSensorRange(definition, engineering),
-            EffectiveMaximumTacticalSpeed(definition, engineering),
-            repair is null
-                ? null
-                : new SystemRepairProjection(
-                    repair.TargetSystem,
-                    repair.ProgressAt(state.Time),
-                    repair.ExpectedCompletion
-                ),
-            new ReadOnlyValueList<EngineeringActionProjection>(ProjectEngineeringActions(ship, definition)),
-            engineering.ShieldCondition,
-            engineering.DirectedEnergyCondition,
-            engineering.ShieldCapability(definition.Engineering),
-            engineering.DirectedEnergyCapability(definition.Engineering),
-            engineering.Allocation.Shields,
-            engineering.Allocation.DirectedEnergyWeapons,
-            definition.Engineering.NominalShieldDemand,
-            definition.Engineering.NominalDirectedEnergyDemand
-        );
-    }
-
-    private static EngineeringActionProjection[] ProjectEngineeringActions(ShipState ship, ShipDefinition definition)
-    {
-        var actions = new List<EngineeringActionProjection>();
-        AddAllocationAction(actions, EngineeringAction.Balanced, ship, definition, PowerAllocationPreset.Balanced);
-        AddAllocationAction(
-            actions,
-            EngineeringAction.PrioritizeSensors,
-            ship,
-            definition,
-            PowerAllocationPreset.PrioritizeSensors
-        );
-        AddAllocationAction(
-            actions,
-            EngineeringAction.PrioritizePropulsion,
-            ship,
-            definition,
-            PowerAllocationPreset.PrioritizePropulsion
-        );
-        AddAllocationAction(
-            actions,
-            EngineeringAction.PrioritizeShields,
-            ship,
-            definition,
-            PowerAllocationPreset.PrioritizeShields
-        );
-        AddAllocationAction(
-            actions,
-            EngineeringAction.PrioritizeDirectedEnergyWeapons,
-            ship,
-            definition,
-            PowerAllocationPreset.PrioritizeDirectedEnergyWeapons
-        );
-        AddRepairAction(actions, EngineeringAction.BeginShieldRepair, ship, definition, ShipSystemId.Shields);
-        AddRepairAction(
-            actions,
-            EngineeringAction.BeginDirectedEnergyRepair,
-            ship,
-            definition,
-            ShipSystemId.DirectedEnergyWeapons
-        );
-        AddRepairAction(actions, EngineeringAction.BeginSensorRepair, ship, definition, ShipSystemId.Sensors);
-        AddRepairAction(
-            actions,
-            EngineeringAction.BeginImpulseRepair,
-            ship,
-            definition,
-            ShipSystemId.ImpulsePropulsion
-        );
-        actions.Add(new EngineeringActionProjection(EngineeringAction.ReturnToCommand, true));
-        return [.. actions];
-    }
-
-    private static void AddAllocationAction(
-        List<EngineeringActionProjection> actions,
-        EngineeringAction action,
-        ShipState ship,
-        ShipDefinition definition,
-        PowerAllocationPreset preset
-    )
-    {
-        PowerAllocation allocation = ship.Engineering.AllocationFor(definition.Engineering, preset);
-        bool available = ValidateAllocation(ship, definition, allocation) == PowerAllocationOutcome.Accepted;
-        actions.Add(
-            new EngineeringActionProjection(
-                action,
-                available,
-                available ? null : EngineeringActionUnavailableReason.CurrentSpeedTooHigh
-            )
-        );
-    }
-
-    private static void AddRepairAction(
-        List<EngineeringActionProjection> actions,
-        EngineeringAction action,
-        ShipState ship,
-        ShipDefinition definition,
-        ShipSystemId systemId
-    )
-    {
-        EngineeringActionUnavailableReason? reason =
-            !SupportsRepair(definition.Engineering, systemId) ? EngineeringActionUnavailableReason.UnsupportedSystem
-            : ship.Engineering.ActiveRepair is not null ? EngineeringActionUnavailableReason.RepairAlreadyActive
-            : ship.Engineering.ConditionFor(systemId).Value == 1
-                ? EngineeringActionUnavailableReason.SystemAlreadyNominal
-            : null;
-        actions.Add(new EngineeringActionProjection(action, reason is null, reason));
-    }
-
-    private static bool SupportsRepair(ShipEngineeringDefinition definition, ShipSystemId system) =>
-        system == ShipSystemId.Sensors
-        || system == ShipSystemId.ImpulsePropulsion
-        || (system == ShipSystemId.Shields && definition.NominalShieldDemand.Value > 0)
-        || (system == ShipSystemId.DirectedEnergyWeapons && definition.NominalDirectedEnergyDemand.Value > 0);
 
     private static double? ActiveScanProgressAt(SimulationTime currentTime, ActiveSensorScanState? activeScan)
     {
@@ -2173,11 +1952,7 @@ public sealed partial class GameSimulation
         return Math.Clamp((double)elapsed / duration, 0, 1);
     }
 
-    private static SensorContactAction[] GetAvailableContactActions(
-        ShipState playerShip,
-        ShipDefinition playerDefinition,
-        SensorContactTrack contact
-    )
+    private static SensorContactAction[] GetAvailableContactActions(ShipState playerShip, SensorContactTrack contact)
     {
         if (contact.Status != SensorContactStatus.Current)
         {
@@ -2187,7 +1962,7 @@ public sealed partial class GameSimulation
         var actions = new List<SensorContactAction>();
         if (
             contact.Identification == SensorContactIdentification.Detected
-            && HasEffectiveSensorCapability(playerShip, playerDefinition)
+            && HasEffectiveSensorCapability(playerShip.Engineering)
             && playerShip.StrategicState is AtLocationState
             && playerShip.SensorKnowledge.ActiveScan is null
         )
@@ -2203,7 +1978,7 @@ public sealed partial class GameSimulation
         return [.. actions];
     }
 
-    private static PlayerAction[] GetAvailableActions(ShipState playerShip, ShipDefinition playerDefinition)
+    private static PlayerAction[] GetAvailableActions(ShipState playerShip)
     {
         if (playerShip.StrategicState is not AtLocationState)
         {
@@ -2213,8 +1988,7 @@ public sealed partial class GameSimulation
         List<PlayerAction> actions = [PlayerAction.Travel, PlayerAction.SetTacticalCourse, PlayerAction.AdvanceTime];
         if (
             playerShip.SensorKnowledge.Contacts.Any(contact =>
-                GetAvailableContactActions(playerShip, playerDefinition, contact)
-                    .Contains(SensorContactAction.ActiveScan)
+                GetAvailableContactActions(playerShip, contact).Contains(SensorContactAction.ActiveScan)
             )
         )
         {
@@ -2223,19 +1997,6 @@ public sealed partial class GameSimulation
 
         return [.. actions];
     }
-
-    private static bool HasEffectiveSensorCapability(ShipState ship, ShipDefinition definition) =>
-        definition.PassiveSensorRange.Value > 0 && ship.Engineering.SensorCapability(definition.Engineering) > 0;
-
-    private static DistanceKilometers EffectivePassiveSensorRange(
-        ShipDefinition definition,
-        ShipEngineeringState engineering
-    ) => new(definition.PassiveSensorRange.Value * engineering.SensorCapability(definition.Engineering));
-
-    private static SpeedKilometersPerSecond EffectiveMaximumTacticalSpeed(
-        ShipDefinition definition,
-        ShipEngineeringState engineering
-    ) => new(definition.MaximumTacticalSpeed.Value * engineering.ImpulseCapability(definition.Engineering));
 
     private void Commit(SimulationState candidate)
     {

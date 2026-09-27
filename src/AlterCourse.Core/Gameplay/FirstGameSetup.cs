@@ -66,6 +66,14 @@ public static class FirstGameSetup
         return simulation;
     }
 
+    // Production design installed ids, named by role. FirstGameSetup always uses the design default loadout, so
+    // these must equal pathfinder.json's initialLoadout; bootstrap's exact key-set check fails loudly otherwise.
+    private static readonly InstalledSystemId Generator = new(1);
+    private static readonly InstalledSystemId Sensors = new(2);
+    private static readonly InstalledSystemId Impulse = new(3);
+    private static readonly InstalledSystemId Shields = new(4);
+    private static readonly InstalledSystemId Weapons = new(5);
+
     private static ShipStart CreateFactionShip(
         ShipInstanceId id,
         string name,
@@ -79,18 +87,30 @@ public static class FirstGameSetup
             name,
             default,
             default,
-            new SystemCondition(1),
-            new SystemCondition(1),
-            new SystemCondition(1),
-            new PowerAllocation(new PowerUnits(70), new PowerUnits(50)),
             new AtLocationStart(locationId),
-            directControllerFactionId: controller
-        )
-        {
-            ShieldCondition = definition.Engineering.NominalShieldDemand.Value > 0 ? new SystemCondition(1) : default,
-            DirectedEnergyCondition =
-                definition.Engineering.NominalDirectedEnergyDemand.Value > 0 ? new SystemCondition(1) : default,
-        };
+            Systems(1, 1, 70, 50, 0, 0),
+            DirectControllerFactionId: controller
+        );
+
+    /// <summary>
+    /// Declares state for the five default installations. New-game combat systems are nominal (condition 1),
+    /// unlike historically migrated ships whose shields and weapons load installed but offline.
+    /// </summary>
+    private static ShipSystemsStart Systems(
+        double generation,
+        double sensors,
+        int sensorPower,
+        int impulsePower,
+        int shieldPower,
+        int weaponPower
+    ) =>
+        ShipSystemsStart.FromDesignDefaults([
+            new(Generator, new SystemCondition(generation), null),
+            new(Sensors, new SystemCondition(sensors), new PowerUnits(sensorPower)),
+            new(Impulse, new SystemCondition(1), new PowerUnits(impulsePower)),
+            new(Shields, new SystemCondition(1), new PowerUnits(shieldPower)),
+            new(Weapons, new SystemCondition(1), new PowerUnits(weaponPower)),
+        ]);
 
     private static ShipStart[] CreateShipStarts(
         ShipDefinition definition,
@@ -102,11 +122,11 @@ public static class FirstGameSetup
     {
         var damagedSensors = new SystemCondition(0.4);
         var nominal = new SystemCondition(1);
-        var constrainedGeneration = new SystemCondition(0.625);
-        var fullAllocation = new PowerAllocation(new PowerUnits(70), new PowerUnits(50));
-        var balancedAllocation = new PowerAllocation(new PowerUnits(44), new PowerUnits(31));
         var zeroMotion = new TacticalMotion(new HeadingDegrees(0), new SpeedKilometersPerSecond(0));
-        ShipStart[] starts =
+
+        // The player's 44/31/0/0 and Kestrel's 70/5/15/30 are authored starting allocations, not computed
+        // presets (the player deliberately does not start on the four-consumer Balanced 28/20/16/11).
+        return
         [
             new(
                 new ShipInstanceId(1),
@@ -114,12 +134,9 @@ public static class FirstGameSetup
                 "USS Pathfinder",
                 new TacticalPosition(3.25, -7.5),
                 zeroMotion,
-                constrainedGeneration,
-                damagedSensors,
-                nominal,
-                balancedAllocation,
                 new AtLocationStart(dawn),
-                new SystemRepairStart(ShipSystemId.Sensors, damagedSensors, nominal, initialTime)
+                Systems(0.625, 0.4, 44, 31, 0, 0),
+                new SystemRepairStart(Sensors, damagedSensors, nominal, initialTime)
             ),
             new(
                 new ShipInstanceId(2),
@@ -127,11 +144,8 @@ public static class FirstGameSetup
                 "USS Wayfarer",
                 new TacticalPosition(-2, 4),
                 zeroMotion,
-                nominal,
-                nominal,
-                nominal,
-                fullAllocation,
-                new AtLocationStart(vesper)
+                new AtLocationStart(vesper),
+                Systems(1, 1, 70, 50, 0, 0)
             ),
             new(
                 new ShipInstanceId(3),
@@ -139,11 +153,8 @@ public static class FirstGameSetup
                 "USS Horizon",
                 new TacticalPosition(6, 1.5),
                 zeroMotion,
-                nominal,
-                nominal,
-                nominal,
-                fullAllocation,
-                new TravelingStart(vesper, meridian, initialTime)
+                new TravelingStart(vesper, meridian, initialTime),
+                Systems(1, 1, 70, 50, 0, 0)
             ),
             new(
                 new ShipInstanceId(4),
@@ -151,41 +162,11 @@ public static class FirstGameSetup
                 "Survey Vessel Kestrel",
                 new TacticalPosition(21.25, -7.5),
                 zeroMotion,
-                nominal,
-                nominal,
-                nominal,
-                fullAllocation,
-                new AtLocationStart(dawn)
+                new AtLocationStart(dawn),
+                Systems(1, 1, 70, 5, 15, 30)
             ),
         ];
-        return InitializeCombat(starts, nominal, definition.Engineering);
     }
-
-    private static ShipStart[] InitializeCombat(
-        ShipStart[] starts,
-        SystemCondition nominal,
-        ShipEngineeringDefinition engineering
-    ) =>
-        starts
-            .Select(start =>
-                start with
-                {
-                    ShieldCondition = engineering.NominalShieldDemand.Value > 0 ? nominal : default,
-                    DirectedEnergyCondition = engineering.NominalDirectedEnergyDemand.Value > 0 ? nominal : default,
-                    Allocation =
-                        start.InstanceId == new ShipInstanceId(4)
-                        && engineering.NominalShieldDemand.Value > 0
-                        && engineering.NominalDirectedEnergyDemand.Value > 0
-                            ? new PowerAllocation(
-                                new PowerUnits(70),
-                                new PowerUnits(5),
-                                new PowerUnits(15),
-                                new PowerUnits(30)
-                            )
-                            : start.Allocation,
-                }
-            )
-            .ToArray();
 
     private static (StrategicMap Map, LocationId Dawn, LocationId Vesper, LocationId Meridian) CreateMap()
     {

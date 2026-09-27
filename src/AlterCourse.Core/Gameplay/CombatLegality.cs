@@ -9,27 +9,37 @@ namespace AlterCourse.Core.Gameplay;
 /// <summary>Shares actor-safe fire constraints among commands, projections, and defensive decisions.</summary>
 internal static class CombatLegality
 {
-    internal static IReadOnlyList<ShipSystemId> SupportedSystems { get; } =
-        Array.AsReadOnly(
-            new[]
-            {
-                ShipSystemId.PowerGeneration,
-                ShipSystemId.Sensors,
-                ShipSystemId.ImpulsePropulsion,
-                ShipSystemId.Shields,
-                ShipSystemId.DirectedEnergyWeapons,
-            }
-        );
-
+    /// <summary>Evaluates a shot, beginning with whether the aim kind is in the admitted public vocabulary.</summary>
+    /// <remarks>
+    /// The vocabulary is the loaded catalog's damage-target kinds: public content, never the victim's installations
+    /// (an inventory oracle) and never the attacker's own (a shieldless attacker may aim at shields). An aimed kind
+    /// the victim lacks is therefore not refused here; the shot discharges and its residual damage has no receiver.
+    /// </remarks>
     internal static FireDirectedEnergyOutcome Evaluate(
         CombatOwnFacts own,
         SensorContactSnapshot? contact,
         bool sameContext,
-        ShipSystemId system
+        ShipSystemKind aimKind,
+        IReadOnlyList<ShipSystemKind> admittedAimKinds
     )
     {
-        if (!SupportedSystems.Contains(system))
-            return FireDirectedEnergyOutcome.UnsupportedSystem;
+        ArgumentNullException.ThrowIfNull(admittedAimKinds);
+        return !admittedAimKinds.Contains(aimKind)
+            ? FireDirectedEnergyOutcome.UnsupportedSystem
+            : EvaluatePrerequisites(own, contact, sameContext);
+    }
+
+    /// <summary>
+    /// Evaluates the actor-safe prerequisites independent of any aim kind, so pre-shot projections and defensive
+    /// doctrine never vary with which kinds the catalog admits or which systems the target has.
+    /// </summary>
+    internal static FireDirectedEnergyOutcome EvaluatePrerequisites(
+        CombatOwnFacts own,
+        SensorContactSnapshot? contact,
+        bool sameContext
+    )
+    {
+        ArgumentNullException.ThrowIfNull(own);
         if (contact is null)
             return FireDirectedEnergyOutcome.ContactNotFound;
         if (contact.Status != SensorContactStatus.Current)

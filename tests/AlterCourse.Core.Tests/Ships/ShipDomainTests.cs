@@ -28,52 +28,33 @@ public sealed class ShipDomainTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new SystemCondition(value));
     }
 
-    /// <summary>Confirms ship definitions require stable identity, name, and aligned sensor timing.</summary>
+    /// <summary>
+    /// Confirms ship definitions require stable identity and name, and that sensor timing — now owned by the sensor
+    /// and repair system definitions a design installs — must be positive and fixed-step aligned.
+    /// </summary>
     [Fact]
     public void ShipDefinitionRejectsInvalidIdentityAndUnalignedRepairDuration()
     {
+        var loadout = new ShipLoadoutDefinition(1, []);
         Assert.Throws<ArgumentException>(() => new ShipDefinitionId(""));
-        Assert.Throws<ArgumentException>(() =>
-            new ShipDefinition(
-                new ShipDefinitionId("ship"),
-                " ",
-                new SpeedKilometersPerSecond(1),
-                new DistanceKilometers(30),
-                new SimulationDuration(2000),
-                new SimulationDuration(8000)
-            )
-        );
-        Assert.Throws<ArgumentOutOfRangeException>(() =>
-            new ShipDefinition(
-                new ShipDefinitionId("ship"),
-                "Ship",
-                new SpeedKilometersPerSecond(1),
-                new DistanceKilometers(30),
-                new SimulationDuration(0),
-                new SimulationDuration(8000)
-            )
-        );
-        Assert.Throws<ArgumentException>(() =>
-            new ShipDefinition(
-                new ShipDefinitionId("ship"),
-                "Ship",
-                new SpeedKilometersPerSecond(1),
-                new DistanceKilometers(30),
-                new SimulationDuration(2050),
-                new SimulationDuration(8000)
-            )
-        );
-        Assert.Throws<ArgumentException>(() =>
-            new ShipDefinition(
-                new ShipDefinitionId("ship"),
-                "Ship",
-                new SpeedKilometersPerSecond(1),
-                new DistanceKilometers(30),
-                new SimulationDuration(2000),
-                new SimulationDuration(8050)
-            )
-        );
+        Assert.Throws<ArgumentException>(() => new ShipDefinition(new ShipDefinitionId("ship"), " ", loadout));
+        Assert.Throws<ArgumentException>(() => Sensor(0));
+        Assert.Throws<ArgumentException>(() => Sensor(2050));
+        Assert.Throws<ArgumentException>(() => new SystemRepairCapability(new SimulationDuration(8050), 0));
+        Assert.Equal(2000, Sensor(2000).ActiveScanDuration.Milliseconds);
     }
+
+    private static SensorSystemDefinition Sensor(long scanMilliseconds) =>
+        new(
+            new SystemDefinitionId("test.sensors"),
+            "Sensors",
+            200,
+            true,
+            new SystemRepairCapability(new SimulationDuration(8000), 0),
+            new SystemPowerDemand(new PowerUnits(70)),
+            new DistanceKilometers(30),
+            new SimulationDuration(scanMilliseconds)
+        );
 
     /// <summary>Confirms durable ship-definition identities use the compact ASCII wire alphabet.</summary>
     [Theory]

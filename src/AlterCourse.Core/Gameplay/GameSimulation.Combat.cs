@@ -48,18 +48,29 @@ public sealed partial class GameSimulation
         );
     }
 
-    private static CombatOwnFacts CombatFacts(SimulationState state, ShipState ship, ShipDefinition definition) =>
-        new(
+    /// <summary>
+    /// Gathers the firing ship's own facts from its sole installed weapon; without one the weapon fields are empty
+    /// and legality reports <see cref="FireDirectedEnergyOutcome.WeaponOffline"/>.
+    /// </summary>
+    private static CombatOwnFacts CombatFacts(SimulationState state, ShipState ship)
+    {
+        InstalledSystem? weapon = ShipSystemAdmission.SupportedSingle(
+            ship.Engineering.Systems,
+            ShipSystemKind.DirectedEnergyWeapons
+        );
+        return new(
             state.Time,
             ship.StrategicState is AtLocationState,
             ship.TacticalPosition,
             ship.TacticalMotion,
-            EffectiveMaximumTacticalSpeed(definition, ship.Engineering),
-            definition.DirectedEnergyWeapon,
-            ship.Engineering.DirectedEnergyCondition,
-            ship.Engineering.DirectedEnergyCapability(definition.Engineering),
-            ship.Combat.NextDirectedEnergyReadyAt
+            EffectiveMaximumTacticalSpeed(ship.Engineering),
+            weapon?.Id,
+            (weapon?.Definition as DirectedEnergyWeaponSystemDefinition)?.Weapon,
+            weapon?.Condition ?? default,
+            weapon is null ? 0 : ShipEngineeringState.Capability(weapon),
+            weapon is null ? new SimulationTime(0) : ship.Combat.ReadinessOf(weapon.Id)!.ReadyAt
         );
+    }
 
     private static bool SameCombatContext(ShipState observer, ShipState target) =>
         observer.StrategicState is AtLocationState own
@@ -79,16 +90,17 @@ public sealed partial class GameSimulation
     )
     {
         ShipState attacker = state.GetRequiredShip(attackerId);
-        ShipDefinition definition = catalog.GetRequired(attacker.DefinitionId);
         SensorContactTrack? contact = attacker.SensorKnowledge.Contacts.FirstOrDefault(item =>
             item.Id == intent.ContactId
         );
         ShipState? victim = contact is null ? null : state.GetRequiredShip(contact.TargetShipId);
+        CombatOwnFacts own = CombatFacts(state, attacker);
         FireDirectedEnergyOutcome outcome = CombatLegality.Evaluate(
-            CombatFacts(state, attacker, definition),
+            own,
             contact?.ToActorSafeSnapshot(),
             victim is not null && SameCombatContext(attacker, victim),
-            intent.TargetSystem
+            intent.TargetSystem,
+            catalog.SystemDefinitions.DamageTargetKinds
         );
         if (outcome != FireDirectedEnergyOutcome.Accepted)
             return new CombatApplication(outcome, state);
@@ -97,7 +109,7 @@ public sealed partial class GameSimulation
             state,
             catalog,
             attacker,
-            definition,
+            own,
             victim!,
             contact!,
             intent,
@@ -111,7 +123,7 @@ public sealed partial class GameSimulation
         SimulationState state,
         ShipDefinitionCatalog catalog,
         ShipState attacker,
-        ShipDefinition definition,
+        CombatOwnFacts own,
         ShipState victim,
         SensorContactTrack contact,
         FireDirectedEnergyIntent intent,
@@ -125,36 +137,27 @@ public sealed partial class GameSimulation
                 item.TargetShipId == attacker.InstanceId && item.Status == SensorContactStatus.Current
             )
             ?.Id;
-        ShipDefinition victimDefinition = catalog.GetRequired(victim.DefinitionId);
         ShipEngineeringState before = victim.Engineering;
-        double damage =
-            definition.DirectedEnergyWeapon!.BaseNormalizedDamage
-            * attacker.Engineering.DirectedEnergyCapability(definition.Engineering);
-        ShieldDamageResult impact = ShieldDamage.Resolve(
-            damage,
-            before.ShieldCondition,
-            before.ShieldPowerSatisfaction(victimDefinition.Engineering)
-        );
-        ShipEngineeringState damaged = before with { ShieldCondition = impact.ShieldCondition };
-        damaged = damaged.WithCondition(intent.TargetSystem, impact.ApplyTo(damaged.ConditionFor(intent.TargetSystem)));
+        (ShipEngineeringState damaged, ShieldDamageResult impact, InstalledSystem? shield, InstalledSystem? receiver) =
+            ResolveHit(before, own.Weapon!.BaseNormalizedDamage * own.WeaponCapability, intent.TargetSystem);
         DamageRepairResolution repairResult = CancelHitRepair(
             state,
             victim,
             damaged,
             impact,
-            intent.TargetSystem,
+            shield?.Id,
+            receiver?.Id,
             canceledRepairs
         );
         damaged = repairResult.Engineering;
         SimulationScheduler scheduler = repairResult.Scheduler;
         bool repairInterrupted = repairResult.Interrupted;
-        ShipState hit = ReconcileDamagedShip(victim, victimDefinition, damaged);
+        ShipState hit = ReconcileDamagedShip(victim, damaged);
         ShipState fired = attacker with
         {
-            Combat = attacker.Combat with
-            {
-                NextDirectedEnergyReadyAt = state.Time.AdvanceBy(definition.DirectedEnergyWeapon.Cooldown),
-            },
+            Combat = attacker.Combat.WithReadiness(
+                new DirectedEnergyReadiness(own.WeaponId!.Value, state.Time.AdvanceBy(own.Weapon.Cooldown))
+            ),
         };
         SimulationState candidate = state
             .ReplaceShip(attacker.InstanceId, fired)
@@ -168,6 +171,8 @@ public sealed partial class GameSimulation
             contact!,
             victim,
             intent.TargetSystem,
+            shield,
+            receiver,
             before,
             impact,
             repairInterrupted,
@@ -181,15 +186,42 @@ public sealed partial class GameSimulation
         return new CombatApplication(FireDirectedEnergyOutcome.Accepted, candidate);
     }
 
-    private static ShipState ReconcileDamagedShip(
-        ShipState victim,
-        ShipDefinition definition,
-        ShipEngineeringState damaged
-    )
+    /// <summary>Applies one shot's damage to the victim's actual installations.</summary>
+    /// <remarks>
+    /// Call order is load-bearing: shields resolve first (a shieldless victim absorbs nothing), then the receiver
+    /// reads its post-shield condition so an aimed shield installation takes both legs, as before the substrate. The
+    /// receiver is resolved against the victim's actual installations; when the aimed kind is absent the residual
+    /// damage has no receiver and is discarded — never redirected to another installation or to a hull pool.
+    /// </remarks>
+    private static (
+        ShipEngineeringState Damaged,
+        ShieldDamageResult Impact,
+        InstalledSystem? Shield,
+        InstalledSystem? Receiver
+    ) ResolveHit(ShipEngineeringState before, double damage, ShipSystemKind aimKind)
     {
-        PowerAllocation reconciled = damaged.ReconcileAvailablePower(definition.Engineering);
-        damaged = damaged with { Allocation = reconciled };
-        double maxSpeed = EffectiveMaximumTacticalSpeed(definition, damaged).Value;
+        InstalledSystem? shield = ShipSystemAdmission.SupportedSingle(before.Systems, ShipSystemKind.Shields);
+        ShieldDamageResult impact = ShieldDamage.Resolve(
+            damage,
+            shield?.Condition ?? default,
+            shield is null ? 0 : ShipEngineeringState.PowerSatisfaction(shield)
+        );
+        ShipEngineeringState damaged = shield is null
+            ? before
+            : before.WithCondition(shield.Id, impact.ShieldCondition);
+        InstalledSystem? receiver = ShipSystemAdmission.SupportedSingle(damaged.Systems, aimKind);
+        if (receiver is not null)
+        {
+            damaged = damaged.WithCondition(receiver.Id, impact.ApplyTo(receiver.Condition));
+        }
+
+        return (damaged, impact, shield, receiver);
+    }
+
+    private static ShipState ReconcileDamagedShip(ShipState victim, ShipEngineeringState damaged)
+    {
+        damaged = damaged.WithAllocation(damaged.ReconcileAvailablePower());
+        double maxSpeed = EffectiveMaximumTacticalSpeed(damaged).Value;
         TacticalMotion motion =
             victim.TacticalMotion.Speed.Value > maxSpeed
                 ? new TacticalMotion(victim.TacticalMotion.Heading, new SpeedKilometersPerSecond(maxSpeed))
@@ -208,17 +240,21 @@ public sealed partial class GameSimulation
         ShipState victim,
         ShipEngineeringState damaged,
         ShieldDamageResult impact,
-        ShipSystemId targetSystem,
+        InstalledSystemId? shield,
+        InstalledSystemId? receiver,
         HashSet<ScheduledWork>? canceledRepairs
     )
     {
         SimulationScheduler scheduler = state.Scheduler;
         bool repairInterrupted = false;
+
+        // Positive absorption interrupts repair of the actual shield installation and positive penetration repair of
+        // the actual receiver; damage anywhere else leaves the repair running. An absent receiver damaged nothing.
         if (
             victim.Engineering.ActiveRepair is { } repair
             && (
-                (repair.TargetSystem == ShipSystemId.Shields && impact.AbsorbedDamage > 0)
-                || (repair.TargetSystem == targetSystem && impact.PenetratingDamage > 0)
+                (shield == repair.Target && impact.AbsorbedDamage > 0)
+                || (receiver == repair.Target && impact.PenetratingDamage > 0)
             )
         )
         {
@@ -235,7 +271,7 @@ public sealed partial class GameSimulation
             if (!removed && (canceledRepairs is null || repair.ExpectedCompletion != state.Time))
                 throw new InvalidOperationException("Damage cancellation lacks the exact repair completion.");
             canceledRepairs?.Add(canceled);
-            damaged = damaged with { ActiveRepair = null };
+            damaged = damaged.WithRepair(null);
             repairInterrupted = true;
         }
         return new DamageRepairResolution(damaged, scheduler, repairInterrupted);
@@ -246,7 +282,9 @@ public sealed partial class GameSimulation
         ShipInstanceId attackerId,
         SensorContactTrack contact,
         ShipState victim,
-        ShipSystemId targetSystem,
+        ShipSystemKind aimKind,
+        InstalledSystem? shield,
+        InstalledSystem? receiver,
         ShipEngineeringState before,
         ShieldDamageResult impact,
         bool repairInterrupted,
@@ -258,62 +296,79 @@ public sealed partial class GameSimulation
     {
         if (attackerId == state.PlayerShipId)
         {
-            events.Add(
-                new PlayerAdvanceEvent(PlayerAdvanceEventKind.DirectedEnergyFired, state.Time, contact.Id, targetSystem)
-            );
-            if (impact.AbsorbedDamage > 0)
-                events.Add(
-                    new PlayerAdvanceEvent(
-                        PlayerAdvanceEventKind.ShieldImpact,
-                        state.Time,
-                        contact.Id,
-                        ShipSystemId.Shields
-                    )
-                );
-            if (impact.PenetratingDamage > 0)
-                events.Add(
-                    new PlayerAdvanceEvent(
-                        PlayerAdvanceEventKind.SubsystemPenetration,
-                        state.Time,
-                        contact.Id,
-                        targetSystem
-                    )
-                );
+            ReportAttackerFeedback(state, contact.Id, aimKind, impact, events);
         }
+
         if (victim.InstanceId == state.PlayerShipId)
         {
-            if (impact.AbsorbedDamage > 0)
+            // The victim owner sees its actual damage: its own kinds and installed identities.
+            if (impact.AbsorbedDamage > 0 && shield is not null)
                 events.Add(
                     new PlayerAdvanceEvent(
                         PlayerAdvanceEventKind.OwnSystemDamaged,
                         state.Time,
                         observedAttacker,
-                        ShipSystemId.Shields
+                        shield.Kind,
+                        shield.Id
                     )
                 );
-            if (impact.PenetratingDamage > 0)
+            if (impact.PenetratingDamage > 0 && receiver is not null)
                 events.Add(
                     new PlayerAdvanceEvent(
                         PlayerAdvanceEventKind.OwnSystemDamaged,
                         state.Time,
                         observedAttacker,
-                        targetSystem
+                        receiver.Kind,
+                        receiver.Id
                     )
                 );
             if (repairInterrupted)
+            {
+                InstalledSystem interrupted = before.Systems.GetRequired(before.ActiveRepair!.Target);
                 events.Add(
                     new PlayerAdvanceEvent(
                         PlayerAdvanceEventKind.SystemRepairInterrupted,
                         state.Time,
                         observedAttacker,
-                        before.ActiveRepair!.TargetSystem
+                        interrupted.Kind,
+                        interrupted.Id
                     )
                 );
+            }
             if (reconciled != before.Allocation)
                 events.Add(new PlayerAdvanceEvent(PlayerAdvanceEventKind.PowerBrownout, state.Time));
             if (motion != victim.TacticalMotion)
                 events.Add(new PlayerAdvanceEvent(PlayerAdvanceEventKind.ForcedDeceleration, state.Time));
         }
+    }
+
+    /// <summary>
+    /// Attacker feedback depends only on the shot and the shield interaction, never on receiver presence, so a present
+    /// and an absent receiver are indistinguishable to the attacker (subsystem damage stays unconfirmed). Installed
+    /// identities never appear on attacker-facing events, and ShieldImpact always names shields whatever the aim.
+    /// </summary>
+    private static void ReportAttackerFeedback(
+        SimulationState state,
+        SensorContactId contactId,
+        ShipSystemKind aimKind,
+        ShieldDamageResult impact,
+        List<PlayerAdvanceEvent> events
+    )
+    {
+        events.Add(new PlayerAdvanceEvent(PlayerAdvanceEventKind.DirectedEnergyFired, state.Time, contactId, aimKind));
+        if (impact.AbsorbedDamage > 0)
+            events.Add(
+                new PlayerAdvanceEvent(
+                    PlayerAdvanceEventKind.ShieldImpact,
+                    state.Time,
+                    contactId,
+                    ShipSystemKind.Shields
+                )
+            );
+        if (impact.PenetratingDamage > 0)
+            events.Add(
+                new PlayerAdvanceEvent(PlayerAdvanceEventKind.SubsystemPenetration, state.Time, contactId, aimKind)
+            );
     }
 
     private static SimulationState AdmitCombatStimulus(
@@ -373,13 +428,12 @@ public sealed partial class GameSimulation
         SensorContactTrack? contact = ship.SensorKnowledge.Contacts.FirstOrDefault(item =>
             item.Id == stimulus.ContactId
         );
-        ShipDefinition definition = catalog.GetRequired(ship.DefinitionId);
         bool sameContext =
             ship.StrategicState is AtLocationState at
             && contact is not null
             && (contact.ObservedAtLocationId is null || contact.ObservedAtLocationId == at.LocationId);
         var input = new DefensiveCombatDecisionInput(
-            CombatFacts(cleared, ship, definition),
+            CombatFacts(cleared, ship),
             contact?.ToActorSafeSnapshot(),
             sameContext,
             stimulus
@@ -427,7 +481,7 @@ public sealed partial class GameSimulation
                 state,
                 catalog,
                 ship.InstanceId,
-                new FireDirectedEnergyIntent(decision.ContactId, ShipSystemId.DirectedEnergyWeapons),
+                new FireDirectedEnergyIntent(decision.ContactId, ShipSystemKind.DirectedEnergyWeapons),
                 events,
                 canceledRepairs,
                 collector
@@ -447,36 +501,6 @@ public sealed partial class GameSimulation
         }
         return (candidate, decision);
     }
-
-    private static CombatProjection ProjectCombat(SimulationState state, ShipState ship, ShipDefinition definition) =>
-        new(
-            definition.DirectedEnergyWeapon?.Range,
-            definition.DirectedEnergyWeapon?.Cooldown,
-            ship.Combat.NextDirectedEnergyReadyAt,
-            new SimulationDuration(
-                Math.Max(0, ship.Combat.NextDirectedEnergyReadyAt.Milliseconds - state.Time.Milliseconds)
-            ),
-            new ReadOnlyValueList<CombatTargetProjection>(
-                ship.SensorKnowledge.Contacts.Select(contact =>
-                {
-                    bool context =
-                        ship.StrategicState is AtLocationState at
-                        && (contact.ObservedAtLocationId is null || contact.ObservedAtLocationId == at.LocationId);
-                    double distance = CombatLegality.Distance(ship.TacticalPosition, contact.LastObservedPosition);
-                    return new CombatTargetProjection(
-                        contact.Id,
-                        context && double.IsFinite(distance) ? new DistanceKilometers(distance) : null,
-                        CombatLegality.Evaluate(
-                            CombatFacts(state, ship, definition),
-                            contact.ToActorSafeSnapshot(),
-                            context,
-                            ShipSystemId.DirectedEnergyWeapons
-                        ),
-                        new ReadOnlyValueList<ShipSystemId>(CombatLegality.SupportedSystems)
-                    );
-                })
-            )
-        );
 
     private void RememberLatestCombatDecision(IReadOnlyList<ScheduledConsequenceTrace> traces)
     {

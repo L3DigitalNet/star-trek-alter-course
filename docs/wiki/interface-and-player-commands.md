@@ -6,7 +6,7 @@ description: 'Command Deck design, live Engineering, actor-safe presentation, an
 doc_type: 'reference'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-26'
+updated: '2026-09-27'
 tags:
   - 'godot'
   - 'ui'
@@ -53,9 +53,9 @@ The inspector's own `KnownContactReports` section lists retained reports: learne
 
 Shortcuts are 1 strategic, 2 tactical, Space pause/resume, R cycle rate, U advance to player-relevant event, Ctrl+S/Ctrl+L quick save/load, E engage selected travel, and C submit the current course fields. Engineering and Combat workspaces are selected through their visible controls. Running rates are 0.5x, 1x, 2x, and 4x; pause is separate. The quick-save slot and its failure-preservation boundary are owned by [content, assets, and persistence](content-assets-and-persistence.md).
 
-## Selected installed-system interface migration
+## Installed-system interface migration
 
-Issue #121's [substrate contract](ship-system-substrate.md#generic-presentation-and-refit-readiness) requires generic own-ship rows and Repair/Prioritize actions addressed to installed identities, not another action enum member per kind. It is selected work, not current UI behavior. Absent installations have no fake Engineering row; specialized views may explicitly report unavailable capability. Stable operation/installation keys preserve selection and focus, and activation resolves the current payload rather than a stale captured ID.
+Issue #121's [substrate contract](ship-system-substrate.md#generic-presentation-and-refit-readiness) is implemented on the development branch: generic own-ship rows and Balance/Prioritize/Begin Repair actions are addressed to installed identities, not a per-kind action enum member. Rows and buttons iterate Core's `EngineeringProjection.Systems`/`Actions`; text comes from a Godot presentation table (`EngineeringKindPresentation`) keyed by kind, so the M6A hierarchy, labels, and button order above are reproduced unchanged for the production loadout. Stable keys are `balance`, `prioritize:<id>`, `repair:<id>`, `return-command`, and hierarchy/selection key `system:<id>` (`EngineeringWorkspace`); `EngineeringAction`, `PowerAllocationPreset`, and the temporary `GameSimulation.EngineeringAdapter.cs` bridge are removed, and Godot switches only on `EngineeringOperation`. Absent installations have no fake Engineering row; specialized views explicitly report unavailable capability ("UNAVAILABLE", e.g. `SensorProjection.SensorInstallation` null). Activation resolves the current payload rather than a stale captured ID: each own-ship action carries an `OwnShipActionBinding` (owning ship plus `GameScreen`'s simulation generation), and a control presented before a load that changes the player ship or an installation's meaning is refused rather than acting on the wrong installation; an ordinary refresh preserves the binding, selection, and focus.
 
 Remote aim remains different from own-ship component selection. Neither target inventory nor an absence-specific fire refusal may become an implicit scan. Follow the [remote-targeting contract](ship-system-substrate.md#remote-targeting-must-not-become-an-inventory-probe), including non-confirming feedback for newly representable absent-kind targets. Do not build player refit controls in this migration.
 
@@ -69,4 +69,4 @@ Future station workspaces need a concrete domain consumer and later decision; th
 
 ## Sources and evidence
 
-See [GameScreen](../../src/AlterCourse.Godot/src/Gameplay/GameScreen.cs), [EngineeringWorkspace](../../src/AlterCourse.Godot/src/Gameplay/EngineeringWorkspace.cs), [shell scene](../../src/AlterCourse.Godot/Main.tscn), and [Godot shell tests](../../src/AlterCourse.Godot/tests/GameplayShellTest.gd). The [root README](../../README.md) owns setup and launch instructions; this page owns player controls. Issue #121 must supply fresh conformance evidence before its selected interface migration is marked implemented.
+See [GameScreen](../../src/AlterCourse.Godot/src/Gameplay/GameScreen.cs), [EngineeringWorkspace](../../src/AlterCourse.Godot/src/Gameplay/EngineeringWorkspace.cs), [OwnShipActionBinding](../../src/AlterCourse.Godot/src/Gameplay/OwnShipActionBinding.cs), [EngineeringKindPresentation](../../src/AlterCourse.Godot/src/Gameplay/EngineeringKindPresentation.cs), [shell scene](../../src/AlterCourse.Godot/Main.tscn), and [Godot shell tests](../../src/AlterCourse.Godot/tests/GameplayShellTest.gd), including `test_live_engineering_rows_actions_and_labels_reproduce_base_presentation`, `test_stale_engineering_control_is_refused_after_quick_load_but_acts_after_refresh`, `test_stale_engineering_control_is_refused_after_load_changes_the_owner`, and `test_stale_engineering_control_is_refused_after_load_changes_installation_meaning`. The [root README](../../README.md) owns setup and launch instructions; this page owns player controls.

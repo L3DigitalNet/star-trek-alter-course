@@ -13,6 +13,7 @@ using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
 using AlterCourse.Core.Tactical;
+using AlterCourse.Core.Tests.Support;
 
 namespace AlterCourse.Core.Tests.Persistence;
 
@@ -42,8 +43,8 @@ public sealed class GamePersistenceV4SensorTests
         JsonArray ships = root["simulation"]!["ships"]!.AsArray();
 
         Assert.Equal(first, second);
-        Assert.Equal(9, root["schemaVersion"]!.GetValue<int>());
-        Assert.Equal("first-combat-engagement-v1", root["simulationRulesVersion"]!.GetValue<string>());
+        Assert.Equal(10, root["schemaVersion"]!.GetValue<int>());
+        Assert.Equal("installed-ship-system-substrate-v1", root["simulationRulesVersion"]!.GetValue<string>());
         Assert.Equal(
             "identified",
             ships[0]!["sensorKnowledge"]!["contacts"]![0]!["identification"]!.GetValue<string>()
@@ -67,7 +68,7 @@ public sealed class GamePersistenceV4SensorTests
         JsonNode simulation = current["simulation"]!;
         JsonNode npc = simulation["ships"]![1]!;
 
-        Assert.Equal(9, current["schemaVersion"]!.GetValue<int>());
+        Assert.Equal(10, current["schemaVersion"]!.GetValue<int>());
         Assert.Equal("holdUntil", npc["activeOrder"]!["kind"]!.GetValue<string>());
         Assert.Equal("orderWake", simulation["scheduler"]!["outstandingWork"]![0]!["kind"]!.GetValue<string>());
         Assert.Equal(1, npc["sensorKnowledge"]!["nextContactId"]!.GetValue<long>());
@@ -123,7 +124,7 @@ public sealed class GamePersistenceV4SensorTests
         Assert.Equal(new SimulationTime(100), scan.StartedAt);
         Assert.Equal(new SimulationTime(2_100), scan.ExpectedCompletion);
         Assert.Equal(new ScheduledWorkId(2), scan.ScheduledCompletionId);
-        Assert.Equal(ShipSystemId.Sensors, repair.TargetSystem);
+        Assert.Equal(TestShipContent.Sensors, repair.Target);
         Assert.Equal(new SystemCondition(0.5), repair.StartingCondition);
         Assert.Equal(new SystemCondition(1), repair.TargetCondition);
         Assert.Equal(new SimulationTime(100), repair.StartedAt);
@@ -147,7 +148,7 @@ public sealed class GamePersistenceV4SensorTests
     private static void AssertCurrentOrdering(byte[] migratedCurrent)
     {
         JsonObject current = Parse(migratedCurrent);
-        Assert.Equal(9, current["schemaVersion"]!.GetValue<int>());
+        Assert.Equal(10, current["schemaVersion"]!.GetValue<int>());
         Assert.Equal(
             [1L, 2L, 3L],
             current["simulation"]!["ships"]!.AsArray().Select(ship => ship!["instanceId"]!.GetValue<long>())
@@ -180,7 +181,7 @@ public sealed class GamePersistenceV4SensorTests
             repairCompletion.ResolvedEvents,
             item =>
                 item.Kind == PlayerAdvanceEventKind.SystemRepairCompleted
-                && item.ShipSystemId == ShipSystemId.Sensors
+                && item.SystemKind == ShipSystemKind.Sensors
                 && item.OccurredAt == new SimulationTime(8_100)
         );
         Assert.Equal(
@@ -286,7 +287,7 @@ public sealed class GamePersistenceV4SensorTests
         );
 
         Assert.InRange(saved.Length, 1, 128 * 1024 * 1024);
-        Assert.Equal(88_137_170, saved.Length);
+        Assert.Equal(88_239_425, saved.Length);
         Assert.Equal(256, loaded.Simulation.CaptureState().Ships.Length);
         Assert.Equal(256, loaded.Simulation.CaptureState().Factions.Length);
         Assert.Equal(66_302, loaded.Simulation.CaptureState().Scheduler.OutstandingWork.Length);
@@ -330,7 +331,7 @@ public sealed class GamePersistenceV4SensorTests
         Assert.Equal(saved, GamePersistence.Serialize(loaded.Simulation, loaded.Metadata));
     }
 
-    /// <summary>Confirms compact V8 output admits a validated maximum-width report world.</summary>
+    /// <summary>Confirms compact V10 output admits a validated maximum-width report world.</summary>
     /// <remarks>
     /// The measured vertex saturates contacts, report history, work correlations, identity widths, times, positions,
     /// and escaped names. The derived ceiling then adds complete maximum encodings for every omitted bounded shape;
@@ -346,14 +347,14 @@ public sealed class GamePersistenceV4SensorTests
         var metadata = new GameSaveMetadata(new string('\u0080', 128), new string('\u0080', 128), Timestamp, Timestamp);
 
         byte[] saved = GamePersistence.Serialize(simulation, metadata);
-        LoadedGameSave loaded = GamePersistence.Deserialize(saved, catalog, factionCatalog, "maximum-width-v9.json");
-        long conservativeSupportedShapeCeiling = CompactV9SizeBound.FromMeasuredReportVertex(
+        LoadedGameSave loaded = GamePersistence.Deserialize(saved, catalog, factionCatalog, "maximum-width-v10.json");
+        long conservativeSupportedShapeCeiling = CompactV10SizeBound.FromMeasuredReportVertex(
             saved.Length,
             populated.Scheduler.OutstandingWork.Length
         );
 
-        Assert.Equal(108_935_516, saved.Length);
-        Assert.Equal(113_292_140, conservativeSupportedShapeCeiling);
+        Assert.Equal(109_030_603, saved.Length);
+        Assert.Equal(114_536_452, conservativeSupportedShapeCeiling);
         Assert.InRange(conservativeSupportedShapeCeiling, 1, 128L * 1024 * 1024);
         Assert.Equal(saved, GamePersistence.Serialize(loaded.Simulation, loaded.Metadata));
     }
@@ -363,8 +364,7 @@ public sealed class GamePersistenceV4SensorTests
     public void MaximumEligibleCombatContinuationsRoundTripWithinSaveEnvelope()
     {
         (GameSimulation game, ShipDefinitionCatalog catalog) = CreateMaximumCombatWorld();
-        ShipDefinition definition = catalog.GetRequired(DefinitionId);
-        SimulationState state = ArmMaximumCombatContinuations(game.CaptureState(), definition);
+        SimulationState state = ArmMaximumCombatContinuations(game.CaptureState());
         game = GameSimulation.RestoreState(state, catalog);
         byte[] saved = GamePersistence.Serialize(game, Metadata());
         GameSimulation restored = GamePersistence.Deserialize(saved, catalog, "maximum-combat-v9.json").Simulation;
@@ -374,7 +374,7 @@ public sealed class GamePersistenceV4SensorTests
         Assert.Equal(eligibleShips, loaded.Ships.Count(ship => ship.Combat.PendingStimulus is not null));
         Assert.Equal(eligibleShips, loaded.Scheduler.OutstandingWork.Length);
         Assert.Null(loaded.GetRequiredShip(loaded.PlayerShipId).Combat.PendingStimulus);
-        AssertMaximumCombatContinuations(loaded, state, definition);
+        AssertMaximumCombatContinuations(loaded, state);
         Assert.InRange(saved.Length, 1, 128 * 1024 * 1024);
         Assert.Equal(saved, GamePersistence.Serialize(restored, Metadata()));
         AssertCombatSizeAlternative(game, catalog, saved.Length);
@@ -383,21 +383,15 @@ public sealed class GamePersistenceV4SensorTests
         Assert.Empty(restored.CaptureState().Scheduler.OutstandingWork);
     }
 
-    private static void AssertMaximumCombatContinuations(
-        SimulationState loaded,
-        SimulationState state,
-        ShipDefinition definition
-    )
+    private static void AssertMaximumCombatContinuations(SimulationState loaded, SimulationState state)
     {
         Assert.All(
             loaded.Ships,
             ship =>
             {
-                Assert.Equal(
-                    state.Time.AdvanceBy(definition.DirectedEnergyWeapon!.Cooldown),
-                    ship.Combat.NextDirectedEnergyReadyAt
-                );
-                Assert.True(ship.Combat.NextDirectedEnergyReadyAt.Milliseconds >= HighTime);
+                SimulationTime readyAt = ship.Combat.ReadinessOf(TestShipContent.Weapons)!.ReadyAt;
+                Assert.Equal(state.Time.AdvanceBy(TestEngineering.Weapon(ship.Engineering).Cooldown), readyAt);
+                Assert.True(readyAt.Milliseconds >= HighTime);
                 Assert.Equal(SensorKnowledge.MaximumContactsPerObserver, ship.SensorKnowledge.Contacts.Length);
                 if (ship.Combat.PendingStimulus is { } stimulus)
                 {
@@ -423,22 +417,22 @@ public sealed class GamePersistenceV4SensorTests
     {
         SimulationState state = game.CaptureState();
         SimulationState empty = state.ReplaceShips([
-            .. state.Ships.Select(ship => ship with { Combat = ShipCombatState.Empty }),
+            .. state.Ships.Select(ship => ship with { Combat = ShipCombatState.InitialFor(ship.Engineering.Systems) }),
         ]) with
         {
             Scheduler = SimulationScheduler.Restore(state.Scheduler.NextWorkId, state.Scheduler.NextSequence, []),
         };
         int emptyBytes = GamePersistence.Serialize(GameSimulation.RestoreState(empty, catalog), Metadata()).Length;
-        Assert.InRange(savedBytes - emptyBytes, 1, CompactV9SizeBound.MaximumCombatAlternativesBytes());
+        Assert.InRange(savedBytes - emptyBytes, 1, CompactV10SizeBound.MaximumCombatAlternativesBytes());
     }
 
     private static (GameSimulation Game, ShipDefinitionCatalog Catalog) CreateMaximumCombatWorld()
     {
         var fixture = new AlterCourse.Core.Tests.Gameplay.Milestone3ProofFixture();
-        ShipDefinition definition = fixture.Catalog.GetRequired(DefinitionId);
-        var nominal = new SystemCondition(1);
-        var engineering = new ShipEngineeringState(nominal, nominal, nominal, nominal, nominal, default);
-        PowerAllocation allocation = engineering.AllocationFor(definition.Engineering, PowerAllocationPreset.Balanced);
+        PowerAllocation allocation = TestEngineering
+            .State(1, TestEngineering.Allocation(0, 0, 0, 0))
+            .BalancedAllocation();
+        int Share(InstalledSystemId consumer) => allocation.TryGet(consumer, out PowerUnits share) ? share.Value : 0;
         ShipStart[] starts =
         [
             .. Enumerable
@@ -449,16 +443,16 @@ public sealed class GamePersistenceV4SensorTests
                     new string('\u0080', ShipState.MaximumVesselDisplayNameLength),
                     default,
                     default,
-                    nominal,
-                    nominal,
-                    nominal,
-                    allocation,
-                    new AtLocationStart(Location)
-                )
-                {
-                    ShieldCondition = nominal,
-                    DirectedEnergyCondition = nominal,
-                }),
+                    new AtLocationStart(Location),
+                    TestShipStarts.Pathfinder(
+                        sensorPower: Share(TestShipContent.Sensors),
+                        impulsePower: Share(TestShipContent.Impulse),
+                        shieldPower: Share(TestShipContent.Shields),
+                        weaponPower: Share(TestShipContent.Weapons),
+                        shields: 1,
+                        weapons: 1
+                    )
+                )),
         ];
         var map = new StrategicMap([new StrategicLocation(Location, "Combat bounds", default)], []);
         GameSimulation game = new GameBootstrap(
@@ -473,7 +467,7 @@ public sealed class GamePersistenceV4SensorTests
         return (game, fixture.Catalog);
     }
 
-    private static SimulationState ArmMaximumCombatContinuations(SimulationState state, ShipDefinition definition)
+    private static SimulationState ArmMaximumCombatContinuations(SimulationState state)
     {
         state = state with { Scheduler = SimulationScheduler.Restore(HighWorkId, HighWorkId, []) };
         foreach (ShipState original in state.Ships)
@@ -508,7 +502,15 @@ public sealed class GamePersistenceV4SensorTests
             ShipState ship = original with
             {
                 SensorKnowledge = knowledge,
-                Combat = new ShipCombatState(state.Time.AdvanceBy(definition.DirectedEnergyWeapon!.Cooldown), stimulus),
+                Combat = new ShipCombatState(
+                    [
+                        new DirectedEnergyReadiness(
+                            TestShipContent.Weapons,
+                            state.Time.AdvanceBy(TestEngineering.Weapon(original.Engineering).Cooldown)
+                        ),
+                    ],
+                    stimulus
+                ),
             };
             state = state.ReplaceShip(ship.InstanceId, ship);
         }
@@ -760,20 +762,7 @@ public sealed class GamePersistenceV4SensorTests
     private static ShipDefinitionCatalog CreateMaximumShipCatalog(
         ShipDefinitionId definitionId,
         string maximumDesignName
-    ) =>
-        new(
-            new Dictionary<ShipDefinitionId, ShipDefinition>
-            {
-                [definitionId] = new ShipDefinition(
-                    definitionId,
-                    maximumDesignName,
-                    new SpeedKilometersPerSecond(10),
-                    new DistanceKilometers(30),
-                    new SimulationDuration(2_000),
-                    new SimulationDuration(8_000)
-                ),
-            }
-        );
+    ) => TestShipContent.Pathfinder(designId: definitionId.Value, designDisplayName: maximumDesignName);
 
     private static ShipState CreateMaximumContactShip(
         int observerIndex,
@@ -817,13 +806,15 @@ public sealed class GamePersistenceV4SensorTests
                 ? new TacticalPosition(-double.MaxValue, -double.MaxValue)
                 : new TacticalPosition(observerIndex, -observerIndex),
             default,
-            new ShipEngineeringState(
-                new SystemCondition(1),
-                repair.ConditionAt(currentTime),
-                new SystemCondition(1),
-                new PowerAllocation(new(70), new(50)),
-                repair
-            ),
+            TestEngineering
+                .State(
+                    1,
+                    TestEngineering.Allocation(70, 50, 0, 0),
+                    sensors: repair.ConditionAt(currentTime).Value,
+                    shields: 0,
+                    weapons: 0
+                )
+                .WithRepair(repair),
             new AtLocationState(locationId),
             order,
             knowledge,
@@ -897,6 +888,7 @@ public sealed class GamePersistenceV4SensorTests
             contacts,
             new ActiveSensorScanState(
                 new SensorContactId((highWidth ? HighContactId : 0) + 1L),
+                TestShipContent.Sensors,
                 currentTime,
                 scanDueTime,
                 scanWorkId
@@ -959,7 +951,7 @@ public sealed class GamePersistenceV4SensorTests
 
         return (
             new SystemRepairState(
-                ShipSystemId.Sensors,
+                TestShipContent.Sensors,
                 new SystemCondition(0.5),
                 new SystemCondition(1),
                 currentTime,
@@ -1062,7 +1054,13 @@ public sealed class GamePersistenceV4SensorTests
             SensorKnowledge = new SensorKnowledge(
                 2,
                 [Contact(1, playerId, "Player")],
-                new ActiveSensorScanState(new SensorContactId(1), new SimulationTime(100), scan.DueTime, scan.Id)
+                new ActiveSensorScanState(
+                    new SensorContactId(1),
+                    TestShipContent.Sensors,
+                    new SimulationTime(100),
+                    scan.DueTime,
+                    scan.Id
+                )
             ),
         };
         var state = new SimulationState(
@@ -1127,12 +1125,7 @@ public sealed class GamePersistenceV4SensorTests
             name,
             default,
             default,
-            new ShipEngineeringState(
-                new SystemCondition(1),
-                new SystemCondition(1),
-                new SystemCondition(1),
-                new PowerAllocation(new(70), new(50))
-            ),
+            TestEngineering.State(1, TestEngineering.Allocation(70, 50, 0, 0), shields: 0, weapons: 0),
             new AtLocationState(Location)
         );
 
@@ -1332,16 +1325,39 @@ public sealed class GamePersistenceV4SensorTests
     private static string ShipJson(long id, string name, string order) =>
         $$"""{ "instanceId": {{id}}, "definitionId": "pathfinder", "displayName": "{{name}}", "tacticalPosition": { "xKilometers": 0, "yKilometers": 0 }, "tacticalMotion": { "headingDegrees": 0, "speedKilometersPerSecond": 0 }, "sensorIntegrity": 1, "sensorRepair": null, "strategicState": { "kind": "atLocation", "locationId": "alpha", "travel": null }, "activeOrder": {{order}} }""";
 
-    private static class CompactV9SizeBound
+    /// <summary>
+    /// Derives the conservative compact V10 size ceiling from a measured high-width vertex.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Formula: measured bytes + the maximum strategic map + per ship (256) the complete maximum encoding of every
+    /// bounded per-ship alternative + per faction (256) the complete faction alternatives + a maximum scheduled-work
+    /// item for every unoccupied work slot + the maximum V10 system-definition table + the maximum aim-vocabulary
+    /// member. Whole alternatives are added on top of the measured document instead of their deltas, which
+    /// deliberately overcounts mutually exclusive states and every member the vertex already contains.
+    /// </para>
+    /// <para>
+    /// The V10 per-ship engineering alternative uses the storage maximum of 16 installations (a valid typed world
+    /// holds at most 5), each at nineteen-digit installed id, a 64-character definition id, a maximum finite
+    /// condition, and a nineteen-digit allocation; readiness uses 16 nineteen-digit entries. The measured vertex
+    /// carries production five-slot loadouts with short identities, so every installation and readiness width is
+    /// covered by these added maxima rather than by measurement.
+    /// </para>
+    /// </remarks>
+    private static class CompactV10SizeBound
     {
         private const int MaximumLongBytes = 19;
         private const int MaximumFiniteDoubleBytes = 24;
         private const int MaximumAsciiIdentityTokenBytes = LocationId.MaximumLength + 2;
+        private const int MaximumSystemDefinitionIdTokenBytes = SystemDefinitionId.MaximumLength + 2;
+        private const int MaximumInstallations = ShipSystemLimits.MaximumInstalledSystemsPerShip;
 
         internal static long FromMeasuredReportVertex(int measuredBytes, int occupiedWorkSlots)
         {
             int unoccupiedWorkSlots = SimulationScheduler.MaximumOutstandingWork - occupiedWorkSlots;
             return measuredBytes
+                + MaximumSystemDefinitionTableBytes()
+                + MaximumAimVocabularyBytes()
                 + MaximumStrategicMapBytes()
                 + (SimulationState.MaximumShips * MaximumPerShipAlternativeBytes())
                 + (SimulationState.MaximumFactions * MaximumPerFactionAlternativeBytes())
@@ -1371,26 +1387,40 @@ public sealed class GamePersistenceV4SensorTests
             );
         }
 
+        // "systemDefinitions": one row per distinct referenced definition, at most 256, each with a maximum id and a
+        // maximum (256-character) semantics descriptor.
+        private static int MaximumSystemDefinitionTableBytes() =>
+            ",\"systemDefinitions\":".Length
+            + Array(
+                GamePersistence.MaximumSystemDefinitionReferences,
+                Object(
+                    ("definitionId", MaximumSystemDefinitionIdTokenBytes),
+                    ("semantics", SystemDefinitionSemantics.MaximumLength + 2)
+                )
+            );
+
+        private static int MaximumAimVocabularyBytes() =>
+            ",\"aimVocabulary\":".Length + AimVocabularySemantics.MaximumLength + 2;
+
         private static int MaximumPerShipAlternativeBytes()
         {
             int repair = Object(
-                ("targetSystem", MaximumAsciiIdentityTokenBytes),
+                ("targetInstalledSystemId", MaximumLongBytes),
                 ("startingCondition", MaximumFiniteDoubleBytes),
                 ("targetCondition", MaximumFiniteDoubleBytes),
                 ("startedAtMilliseconds", MaximumLongBytes),
                 ("expectedCompletionMilliseconds", MaximumLongBytes),
                 ("scheduledCompletionId", MaximumLongBytes)
             );
+            int installation = Object(
+                ("installedSystemId", MaximumLongBytes),
+                ("definitionId", MaximumSystemDefinitionIdTokenBytes),
+                ("condition", MaximumFiniteDoubleBytes),
+                ("allocation", MaximumLongBytes)
+            );
             int engineering = Object(
-                ("generationCondition", MaximumFiniteDoubleBytes),
-                ("sensorCondition", MaximumFiniteDoubleBytes),
-                ("impulseCondition", MaximumFiniteDoubleBytes),
-                ("shieldCondition", MaximumFiniteDoubleBytes),
-                ("directedEnergyCondition", MaximumFiniteDoubleBytes),
-                ("sensorAllocation", MaximumLongBytes),
-                ("impulseAllocation", MaximumLongBytes),
-                ("shieldAllocation", MaximumLongBytes),
-                ("directedEnergyAllocation", MaximumLongBytes),
+                ("nextInstalledSystemId", MaximumLongBytes),
+                ("installedSystems", Array(MaximumInstallations, installation)),
                 ("activeRepair", repair)
             );
             return MaximumMotionBytes()
@@ -1485,6 +1515,7 @@ public sealed class GamePersistenceV4SensorTests
         private static int MaximumActiveScanBytes() =>
             Object(
                 ("targetContactId", MaximumLongBytes),
+                ("sensorInstalledSystemId", MaximumLongBytes),
                 ("startedAtMilliseconds", MaximumLongBytes),
                 ("expectedCompletionMilliseconds", MaximumLongBytes),
                 ("scheduledCompletionId", MaximumLongBytes)
@@ -1498,7 +1529,13 @@ public sealed class GamePersistenceV4SensorTests
 
         private static int MaximumCombatStateBytes() =>
             Object(
-                ("nextDirectedEnergyReadyAtMilliseconds", MaximumLongBytes),
+                (
+                    "directedEnergyReadiness",
+                    Array(
+                        MaximumInstallations,
+                        Object(("weaponInstalledSystemId", MaximumLongBytes), ("readyAtMilliseconds", MaximumLongBytes))
+                    )
+                ),
                 (
                     "pendingStimulus",
                     Object(
@@ -1540,18 +1577,5 @@ public sealed class GamePersistenceV4SensorTests
 
     private static GameSaveMetadata Metadata() => new("slot", "Sensors", Timestamp, Timestamp);
 
-    private static ShipDefinitionCatalog Catalog() =>
-        new(
-            new Dictionary<ShipDefinitionId, ShipDefinition>
-            {
-                [DefinitionId] = new ShipDefinition(
-                    DefinitionId,
-                    "Pathfinder",
-                    new SpeedKilometersPerSecond(10),
-                    new DistanceKilometers(30),
-                    new SimulationDuration(2000),
-                    new SimulationDuration(8000)
-                ),
-            }
-        );
+    private static ShipDefinitionCatalog Catalog() => TestShipContent.Pathfinder(designDisplayName: "Pathfinder");
 }

@@ -5,6 +5,7 @@ using AlterCourse.Core.Quantities;
 using AlterCourse.Core.Sensors;
 using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
+using AlterCourse.Core.Tests.Support;
 
 namespace AlterCourse.Core.Tests.Gameplay;
 
@@ -24,24 +25,25 @@ public sealed class M6CombatScenarioTests
             SensorContactStatus.Current,
             M6CombatProofFixture.Player(game).SensorKnowledge.Contacts.Single(item => item.Id == contact).Status
         );
-        FireDirectedEnergyResult first = game.FireDirectedEnergy(new(contact, ShipSystemId.ImpulsePropulsion));
+        FireDirectedEnergyResult first = game.FireDirectedEnergy(new(contact, ShipSystemKind.ImpulsePropulsion));
         Assert.Equal(FireDirectedEnergyOutcome.Accepted, first.Outcome);
         Assert.Contains(first.ResolvedEvents, item => item.Kind == PlayerAdvanceEventKind.ShieldImpact);
         Assert.DoesNotContain(first.ResolvedEvents, item => item.Kind == PlayerAdvanceEventKind.SubsystemPenetration);
         bool penetrated = false;
         for (int shot = 0; shot < 16 && !penetrated; shot++)
         {
-            game = _fixture.AdvanceTo(game, M6CombatProofFixture.Player(game).Combat.NextDirectedEnergyReadyAt);
-            FireDirectedEnergyResult result = game.FireDirectedEnergy(new(contact, ShipSystemId.ImpulsePropulsion));
+            game = _fixture.AdvanceTo(
+                game,
+                M6CombatProofFixture.Player(game).Combat.ReadinessOf(TestShipContent.Weapons)!.ReadyAt
+            );
+            FireDirectedEnergyResult result = game.FireDirectedEnergy(new(contact, ShipSystemKind.ImpulsePropulsion));
             Assert.Equal(FireDirectedEnergyOutcome.Accepted, result.Outcome);
             penetrated = result.ResolvedEvents.Any(item => item.Kind == PlayerAdvanceEventKind.SubsystemPenetration);
         }
         Assert.True(penetrated, "The bounded production engagement must reach concrete penetration.");
         ShipState victim = game.CaptureState().GetRequiredShip(kestrel);
-        Assert.True(victim.Engineering.ImpulseCondition.Value < 1);
-        Assert.True(
-            victim.Engineering.ImpulseCapability(_fixture.Catalog.GetRequired(victim.DefinitionId).Engineering) < 0.1
-        );
+        Assert.True(TestEngineering.ConditionOf(victim.Engineering, ShipSystemKind.ImpulsePropulsion) < 1);
+        Assert.True(TestEngineering.CapabilityOf(victim.Engineering, ShipSystemKind.ImpulsePropulsion) < 0.1);
         game.CaptureState().Validate(_fixture.Catalog);
         _fixture.AssertEquivalent(game, _fixture.RoundTrip(game));
     }
@@ -57,18 +59,18 @@ public sealed class M6CombatScenarioTests
         Assert.True(checkpoint.ObservationReportIdAllocator.NextId > 1);
         Assert.True(checkpoint.Factions.Any(item => item.Observation!.ReceivedReports.Length > 0));
         ShipState victim = checkpoint.GetRequiredShip(kestrel);
-        Assert.InRange(victim.Engineering.ShieldCondition.Value, double.Epsilon, 0.999);
-        Assert.True(victim.Engineering.ImpulseCondition.Value < 1);
+        Assert.InRange(TestEngineering.ConditionOf(victim.Engineering, ShipSystemKind.Shields), double.Epsilon, 0.999);
+        Assert.True(TestEngineering.ConditionOf(victim.Engineering, ShipSystemKind.ImpulsePropulsion) < 1);
         Assert.Equal(
             M6CombatProofFixture.Allocation(20, 5, 20, 30),
             M6CombatProofFixture.Player(game).Engineering.Allocation
         );
         CombatStimulus stimulus = Assert.IsType<CombatStimulus>(victim.Combat.PendingStimulus);
-        SimulationTime ready = M6CombatProofFixture.Player(game).Combat.NextDirectedEnergyReadyAt;
+        SimulationTime ready = M6CombatProofFixture.Player(game).Combat.ReadinessOf(TestShipContent.Weapons)!.ReadyAt;
         Assert.True(ready.Milliseconds > checkpoint.Time.Milliseconds);
         GameSimulation resumed = _fixture.RoundTrip(game);
         _fixture.AssertEquivalent(game, resumed);
-        FireDirectedEnergyIntent intent = new(contact, ShipSystemId.Sensors);
+        FireDirectedEnergyIntent intent = new(contact, ShipSystemKind.Sensors);
         Assert.Equal(FireDirectedEnergyOutcome.CooldownActive, game.FireDirectedEnergy(intent).Outcome);
         Assert.Equal(FireDirectedEnergyOutcome.CooldownActive, resumed.FireDirectedEnergy(intent).Outcome);
         Assert.Same(checkpoint, game.CaptureState());
@@ -115,8 +117,11 @@ public sealed class M6CombatScenarioTests
         for (int shot = 0; shot < 16 && !penetrated; shot++)
         {
             if (shot > 0)
-                game = _fixture.AdvanceTo(game, M6CombatProofFixture.Player(game).Combat.NextDirectedEnergyReadyAt);
-            FireDirectedEnergyResult result = game.FireDirectedEnergy(new(contact, ShipSystemId.ImpulsePropulsion));
+                game = _fixture.AdvanceTo(
+                    game,
+                    M6CombatProofFixture.Player(game).Combat.ReadinessOf(TestShipContent.Weapons)!.ReadyAt
+                );
+            FireDirectedEnergyResult result = game.FireDirectedEnergy(new(contact, ShipSystemKind.ImpulsePropulsion));
             Assert.Equal(FireDirectedEnergyOutcome.Accepted, result.Outcome);
             penetrated = result.ResolvedEvents.Any(item => item.Kind == PlayerAdvanceEventKind.SubsystemPenetration);
         }
@@ -135,9 +140,9 @@ public sealed class M6CombatScenarioTests
             ? M6CombatProofFixture.Allocation(70, 20, 0, 30)
             : M6CombatProofFixture.Allocation(40, 10, 0, 30);
         Assert.Equal(PowerAllocationOutcome.Accepted, game.SetPowerAllocation(allocation).Outcome);
-        ShipDirectedEnergyApplicationResult hit = _fixture.Incoming(game, ShipSystemId.PowerGeneration);
+        ShipDirectedEnergyApplicationResult hit = _fixture.Incoming(game, ShipSystemKind.PowerGeneration);
         ShipState player = hit.CandidateState.GetRequiredShip(hit.CandidateState.PlayerShipId);
-        Assert.Equal(0.75, player.Engineering.GenerationCondition.Value);
+        Assert.Equal(0.75, TestEngineering.ConditionOf(player.Engineering, ShipSystemKind.PowerGeneration));
         Assert.Equal(
             brownout ? M6CombatProofFixture.Allocation(53, 15, 0, 22) : allocation,
             player.Engineering.Allocation
@@ -155,7 +160,7 @@ public sealed class M6CombatScenarioTests
             SetTacticalCourseOutcome.Accepted,
             game.SetTacticalCourse(new(heading, new SpeedKilometersPerSecond(4))).Outcome
         );
-        ShipDirectedEnergyApplicationResult hit = _fixture.Incoming(game, ShipSystemId.ImpulsePropulsion);
+        ShipDirectedEnergyApplicationResult hit = _fixture.Incoming(game, ShipSystemKind.ImpulsePropulsion);
         ShipState player = hit.CandidateState.GetRequiredShip(hit.CandidateState.PlayerShipId);
         Assert.Equal(heading, player.TacticalMotion.Heading);
         Assert.Equal(3, player.TacticalMotion.Speed.Value, 12);
@@ -170,7 +175,7 @@ public sealed class M6CombatScenarioTests
         SensorContactId contact = M6CombatProofFixture.Contact(game, M6CombatProofFixture.ScanTarget);
         Assert.Equal(ActiveSensorScanOutcome.Accepted, game.RequestActiveSensorScan(contact).Outcome);
         ActiveSensorScanState scan = M6CombatProofFixture.Player(game).SensorKnowledge.ActiveScan!;
-        ShipDirectedEnergyApplicationResult hit = _fixture.Incoming(game, ShipSystemId.Sensors);
+        ShipDirectedEnergyApplicationResult hit = _fixture.Incoming(game, ShipSystemKind.Sensors);
         Assert.Contains(hit.ResolvedEvents, item => item.Kind == PlayerAdvanceEventKind.ActiveSensorScanInterrupted);
         GameSimulation damaged = _fixture.Restore(hit.CandidateState);
         Assert.Null(M6CombatProofFixture.Player(damaged).SensorKnowledge.ActiveScan);
@@ -203,18 +208,18 @@ public sealed class M6CombatScenarioTests
                     player.InstanceId,
                     player with
                     {
-                        Engineering = player.Engineering.WithCondition(ShipSystemId.Sensors, new SystemCondition(0.8)),
+                        Engineering = TestEngineering.WithCondition(player.Engineering, ShipSystemKind.Sensors, 0.8),
                     }
                 )
         );
         Assert.Equal(
             SystemRepairOutcome.Accepted,
-            game.BeginSystemRepair(ShipSystemId.Sensors, new SystemCondition(1)).Outcome
+            game.BeginSystemRepair(TestShipContent.Sensors, new SystemCondition(1)).Outcome
         );
         SystemRepairState repair = M6CombatProofFixture.Player(game).Engineering.ActiveRepair!;
         ShipDirectedEnergyApplicationResult hit = _fixture.Incoming(
             game,
-            sameSystem ? ShipSystemId.Sensors : ShipSystemId.ImpulsePropulsion
+            sameSystem ? ShipSystemKind.Sensors : ShipSystemKind.ImpulsePropulsion
         );
         Assert.Equal(
             !sameSystem,
@@ -225,7 +230,11 @@ public sealed class M6CombatScenarioTests
             repair.ExpectedCompletion.AdvanceBy(SimulationFixedStep.Duration)
         );
         Assert.Null(M6CombatProofFixture.Player(later).Engineering.ActiveRepair);
-        Assert.Equal(sameSystem ? 0.55 : 1, M6CombatProofFixture.Player(later).Engineering.SensorCondition.Value, 12);
+        Assert.Equal(
+            sameSystem ? 0.55 : 1,
+            TestEngineering.ConditionOf(M6CombatProofFixture.Player(later).Engineering, ShipSystemKind.Sensors),
+            12
+        );
         later.CaptureState().Validate(_fixture.Catalog);
     }
 
@@ -238,13 +247,13 @@ public sealed class M6CombatScenarioTests
         ShipState before = game.CaptureState().GetRequiredShip(M6CombatProofFixture.Defender);
         Assert.Equal(
             FireDirectedEnergyOutcome.Accepted,
-            game.FireDirectedEnergy(new(contact, ShipSystemId.Shields)).Outcome
+            game.FireDirectedEnergy(new(contact, ShipSystemKind.Shields)).Outcome
         );
         SimulationState state = game.CaptureState();
         CombatStimulus stimulus = state.GetRequiredShip(before.InstanceId).Combat.PendingStimulus!;
         Assert.Equal(
-            before.Combat.NextDirectedEnergyReadyAt,
-            state.GetRequiredShip(before.InstanceId).Combat.NextDirectedEnergyReadyAt
+            before.Combat.ReadinessOf(TestShipContent.Weapons)!.ReadyAt,
+            state.GetRequiredShip(before.InstanceId).Combat.ReadinessOf(TestShipContent.Weapons)!.ReadyAt
         );
         Assert.Equal(state.Time.AdvanceBy(SimulationFixedStep.Duration), stimulus.DueTime);
         Assert.Single(
@@ -293,25 +302,25 @@ public sealed class M6CombatScenarioTests
                     player.InstanceId,
                     player with
                     {
-                        Engineering = player.Engineering with { ShieldCondition = new SystemCondition(0.2) },
+                        Engineering = TestEngineering.WithCondition(player.Engineering, ShipSystemKind.Shields, 0.2),
                     }
                 )
         );
         SensorContactId contact = M6CombatProofFixture.Contact(first, M6CombatProofFixture.Defender);
         Assert.Equal(
             FireDirectedEnergyOutcome.Accepted,
-            first.FireDirectedEnergy(new(contact, ShipSystemId.Shields)).Outcome
+            first.FireDirectedEnergy(new(contact, ShipSystemKind.Shields)).Outcome
         );
         Assert.Equal(
             FireDirectedEnergyOutcome.Accepted,
-            second.FireDirectedEnergy(new(contact, ShipSystemId.Shields)).Outcome
+            second.FireDirectedEnergy(new(contact, ShipSystemKind.Shields)).Outcome
         );
         first.AdvanceFixedSteps(1);
         second.AdvanceFixedSteps(1);
         Assert.Equal(first.LastDefensiveCombatDecisionExplanation, second.LastDefensiveCombatDecisionExplanation);
         Assert.NotEqual(
-            M6CombatProofFixture.Player(first).Engineering.ShieldCondition,
-            M6CombatProofFixture.Player(second).Engineering.ShieldCondition
+            TestEngineering.ConditionOf(M6CombatProofFixture.Player(first).Engineering, ShipSystemKind.Shields),
+            TestEngineering.ConditionOf(M6CombatProofFixture.Player(second).Engineering, ShipSystemKind.Shields)
         );
     }
 
@@ -327,17 +336,16 @@ public sealed class M6CombatScenarioTests
                     defender.InstanceId,
                     defender with
                     {
-                        Engineering = defender.Engineering with
-                        {
-                            Allocation = M6CombatProofFixture.Allocation(70, 5, 15, 0),
-                        },
+                        Engineering = defender.Engineering.WithAllocation(
+                            M6CombatProofFixture.Allocation(70, 5, 15, 0)
+                        ),
                     }
                 )
         );
         SensorContactId contact = M6CombatProofFixture.Contact(game, defender.InstanceId);
         Assert.Equal(
             FireDirectedEnergyOutcome.Accepted,
-            game.FireDirectedEnergy(new(contact, ShipSystemId.Shields)).Outcome
+            game.FireDirectedEnergy(new(contact, ShipSystemKind.Shields)).Outcome
         );
         double before = M6CombatProofFixture.Separation(game, defender.InstanceId);
         game.AdvanceFixedSteps(1);
@@ -372,13 +380,13 @@ public sealed class M6CombatScenarioTests
         );
         game.AdvanceFixedSteps(30);
         Assert.True(M6CombatProofFixture.Separation(game, M6CombatProofFixture.Defender) > initial);
-        FireDirectedEnergyResult rejected = game.FireDirectedEnergy(new(contact, ShipSystemId.Sensors));
+        FireDirectedEnergyResult rejected = game.FireDirectedEnergy(new(contact, ShipSystemKind.Sensors));
         Assert.Equal(FireDirectedEnergyOutcome.OutOfRange, rejected.Outcome);
         Assert.Empty(rejected.ResolvedEvents);
         game.AdvanceFixedSteps(30);
         Assert.Equal(
             FireDirectedEnergyOutcome.ContactNotCurrent,
-            game.FireDirectedEnergy(new(contact, ShipSystemId.Sensors)).Outcome
+            game.FireDirectedEnergy(new(contact, ShipSystemKind.Sensors)).Outcome
         );
         game.CaptureState().Validate(_fixture.Catalog);
     }

@@ -12,6 +12,7 @@ internal sealed record CombatOwnFacts(
     TacticalPosition Position,
     TacticalMotion Motion,
     SpeedKilometersPerSecond MaximumSpeed,
+    InstalledSystemId? WeaponId,
     DirectedEnergyWeaponDefinition? Weapon,
     SystemCondition WeaponCondition,
     double WeaponCapability,

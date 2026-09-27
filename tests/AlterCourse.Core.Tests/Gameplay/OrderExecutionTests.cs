@@ -8,6 +8,7 @@ using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
 using AlterCourse.Core.Tactical;
+using AlterCourse.Core.Tests.Support;
 
 namespace AlterCourse.Core.Tests.Gameplay;
 
@@ -245,22 +246,20 @@ public sealed class OrderExecutionTests
             ScheduledWorkKind.SystemRepairCompletion
         );
         var repair = new SystemRepairState(
-            ShipSystemId.Sensors,
+            TestShipContent.Sensors,
             new SystemCondition(0.5),
             new SystemCondition(1),
             new SimulationTime(0),
             new SimulationTime(800),
             repairWork.Id
         );
-        ShipState player = CreateShip(PlayerId, Alpha) with
+        ShipState player = CreateShip(PlayerId, Alpha, new SimulationDuration(800)) with
         {
-            Engineering = CreateShip(PlayerId, Alpha).Engineering with
-            {
-                SensorCondition = new SystemCondition(0.5),
-                ActiveRepair = repair,
-            },
+            Engineering = CreateShip(PlayerId, Alpha, new SimulationDuration(800))
+                .Engineering.WithCondition(TestShipContent.Sensors, new SystemCondition(0.5))
+                .WithRepair(repair),
         };
-        ShipState npc = CreateShip(NpcId, Beta) with
+        ShipState npc = CreateShip(NpcId, Beta, new SimulationDuration(800)) with
         {
             ActiveOrder = new HoldUntilOrder(new ShipOrderId(1), new SimulationTime(600), wake.Id),
         };
@@ -301,7 +300,8 @@ public sealed class OrderExecutionTests
                 new PlayerAdvanceEvent(
                     PlayerAdvanceEventKind.SystemRepairCompleted,
                     new SimulationTime(800),
-                    ShipSystemId: ShipSystemId.Sensors
+                    SystemKind: ShipSystemKind.Sensors,
+                    InstalledSystemId: TestShipContent.Sensors
                 ),
             ],
             result.ResolvedEvents
@@ -309,7 +309,10 @@ public sealed class OrderExecutionTests
         Assert.Null(game.CaptureState().GetRequiredShip(NpcId).ActiveOrder);
         Assert.Null(game.CaptureState().GetRequiredShip(PlayerId).Engineering.ActiveRepair);
 
-        SimulationState hiddenOnly = state.ReplaceShip(PlayerId, CreateShip(PlayerId, Alpha)) with
+        SimulationState hiddenOnly = state.ReplaceShip(
+            PlayerId,
+            CreateShip(PlayerId, Alpha, new SimulationDuration(800))
+        ) with
         {
             Scheduler = SimulationScheduler.Restore(2, 1, [state.Scheduler.OutstandingWork[0]]),
         };
@@ -335,7 +338,8 @@ public sealed class OrderExecutionTests
                 new PlayerAdvanceEvent(
                     PlayerAdvanceEventKind.SystemRepairCompleted,
                     new SimulationTime(1000),
-                    ShipSystemId: ShipSystemId.Sensors
+                    SystemKind: ShipSystemKind.Sensors,
+                    InstalledSystemId: TestShipContent.Sensors
                 ),
             ],
             result.ResolvedEvents
@@ -379,22 +383,20 @@ public sealed class OrderExecutionTests
             ScheduledWorkKind.SystemRepairCompletion
         );
         var repair = new SystemRepairState(
-            ShipSystemId.Sensors,
+            TestShipContent.Sensors,
             new SystemCondition(0.25),
             new SystemCondition(1),
             new SimulationTime(0),
             work.DueTime,
             work.Id
         );
-        ShipState player = CreateShip(PlayerId, Alpha) with
+        ShipState player = CreateShip(PlayerId, Alpha, duration) with
         {
-            Engineering = CreateShip(PlayerId, Alpha).Engineering with
-            {
-                SensorCondition = new SystemCondition(0.25),
-                ActiveRepair = repair,
-            },
+            Engineering = CreateShip(PlayerId, Alpha, duration)
+                .Engineering.WithCondition(TestShipContent.Sensors, new SystemCondition(0.25))
+                .WithRepair(repair),
         };
-        ShipState stationaryNpc = CreateShip(NpcId, Beta) with
+        ShipState stationaryNpc = CreateShip(NpcId, Beta, duration) with
         {
             TacticalPosition = new TacticalPosition(4, -3),
             TacticalMotion = new TacticalMotion(new HeadingDegrees(237), new SpeedKilometersPerSecond(0)),
@@ -479,22 +481,20 @@ public sealed class OrderExecutionTests
             ScheduledWorkKind.SystemRepairCompletion
         );
         var repair = new SystemRepairState(
-            ShipSystemId.Sensors,
+            TestShipContent.Sensors,
             new SystemCondition(0.5),
             new SystemCondition(1),
             new SimulationTime(0),
             repairWork.DueTime,
             repairWork.Id
         );
-        ShipState player = CreateShip(PlayerId, Alpha) with
+        ShipState player = CreateShip(PlayerId, Alpha, new SimulationDuration(800)) with
         {
-            Engineering = CreateShip(PlayerId, Alpha).Engineering with
-            {
-                SensorCondition = new SystemCondition(0.5),
-                ActiveRepair = repair,
-            },
+            Engineering = CreateShip(PlayerId, Alpha, new SimulationDuration(800))
+                .Engineering.WithCondition(TestShipContent.Sensors, new SystemCondition(0.5))
+                .WithRepair(repair),
         };
-        ShipState npc = CreateShip(NpcId, Beta) with
+        ShipState npc = CreateShip(NpcId, Beta, new SimulationDuration(800)) with
         {
             ActiveOrder = new HoldUntilOrder(new ShipOrderId(1), wake.DueTime, wake.Id),
         };
@@ -518,7 +518,7 @@ public sealed class OrderExecutionTests
             ScheduledWorkKind.SystemRepairCompletion
         );
         var repair = new SystemRepairState(
-            ShipSystemId.Sensors,
+            TestShipContent.Sensors,
             new SystemCondition(0.5),
             new SystemCondition(1),
             new SimulationTime(0),
@@ -527,11 +527,9 @@ public sealed class OrderExecutionTests
         );
         ShipState player = CreateShip(PlayerId, Alpha) with
         {
-            Engineering = CreateShip(PlayerId, Alpha).Engineering with
-            {
-                SensorCondition = new SystemCondition(0.5),
-                ActiveRepair = repair,
-            },
+            Engineering = CreateShip(PlayerId, Alpha)
+                .Engineering.WithCondition(TestShipContent.Sensors, new SystemCondition(0.5))
+                .WithRepair(repair),
         };
         ShipState npc = CreatePatrollingShip(NpcId, new ShipOrderId(1), Alpha, Beta, 1, arrival);
         return (
@@ -644,18 +642,23 @@ public sealed class OrderExecutionTests
             orderIdAllocator
         );
 
-    private static ShipState CreateShip(ShipInstanceId id, LocationId location) =>
+    private static ShipState CreateShip(
+        ShipInstanceId id,
+        LocationId location,
+        SimulationDuration? repairDuration = null
+    ) =>
         new(
             id,
             DefinitionId,
             $"Ship {id.Value}",
             default,
             default,
-            new ShipEngineeringState(
-                new SystemCondition(1),
-                new SystemCondition(1),
-                new SystemCondition(1),
-                new PowerAllocation(new(70), new(50))
+            TestEngineering.FromDesign(
+                CreateCatalog(repairDuration),
+                DefinitionId,
+                TestEngineering.Allocation(70, 50, 0, 0),
+                shields: 0,
+                weapons: 0
             ),
             new AtLocationState(location)
         );
@@ -674,18 +677,13 @@ public sealed class OrderExecutionTests
         return new StrategicMap([alpha, beta, gamma], routes);
     }
 
-    private static ShipDefinitionCatalog CreateCatalog(SimulationDuration? repairDuration = null)
-    {
-        var definition = new ShipDefinition(
-            DefinitionId,
-            "Test ship",
-            new SpeedKilometersPerSecond(10),
-            new DistanceKilometers(30),
-            new SimulationDuration(2000),
-            repairDuration ?? new SimulationDuration(1000)
+    private static ShipDefinitionCatalog CreateCatalog(SimulationDuration? repairDuration = null) =>
+        TestShipContent.Pathfinder(
+            PathfinderTuning.Production with
+            {
+                SensorRepairMilliseconds = (repairDuration ?? new SimulationDuration(1000)).Milliseconds,
+            },
+            DefinitionId.Value,
+            "Test ship"
         );
-        return new ShipDefinitionCatalog(
-            new Dictionary<ShipDefinitionId, ShipDefinition> { [DefinitionId] = definition }
-        );
-    }
 }

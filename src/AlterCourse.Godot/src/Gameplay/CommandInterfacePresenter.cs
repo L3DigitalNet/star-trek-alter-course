@@ -37,7 +37,8 @@ public static class CommandInterfacePresenter
         LocationId? selectedLocationId = null,
         SensorContactId? selectedContactId = null,
         IReadOnlyList<ActivityEvent>? recentEvents = null,
-        CommandInterfaceMode mode = CommandInterfaceMode.Travel
+        CommandInterfaceMode mode = CommandInterfaceMode.Travel,
+        OwnShipActionBinding? binding = null
     )
     {
         ArgumentNullException.ThrowIfNull(projection);
@@ -59,7 +60,12 @@ public static class CommandInterfacePresenter
             Header = BuildHeader(projection),
             Systems = BuildSystems(projection),
             Telemetry = BuildTelemetry(projection, selectedLocation, selectedContact, mode),
-            Actions = BuildActions(projection, selectedLocation, selectedContact, mode),
+            // Every live action is an own-ship action, so each carries the owner and generation it was presented for.
+            Actions =
+            [
+                .. BuildActions(projection, selectedLocation, selectedContact, mode)
+                    .Select(action => action with { Binding = binding }),
+            ],
             Events = BuildEvents(projection, recentEvents),
             Stations = BuildStations(mode),
             MapItems = BuildMapItems(projection),
@@ -71,6 +77,7 @@ public static class CommandInterfacePresenter
             Tactical = projection.Ship.Tactical,
             Engineering = BuildEngineering(projection),
             CombatTarget = FindCombatTarget(projection, selectedContact),
+            Binding = binding,
         };
     }
 
@@ -91,11 +98,7 @@ public static class CommandInterfacePresenter
         return
         [
             SystemUnavailable("hull", "HULL"),
-            new(
-                "shields",
-                "SHIELDS",
-                Available("CONDITION", FormatCondition(projection.Ship.Engineering.ShieldCondition))
-            ),
+            new("shields", "SHIELDS", CombatCondition(projection.Ship.Combat.Shields)),
             SystemUnavailable("power", "POWER"),
             new CommandInterfaceSystemRow(
                 "propulsion",
@@ -109,13 +112,13 @@ public static class CommandInterfacePresenter
             new CommandInterfaceSystemRow(
                 "sensors",
                 "SENSORS",
-                Available("INTEGRITY", FormatPercent(projection.Ship.Sensors.Integrity), sensorTone)
+                // Absent sensors are stated, not shown as a 0% damaged reading.
+                projection.Ship.Sensors.SensorInstallation
+                    is null
+                    ? Available("INTEGRITY", "UNAVAILABLE", CommandInterfaceTone.Muted)
+                    : Available("INTEGRITY", FormatPercent(projection.Ship.Sensors.Integrity), sensorTone)
             ),
-            new(
-                "weapons",
-                "WEAPONS",
-                Available("CONDITION", FormatCondition(projection.Ship.Engineering.DirectedEnergyCondition))
-            ),
+            new("weapons", "WEAPONS", CombatCondition(projection.Ship.Combat.Weapon)),
             SystemUnavailable("computer", "COMPUTER"),
             SystemUnavailable("life-support", "LIFE SUP"),
         ];
@@ -311,7 +314,8 @@ public static class CommandInterfacePresenter
     {
         if (mode == CommandInterfaceMode.Engineering)
         {
-            return [.. projection.Ship.Engineering.Actions.Select(BuildEngineeringAction)];
+            EngineeringProjection engineering = projection.Ship.Engineering;
+            return [.. engineering.Actions.Select(action => BuildEngineeringAction(engineering, action))];
         }
 
         bool activeScanAvailable = IsContactActionAvailable(
@@ -384,7 +388,7 @@ public static class CommandInterfacePresenter
                         new CommandInterfaceEventRow(
                             FormatClock(activity.SimulationTimeMilliseconds),
                             "ENGINEER",
-                            $"{SystemLabel(resolved.Event.ShipSystemId)} repair completed.",
+                            $"{SystemLabel(resolved.Event.SystemKind)} repair completed.",
                             CommandInterfaceTone.Nominal
                         ),
                     ResolvedActivityEvent { Event.Kind: PlayerAdvanceEventKind.SensorContactDetected } resolved =>
@@ -431,7 +435,7 @@ public static class CommandInterfacePresenter
     private static CommandInterfaceAction BuildFireAction(PlayerProjection projection, SensorContactSnapshot? contact)
     {
         CombatTargetProjection? target = FindCombatTarget(projection, contact);
-        bool available = target?.Outcome == FireDirectedEnergyOutcome.Accepted && target.SupportedSystems.Count > 0;
+        bool available = target?.Outcome == FireDirectedEnergyOutcome.Accepted && target.AimKinds.Count > 0;
         return new(
             "fire-phasers",
             "Fire directed energy",
@@ -449,7 +453,6 @@ public static class CommandInterfacePresenter
     )
     {
         CombatProjection combat = projection.Ship.Combat;
-        EngineeringProjection engineering = projection.Ship.Engineering;
         CombatTargetProjection? target = FindCombatTarget(projection, contact);
         return new(
             "combat",
@@ -463,15 +466,36 @@ public static class CommandInterfacePresenter
                     combat.WeaponRange is { } weaponRange ? FormatKilometers(weaponRange.Value) : "UNAVAILABLE"
                 ),
                 Available("COOLDOWN REMAINING", FormatSeconds(combat.RemainingCooldown.Milliseconds)),
-                Available("SHIELD CONDITION", FormatCondition(engineering.ShieldCondition)),
-                Available("SHIELD POWER", FormatPower(engineering.ShieldAllocation)),
-                Available("SHIELD CAPABILITY", FormatPercent(engineering.ShieldCapability)),
-                Available("WEAPON CONDITION", FormatCondition(engineering.DirectedEnergyCondition)),
-                Available("WEAPON POWER", FormatPower(engineering.DirectedEnergyAllocation)),
-                Available("WEAPON CAPABILITY", FormatPercent(engineering.DirectedEnergyCapability)),
+                .. CombatSystemFields("SHIELD", combat.Shields),
+                .. CombatSystemFields("WEAPON", combat.Weapon),
             ]
         );
     }
+
+    // An absent installation is stated as unavailable rather than rendered as a 0% placeholder; the three field
+    // labels stay so the panel keeps its layout whether or not the capability is installed.
+    private static ImmutableArray<CommandInterfaceField> CombatSystemFields(
+        string prefix,
+        CombatSystemStatusProjection? system
+    ) =>
+        system is null
+            ?
+            [
+                Available($"{prefix} CONDITION", "UNAVAILABLE", CommandInterfaceTone.Muted),
+                Available($"{prefix} POWER", "UNAVAILABLE", CommandInterfaceTone.Muted),
+                Available($"{prefix} CAPABILITY", "UNAVAILABLE", CommandInterfaceTone.Muted),
+            ]
+            :
+            [
+                Available($"{prefix} CONDITION", FormatCondition(system.Condition)),
+                Available($"{prefix} POWER", FormatPower(system.Allocation)),
+                Available($"{prefix} CAPABILITY", FormatPercent(system.Capability)),
+            ];
+
+    private static CommandInterfaceField CombatCondition(CombatSystemStatusProjection? system) =>
+        system is null
+            ? Available("CONDITION", "UNAVAILABLE", CommandInterfaceTone.Muted)
+            : Available("CONDITION", FormatCondition(system.Condition));
 
     /// <summary>Formats Core's typed fire outcome without recreating its legality checks.</summary>
     public static string FireReason(FireDirectedEnergyOutcome outcome) =>
@@ -497,11 +521,10 @@ public static class CommandInterfacePresenter
         {
             PlayerAdvanceEventKind.DirectedEnergyFired => "Directed-energy shot fired.",
             PlayerAdvanceEventKind.ShieldImpact => "Observed shield impact.",
-            PlayerAdvanceEventKind.SubsystemPenetration =>
-                $"Observed penetration to {SystemLabel(@event.ShipSystemId)}.",
-            PlayerAdvanceEventKind.OwnSystemDamaged => $"Own {SystemLabel(@event.ShipSystemId)} damaged.",
+            PlayerAdvanceEventKind.SubsystemPenetration => $"Observed penetration to {SystemLabel(@event.SystemKind)}.",
+            PlayerAdvanceEventKind.OwnSystemDamaged => $"Own {SystemLabel(@event.SystemKind)} damaged.",
             PlayerAdvanceEventKind.SystemRepairInterrupted =>
-                $"Own {SystemLabel(@event.ShipSystemId)} repair interrupted.",
+                $"Own {SystemLabel(@event.SystemKind)} repair interrupted.",
             PlayerAdvanceEventKind.PowerBrownout => "Own power allocation reduced by brownout.",
             PlayerAdvanceEventKind.ForcedDeceleration => "Own speed reduced by propulsion capability.",
             _ => throw new ArgumentOutOfRangeException(nameof(@event), @event.Kind, "Unknown combat event."),
@@ -753,22 +776,20 @@ public static class CommandInterfacePresenter
     private static CommandInterfaceEngineeringPresentation BuildEngineering(PlayerProjection projection)
     {
         EngineeringProjection engineering = projection.Ship.Engineering;
-        CommandInterfaceTone powerTone = ConditionTone(engineering.GenerationCondition);
-        CommandInterfaceTone sensorTone = ConditionTone(engineering.SensorCondition);
-        CommandInterfaceTone impulseTone = ConditionTone(engineering.ImpulseCondition);
         bool repairing = engineering.ActiveRepair is not null;
+
+        // Rows are exactly Core's installations in Core's order, between the fixed overview and repairs rows; an
+        // absent installation has no row. Keys carry the installed identity, never a position or label.
         return new CommandInterfaceEngineeringPresentation(
             [
                 Hierarchy("overview", "OVERVIEW", selected: true, CommandInterfaceTone.Engineering),
-                Hierarchy("power", "POWER", false, powerTone),
-                Hierarchy("sensors", "SENSORS", false, sensorTone),
-                Hierarchy("propulsion", "PROPULSION", false, impulseTone),
-                Hierarchy("shields", "SHIELDS", false, ConditionTone(engineering.ShieldCondition)),
-                Hierarchy(
-                    "directed-energy-weapons",
-                    "DIRECTED-ENERGY WEAPONS",
-                    false,
-                    ConditionTone(engineering.DirectedEnergyCondition)
+                .. engineering.Systems.Select(row =>
+                    Hierarchy(
+                        SystemKey(row.Id),
+                        EngineeringKindPresentation.HierarchyLabel(row),
+                        false,
+                        ConditionTone(row.Condition)
+                    )
                 ),
                 Hierarchy(
                     "repairs",
@@ -778,47 +799,40 @@ public static class CommandInterfacePresenter
                     repairing ? 1 : 0
                 ),
             ],
-            BuildEngineeringComponents(engineering, powerTone, sensorTone, impulseTone),
+            [
+                EngineeringOverview(engineering),
+                .. engineering.Systems.Select(row => EngineeringSystemSection(engineering, row)),
+                EngineeringRepair(engineering),
+            ],
             [],
             []
         );
     }
 
-    private static ImmutableArray<CommandInterfaceTelemetrySection> BuildEngineeringComponents(
-        EngineeringProjection engineering,
-        CommandInterfaceTone powerTone,
-        CommandInterfaceTone sensorTone,
-        CommandInterfaceTone impulseTone
-    ) =>
-        [
-            EngineeringOverview(engineering),
-            EngineeringPower(engineering, powerTone),
-            EngineeringSensors(engineering, sensorTone),
-            EngineeringPropulsion(engineering, impulseTone),
-            new(
-                "shields",
-                "SHIELDS",
-                ConditionTone(engineering.ShieldCondition),
-                [
-                    Available("CONDITION", FormatCondition(engineering.ShieldCondition)),
-                    Available("ALLOCATION", FormatPower(engineering.ShieldAllocation)),
-                    Available("DEMAND", FormatPower(engineering.NominalShieldDemand)),
-                    Available("CAPABILITY", FormatPercent(engineering.ShieldCapability)),
-                ]
+    /// <summary>Gets the stable hierarchy and schematic key of one installation.</summary>
+    public static string SystemKey(InstalledSystemId id) =>
+        string.Create(CultureInfo.InvariantCulture, $"system:{id.Value}");
+
+    /// <summary>Gets the stable action key of one Engineering operation and optional installation.</summary>
+    public static string EngineeringActionKey(EngineeringOperation operation, InstalledSystemId? target) =>
+        (operation, target) switch
+        {
+            (EngineeringOperation.Balance, null) => "balance",
+            (EngineeringOperation.ReturnToCommand, null) => "return-command",
+            (EngineeringOperation.Prioritize, { } id) => string.Create(
+                CultureInfo.InvariantCulture,
+                $"prioritize:{id.Value}"
             ),
-            new(
-                "directed-energy-weapons",
-                "DIRECTED-ENERGY WEAPONS",
-                ConditionTone(engineering.DirectedEnergyCondition),
-                [
-                    Available("CONDITION", FormatCondition(engineering.DirectedEnergyCondition)),
-                    Available("ALLOCATION", FormatPower(engineering.DirectedEnergyAllocation)),
-                    Available("DEMAND", FormatPower(engineering.NominalDirectedEnergyDemand)),
-                    Available("CAPABILITY", FormatPercent(engineering.DirectedEnergyCapability)),
-                ]
+            (EngineeringOperation.BeginRepair, { } id) => string.Create(
+                CultureInfo.InvariantCulture,
+                $"repair:{id.Value}"
             ),
-            EngineeringRepair(engineering),
-        ];
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(operation),
+                operation,
+                "Engineering operation and target do not form a known action."
+            ),
+        };
 
     private static CommandInterfaceTelemetrySection EngineeringOverview(EngineeringProjection engineering) =>
         new(
@@ -833,53 +847,50 @@ public static class CommandInterfacePresenter
             ]
         );
 
-    private static CommandInterfaceTelemetrySection EngineeringPower(
+    /// <summary>
+    /// Builds one installation's inspector section. The title is the authored component label; the field set comes
+    /// from the presentation table's layout, and every value is a Core-projected row fact or ship-level total.
+    /// </summary>
+    private static CommandInterfaceTelemetrySection EngineeringSystemSection(
         EngineeringProjection engineering,
-        CommandInterfaceTone tone
-    ) =>
-        new(
-            "power",
-            "POWER GENERATION",
-            tone,
+        InstalledSystemProjection row
+    )
+    {
+        CommandInterfaceTone tone = ConditionTone(row.Condition);
+        ImmutableArray<CommandInterfaceField> fields = EngineeringKindPresentation.Layout(row) switch
+        {
+            EngineeringKindPresentation.FieldLayout.Generation =>
             [
                 Available("NOMINAL", FormatPower(engineering.NominalGeneration)),
                 Available("AVAILABLE", FormatPower(engineering.AvailablePower), tone),
-                Available("CONDITION", FormatCondition(engineering.GenerationCondition), tone),
+                Available("CONDITION", FormatCondition(row.Condition), tone),
                 Available("RESERVE", FormatPower(engineering.Reserve)),
-            ]
-        );
-
-    private static CommandInterfaceTelemetrySection EngineeringSensors(
-        EngineeringProjection engineering,
-        CommandInterfaceTone tone
-    ) =>
-        new(
-            "sensors",
-            "SENSORS",
-            tone,
+            ],
+            EngineeringKindPresentation.FieldLayout.Sensors =>
             [
-                Available("CONDITION", FormatCondition(engineering.SensorCondition), tone),
-                Available("ALLOCATION", FormatPower(engineering.SensorAllocation)),
-                Available("CAPABILITY", FormatPercent(engineering.SensorCapability), tone),
+                Available("CONDITION", FormatCondition(row.Condition), tone),
+                Available("ALLOCATION", FormatOptionalPower(row.Allocation)),
+                Available("CAPABILITY", FormatOptionalPercent(row.Capability), tone),
                 Available("PASSIVE RANGE", FormatKilometers(engineering.EffectivePassiveSensorRange.Value)),
-            ]
-        );
-
-    private static CommandInterfaceTelemetrySection EngineeringPropulsion(
-        EngineeringProjection engineering,
-        CommandInterfaceTone tone
-    ) =>
-        new(
-            "propulsion",
-            "IMPULSE PROPULSION",
-            tone,
+            ],
+            EngineeringKindPresentation.FieldLayout.ImpulsePropulsion =>
             [
-                Available("CONDITION", FormatCondition(engineering.ImpulseCondition), tone),
-                Available("ALLOCATION", FormatPower(engineering.ImpulseAllocation)),
-                Available("CAPABILITY", FormatPercent(engineering.ImpulseCapability), tone),
+                Available("CONDITION", FormatCondition(row.Condition), tone),
+                Available("ALLOCATION", FormatOptionalPower(row.Allocation)),
+                Available("CAPABILITY", FormatOptionalPercent(row.Capability), tone),
                 Available("MAX TACTICAL SPEED", FormatSpeed(engineering.EffectiveMaximumTacticalSpeed.Value)),
-            ]
-        );
+            ],
+            _ when row.NominalDemand is null => [Available("CONDITION", FormatCondition(row.Condition))],
+            _ =>
+            [
+                Available("CONDITION", FormatCondition(row.Condition)),
+                Available("ALLOCATION", FormatOptionalPower(row.Allocation)),
+                Available("DEMAND", FormatOptionalPower(row.NominalDemand)),
+                Available("CAPABILITY", FormatOptionalPercent(row.Capability)),
+            ],
+        };
+        return new(SystemKey(row.Id), row.ComponentLabel.ToUpperInvariant(), tone, fields);
+    }
 
     private static CommandInterfaceTelemetrySection EngineeringRepair(EngineeringProjection engineering) =>
         new(
@@ -889,7 +900,9 @@ public static class CommandInterfacePresenter
             [
                 Available(
                     "TARGET",
-                    engineering.ActiveRepair is null ? "NONE" : SystemLabel(engineering.ActiveRepair.TargetSystem)
+                    engineering.ActiveRepair is not { } repair
+                        ? "NONE"
+                        : EngineeringKindPresentation.TargetLabel(repair.TargetKind, repair.TargetLabel)
                 ),
                 Available(
                     "PROGRESS",
@@ -906,17 +919,22 @@ public static class CommandInterfacePresenter
 
     private static ImmutableArray<CommandInterfaceTelemetrySection> BuildEngineeringTelemetry(
         EngineeringProjection engineering
-    ) =>
+    )
+    {
+        InstalledSystemProjection[] consumers = [.. engineering.Systems.Where(row => row.Allocation is not null)];
+        return
         [
             new CommandInterfaceTelemetrySection(
                 "connected-loads",
                 "CONNECTED LOADS",
                 CommandInterfaceTone.Engineering,
                 [
-                    Available("SENSORS", FormatPower(engineering.SensorAllocation)),
-                    Available("IMPULSE PROPULSION", FormatPower(engineering.ImpulseAllocation)),
-                    Available("SHIELDS", FormatPower(engineering.ShieldAllocation)),
-                    Available("DIRECTED-ENERGY WEAPONS", FormatPower(engineering.DirectedEnergyAllocation)),
+                    .. consumers.Select(row =>
+                        Available(
+                            EngineeringKindPresentation.ConnectedLoadLabel(row),
+                            FormatOptionalPower(row.Allocation)
+                        )
+                    ),
                 ]
             ),
             new CommandInterfaceTelemetrySection(
@@ -926,40 +944,48 @@ public static class CommandInterfacePresenter
                 [
                     Available("NOMINAL GENERATION", FormatPower(engineering.NominalGeneration)),
                     Available("AVAILABLE POWER", FormatPower(engineering.AvailablePower)),
-                    Available("SENSORS", FormatPower(engineering.SensorAllocation)),
-                    Available("PROPULSION", FormatPower(engineering.ImpulseAllocation)),
-                    Available("SHIELDS", FormatPower(engineering.ShieldAllocation)),
-                    Available("DIRECTED-ENERGY WEAPONS", FormatPower(engineering.DirectedEnergyAllocation)),
+                    .. consumers.Select(row =>
+                        Available(
+                            EngineeringKindPresentation.AllocationSummaryLabel(row),
+                            FormatOptionalPower(row.Allocation)
+                        )
+                    ),
                     Available("RESERVE", FormatPower(engineering.Reserve)),
                 ]
             ),
         ];
+    }
 
-    private static CommandInterfaceAction BuildEngineeringAction(EngineeringActionProjection action)
+    /// <summary>
+    /// Formats one Core action as a keyed button. The label is looked up from the target row's kind; availability,
+    /// reason, order, and target all come from Core unchanged.
+    /// </summary>
+    private static CommandInterfaceAction BuildEngineeringAction(
+        EngineeringProjection engineering,
+        EngineeringActionProjection action
+    )
     {
-        (string id, string label) = action.Action switch
+        InstalledSystemProjection? target = action.Target is { } id
+            ? engineering.Systems.Single(row => row.Id == id)
+            : null;
+        string label = (action.Operation, target) switch
         {
-            EngineeringAction.Balanced => ("allocate-balanced", "Balance power allocation"),
-            EngineeringAction.PrioritizeSensors => ("prioritize-sensors", "Prioritize sensors"),
-            EngineeringAction.PrioritizePropulsion => ("prioritize-propulsion", "Prioritize propulsion"),
-            EngineeringAction.BeginSensorRepair => ("repair-sensors", "Begin sensor repair"),
-            EngineeringAction.BeginImpulseRepair => ("repair-propulsion", "Begin impulse repair"),
-            EngineeringAction.PrioritizeShields => ("prioritize-shields", "Prioritize shields"),
-            EngineeringAction.PrioritizeDirectedEnergyWeapons => ("prioritize-weapons", "Prioritize weapons"),
-            EngineeringAction.BeginShieldRepair => ("repair-shields", "Begin shield repair"),
-            EngineeringAction.BeginDirectedEnergyRepair => ("repair-weapons", "Begin weapon repair"),
-            EngineeringAction.ReturnToCommand => ("return-command", "Return to Command Deck"),
-            _ => throw new ArgumentOutOfRangeException(nameof(action), action.Action, "Unknown Engineering action."),
+            (EngineeringOperation.Balance, _) => "Balance power allocation",
+            (EngineeringOperation.Prioritize, { } row) => EngineeringKindPresentation.PrioritizeLabel(row),
+            (EngineeringOperation.BeginRepair, { } row) => EngineeringKindPresentation.RepairLabel(row),
+            (EngineeringOperation.ReturnToCommand, _) => "Return to Command Deck",
+            _ => throw new ArgumentOutOfRangeException(nameof(action), action, "Unknown Engineering action."),
         };
         return new CommandInterfaceAction(
-            id,
+            EngineeringActionKey(action.Operation, action.Target),
             label,
             action.IsAvailable ? CommandInterfaceTone.Engineering : CommandInterfaceTone.Muted,
             action.IsAvailable
                 ? CommandInterfaceActionAvailability.Submittable
                 : CommandInterfaceActionAvailability.Disabled,
             Tooltip: EngineeringActionTooltip(action),
-            EngineeringCommand: action.Action
+            EngineeringOperation: action.Operation,
+            EngineeringTarget: action.Target
         );
     }
 
@@ -973,8 +999,6 @@ public static class CommandInterfacePresenter
                 "Unavailable: another system repair is active.",
             (false, EngineeringActionUnavailableReason.SystemAlreadyNominal) =>
                 "Unavailable: this system is already nominal.",
-            (false, EngineeringActionUnavailableReason.UnsupportedSystem) =>
-                "Unavailable: this system is not installed.",
             _ => "Unavailable: Core does not currently support this Engineering action.",
         };
 
@@ -995,16 +1019,12 @@ public static class CommandInterfacePresenter
     private static string FormatPower(PowerUnits power) =>
         $"{power.Value.ToString(CultureInfo.InvariantCulture)} units";
 
-    private static string SystemLabel(ShipSystemId? system) =>
-        system switch
-        {
-            ShipSystemId id when id == ShipSystemId.PowerGeneration => "Power generation",
-            ShipSystemId id when id == ShipSystemId.Sensors => "Sensors",
-            ShipSystemId id when id == ShipSystemId.ImpulsePropulsion => "Impulse propulsion",
-            ShipSystemId id when id == ShipSystemId.Shields => "Shields",
-            ShipSystemId id when id == ShipSystemId.DirectedEnergyWeapons => "Directed-energy weapons",
-            _ => "System",
-        };
+    private static string SystemLabel(ShipSystemKind? system) => EngineeringKindPresentation.TargetLabel(system);
+
+    private static string FormatOptionalPower(PowerUnits? power) => power is { } value ? FormatPower(value) : "NONE";
+
+    private static string FormatOptionalPercent(double? fraction) =>
+        fraction is { } value ? FormatPercent(value) : "NONE";
 
     private static CommandInterfaceAction LiveAction(
         string id,

@@ -6,22 +6,33 @@ namespace AlterCourse.Core.Gameplay;
 
 internal sealed partial record SimulationState
 {
-    private void ValidateCombatState(ShipState ship, ShipDefinition definition, HashSet<ScheduledWorkId> workIds)
+    private void ValidateCombatState(ShipState ship, HashSet<ScheduledWorkId> workIds)
     {
         ShipCombatState combat = ship.Combat ?? throw new InvalidOperationException("Combat state cannot be null.");
-        long ready = combat.NextDirectedEnergyReadyAt.Milliseconds;
-        if (
-            ready % SimulationFixedStep.Duration.Milliseconds != 0
-            || ready > long.MaxValue - SimulationFixedStep.Duration.Milliseconds
-            || (
-                ready > Time.Milliseconds
-                && (
-                    definition.DirectedEnergyWeapon is not { } weapon
-                    || ready - Time.Milliseconds > weapon.Cooldown.Milliseconds
-                )
+
+        // Readiness exists for exactly the installed weapons: a missing entry would make an installed weapon
+        // unfireable forever, and an extra one would be phantom state for an absent or non-weapon installation.
+        InstalledSystem[] weapons =
+        [
+            .. ship.Engineering.Systems.ByIdentity.Where(system =>
+                system.Definition is DirectedEnergyWeaponSystemDefinition
+            ),
+        ];
+        if (!combat.WeaponReadiness.Select(entry => entry.Weapon).SequenceEqual(weapons.Select(weapon => weapon.Id)))
+            throw new InvalidOperationException("Weapon readiness must list exactly the installed weapons.");
+        foreach (DirectedEnergyReadiness entry in combat.WeaponReadiness)
+        {
+            long ready = entry.ReadyAt.Milliseconds;
+            var weapon = (DirectedEnergyWeaponSystemDefinition)
+                ship.Engineering.Systems.GetRequired(entry.Weapon).Definition;
+            if (
+                ready % SimulationFixedStep.Duration.Milliseconds != 0
+                || ready > long.MaxValue - SimulationFixedStep.Duration.Milliseconds
+                || (ready > Time.Milliseconds && ready - Time.Milliseconds > weapon.Weapon.Cooldown.Milliseconds)
             )
-        )
-            throw new InvalidOperationException("Weapon readiness is outside its authored time bounds.");
+                throw new InvalidOperationException("Weapon readiness is outside its authored time bounds.");
+        }
+
         if (combat.PendingStimulus is not { } stimulus)
             return;
         if (

@@ -2,11 +2,11 @@
 schema_version: '1.1'
 id: 'spec-wnw8vo-ship-system-substrate'
 title: 'Ship-System Substrate Migration'
-description: 'Selected ADR 0014 implementation contract for heterogeneous installed systems, compatibility, information safety, and conformance evidence.'
+description: 'ADR 0014 implementation contract for heterogeneous installed systems, compatibility, information safety, and conformance evidence, implemented on the development branch.'
 doc_type: 'spec'
 status: 'active'
 created: '2026-09-26'
-updated: '2026-09-26'
+updated: '2026-09-27'
 tags:
   - 'architecture'
   - 'simulation'
@@ -28,7 +28,7 @@ related:
 
 This page owns the bounded implementation and admission contract for [Issue #121](https://github.com/L3DigitalNet/star-trek-alter-course/issues/121). ADR 0014 owns the architectural decision. The owner selected implementation of that decision before further ship-system or Damage Control expansion; this page reconciles that instruction with the existing simulation and information boundaries.
 
-**Selected, not implemented at the reviewed baseline `e16e1a83e064e35c1fd7bb7a43f9e595b4d36d81`.** ADR 0014 was adopted by PR #120; adopting it did not migrate runtime state. Current development still uses M6A's five named conditions, four named allocations, V5 ship content, and V9 saves. The latest source release remains v0.6.2 with v0.6.0/V8 gameplay. An active document is not implementation evidence.
+**Implemented on the development branch (`feature/121-extensible-ship-system-substrate`, Final PR #123); unreleased.** ADR 0014 was adopted by PR #120. Runtime, content, persistence, and Godot's generic Engineering presentation now use the installed-system substrate described below: ship content V6, system-definition content V1, and saves V10 under rules identity `installed-ship-system-substrate-v1`. The latest source release remains v0.6.2 with v0.6.0/V8 gameplay; this migration is unreleased development, not a claim of merge or release. [Implementation status](implementation-status.md) and [Milestone proofs](milestone-proofs.md) track admission of the Final PR.
 
 The sequence is M6A → ADR 0014 conformance migration → separately refined recovery or tactical gameplay. This migration is not M6B and does not complete M3, M5, or M6. Earlier Damage Control prompts and any ship-system prompt conflicting with this page are superseded as implementation instructions. They must not be used to introduce generation repair, recovery AI, or another system kind here.
 
@@ -102,7 +102,7 @@ This closes a contradiction in the earlier handoff between hidden-loadout protec
 
 ## Compatibility and current-format capture
 
-Expected versions are ship content V6, system-definition content V1, and saves V10 under a new explicit rules identity, provided no intervening work assigns them first. These are selected targets, not currently implemented formats. Content-family versions and save versions are separate.
+Ship content V6, system-definition content V1, and saves V10 under the explicit rules identity `installed-ship-system-substrate-v1` are implemented on the development branch. Content-family versions and save versions are separate.
 
 V10 capture must serialize current installed state directly. Do not capture a V10 world into V8/V9's fixed five fields and then upgrade it; that would lose heterogeneous installations or leak legacy assumptions into current serialization. Existing bounded snapshot subrecords for unrelated state may be reused where their contracts are unchanged.
 
@@ -116,7 +116,7 @@ Re-derive current save-size and work bounds from legal combined shapes. Retain t
 
 ## Generic presentation and refit readiness
 
-Core projects an ordered list of the player's actual installations plus ship totals and existing specialized views. Generic Repair and Prioritize actions carry installed IDs with Core-owned availability and reasons. Absent installations create no fake Engineering row. A lack of a specialized capability may still have an explicit unavailable status in the relevant specialized panel.
+**Implemented on the development branch.** Core projects an ordered list of the player's actual installations plus ship totals and existing specialized views (`EngineeringProjection`, `InstalledSystemProjection`, `GameSimulation.Projection.cs`). Generic Balance, Prioritize, and Begin Repair actions carry installed IDs with Core-owned availability and reasons, bound to the owning ship and load generation (`OwnShipActionBinding`, `GameScreen._simulationGeneration`) so a stale control cannot act on another installation after refresh or quick-load. Absent installations create no fake Engineering row. A lack of a specialized capability has an explicit unavailable status ("UNAVAILABLE") in the relevant specialized panel, e.g. `SensorProjection.SensorInstallation` is null for an absent sensor. The per-kind `EngineeringAction`, `PowerAllocationPreset`, and the temporary `GameSimulation.EngineeringAdapter.cs` bridge are removed; Godot switches only on `EngineeringOperation`.
 
 Stable UI action keys include operation and installed identity, never list position or display name. Resolve the current payload at activation; an obsolete control cannot act on another installation after refresh/load. Preserve keyboard/mouse paths, focus, preview isolation, and current Combat behavior. Player refit controls are outside this feature.
 
@@ -140,4 +140,4 @@ Issue #121 is not complete until the following evidence is in its Final PR and t
 
 ## Source baseline
 
-[ADR 0014](../adr/0014-use-an-extensible-bounded-ship-system-substrate.md), [Issue #121](https://github.com/L3DigitalNet/star-trek-alter-course/issues/121), [Engineering state](../../src/AlterCourse.Core/Ships/ShipEngineeringState.cs), [fixed allocation](../../src/AlterCourse.Core/Ships/PowerAllocation.cs), [repair state](../../src/AlterCourse.Core/Ships/SystemRepairState.cs), [bootstrap](../../src/AlterCourse.Core/Gameplay/GameBootstrap.cs), [simulation](../../src/AlterCourse.Core/Gameplay/GameSimulation.cs), [combat](../../src/AlterCourse.Core/Gameplay/GameSimulation.Combat.cs), [V9 mapping](../../src/AlterCourse.Core/Persistence/GamePersistence.V9.cs), and [shell tests](../../src/AlterCourse.Godot/tests/GameplayShellTest.gd) establish the reviewed starting point, not evidence that this selected migration is implemented.
+[ADR 0014](../adr/0014-use-an-extensible-bounded-ship-system-substrate.md), [Issue #121](https://github.com/L3DigitalNet/star-trek-alter-course/issues/121), [installed-system identities](../../src/AlterCourse.Core/Ships/InstalledSystem.cs), [installed-system collection](../../src/AlterCourse.Core/Ships/InstalledSystemCollection.cs), [cardinality admission](../../src/AlterCourse.Core/Ships/ShipSystemAdmission.cs), [Engineering state](../../src/AlterCourse.Core/Ships/ShipEngineeringState.cs), [exact allocation](../../src/AlterCourse.Core/Ships/PowerAllocation.cs), [repair state](../../src/AlterCourse.Core/Ships/SystemRepairState.cs), [system-definition catalog](../../src/AlterCourse.Godot/content/systems/pathfinder-systems.json) and [schema](../../src/AlterCourse.Godot/content/schemas/system-definition-v1.schema.json), [ship content V6](../../src/AlterCourse.Godot/content/ships/pathfinder.json) and [schema](../../src/AlterCourse.Godot/content/schemas/ship-definition-v6.schema.json), [V10 save models](../../src/AlterCourse.Core/Persistence/SaveModelsV10.cs) and [capture/migration](../../src/AlterCourse.Core/Persistence/GamePersistence.V10.cs), [installed-system identity tests](../../tests/AlterCourse.Core.Tests/Ships/InstalledSystemIdentityTests.cs), [cardinality bootstrap test](../../tests/AlterCourse.Core.Tests/Gameplay/HeterogeneousBootstrapTests.cs), [V10 compatibility tests](../../tests/AlterCourse.Core.Tests/Persistence/GamePersistenceV10CompatibilityTests.cs), [V10 substrate tests](../../tests/AlterCourse.Core.Tests/Persistence/GamePersistenceV10SubstrateTests.cs), [Engineering projection tests](../../tests/AlterCourse.Core.Tests/Player/EngineeringProjectionTests.cs), [Godot Engineering workspace](../../src/AlterCourse.Godot/src/Gameplay/EngineeringWorkspace.cs), [own-ship action binding](../../src/AlterCourse.Godot/src/Gameplay/OwnShipActionBinding.cs), [kind presentation table](../../src/AlterCourse.Godot/src/Gameplay/EngineeringKindPresentation.cs), and [shell tests](../../src/AlterCourse.Godot/tests/GameplayShellTest.gd) establish the implemented runtime, persistence, and presentation baseline for this migration. [Substrate conformance tests](../../tests/AlterCourse.Core.Tests/SubstrateConformanceTests.cs), the [extension demonstration](../../tests/AlterCourse.Core.Tests/SubstrateExtensionTests.cs), [heterogeneous continuation tests](../../tests/AlterCourse.Core.Tests/Gameplay/HeterogeneousLoadoutContinuationTests.cs), and [long-horizon tests](../../tests/AlterCourse.Core.Tests/Gameplay/M6CombatLongHorizonTests.cs) guard the integrated result.

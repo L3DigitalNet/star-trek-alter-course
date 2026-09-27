@@ -72,7 +72,12 @@ public static partial class GamePersistence
     private const int V6SchemaVersion = 6;
     private const int V7SchemaVersion = 7;
     private const int V8SchemaVersion = 8;
-    private const int CurrentSchemaVersion = 9;
+
+    // The current aliases name the V10 constants and are used only by Serialize's writer check and the Deserialize
+    // dispatch arm; V10 capture, validation, and V9→V10 migration name the V10 constants directly. No migration or
+    // historical validator may read the aliases: each declares its own fixed source and target labels, so adding a
+    // schema never relabels an older document's migration output.
+    private const int CurrentSchemaVersion = V10SchemaVersion;
     private const string V1SimulationRulesVersion = "first-playable-v1";
     private const string V2SimulationRulesVersion = "first-playable-v1";
     private const string V3SimulationRulesVersion = "active-world-orders-v1";
@@ -85,10 +90,8 @@ public static partial class GamePersistence
 
     private const string V7SimulationRulesVersion = "faction-intent-autonomous-assignment-v1";
 
-    // Godot's gameplay shell asserts the current literal from the written save in
-    // src/AlterCourse.Godot/tests/GameplayShellTest.gd, so changing it requires updating that end.
     private const string V8SimulationRulesVersion = "observation-driven-faction-response-v1";
-    private const string CurrentSimulationRulesVersion = "first-combat-engagement-v1";
+    private const string CurrentSimulationRulesVersion = V10SimulationRulesVersion;
     private const string TravelArrivalKind = "travelArrival";
     private const string SensorRepairCompletionKind = "sensorRepairCompletion";
     private const string SystemRepairCompletionKind = "systemRepairCompletion";
@@ -128,19 +131,33 @@ public static partial class GamePersistence
         MaxDepth = MaximumJsonDepth,
     };
 
-    /// <summary>Serializes a validated simulation and caller-supplied organization metadata as V9 UTF-8 JSON.</summary>
+    /// <summary>Serializes a validated simulation and caller-supplied organization metadata as V10 UTF-8 JSON.</summary>
     public static byte[] Serialize(GameSimulation simulation, GameSaveMetadata metadata)
     {
         ArgumentNullException.ThrowIfNull(simulation);
         ArgumentNullException.ThrowIfNull(metadata);
         ValidateMetadata(metadata);
 
-        SaveModelsV9.SaveEnvelopeV9 envelope = CaptureV9(simulation.CaptureState(), metadata);
+        SaveModelsV10.SaveEnvelopeV10 envelope = CaptureV10(
+            simulation.CaptureState(),
+            simulation.ShipCatalog,
+            metadata
+        );
+        if (
+            envelope.SchemaVersion != CurrentSchemaVersion
+            || !string.Equals(envelope.SimulationRulesVersion, CurrentSimulationRulesVersion, StringComparison.Ordinal)
+        )
+        {
+            throw new InvalidOperationException(
+                "The save writer produced a document other than the current schema and rules identity."
+            );
+        }
+
         byte[] json = JsonSerializer.SerializeToUtf8Bytes(envelope, SerializerOptions);
         if (json.Length > MaximumSaveBytes)
         {
             throw new InvalidOperationException(
-                $"The V9 save is {json.Length} bytes and exceeds the {MaximumSaveBytes}-byte contract limit."
+                $"The V10 save is {json.Length} bytes and exceeds the {MaximumSaveBytes}-byte contract limit."
             );
         }
 
@@ -191,7 +208,8 @@ public static partial class GamePersistence
                 V6SchemaVersion => LoadV6(documentBytes, catalog, factionCatalog, sourceIdentity),
                 V7SchemaVersion => LoadV7(documentBytes, catalog, factionCatalog, sourceIdentity),
                 V8SchemaVersion => LoadV8(documentBytes, catalog, factionCatalog, sourceIdentity),
-                CurrentSchemaVersion => LoadV9(documentBytes, catalog, factionCatalog, sourceIdentity),
+                V9SchemaVersion => LoadV9(documentBytes, catalog, factionCatalog, sourceIdentity),
+                CurrentSchemaVersion => LoadV10(documentBytes, catalog, factionCatalog, sourceIdentity),
                 _ => throw Failure(
                     GamePersistenceFailure.UnsupportedVersion,
                     sourceIdentity,
@@ -202,6 +220,10 @@ public static partial class GamePersistence
         catch (GamePersistenceException)
         {
             throw;
+        }
+        catch (SaveContentIncompatibleException exception)
+        {
+            throw Failure(GamePersistenceFailure.IncompatibleContent, sourceIdentity, exception.Message, exception);
         }
         catch (JsonException exception)
         {
@@ -328,48 +350,6 @@ public static partial class GamePersistence
         }
     }
 
-    private static SaveEnvelopeV8 CaptureV8(SimulationState state, GameSaveMetadata metadata)
-    {
-        if (state.Ships.Length > SimulationState.MaximumShips)
-        {
-            throw new InvalidOperationException(
-                $"V8 persistence supports at most {SimulationState.MaximumShips} ships."
-            );
-        }
-
-        if (state.Factions.Length > SimulationState.MaximumFactions)
-        {
-            throw new InvalidOperationException(
-                $"V8 persistence supports at most {SimulationState.MaximumFactions} factions."
-            );
-        }
-
-        return new SaveEnvelopeV8
-        {
-            SchemaVersion = V8SchemaVersion,
-            SimulationRulesVersion = V8SimulationRulesVersion,
-            Metadata = new SaveMetadataV2
-            {
-                SaveId = metadata.SaveId,
-                DisplayName = metadata.DisplayName,
-                CreatedAtUtc = metadata.CreatedAtUtc,
-                SavedAtUtc = metadata.SavedAtUtc,
-            },
-            Simulation = new SimulationSnapshotV8
-            {
-                TimeMilliseconds = state.Time.Milliseconds,
-                ShipAllocatorNextId = state.ShipIdAllocator.NextId,
-                OrderAllocatorNextId = state.OrderIdAllocator.NextId,
-                ObservationReportAllocatorNextId = state.ObservationReportIdAllocator.NextId,
-                PlayerShipId = state.PlayerShipId.Value,
-                Scheduler = CaptureSchedulerV7(state.Scheduler),
-                StrategicMap = CaptureStrategicMapV2(state.StrategicMap),
-                Ships = [.. state.Ships.OrderBy(ship => ship.InstanceId.Value).Select(CaptureShipV7)],
-                Factions = [.. state.Factions.OrderBy(faction => faction.Id.Value).Select(CaptureFactionV8)],
-            },
-        };
-    }
-
     private static SaveModelsV7.SchedulerSnapshotV7 CaptureSchedulerV7(SimulationScheduler scheduler) =>
         new()
         {
@@ -415,48 +395,6 @@ public static partial class GamePersistence
                     DurationMilliseconds = route.Duration.Milliseconds,
                 }),
             ],
-        };
-
-    private static ShipSnapshotV7 CaptureShipV7(ShipState ship) =>
-        new()
-        {
-            InstanceId = ship.InstanceId.Value,
-            DefinitionId = ship.DefinitionId.Value,
-            DisplayName = ship.VesselDisplayName,
-            TacticalPosition = new TacticalPositionSnapshotV2
-            {
-                XKilometers = ship.TacticalPosition.XKilometers,
-                YKilometers = ship.TacticalPosition.YKilometers,
-            },
-            TacticalMotion = new TacticalMotionSnapshotV2
-            {
-                HeadingDegrees = ship.TacticalMotion.Heading.Value,
-                SpeedKilometersPerSecond = ship.TacticalMotion.Speed.Value,
-            },
-            Engineering = new SaveModelsV5.EngineeringSnapshotV5
-            {
-                GenerationCondition = ship.Engineering.GenerationCondition.Value,
-                SensorCondition = ship.Engineering.SensorCondition.Value,
-                ImpulseCondition = ship.Engineering.ImpulseCondition.Value,
-                SensorAllocation = ship.Engineering.Allocation.Sensors.Value,
-                ImpulseAllocation = ship.Engineering.Allocation.ImpulsePropulsion.Value,
-                ActiveRepair = ship.Engineering.ActiveRepair is null
-                    ? null
-                    : new SaveModelsV5.SystemRepairSnapshotV5
-                    {
-                        TargetSystem = ship.Engineering.ActiveRepair.TargetSystem.Value,
-                        StartingCondition = ship.Engineering.ActiveRepair.StartingCondition.Value,
-                        TargetCondition = ship.Engineering.ActiveRepair.TargetCondition.Value,
-                        StartedAtMilliseconds = ship.Engineering.ActiveRepair.StartedAt.Milliseconds,
-                        ExpectedCompletionMilliseconds = ship.Engineering.ActiveRepair.ExpectedCompletion.Milliseconds,
-                        ScheduledCompletionId = ship.Engineering.ActiveRepair.ScheduledCompletionId.Value,
-                    },
-            },
-            StrategicState = CaptureStrategicStateV2(ship.StrategicState),
-            ActiveOrder = CaptureOrderV3(ship.ActiveOrder),
-            SensorKnowledge = CaptureSensorKnowledgeV6(ship.SensorKnowledge),
-            AutonomousState = CaptureAutonomousStateV4(ship.AutonomousState),
-            DirectControllerFactionId = ship.DirectControllerFactionId?.Value,
         };
 
     private static SaveModelsV7.FactionSnapshotV7 CaptureFactionV7(FactionState faction) =>
@@ -566,22 +504,6 @@ public static partial class GamePersistence
             Identification = CaptureContactIdentification(report.Identification),
             KnownVesselDisplayName = report.KnownVesselDisplayName,
             KnownDesignDisplayName = report.KnownDesignDisplayName,
-        };
-
-    private static SaveModelsV6.SensorKnowledgeSnapshotV6 CaptureSensorKnowledgeV6(SensorKnowledge knowledge) =>
-        new()
-        {
-            NextContactId = knowledge.NextContactId,
-            Contacts = [.. knowledge.Contacts.Select(CaptureContactV6)],
-            ActiveScan = knowledge.ActiveScan is null
-                ? null
-                : new SaveModelsV4.ActiveSensorScanSnapshotV4
-                {
-                    TargetContactId = knowledge.ActiveScan.TargetContactId.Value,
-                    StartedAtMilliseconds = knowledge.ActiveScan.StartedAt.Milliseconds,
-                    ExpectedCompletionMilliseconds = knowledge.ActiveScan.ExpectedCompletion.Milliseconds,
-                    ScheduledCompletionId = knowledge.ActiveScan.ScheduledCompletionId.Value,
-                },
         };
 
     private static SaveModelsV6.SensorContactSnapshotV6 CaptureContactV6(SensorContactTrack contact) =>
@@ -756,7 +678,7 @@ public static partial class GamePersistence
                 JsonSerializer.Deserialize<SaveEnvelopeV1>(json, SerializerOptions)
                 ?? throw new JsonException("The save root must be an object.");
             ValidateEnvelopeV1(envelope);
-            SaveEnvelopeV2 migrated = MigrateV1ToV2(envelope, catalog);
+            SaveEnvelopeV2 migrated = MigrateV1ToV2(envelope);
             ValidateCandidateV2(migrated, catalog);
             SaveEnvelopeV3 migratedV3 = MigrateV2ToV3(migrated);
             ValidateCandidateV3(migratedV3, catalog);
@@ -1065,7 +987,7 @@ public static partial class GamePersistence
                 JsonSerializer.Deserialize<SaveEnvelopeV8>(json, SerializerOptions)
                 ?? throw new JsonException("The save root must be an object.");
             ValidateCandidateV8(envelope, catalog);
-            return RestoreV9(MigrateV8ToV9(envelope), catalog, factionCatalog);
+            return RestoreThroughV10(MigrateV8ToV9(envelope), catalog, factionCatalog);
         }
         catch (GamePersistenceException)
         {
@@ -1092,7 +1014,7 @@ public static partial class GamePersistence
         }
     }
 
-    private static SaveEnvelopeV2 MigrateV1ToV2(SaveEnvelopeV1 envelope, ShipDefinitionCatalog catalog)
+    private static SaveEnvelopeV2 MigrateV1ToV2(SaveEnvelopeV1 envelope)
     {
         SimulationSnapshotV1 source = envelope.Simulation;
         if (
@@ -1107,14 +1029,14 @@ public static partial class GamePersistence
 
         PlayerShipSnapshotV1 player = source.PlayerShip;
         ValidateText(player.DefinitionId, "Ship definition identity", ShipDefinitionId.MaximumLength);
-        ShipDefinition definition = catalog.GetRequired(new ShipDefinitionId(player.DefinitionId));
+        var definition = HistoricalShipContentV5.GetRequired(player.DefinitionId);
 
         // V1 predates runtime vessel names. During pre-1.0 migration only, the authored design label
         // supplies the missing value deterministically; V2 persists it and never repeats this fallback.
         return new SaveEnvelopeV2
         {
             SchemaVersion = V2SchemaVersion,
-            SimulationRulesVersion = envelope.SimulationRulesVersion,
+            SimulationRulesVersion = V2SimulationRulesVersion,
             Metadata = new SaveMetadataV2
             {
                 SaveId = envelope.Metadata.SaveId,
@@ -1262,7 +1184,10 @@ public static partial class GamePersistence
 
     private static ShipSnapshotV5 MigrateShipV4(ShipSnapshotV4 ship, ShipDefinitionCatalog catalog)
     {
-        ShipDefinition definition = catalog.GetRequired(new ShipDefinitionId(ship.DefinitionId));
+        // Frozen historical demands, never the current catalog's: V4→V5 must fill the allocation every V5 build
+        // produced for this save, whatever today's content says.
+        ArgumentNullException.ThrowIfNull(catalog);
+        var definition = HistoricalShipContentV5.GetRequired(ship.DefinitionId);
         return new ShipSnapshotV5
         {
             InstanceId = ship.InstanceId,
@@ -1275,15 +1200,15 @@ public static partial class GamePersistence
                 GenerationCondition = 1,
                 SensorCondition = ship.SensorIntegrity,
                 ImpulseCondition = 1,
-                SensorAllocation = definition.Engineering.NominalSensorDemand.Value,
-                ImpulseAllocation = definition.Engineering.NominalImpulseDemand.Value,
+                SensorAllocation = definition.NominalSensorDemandPowerUnits,
+                ImpulseAllocation = definition.NominalImpulseDemandPowerUnits,
                 // V4 encoded only sensor repair. V5 changes both the target identity and
                 // scheduled kind while preserving the exact temporal/work correlation.
                 ActiveRepair = ship.SensorRepair is null
                     ? null
                     : new SaveModelsV5.SystemRepairSnapshotV5
                     {
-                        TargetSystem = ShipSystemId.Sensors.Value,
+                        TargetSystem = ShipSystemKind.Sensors.Value,
                         StartingCondition = ship.SensorRepair.StartingIntegrity,
                         TargetCondition = ship.SensorRepair.TargetIntegrity,
                         StartedAtMilliseconds = ship.SensorRepair.StartedAtMilliseconds,
@@ -1636,35 +1561,7 @@ public static partial class GamePersistence
         ValidateCandidateV7(envelope, catalog);
         SaveEnvelopeV8 migrated = MigrateV7ToV8(envelope);
         ValidateCandidateV8(migrated, catalog);
-        return RestoreV9(MigrateV8ToV9(migrated), catalog, factionCatalog);
-    }
-
-    private static LoadedGameSave RestoreV8(
-        SaveEnvelopeV8 envelope,
-        ShipDefinitionCatalog catalog,
-        FactionDefinitionCatalog factionCatalog
-    )
-    {
-        ValidateCandidateV8(envelope, catalog);
-        SimulationSnapshotV8 snapshot = envelope.Simulation;
-        var state = new SimulationState(
-            new SimulationTime(snapshot.TimeMilliseconds),
-            RestoreSchedulerV7(snapshot.Scheduler),
-            ShipInstanceIdAllocator.Restore(snapshot.ShipAllocatorNextId),
-            RestoreMapV2(snapshot.StrategicMap),
-            new ShipInstanceId(snapshot.PlayerShipId),
-            snapshot.Ships.Select(RestoreShipV7),
-            ShipOrderIdAllocator.Restore(snapshot.OrderAllocatorNextId),
-            snapshot.Factions.Select(RestoreFactionV8),
-            ObservationReportIdAllocator.Restore(snapshot.ObservationReportAllocatorNextId)
-        );
-        var metadata = new GameSaveMetadata(
-            envelope.Metadata.SaveId,
-            envelope.Metadata.DisplayName,
-            envelope.Metadata.CreatedAtUtc,
-            envelope.Metadata.SavedAtUtc
-        );
-        return new LoadedGameSave(metadata, GameSimulation.RestoreState(state, catalog, factionCatalog));
+        return RestoreThroughV10(MigrateV8ToV9(migrated), catalog, factionCatalog);
     }
 
     private static void ValidateCandidateV2(SaveEnvelopeV2 envelope, ShipDefinitionCatalog catalog)
@@ -2235,6 +2132,9 @@ public static partial class GamePersistence
         }
     }
 
+    /// <param name="snapshot">The candidate simulation.</param>
+    /// <param name="catalog">The supplied content (checked for presence only; historical tuning is frozen).</param>
+    /// <param name="sourceSchemaVersion">The schema version whose scheduler rules apply.</param>
     private static void ValidateSimulationCandidateV5(
         SimulationSnapshotV5 snapshot,
         ShipDefinitionCatalog catalog,
@@ -2257,7 +2157,7 @@ public static partial class GamePersistence
         {
             ValidateEngineeringCandidateV5(
                 ship,
-                catalog.GetRequired(new ShipDefinitionId(ship.DefinitionId)),
+                HistoricalShipContentV5.GetRequired(ship.DefinitionId),
                 snapshot.Scheduler,
                 snapshot.TimeMilliseconds
             );
@@ -2545,7 +2445,7 @@ public static partial class GamePersistence
 
     private static void ValidateEngineeringCandidateV5(
         ShipSnapshotV5 ship,
-        ShipDefinition definition,
+        HistoricalShipContentV5 definition,
         SchedulerSnapshotV2 scheduler,
         long currentTime
     )
@@ -2559,19 +2459,32 @@ public static partial class GamePersistence
         EnsureUnitInterval(engineering.GenerationCondition, "Generation condition");
         EnsureUnitInterval(engineering.SensorCondition, "Sensor condition");
         EnsureUnitInterval(engineering.ImpulseCondition, "Impulse condition");
-        var state = new ShipEngineeringState(
-            new SystemCondition(engineering.GenerationCondition),
-            new SystemCondition(engineering.SensorCondition),
-            new SystemCondition(engineering.ImpulseCondition),
-            new PowerAllocation(
-                new PowerUnits(engineering.SensorAllocation),
-                new PowerUnits(engineering.ImpulseAllocation)
-            )
-        );
-        state.Validate(definition.Engineering);
 
-        double effectiveMaximumSpeed =
-            definition.MaximumTacticalSpeed.Value * state.ImpulseCapability(definition.Engineering);
+        // Arithmetic over the DTO numbers and the frozen table, deliberately not current runtime types: historical
+        // validation must not change meaning when runtime engineering or content evolves. The expressions are the
+        // pre-substrate ones (floor generation, per-consumer demand, total, speed from impulse capability).
+        _ = new PowerUnits(engineering.SensorAllocation);
+        _ = new PowerUnits(engineering.ImpulseAllocation);
+        if (
+            engineering.SensorAllocation > definition.NominalSensorDemandPowerUnits
+            || engineering.ImpulseAllocation > definition.NominalImpulseDemandPowerUnits
+        )
+        {
+            throw new InvalidOperationException("Engineering allocation exceeds authored consumer demand.");
+        }
+
+        decimal available = decimal.Floor(
+            definition.NominalGenerationPowerUnits * (decimal)engineering.GenerationCondition
+        );
+        if ((long)engineering.SensorAllocation + engineering.ImpulseAllocation > available)
+        {
+            throw new InvalidOperationException("Engineering allocation exceeds currently available power.");
+        }
+
+        double impulseCapability =
+            engineering.ImpulseCondition
+            * Math.Min(1, (double)engineering.ImpulseAllocation / definition.NominalImpulseDemandPowerUnits);
+        double effectiveMaximumSpeed = definition.MaximumTacticalSpeedKilometersPerSecond * impulseCapability;
         if (ship.TacticalMotion.SpeedKilometersPerSecond > effectiveMaximumSpeed)
         {
             throw new InvalidOperationException("Ship tactical speed exceeds its effective impulse capability.");
@@ -2589,7 +2502,7 @@ public static partial class GamePersistence
 
     private static void ValidateRepairCandidateV5(
         ShipSnapshotV5 ship,
-        ShipDefinition definition,
+        HistoricalShipContentV5 definition,
         long currentTime,
         SaveModelsV5.EngineeringSnapshotV5 engineering,
         ScheduledWorkSnapshotV2[] repairWork
@@ -2606,8 +2519,8 @@ public static partial class GamePersistence
         }
 
         SaveModelsV5.SystemRepairSnapshotV5 repair = engineering.ActiveRepair;
-        var targetSystem = ShipSystemId.Parse(repair.TargetSystem);
-        if (targetSystem != ShipSystemId.Sensors && targetSystem != ShipSystemId.ImpulsePropulsion)
+        var targetSystem = ShipSystemKind.Parse(repair.TargetSystem);
+        if (targetSystem != ShipSystemKind.Sensors && targetSystem != ShipSystemKind.ImpulsePropulsion)
         {
             throw new InvalidOperationException("Only sensors and impulse propulsion are repairable.");
         }
@@ -2616,7 +2529,7 @@ public static partial class GamePersistence
 
         if (
             repair.ExpectedCompletionMilliseconds - repair.StartedAtMilliseconds
-            != definition.Engineering.RepairDurationFor(targetSystem).Milliseconds
+            != definition.RepairDurationMillisecondsFor(targetSystem.Value)
         )
         {
             throw new InvalidOperationException("System repair duration does not match its ship definition.");
@@ -2628,7 +2541,7 @@ public static partial class GamePersistence
         double expectedCondition =
             repair.StartingCondition + ((repair.TargetCondition - repair.StartingCondition) * progress);
         double actualCondition =
-            targetSystem == ShipSystemId.Sensors ? engineering.SensorCondition : engineering.ImpulseCondition;
+            targetSystem == ShipSystemKind.Sensors ? engineering.SensorCondition : engineering.ImpulseCondition;
         if (actualCondition != expectedCondition)
         {
             throw new InvalidOperationException("System condition does not match the active repair at current time.");
@@ -2785,7 +2698,7 @@ public static partial class GamePersistence
         EnsureFixedStep(snapshot.TimeMilliseconds, "Current simulation time");
         ValidateMapCandidateV2(snapshot.StrategicMap);
 
-        (HashSet<long> shipIds, Dictionary<long, ShipDefinition> definitions) = ValidateShipIdentitiesV2(
+        (HashSet<long> shipIds, Dictionary<long, HistoricalShipContentV5> definitions) = ValidateShipIdentitiesV2(
             snapshot.Ships,
             catalog
         );
@@ -2816,7 +2729,7 @@ public static partial class GamePersistence
         }
     }
 
-    private static (HashSet<long> Ids, Dictionary<long, ShipDefinition> Definitions) ValidateShipIdentitiesV2(
+    private static (HashSet<long> Ids, Dictionary<long, HistoricalShipContentV5> Definitions) ValidateShipIdentitiesV2(
         ShipSnapshotV2[] ships,
         ShipDefinitionCatalog catalog
     )
@@ -2828,7 +2741,7 @@ public static partial class GamePersistence
 
         EnsureCount(ships.Length, SimulationState.MaximumShips, "ships");
         var shipIds = new HashSet<long>();
-        var definitions = new Dictionary<long, ShipDefinition>();
+        var definitions = new Dictionary<long, HistoricalShipContentV5>();
         foreach (ShipSnapshotV2? ship in ships)
         {
             if (ship is null)
@@ -2843,7 +2756,8 @@ public static partial class GamePersistence
 
             ValidateText(ship.DefinitionId, "Ship definition identity", ShipDefinitionId.MaximumLength);
             ValidateText(ship.DisplayName, "Ship display name", ShipState.MaximumVesselDisplayNameLength);
-            definitions.Add(ship.InstanceId, catalog.GetRequired(new ShipDefinitionId(ship.DefinitionId)));
+            ArgumentNullException.ThrowIfNull(catalog);
+            definitions.Add(ship.InstanceId, HistoricalShipContentV5.GetRequired(ship.DefinitionId));
         }
 
         return (shipIds, definitions);
@@ -3157,7 +3071,7 @@ public static partial class GamePersistence
 
     private static void ValidateShipCandidateV2(
         ShipSnapshotV2 ship,
-        ShipDefinition definition,
+        HistoricalShipContentV5 definition,
         StrategicMapSnapshotV2 map,
         SchedulerSnapshotV2 scheduler,
         long currentTime
@@ -3174,7 +3088,7 @@ public static partial class GamePersistence
         EnsureFinite(ship.TacticalMotion.SpeedKilometersPerSecond, "Ship tactical speed");
         if (
             ship.TacticalMotion.SpeedKilometersPerSecond < 0
-            || ship.TacticalMotion.SpeedKilometersPerSecond > definition.MaximumTacticalSpeed.Value
+            || ship.TacticalMotion.SpeedKilometersPerSecond > definition.MaximumTacticalSpeedKilometersPerSecond
         )
         {
             throw new InvalidOperationException("Ship tactical speed is outside its definition bounds.");
@@ -3295,7 +3209,7 @@ public static partial class GamePersistence
 
     private static void ValidateRepairCandidateV2(
         ShipSnapshotV2 ship,
-        ShipDefinition definition,
+        HistoricalShipContentV5 definition,
         SchedulerSnapshotV2 scheduler,
         long currentTime
     )
@@ -3332,7 +3246,7 @@ public static partial class GamePersistence
 
         if (
             repair.ExpectedCompletionMilliseconds - repair.StartedAtMilliseconds
-            != definition.SensorRepairDuration.Milliseconds
+            != definition.SensorRepairDurationMilliseconds
         )
         {
             throw new InvalidOperationException("Sensor repair duration does not match its ship definition.");
@@ -3411,33 +3325,6 @@ public static partial class GamePersistence
                 ParseWorkTargetV7(work),
                 ParseWorkKind(work.Kind, sourceSchemaVersion)
             ))
-        );
-
-    private static ShipState RestoreShipV7(ShipSnapshotV7 snapshot) =>
-        new(
-            new ShipInstanceId(snapshot.InstanceId),
-            new ShipDefinitionId(snapshot.DefinitionId),
-            snapshot.DisplayName,
-            new TacticalPosition(snapshot.TacticalPosition.XKilometers, snapshot.TacticalPosition.YKilometers),
-            new TacticalMotion(
-                new HeadingDegrees(snapshot.TacticalMotion.HeadingDegrees),
-                new SpeedKilometersPerSecond(snapshot.TacticalMotion.SpeedKilometersPerSecond)
-            ),
-            new ShipEngineeringState(
-                new SystemCondition(snapshot.Engineering.GenerationCondition),
-                new SystemCondition(snapshot.Engineering.SensorCondition),
-                new SystemCondition(snapshot.Engineering.ImpulseCondition),
-                new PowerAllocation(
-                    new PowerUnits(snapshot.Engineering.SensorAllocation),
-                    new PowerUnits(snapshot.Engineering.ImpulseAllocation)
-                ),
-                RestoreSystemRepairV5(snapshot.Engineering.ActiveRepair)
-            ),
-            RestoreStrategicStateV2(snapshot.StrategicState),
-            RestoreOrderV3(snapshot.ActiveOrder),
-            RestoreSensorKnowledgeV6(snapshot.SensorKnowledge),
-            RestoreAutonomousStateV4(snapshot.AutonomousState),
-            snapshot.DirectControllerFactionId is null ? null : new FactionId(snapshot.DirectControllerFactionId.Value)
         );
 
     private static FactionState RestoreFactionV7(SaveModelsV7.FactionSnapshotV7 snapshot) =>
@@ -3528,10 +3415,14 @@ public static partial class GamePersistence
             snapshot.KnownDesignDisplayName
         );
 
-    private static SensorKnowledge RestoreSensorKnowledgeV6(SaveModelsV6.SensorKnowledgeSnapshotV6 snapshot) =>
+    private static SensorKnowledge RestoreSensorKnowledge(
+        long nextContactId,
+        SaveModelsV6.SensorContactSnapshotV6[] contacts,
+        ActiveSensorScanState? activeScan
+    ) =>
         new(
-            snapshot.NextContactId,
-            snapshot.Contacts.Select(contact => new SensorContactTrack(
+            nextContactId,
+            contacts.Select(contact => new SensorContactTrack(
                 new SensorContactId(contact.Id),
                 new ShipInstanceId(contact.TargetShipId),
                 new TacticalPosition(
@@ -3556,14 +3447,7 @@ public static partial class GamePersistence
                     ? null
                     : new SimulationTime(contact.LossDueTimeMilliseconds.Value)
             )),
-            snapshot.ActiveScan is null
-                ? null
-                : new ActiveSensorScanState(
-                    new SensorContactId(snapshot.ActiveScan.TargetContactId),
-                    new SimulationTime(snapshot.ActiveScan.StartedAtMilliseconds),
-                    new SimulationTime(snapshot.ActiveScan.ExpectedCompletionMilliseconds),
-                    new ScheduledWorkId(snapshot.ActiveScan.ScheduledCompletionId)
-                )
+            activeScan
         );
 
     private static ShipAutonomousState RestoreAutonomousStateV4(SaveModelsV4.ShipAutonomousSnapshotV4 snapshot) =>
@@ -3597,18 +3481,6 @@ public static partial class GamePersistence
             ),
             _ => throw new InvalidOperationException("Active ship order kind is unknown."),
         };
-
-    private static SystemRepairState? RestoreSystemRepairV5(SaveModelsV5.SystemRepairSnapshotV5? snapshot) =>
-        snapshot is null
-            ? null
-            : new SystemRepairState(
-                ShipSystemId.Parse(snapshot.TargetSystem),
-                new SystemCondition(snapshot.StartingCondition),
-                new SystemCondition(snapshot.TargetCondition),
-                new SimulationTime(snapshot.StartedAtMilliseconds),
-                new SimulationTime(snapshot.ExpectedCompletionMilliseconds),
-                new ScheduledWorkId(snapshot.ScheduledCompletionId)
-            );
 
     private static ShipStrategicState RestoreStrategicStateV2(StrategicStateSnapshotV2 snapshot) =>
         snapshot.Kind switch
@@ -3736,8 +3608,10 @@ public static partial class GamePersistence
                     or ScheduledWorkKind.ShipContactDecisionWake
                     or ScheduledWorkKind.FactionDecisionWake
                     or ScheduledWorkKind.ObservationReportDelivery,
-            CurrentSchemaVersion => IsWorkKindAllowed(parsed, V8SchemaVersion)
+            V9SchemaVersion => IsWorkKindAllowed(parsed, V8SchemaVersion)
                 || parsed == ScheduledWorkKind.ShipCombatDecisionWake,
+            // V10 adds no work kind: repair and scan stay one per ship and readiness is a time, not scheduled work.
+            V10SchemaVersion => IsWorkKindAllowed(parsed, V9SchemaVersion),
             _ => false,
         };
 

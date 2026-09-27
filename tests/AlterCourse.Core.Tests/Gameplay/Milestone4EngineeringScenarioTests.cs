@@ -9,6 +9,8 @@ using AlterCourse.Core.Sensors;
 using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
+using AlterCourse.Core.Tests.Persistence;
+using AlterCourse.Core.Tests.Support;
 
 namespace AlterCourse.Core.Tests.Gameplay;
 
@@ -36,9 +38,9 @@ public sealed class Milestone4EngineeringScenarioTests
         EngineeringProjection initialEngineering = initial.Ship.Engineering;
 
         Assert.Equal(new PowerUnits(75), initialEngineering.AvailablePower);
-        Assert.Equal(new PowerUnits(44), initialEngineering.SensorAllocation);
-        Assert.Equal(new PowerUnits(31), initialEngineering.ImpulseAllocation);
-        Assert.Equal(0.4, initialEngineering.SensorCondition.Value);
+        Assert.Equal(new PowerUnits(44), initialEngineering.System(ShipSystemKind.Sensors).Allocation);
+        Assert.Equal(new PowerUnits(31), initialEngineering.System(ShipSystemKind.ImpulsePropulsion).Allocation);
+        Assert.Equal(0.4, initialEngineering.System(ShipSystemKind.Sensors).Condition.Value);
         Assert.Equal(30 * (44d / 70) * 0.4, initialEngineering.EffectivePassiveSensorRange.Value, 12);
         Assert.Equal(6.2, initialEngineering.EffectiveMaximumTacticalSpeed.Value, 12);
         Assert.Equal(new LocationId("dawn-anchor"), initial.Strategic.CurrentLocation!.Id);
@@ -51,13 +53,17 @@ public sealed class Milestone4EngineeringScenarioTests
                 .Travel.Destination
         );
 
-        PowerAllocationResult sensorPriority = uninterrupted.ApplyPowerAllocationPreset(
-            PowerAllocationPreset.PrioritizeSensors
-        );
+        PowerAllocationResult sensorPriority = uninterrupted.PrioritizePlayer(ShipSystemKind.Sensors);
         Assert.Equal(PowerAllocationOutcome.Accepted, sensorPriority.Outcome);
         Assert.Empty(sensorPriority.ResolvedEvents);
-        Assert.Equal(new PowerUnits(70), uninterrupted.GetPlayerProjection().Ship.Engineering.SensorAllocation);
-        Assert.Equal(new PowerUnits(5), uninterrupted.GetPlayerProjection().Ship.Engineering.ImpulseAllocation);
+        Assert.Equal(
+            new PowerUnits(70),
+            uninterrupted.GetPlayerProjection().Ship.Engineering.System(ShipSystemKind.Sensors).Allocation
+        );
+        Assert.Equal(
+            new PowerUnits(5),
+            uninterrupted.GetPlayerProjection().Ship.Engineering.System(ShipSystemKind.ImpulsePropulsion).Allocation
+        );
         Assert.Equal(12, uninterrupted.GetPlayerProjection().Ship.Engineering.EffectivePassiveSensorRange.Value, 12);
         Assert.Equal(1, uninterrupted.GetPlayerProjection().Ship.Engineering.EffectiveMaximumTacticalSpeed.Value, 12);
 
@@ -68,7 +74,11 @@ public sealed class Milestone4EngineeringScenarioTests
         Assert.Equal(new SensorContactId(1), acquiredKestrel.Id);
         Assert.Equal(new SimulationTime(3_500), acquiredKestrel.LastObservedAt);
         Assert.Equal(SensorContactIdentification.Detected, acquiredKestrel.Identification);
-        Assert.Equal(0.6625, acquisition.Projection.Ship.Engineering.SensorCondition.Value, 12);
+        Assert.Equal(
+            0.6625,
+            acquisition.Projection.Ship.Engineering.System(ShipSystemKind.Sensors).Condition.Value,
+            12
+        );
         Assert.Equal(19.875, acquisition.Projection.Ship.Engineering.EffectivePassiveSensorRange.Value, 12);
         Assert.DoesNotContain(
             typeof(SensorContactSnapshot).GetProperties(),
@@ -83,7 +93,7 @@ public sealed class Milestone4EngineeringScenarioTests
         Assert.Equal(ActiveSensorScanOutcome.Accepted, uninterrupted.RequestActiveSensorScan(contactId).Outcome);
         SimulationAdvanceResult midScan = uninterrupted.AdvanceFixedSteps(10);
         Assert.Equal(new SimulationTime(4_500), midScan.FinalTime);
-        Assert.Equal(0.7375, midScan.Projection.Ship.Engineering.SensorCondition.Value, 12);
+        Assert.Equal(0.7375, midScan.Projection.Ship.Engineering.System(ShipSystemKind.Sensors).Condition.Value, 12);
         Assert.Equal(0.5625, midScan.Projection.Ship.Engineering.ActiveRepair!.Progress, 12);
         Assert.Equal(0.5, midScan.Projection.Ship.Sensors.ActiveScanProgress);
 
@@ -93,11 +103,11 @@ public sealed class Milestone4EngineeringScenarioTests
         GameSimulation resumed = loaded.Simulation;
         AssertEquivalentState(uninterrupted, resumed);
         EngineeringProjection loadedEngineering = resumed.GetPlayerProjection().Ship.Engineering;
-        Assert.Equal(0.625, loadedEngineering.GenerationCondition.Value);
-        Assert.Equal(0.7375, loadedEngineering.SensorCondition.Value, 12);
-        Assert.Equal(1, loadedEngineering.ImpulseCondition.Value);
-        Assert.Equal(new PowerUnits(70), loadedEngineering.SensorAllocation);
-        Assert.Equal(new PowerUnits(5), loadedEngineering.ImpulseAllocation);
+        Assert.Equal(0.625, loadedEngineering.System(ShipSystemKind.PowerGeneration).Condition.Value);
+        Assert.Equal(0.7375, loadedEngineering.System(ShipSystemKind.Sensors).Condition.Value, 12);
+        Assert.Equal(1, loadedEngineering.System(ShipSystemKind.ImpulsePropulsion).Condition.Value);
+        Assert.Equal(new PowerUnits(70), loadedEngineering.System(ShipSystemKind.Sensors).Allocation);
+        Assert.Equal(new PowerUnits(5), loadedEngineering.System(ShipSystemKind.ImpulsePropulsion).Allocation);
         Assert.Equal(contactId, Assert.Single(resumed.GetPlayerProjection().Ship.Sensors.Contacts).Id);
         AssertActiveWorkCorrelations(resumed, contactId);
 
@@ -128,30 +138,26 @@ public sealed class Milestone4EngineeringScenarioTests
 
     private static void ProvePropulsionAllocationInvariantAndReacquire(ScenarioPair pair)
     {
-        PowerAllocationResult propulsionPriority = pair.Uninterrupted.ApplyPowerAllocationPreset(
-            PowerAllocationPreset.PrioritizePropulsion
+        PowerAllocationResult propulsionPriority = pair.Uninterrupted.PrioritizePlayer(
+            ShipSystemKind.ImpulsePropulsion
         );
-        PowerAllocationResult resumedPropulsionPriority = pair.Resumed.ApplyPowerAllocationPreset(
-            PowerAllocationPreset.PrioritizePropulsion
+        PowerAllocationResult resumedPropulsionPriority = pair.Resumed.PrioritizePlayer(
+            ShipSystemKind.ImpulsePropulsion
         );
         Assert.Equal(propulsionPriority, resumedPropulsionPriority);
         Assert.Equal(PowerAllocationOutcome.Accepted, propulsionPriority.Outcome);
         Assert.Equal(PlayerAdvanceEventKind.SensorContactStale, Assert.Single(propulsionPriority.ResolvedEvents).Kind);
         EngineeringProjection propulsionEngineering = pair.Uninterrupted.GetPlayerProjection().Ship.Engineering;
-        Assert.Equal(new PowerUnits(25), propulsionEngineering.SensorAllocation);
-        Assert.Equal(new PowerUnits(50), propulsionEngineering.ImpulseAllocation);
+        Assert.Equal(new PowerUnits(25), propulsionEngineering.System(ShipSystemKind.Sensors).Allocation);
+        Assert.Equal(new PowerUnits(50), propulsionEngineering.System(ShipSystemKind.ImpulsePropulsion).Allocation);
         Assert.Equal(10, propulsionEngineering.EffectiveMaximumTacticalSpeed.Value, 12);
 
         var flankCourse = new SetTacticalCourseIntent(new HeadingDegrees(90), new SpeedKilometersPerSecond(10));
         Assert.Equal(SetTacticalCourseOutcome.Accepted, pair.Uninterrupted.SetTacticalCourse(flankCourse).Outcome);
         Assert.Equal(SetTacticalCourseOutcome.Accepted, pair.Resumed.SetTacticalCourse(flankCourse).Outcome);
         PlayerProjection beforeRejectedAllocation = pair.Uninterrupted.GetPlayerProjection();
-        PowerAllocationResult rejectedSensors = pair.Uninterrupted.ApplyPowerAllocationPreset(
-            PowerAllocationPreset.PrioritizeSensors
-        );
-        PowerAllocationResult resumedRejectedSensors = pair.Resumed.ApplyPowerAllocationPreset(
-            PowerAllocationPreset.PrioritizeSensors
-        );
+        PowerAllocationResult rejectedSensors = pair.Uninterrupted.PrioritizePlayer(ShipSystemKind.Sensors);
+        PowerAllocationResult resumedRejectedSensors = pair.Resumed.PrioritizePlayer(ShipSystemKind.Sensors);
         Assert.Equal(PowerAllocationOutcome.CurrentSpeedExceedsResultingMaximum, rejectedSensors.Outcome);
         Assert.Equal(rejectedSensors, resumedRejectedSensors);
         Assert.Equal(beforeRejectedAllocation, pair.Uninterrupted.GetPlayerProjection());
@@ -159,12 +165,8 @@ public sealed class Milestone4EngineeringScenarioTests
         var stop = new SetTacticalCourseIntent(new HeadingDegrees(90), new SpeedKilometersPerSecond(0));
         Assert.Equal(SetTacticalCourseOutcome.Accepted, pair.Uninterrupted.SetTacticalCourse(stop).Outcome);
         Assert.Equal(SetTacticalCourseOutcome.Accepted, pair.Resumed.SetTacticalCourse(stop).Outcome);
-        PowerAllocationResult reacquisition = pair.Uninterrupted.ApplyPowerAllocationPreset(
-            PowerAllocationPreset.PrioritizeSensors
-        );
-        PowerAllocationResult resumedReacquisition = pair.Resumed.ApplyPowerAllocationPreset(
-            PowerAllocationPreset.PrioritizeSensors
-        );
+        PowerAllocationResult reacquisition = pair.Uninterrupted.PrioritizePlayer(ShipSystemKind.Sensors);
+        PowerAllocationResult resumedReacquisition = pair.Resumed.PrioritizePlayer(ShipSystemKind.Sensors);
         Assert.Equal(reacquisition, resumedReacquisition);
         Assert.Equal(PowerAllocationOutcome.Accepted, reacquisition.Outcome);
         Assert.Equal(PlayerAdvanceEventKind.SensorContactReacquired, Assert.Single(reacquisition.ResolvedEvents).Kind);
@@ -186,8 +188,9 @@ public sealed class Milestone4EngineeringScenarioTests
         Assert.Equal(new SimulationTime(8_000), repairCompletion.FinalTime);
         PlayerAdvanceEvent repairEvent = Assert.Single(repairCompletion.ResolvedEvents);
         Assert.Equal(PlayerAdvanceEventKind.SystemRepairCompleted, repairEvent.Kind);
-        Assert.Equal(ShipSystemId.Sensors, repairEvent.ShipSystemId);
-        Assert.Equal(1, repairCompletion.Projection.Ship.Engineering.SensorCondition.Value);
+        Assert.Equal(ShipSystemKind.Sensors, repairEvent.SystemKind);
+        Assert.Equal(TestShipContent.Sensors, repairEvent.InstalledSystemId);
+        Assert.Equal(1, repairCompletion.Projection.Ship.Engineering.System(ShipSystemKind.Sensors).Condition.Value);
         Assert.Null(repairCompletion.Projection.Ship.Engineering.ActiveRepair);
         AssertEquivalentState(pair.Uninterrupted, pair.Resumed);
 
@@ -222,11 +225,12 @@ public sealed class Milestone4EngineeringScenarioTests
         JsonNode persistedPlayer = persistedSimulation["ships"]![0]!;
         JsonNode persistedKestrel = persistedSimulation["ships"]![3]!;
 
-        Assert.Equal(9, root["schemaVersion"]!.GetValue<int>());
+        Assert.Equal(10, root["schemaVersion"]!.GetValue<int>());
         Assert.Equal(4_500, persistedSimulation["timeMilliseconds"]!.GetValue<long>());
-        Assert.Equal(70, persistedPlayer["engineering"]!["sensorAllocation"]!.GetValue<int>());
-        Assert.Equal(5, persistedPlayer["engineering"]!["impulseAllocation"]!.GetValue<int>());
-        Assert.Equal(0.7375, persistedPlayer["engineering"]!["sensorCondition"]!.GetValue<double>(), 12);
+        // Production installed ids: 2 = sensors, 3 = impulse.
+        Assert.Equal(70, SaveJsonV10.Installation(persistedPlayer, 2)["allocation"]!.GetValue<int>());
+        Assert.Equal(5, SaveJsonV10.Installation(persistedPlayer, 3)["allocation"]!.GetValue<int>());
+        Assert.Equal(0.7375, SaveJsonV10.Condition(persistedPlayer, 2), 12);
         Assert.Equal(contactId.Value, persistedPlayer["sensorKnowledge"]!["contacts"]![0]!["id"]!.GetValue<long>());
         Assert.Equal(
             scan.ScheduledCompletionId.Value,

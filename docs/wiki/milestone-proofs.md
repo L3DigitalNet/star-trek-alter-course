@@ -6,7 +6,7 @@ description: 'Milestone acceptance boundaries and architectural proofs, separate
 doc_type: 'reference'
 status: 'active'
 created: '2026-09-07'
-updated: '2026-09-26'
+updated: '2026-09-27'
 tags:
   - 'design'
   - 'validation'
@@ -30,7 +30,7 @@ This page owns the milestone acceptance boundaries formerly carried by the root 
 - **Milestone 1** and **Milestone 2** are implemented.
 - **Milestone 3A — First Observed Contact** is implemented, but **Milestone 3 as a whole is not complete**.
 - **Milestone 4 — Engineering Backbone and Degraded Operations** is implemented.
-- Released v0.6.0 uses content schema **V4** and save schema **V8** through Feature #93 / Final PR #94. Current `dev` adds unreleased M6A content schema **V5** and save schema **V9**. Feature #86 / Final PR #87 introduced strict faction content V1 and save V7; v0.5.0 remains the historical V6 release.
+- Released v0.6.0 uses content schema **V4** and save schema **V8** through Feature #93 / Final PR #94. Unreleased M6A on `dev` was admitted with content schema **V5** and save schema **V9**. [Issue #121's installed-system substrate migration](ship-system-substrate.md) has since implemented unreleased ship content **V6**, system-definition content **V1**, and save schema **V10** under `installed-ship-system-substrate-v1` (development branch, Final PR #123), superseding V5/V9. Feature #86 / Final PR #87 introduced strict faction content V1 and save V7; v0.5.0 remains the historical V6 release.
 - The broader approved [factions and organizations](factions-and-organizations.md) political model remains **design only** beyond the implemented root-faction/direct-control subset. No faction hierarchy, organization runtime, government model, treaty system, layered jurisdiction runtime, or strategic affiliation-knowledge system exists yet.
 - [Strategic Contact Reporting](strategic-contact-reporting.md) is **implemented** (Feature #77, Final PR #78), resolving Q-01. It is not canonically named `M3B`, does not complete Milestone 3, and did not itself begin M5.
 - [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md) is the implemented first M5 slice, resolving Q-05. That slice introduced V7; v0.6.0 now uses V8 and v0.5.0 remains the historical V6 release.
@@ -131,7 +131,7 @@ This is a **partial Milestone 3 outcome**. Strategic contacts, affiliation/inten
 
 **Implemented by Feature #62 / Final PR #63; included in v0.4.0.**
 
-M4 introduced bounded generation, sensor/impulse allocation, three concrete system conditions, derived capability, and deterministic system repair. Those values affect real sensor reach, tactical speed, scan continuity, AI inputs, persistence, and the live Engineering workspace. M6A extends that model to four consumers and five conditions. V4 is the released ship-content baseline; M6A adds V5. Save V5 was introduced by M4; Strategic Contact Reporting added released V6, Faction Intent and Autonomous Assignment added V7, Observation-Driven Faction Response added released V8, and unreleased M6A adds V9.
+M4 introduced bounded generation, sensor/impulse allocation, three concrete system conditions, derived capability, and deterministic system repair. Those values affect real sensor reach, tactical speed, scan continuity, AI inputs, persistence, and the live Engineering workspace. M6A extends that model to four consumers and five conditions. V4 is the released ship-content baseline; M6A adds V5, and the unreleased [Issue #121 installed-system substrate migration](ship-system-substrate.md) has since replaced the fixed-field representation with ship content V6 plus a system-definition V1 catalog, reproducing the same four-consumer/five-condition shape as installed systems rather than named fields. Save V5 was introduced by M4; Strategic Contact Reporting added released V6, Faction Intent and Autonomous Assignment added V7, Observation-Driven Faction Response added released V8, unreleased M6A added V9, and the substrate migration adds unreleased V10.
 
 The milestone intentionally stops short of a universal component system, arbitrary combat damage, detailed EPS topology, batteries, warp power, fuel, heat/coolant, repair teams/queues, shields, weapons, or crew simulation.
 

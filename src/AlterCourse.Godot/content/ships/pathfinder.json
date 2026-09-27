@@ -1,24 +1,15 @@
 {
-	"schemaVersion": 5,
+	"schemaVersion": 6,
 	"id": "pathfinder",
 	"designDisplayName": "Pathfinder class",
-	"maximumTacticalSpeedKilometersPerSecond": 10,
-	"passiveSensorRangeKilometers": 30.0,
-	"activeScanDurationMilliseconds": 2000,
-	"engineering": {
-		"nominalGenerationPowerUnits": 120,
-		"nominalSensorDemandPowerUnits": 70,
-		"nominalImpulseDemandPowerUnits": 50,
-		"sensorRepairDurationMilliseconds": 8000,
-		"impulseRepairDurationMilliseconds": 6000,
-		"nominalShieldDemandPowerUnits": 40,
-		"nominalDirectedEnergyDemandPowerUnits": 30,
-		"shieldRepairDurationMilliseconds": 8000,
-		"directedEnergyRepairDurationMilliseconds": 6000
-	},
-	"directedEnergyWeapon": {
-		"rangeKilometers": 20,
-		"baseNormalizedDamage": 0.25,
-		"cooldownMilliseconds": 2000
+	"initialLoadout": {
+		"nextInstalledSystemId": 6,
+		"systems": [
+			{ "installedSystemId": 1, "definitionId": "pathfinder.power-generation" },
+			{ "installedSystemId": 2, "definitionId": "pathfinder.sensors" },
+			{ "installedSystemId": 3, "definitionId": "pathfinder.impulse-propulsion" },
+			{ "installedSystemId": 4, "definitionId": "pathfinder.shields" },
+			{ "installedSystemId": 5, "definitionId": "pathfinder.directed-energy-weapons" }
+		]
 	}
 }

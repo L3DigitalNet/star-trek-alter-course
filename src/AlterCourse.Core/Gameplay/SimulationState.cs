@@ -152,10 +152,10 @@ internal sealed partial record SimulationState
 
         foreach (ShipState ship in Ships)
         {
-            ShipDefinition definition = catalog.GetRequired(ship.DefinitionId);
-            ship.Engineering.Validate(definition.Engineering);
-            double effectiveMaximumSpeed =
-                definition.MaximumTacticalSpeed.Value * ship.Engineering.ImpulseCapability(definition.Engineering);
+            catalog.GetRequired(ship.DefinitionId);
+            ValidateInstallations(ship, catalog);
+            ship.Engineering.Validate();
+            double effectiveMaximumSpeed = GameSimulation.EffectiveMaximumTacticalSpeed(ship.Engineering).Value;
             if (ship.TacticalMotion.Speed.Value > effectiveMaximumSpeed)
             {
                 throw new InvalidOperationException(
@@ -163,10 +163,10 @@ internal sealed partial record SimulationState
                 );
             }
 
-            ValidateShip(ship, definition);
+            ValidateShip(ship);
             ValidateSensorKnowledge(ship, catalog, contactWorkIds);
             ValidateAutonomousState(ship, contactWorkIds);
-            ValidateCombatState(ship, definition, contactWorkIds);
+            ValidateCombatState(ship, contactWorkIds);
         }
 
         ValidateOrders();
@@ -282,7 +282,36 @@ internal sealed partial record SimulationState
         }
     }
 
-    private void ValidateShip(ShipState ship, ShipDefinition definition)
+    /// <summary>
+    /// Validates that every installation references the active catalog's definition for its id and that the typed
+    /// world admits the ship's per-kind cardinality.
+    /// </summary>
+    /// <remarks>
+    /// Value equality with the catalog entry, not mere id equality, keeps state from carrying a definition outside
+    /// the active content (for example one resolved against a different catalog). Cardinality runs here — on every
+    /// commit and load — rather than in collection storage, so the common layer can still represent several
+    /// installations of one kind while the simulation refuses them with a distinct error.
+    /// </remarks>
+    private static void ValidateInstallations(ShipState ship, ShipDefinitionCatalog catalog)
+    {
+        foreach (InstalledSystem system in ship.Engineering.Systems.ByIdentity)
+        {
+            if (
+                !catalog.SystemDefinitions.TryGet(system.Definition.Id, out SystemDefinition? active)
+                || !active.Equals(system.Definition)
+            )
+            {
+                throw new InvalidOperationException(
+                    $"Ship '{ship.InstanceId.Value}' installation {system.Id.Value} references a system definition "
+                        + "outside the active catalog."
+                );
+            }
+        }
+
+        ShipSystemAdmission.ValidateSupportedCardinality(ship.Engineering.Systems);
+    }
+
+    private void ValidateShip(ShipState ship)
     {
         switch (ship.StrategicState)
         {
@@ -296,7 +325,7 @@ internal sealed partial record SimulationState
                 throw new InvalidOperationException("Ship strategic state kind is unsupported.");
         }
 
-        ValidateRepair(ship, definition);
+        ValidateRepair(ship);
     }
 
     private void ValidateSensorKnowledge(
@@ -362,7 +391,7 @@ internal sealed partial record SimulationState
         if (knowledge.ActiveScan is { } activeScan)
         {
             EnsureUniqueContactWorkId(activeScan.ScheduledCompletionId, contactWorkIds);
-            ValidateActiveScan(observer, activeScan, catalog.GetRequired(observer.DefinitionId));
+            ValidateActiveScan(observer, activeScan);
         }
     }
 
@@ -511,9 +540,19 @@ internal sealed partial record SimulationState
         }
     }
 
-    private void ValidateActiveScan(ShipState observer, ActiveSensorScanState scan, ShipDefinition observerDefinition)
+    private void ValidateActiveScan(ShipState observer, ActiveSensorScanState scan)
     {
-        if (observer.Engineering.SensorCapability(observerDefinition.Engineering) <= 0)
+        // The scan source must be an installed sensor on the observing ship; its definition owns the duration and
+        // its capability must still be positive (a scan never outlives the ability to perform it).
+        if (
+            !observer.Engineering.Systems.TryGet(scan.Sensor, out InstalledSystem? sensor)
+            || sensor.Definition is not SensorSystemDefinition sensorDefinition
+        )
+        {
+            throw new InvalidOperationException("An active scan requires an installed sensor source on the observer.");
+        }
+
+        if (ShipEngineeringState.Capability(sensor) <= 0)
         {
             throw new InvalidOperationException("An active scan requires effective sensor capability.");
         }
@@ -540,7 +579,7 @@ internal sealed partial record SimulationState
             || scan.ExpectedCompletion.Milliseconds <= Time.Milliseconds
             || scan.ExpectedCompletion.Milliseconds <= scan.StartedAt.Milliseconds
             || scan.ExpectedCompletion.Milliseconds - scan.StartedAt.Milliseconds
-                != observerDefinition.ActiveScanDuration.Milliseconds
+                != sensorDefinition.ActiveScanDuration.Milliseconds
         )
         {
             throw new InvalidOperationException("An active scan must contain the current simulation time.");
@@ -723,11 +762,21 @@ internal sealed partial record SimulationState
         );
     }
 
-    private void ValidateRepair(ShipState ship, ShipDefinition definition)
+    private void ValidateRepair(ShipState ship)
     {
         if (ship.Engineering.ActiveRepair is not SystemRepairState repair)
         {
             return;
+        }
+
+        // The target must be installed on this ship and repairable by its own definition; generation can never be a
+        // target because its definition cannot carry repair capability.
+        if (
+            !ship.Engineering.Systems.TryGet(repair.Target, out InstalledSystem? target)
+            || target.Definition.Repair is not { } capability
+        )
+        {
+            throw new InvalidOperationException("Active system repair must target a repairable installed system.");
         }
 
         if (
@@ -740,13 +789,13 @@ internal sealed partial record SimulationState
 
         if (
             repair.ExpectedCompletion.Milliseconds - repair.StartedAt.Milliseconds
-            != definition.Engineering.RepairDurationFor(repair.TargetSystem).Milliseconds
+            != capability.FullRepairDuration.Milliseconds
         )
         {
-            throw new InvalidOperationException("Active system repair duration must match its ship definition.");
+            throw new InvalidOperationException("Active system repair duration must match its target definition.");
         }
 
-        if (ship.Engineering.ConditionFor(repair.TargetSystem) != repair.ConditionAt(Time))
+        if (target.Condition != repair.ConditionAt(Time))
         {
             throw new InvalidOperationException("System condition must match its active repair at the current time.");
         }

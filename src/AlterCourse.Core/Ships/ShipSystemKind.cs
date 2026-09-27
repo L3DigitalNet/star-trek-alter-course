@@ -1,30 +1,30 @@
 namespace AlterCourse.Core.Ships;
 
 /// <summary>Identifies one supported ship system by its stable semantic name.</summary>
-public readonly record struct ShipSystemId
+public readonly record struct ShipSystemKind
 {
-    private ShipSystemId(string value) => Value = value;
+    private ShipSystemKind(string value) => Value = value;
 
     /// <summary>Gets power generation identity.</summary>
-    public static ShipSystemId PowerGeneration { get; } = new("power-generation");
+    public static ShipSystemKind PowerGeneration { get; } = new("power-generation");
 
     /// <summary>Gets sensor identity.</summary>
-    public static ShipSystemId Sensors { get; } = new("sensors");
+    public static ShipSystemKind Sensors { get; } = new("sensors");
 
     /// <summary>Gets impulse propulsion identity.</summary>
-    public static ShipSystemId ImpulsePropulsion { get; } = new("impulse-propulsion");
+    public static ShipSystemKind ImpulsePropulsion { get; } = new("impulse-propulsion");
 
     /// <summary>Gets shield identity.</summary>
-    public static ShipSystemId Shields { get; } = new("shields");
+    public static ShipSystemKind Shields { get; } = new("shields");
 
     /// <summary>Gets directed-energy weapon identity.</summary>
-    public static ShipSystemId DirectedEnergyWeapons { get; } = new("directed-energy-weapons");
+    public static ShipSystemKind DirectedEnergyWeapons { get; } = new("directed-energy-weapons");
 
     /// <summary>Gets the stable serialized identity.</summary>
     public string Value { get; }
 
     /// <summary>Parses one known semantic identity.</summary>
-    public static ShipSystemId Parse(string value) =>
+    public static ShipSystemKind Parse(string value) =>
         value switch
         {
             "power-generation" => PowerGeneration,

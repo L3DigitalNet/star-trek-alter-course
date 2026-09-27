@@ -9,20 +9,14 @@ namespace AlterCourse.Godot.Gameplay;
 public partial class EngineeringWorkspace : Control
 {
     private const string UnavailableText = "UNAVAILABLE — NOT PROVIDED BY LIVE SIMULATION";
-    private static readonly HashSet<string> EngineeringActionIds = new(StringComparer.Ordinal)
+
+    // Illustrative controls of the Engineering preview fixture. They never carry an Engineering operation, so they
+    // can only ever render as preview-only; they are listed so the key grammar below admits them explicitly.
+    private static readonly HashSet<string> ReservedPreviewActionIds = new(StringComparer.Ordinal)
     {
-        "allocate-balanced",
-        "prioritize-sensors",
-        "prioritize-propulsion",
-        "repair-sensors",
-        "repair-propulsion",
-        "return-command",
         "assign-repair",
         "isolate-eps",
         "prioritize-shields",
-        "prioritize-weapons",
-        "repair-shields",
-        "repair-weapons",
         "reduce-impulse",
         "reroute-eps",
     };
@@ -35,10 +29,16 @@ public partial class EngineeringWorkspace : Control
     }
 
     private readonly Dictionary<string, Button> _actionButtons = new(StringComparer.Ordinal);
+    private readonly Dictionary<Button, ActionSlot> _actionSlots = [];
     private readonly Dictionary<string, Button> _hierarchyButtons = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, CommandInterfaceAction> _presentedActions = new(StringComparer.Ordinal);
     private readonly Dictionary<string, CommandInterfaceHierarchyRow> _presentedHierarchy = new(StringComparer.Ordinal);
     private CommandInterfacePresentation? _presentation;
+    private OwnShipActionBinding? _presentedBinding;
+
+    // The last non-null (live) binding and live presentation. Preview snapshots carry no binding, so a live -> preview
+    // -> live round trip must not look like a load; only a change between two live bindings is a world boundary.
+    private OwnShipActionBinding? _liveBinding;
+    private CommandInterfacePresentation? _livePresentation;
     private VBoxContainer _actions = null!;
     private Label _actionsHeading = null!;
     private VBoxContainer _connectedLoads = null!;
@@ -85,6 +85,17 @@ public partial class EngineeringWorkspace : Control
         bool restoreOwnedFocus =
             retainedFocus is Button focusedButton
             && (_actionButtons.ContainsValue(focusedButton) || _hierarchyButtons.ContainsValue(focusedButton));
+        if (presentation.Binding is { } binding)
+        {
+            if (_liveBinding is not null && _liveBinding != binding)
+            {
+                CrossWorldBoundary(presentation);
+            }
+
+            _liveBinding = binding;
+            _livePresentation = presentation;
+        }
+
         _presentation = presentation;
         CurrentDataMode = presentation.DataMode;
         SetMeta("data_mode", presentation.DataMode.ToString());
@@ -97,6 +108,16 @@ public partial class EngineeringWorkspace : Control
         RebuildInspector();
         RebuildSection(_connectedLoads, "CONNECTED LOADS", FindTelemetry("connected-loads"));
         RebuildSection(_powerAllocation, "POWER ALLOCATION SUMMARY", FindTelemetry("power-allocation"));
+        // A new owner or simulation generation means every installed identity may now name something else, so no
+        // action button survives across it: a control captured before a load keeps its old binding and is refused
+        // by the shell instead of being silently retargeted by key. An ordinary refresh keeps the binding, so
+        // buttons, keys, and focus are reconciled in place as before.
+        if (presentation.Binding != _presentedBinding)
+        {
+            RemoveAllActionButtons();
+            _presentedBinding = presentation.Binding;
+        }
+
         ReconcileActions(presentation.Actions);
         bool focusStillRetained =
             retainedFocus is Button retainedButton
@@ -104,9 +125,45 @@ public partial class EngineeringWorkspace : Control
         _pendingFocusRestore = restoreOwnedFocus && focusStillRetained ? retainedFocus as Button : null;
         if (_pendingFocusRestore is not null)
         {
-            Callable.From(RestorePendingFocus).CallDeferred();
+            OwnShipActionBinding? queuedFor = _presentedBinding;
+            Callable.From(() => RestorePendingFocus(queuedFor)).CallDeferred();
         }
     }
+
+    /// <summary>
+    /// Handles a live presentation whose owner or simulation generation differs from the previous live one — a
+    /// quick-load replaced the world. Installed identities are ship-local, so every hierarchy button and
+    /// the <c>system:&lt;id&gt;</c> selection may now name another installation or another ship's installation.
+    /// </summary>
+    /// <remarks>
+    /// All hierarchy buttons are discarded, so a row button captured (or focused) before the load is no longer
+    /// registered: pressing it is ignored by <see cref="SelectCurrentComponent"/>, and no deferred focus restore can
+    /// land on it. The selection survives only when the loaded world demonstrably presents the same component — same
+    /// owner, same key, same authored component title — which keeps a same-ship reload of the running game stable;
+    /// otherwise it is re-derived from the loaded presentation's defaults. Rejected: keeping selection by key alone
+    /// (the defect: <c>system:4</c> silently retargets from shields to weapons, or onto another ship); resetting on
+    /// every load (discards a still-valid same-ship selection for no safety gain).
+    /// </remarks>
+    private void CrossWorldBoundary(CommandInterfacePresentation loaded)
+    {
+        string? retained =
+            SelectedComponentId is string selectedId
+            && _liveBinding?.Owner == loaded.Binding?.Owner
+            && ComponentTitle(_livePresentation, selectedId) is string before
+            && string.Equals(before, ComponentTitle(loaded, selectedId), StringComparison.Ordinal)
+                ? selectedId
+                : null;
+        RemoveAllHierarchyButtons();
+        SelectedComponentId = retained;
+        _pendingFocusRestore = null;
+    }
+
+    private static string? ComponentTitle(CommandInterfacePresentation? presentation, string componentId) =>
+        presentation
+            ?.Engineering?.Components.FirstOrDefault(component =>
+                string.Equals(component.Id, componentId, StringComparison.Ordinal)
+            )
+            ?.Title;
 
     /// <summary>Returns whether the named engineering action currently submits authoritative intent.</summary>
     public bool IsActionEnabled(string actionId) =>
@@ -232,7 +289,8 @@ public partial class EngineeringWorkspace : Control
                 FocusMode = FocusModeEnum.All,
                 ToggleMode = true,
             };
-            button.Pressed += () => SelectCurrentComponent(rowId);
+            Button pressed = button;
+            button.Pressed += () => SelectCurrentComponent(pressed, rowId);
             _hierarchy.AddChild(button);
             _hierarchyButtons.Add(row.Id, button);
         }
@@ -257,10 +315,14 @@ public partial class EngineeringWorkspace : Control
         }
     }
 
-    private void SelectCurrentComponent(string componentId)
+    // A button discarded at a world boundary still exists (QueueFree) and may still be signalled; only the button
+    // currently registered for the key may select, so a pre-load row cannot select the loaded world's same key.
+    private void SelectCurrentComponent(Button button, string componentId)
     {
         if (
-            _presentedHierarchy.TryGetValue(componentId, out CommandInterfaceHierarchyRow? row)
+            _hierarchyButtons.TryGetValue(componentId, out Button? current)
+            && current == button
+            && _presentedHierarchy.TryGetValue(componentId, out CommandInterfaceHierarchyRow? row)
             && row.Availability == CommandInterfaceAvailability.Available
         )
         {
@@ -308,7 +370,7 @@ public partial class EngineeringWorkspace : Control
         }
 
         IEnumerable<CommandInterfaceAction> engineeringActions = actions.Where(action =>
-            EngineeringActionIds.Contains(action.Id)
+            IsEngineeringActionKey(action.Id)
         );
         CommandInterfaceAction[] currentActions = [.. engineeringActions];
         var retainedIds = new HashSet<string>(StringComparer.Ordinal);
@@ -321,11 +383,7 @@ public partial class EngineeringWorkspace : Control
 
         foreach (string removedId in _actionButtons.Keys.Where(id => !retainedIds.Contains(id)).ToArray())
         {
-            Button button = _actionButtons[removedId];
-            _actionButtons.Remove(removedId);
-            _presentedActions.Remove(removedId);
-            _actions.RemoveChild(button);
-            button.QueueFree();
+            RemoveActionButton(removedId);
         }
 
         if (currentActions.Length == 0 && _actions.GetChildCount() == 1)
@@ -339,19 +397,21 @@ public partial class EngineeringWorkspace : Control
         bool enabled =
             CurrentDataMode == CommandInterfaceDataMode.Live
             && action.Availability == CommandInterfaceActionAvailability.Submittable
-            && action.EngineeringCommand is not null;
+            && action.EngineeringOperation is not null;
         if (!_actionButtons.TryGetValue(action.Id, out Button? button))
         {
-            string actionId = action.Id;
+            var slot = new ActionSlot(action);
             button = new Button
             {
                 Name = $"Action_{SafeNodeName(action.Id)}",
                 Alignment = HorizontalAlignment.Left,
                 FocusMode = FocusModeEnum.All,
             };
-            button.Pressed += () => OnActionPressed(actionId);
+            Button pressed = button;
+            button.Pressed += () => OnActionPressed(pressed, slot);
             _actions.AddChild(button);
             _actionButtons.Add(action.Id, button);
+            _actionSlots.Add(button, slot);
         }
 
         string suffix = action.Availability switch
@@ -385,7 +445,7 @@ public partial class EngineeringWorkspace : Control
             button.TooltipText = tooltip;
         }
 
-        _presentedActions[action.Id] = action;
+        _actionSlots[button].Action = action;
         if (button.GetIndex() != index)
         {
             _actions.MoveChild(button, index);
@@ -401,21 +461,71 @@ public partial class EngineeringWorkspace : Control
             : "The live simulation does not currently support this engineering command."
         );
 
-    private void OnActionPressed(string actionId)
+    /// <summary>
+    /// Emits the action this particular button was last presented with. A button removed by a binding change still
+    /// holds its old binding, so the shell can recognise and refuse it; the payload is still re-validated against the
+    /// current Core projection there before anything is submitted.
+    /// </summary>
+    private void OnActionPressed(Button button, ActionSlot slot)
     {
         if (
             CurrentDataMode == CommandInterfaceDataMode.Live
-            && IsActionEnabled(actionId)
-            && _presentedActions.TryGetValue(actionId, out CommandInterfaceAction? action)
-            && action.EngineeringCommand is not null
+            && !button.Disabled
+            && slot.Action.Availability == CommandInterfaceActionAvailability.Submittable
+            && slot.Action.EngineeringOperation is not null
         )
         {
-            EngineeringCommandRequested?.Invoke(this, new EngineeringCommandRequestedEventArgs(action));
+            EngineeringCommandRequested?.Invoke(this, new EngineeringCommandRequestedEventArgs(slot.Action));
         }
     }
 
-    private void RestorePendingFocus()
+    private void RemoveAllActionButtons()
     {
+        foreach (string id in _actionButtons.Keys.ToArray())
+        {
+            RemoveActionButton(id);
+        }
+    }
+
+    private void RemoveActionButton(string id)
+    {
+        Button button = _actionButtons[id];
+        _actionButtons.Remove(id);
+        _actionSlots.Remove(button);
+        _actions.RemoveChild(button);
+        button.QueueFree();
+    }
+
+    /// <summary>
+    /// Admits the Engineering key grammar: <c>balance</c>, <c>return-command</c>, <c>prioritize:&lt;id&gt;</c>,
+    /// <c>repair:&lt;id&gt;</c> with a positive decimal installed identity, plus the reserved preview ids.
+    /// </summary>
+    private static bool IsEngineeringActionKey(string id) =>
+        id is "balance" or "return-command"
+        || ReservedPreviewActionIds.Contains(id)
+        || HasInstalledIdentity(id, "prioritize:")
+        || HasInstalledIdentity(id, "repair:");
+
+    private static bool HasInstalledIdentity(string id, string prefix) =>
+        id.StartsWith(prefix, StringComparison.Ordinal)
+        && long.TryParse(
+            id.AsSpan(prefix.Length),
+            System.Globalization.NumberStyles.None,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out long value
+        )
+        && value > 0;
+
+    // Deferred, so it captures the binding it was queued under: a restore queued before a quick-load flushes after
+    // the load and must not move focus onto a control of the replaced world. A stale call returns without clearing
+    // the field, which may already hold a restore queued by the loaded world's own presentation.
+    private void RestorePendingFocus(OwnShipActionBinding? queuedFor)
+    {
+        if (queuedFor != _presentedBinding)
+        {
+            return;
+        }
+
         Button? button = _pendingFocusRestore;
         _pendingFocusRestore = null;
         if (
@@ -549,5 +659,12 @@ public partial class EngineeringWorkspace : Control
                 _ => "TelemetryValue",
             };
 
-    private static string SafeNodeName(string id) => id.Replace('-', '_');
+    // Godot rejects ':' in node names, and keys such as "repair:4" contain one; tests locate buttons by this name.
+    private static string SafeNodeName(string id) => id.Replace('-', '_').Replace(':', '_');
+
+    /// <summary>Holds the action a button currently represents; updated in place by an ordinary refresh.</summary>
+    private sealed class ActionSlot(CommandInterfaceAction action)
+    {
+        public CommandInterfaceAction Action { get; set; } = action;
+    }
 }

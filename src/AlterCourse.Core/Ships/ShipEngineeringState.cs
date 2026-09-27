@@ -2,222 +2,277 @@ using AlterCourse.Core.Quantities;
 
 namespace AlterCourse.Core.Ships;
 
-/// <summary>Owns all consequential runtime engineering state for one ship.</summary>
+/// <summary>
+/// Owns a ship's live installed systems, their identity continuation, and its single active repair.
+/// </summary>
+/// <remarks>
+/// <para>
+/// ONE SOURCE OF TRUTH: condition and allocation are stored only on each <see cref="InstalledSystem"/>.
+/// <see cref="Allocation"/> is a derived read-only value; nothing writes through it. There is no named per-kind
+/// field and no parallel keyed map to keep synchronized.
+/// </para>
+/// <para>
+/// Power algorithms walk consumers in canonical order (authored common order, then installed identity), never
+/// array or dictionary order, so renumbering installations with the same common order yields identical vectors.
+/// Power arithmetic uses checked 64-bit intermediates: a consumer demand and the available supply are each at most
+/// 1,000,000 and there are at most 16 consumers, so every product stays below 10^13.
+/// </para>
+/// </remarks>
 public sealed record ShipEngineeringState
 {
-    /// <summary>Initializes concrete system conditions, exact allocation, and optional repair.</summary>
-    public ShipEngineeringState(
-        SystemCondition generationCondition,
-        SystemCondition sensorCondition,
-        SystemCondition impulseCondition,
-        PowerAllocation allocation,
-        SystemRepairState? activeRepair = null
-    ) =>
-        (GenerationCondition, SensorCondition, ImpulseCondition, Allocation, ActiveRepair) = (
-            generationCondition,
-            sensorCondition,
-            impulseCondition,
-            allocation,
-            activeRepair
-        );
-
-    /// <summary>Initializes all five conditions with exact allocation and optional repair.</summary>
-    public ShipEngineeringState(
-        SystemCondition generationCondition,
-        SystemCondition sensorCondition,
-        SystemCondition impulseCondition,
-        SystemCondition shieldCondition,
-        SystemCondition directedEnergyCondition,
-        PowerAllocation allocation,
+    internal ShipEngineeringState(
+        InstalledSystemCollection systems,
+        InstalledSystemIdAllocator installationIds,
         SystemRepairState? activeRepair = null
     )
-        : this(generationCondition, sensorCondition, impulseCondition, allocation, activeRepair)
     {
-        ShieldCondition = shieldCondition;
-        DirectedEnergyCondition = directedEnergyCondition;
+        ArgumentNullException.ThrowIfNull(systems);
+        ArgumentNullException.ThrowIfNull(installationIds);
+        Systems = systems;
+        InstallationIds = installationIds;
+        ActiveRepair = activeRepair;
     }
 
-    /// <summary>Gets shield condition.</summary>
-    public SystemCondition ShieldCondition { get; init; }
+    /// <summary>Gets the live installations.</summary>
+    public InstalledSystemCollection Systems { get; init; }
 
-    /// <summary>Gets directed-energy weapon condition.</summary>
-    public SystemCondition DirectedEnergyCondition { get; init; }
-
-    /// <summary>Gets shield demand satisfaction; absent legacy capacity remains unpowered.</summary>
-    public double ShieldPowerSatisfaction(ShipEngineeringDefinition definition) =>
-        PowerSatisfaction(Allocation.Shields, definition.NominalShieldDemand);
-
-    /// <summary>Derives effective shield capability.</summary>
-    public double ShieldCapability(ShipEngineeringDefinition definition) =>
-        Capability(ShieldCondition, Allocation.Shields, definition.NominalShieldDemand);
-
-    /// <summary>Derives effective directed-energy weapon capability.</summary>
-    public double DirectedEnergyCapability(ShipEngineeringDefinition definition) =>
-        Capability(DirectedEnergyCondition, Allocation.DirectedEnergyWeapons, definition.NominalDirectedEnergyDemand);
-
-    /// <summary>Gets power-generation condition.</summary>
-    public SystemCondition GenerationCondition { get; init; }
-
-    /// <summary>Gets sensor condition.</summary>
-    public SystemCondition SensorCondition { get; init; }
-
-    /// <summary>Gets impulse-propulsion condition.</summary>
-    public SystemCondition ImpulseCondition { get; init; }
-
-    /// <summary>Gets exact consumer allocations.</summary>
-    public PowerAllocation Allocation { get; init; }
+    /// <summary>Gets the ship-local installed identity continuation; restored, never recomputed.</summary>
+    public InstalledSystemIdAllocator InstallationIds { get; init; }
 
     /// <summary>Gets the sole active repair, when present.</summary>
     public SystemRepairState? ActiveRepair { get; init; }
 
-    /// <summary>Derives available power using a floor over decimal-safe bounded arithmetic.</summary>
-    public PowerUnits AvailablePower(ShipEngineeringDefinition definition)
+    /// <summary>Gets the current exact allocation derived from consumer installations.</summary>
+    public PowerAllocation Allocation =>
+        new(Systems.Consumers.Select(consumer => new PowerAllocationEntry(consumer.Id, consumer.Allocation!.Value)));
+
+    /// <summary>Gets the nominal output of the sole generator, or zero when none is installed.</summary>
+    public PowerUnits NominalGeneration =>
+        ShipSystemAdmission.SupportedSingle(Systems, ShipSystemKind.PowerGeneration) is { } generator
+            ? ((PowerGenerationSystemDefinition)generator.Definition).NominalOutput
+            : default;
+
+    /// <summary>
+    /// Gets available power: the floor of nominal output times generator condition, or zero without a generator.
+    /// </summary>
+    public PowerUnits AvailablePower
     {
-        ArgumentNullException.ThrowIfNull(definition);
-        decimal available = decimal.Floor(definition.NominalGeneration.Value * (decimal)GenerationCondition.Value);
-        return new PowerUnits(decimal.ToInt32(available));
+        get
+        {
+            InstalledSystem? generator = ShipSystemAdmission.SupportedSingle(Systems, ShipSystemKind.PowerGeneration);
+            if (generator is null)
+            {
+                return default;
+            }
+
+            // Decimal keeps the historical expression exact: floor(120 × 0.625) must be 75, not 74.99….
+            var definition = (PowerGenerationSystemDefinition)generator.Definition;
+            decimal available = decimal.Floor(definition.NominalOutput.Value * (decimal)generator.Condition.Value);
+            return new PowerUnits(decimal.ToInt32(available));
+        }
     }
 
     /// <summary>Gets unallocated available power.</summary>
-    public PowerUnits Reserve(ShipEngineeringDefinition definition)
+    public PowerUnits Reserve => new(checked((int)(AvailablePower.Value - Allocation.Total)));
+
+    /// <summary>Gets a consumer's demand satisfaction on the unit interval; nonconsumers are zero.</summary>
+    public static double PowerSatisfaction(InstalledSystem system)
     {
-        PowerUnits available = AvailablePower(definition);
-        int allocated = Allocation.Total;
-        return new PowerUnits(checked(available.Value - allocated));
+        ArgumentNullException.ThrowIfNull(system);
+        if (system.Definition.Power is not { } power || system.Allocation is not { } allocation)
+        {
+            return 0;
+        }
+
+        return Math.Min(1, (double)allocation.Value / power.NominalDemand.Value);
     }
 
-    /// <summary>Derives effective sensor capability on the inclusive unit interval.</summary>
-    public double SensorCapability(ShipEngineeringDefinition definition) =>
-        Capability(SensorCondition, Allocation.Sensors, definition.NominalSensorDemand);
-
-    /// <summary>Derives effective impulse-propulsion capability on the inclusive unit interval.</summary>
-    public double ImpulseCapability(ShipEngineeringDefinition definition) =>
-        Capability(ImpulseCondition, Allocation.ImpulsePropulsion, definition.NominalImpulseDemand);
-
-    /// <summary>Generates one deterministic allocation preset from current available power.</summary>
-    public PowerAllocation AllocationFor(ShipEngineeringDefinition definition, PowerAllocationPreset preset)
+    /// <summary>Gets effective capability: condition times demand satisfaction.</summary>
+    public static double Capability(InstalledSystem system)
     {
-        ArgumentNullException.ThrowIfNull(definition);
-        int available = AvailablePower(definition).Value;
-        int[] demands =
-        [
-            definition.NominalSensorDemand.Value,
-            definition.NominalImpulseDemand.Value,
-            definition.NominalShieldDemand.Value,
-            definition.NominalDirectedEnergyDemand.Value,
-        ];
-        int[] shares = new int[4];
-        if (preset == PowerAllocationPreset.Balanced)
-        {
-            int totalDemand = checked(demands.Sum());
-            int budget = Math.Min(available, totalDemand);
-            for (int i = 0; i < shares.Length; i++)
-            {
-                shares[i] = checked((int)((long)budget * demands[i] / totalDemand));
-            }
-            DistributeRemainder(shares, demands, budget - shares.Sum());
-        }
-        else
-        {
-            int priority = preset switch
-            {
-                PowerAllocationPreset.PrioritizeSensors => 0,
-                PowerAllocationPreset.PrioritizePropulsion => 1,
-                PowerAllocationPreset.PrioritizeShields => 2,
-                PowerAllocationPreset.PrioritizeDirectedEnergyWeapons => 3,
-                _ => throw new ArgumentOutOfRangeException(
-                    nameof(preset),
-                    preset,
-                    "Power allocation preset is unknown."
-                ),
-            };
-            shares[priority] = Math.Min(available, demands[priority]);
-            available -= shares[priority];
-            for (int i = 0; i < shares.Length; i++)
-            {
-                if (i == priority)
-                    continue;
-                shares[i] = Math.Min(available, demands[i]);
-                available -= shares[i];
-            }
-        }
-        return AllocationFrom(shares);
+        ArgumentNullException.ThrowIfNull(system);
+        return system.Condition.Value * PowerSatisfaction(system);
     }
 
-    /// <summary>Reconciles forced generation loss without increasing any previous consumer share.</summary>
-    public PowerAllocation ReconcileAvailablePower(ShipEngineeringDefinition definition)
+    /// <summary>Generates the Balanced allocation over installed consumer demands.</summary>
+    public PowerAllocation BalancedAllocation()
     {
-        int available = AvailablePower(definition).Value;
-        int total = Allocation.Total;
+        IReadOnlyList<InstalledSystem> consumers = Systems.Consumers;
+        if (consumers.Count == 0)
+        {
+            return PowerAllocation.Empty;
+        }
+
+        long[] demands = [.. consumers.Select(consumer => (long)consumer.Definition.Power!.NominalDemand.Value)];
+        long totalDemand = 0;
+        foreach (long demand in demands)
+        {
+            totalDemand = checked(totalDemand + demand);
+        }
+
+        long budget = Math.Min(AvailablePower.Value, totalDemand);
+        long[] shares = new long[demands.Length];
+        long assigned = 0;
+        for (int index = 0; index < shares.Length; index++)
+        {
+            shares[index] = checked(budget * demands[index]) / totalDemand;
+            assigned = checked(assigned + shares[index]);
+        }
+
+        DistributeRemainder(shares, demands, checked(budget - assigned));
+        return AllocationFrom(consumers, shares);
+    }
+
+    /// <summary>
+    /// Generates a priority allocation: the named consumer first, then the rest in canonical order.
+    /// </summary>
+    public PowerAllocation PriorityAllocation(InstalledSystemId priority)
+    {
+        IReadOnlyList<InstalledSystem> consumers = Systems.Consumers;
+        int priorityIndex = -1;
+        for (int index = 0; index < consumers.Count; index++)
+        {
+            if (consumers[index].Id == priority)
+            {
+                priorityIndex = index;
+            }
+        }
+
+        if (priorityIndex < 0)
+        {
+            throw new ArgumentException(
+                $"Installed system {priority.Value} is not a consumer on this ship.",
+                nameof(priority)
+            );
+        }
+
+        long remaining = AvailablePower.Value;
+        long[] shares = new long[consumers.Count];
+        shares[priorityIndex] = Math.Min(remaining, consumers[priorityIndex].Definition.Power!.NominalDemand.Value);
+        remaining -= shares[priorityIndex];
+        for (int index = 0; index < consumers.Count; index++)
+        {
+            if (index == priorityIndex)
+            {
+                continue;
+            }
+
+            shares[index] = Math.Min(remaining, consumers[index].Definition.Power!.NominalDemand.Value);
+            remaining -= shares[index];
+        }
+
+        return AllocationFrom(consumers, shares);
+    }
+
+    /// <summary>
+    /// Forced brownout: scales previously committed allocations down to available power.
+    /// </summary>
+    /// <remarks>
+    /// Distinct from Balanced by design: it scales prior shares, not demands, and never raises any consumer above
+    /// its prior share, so a brownout cannot silently redistribute power the player chose not to assign.
+    /// </remarks>
+    public PowerAllocation ReconcileAvailablePower()
+    {
+        IReadOnlyList<InstalledSystem> consumers = Systems.Consumers;
+        long available = AvailablePower.Value;
+        long[] previous = [.. consumers.Select(consumer => (long)consumer.Allocation!.Value.Value)];
+        long total = 0;
+        foreach (long share in previous)
+        {
+            total = checked(total + share);
+        }
+
         if (total <= available)
+        {
             return Allocation;
-        int[] oldShares =
-        [
-            Allocation.Sensors.Value,
-            Allocation.ImpulsePropulsion.Value,
-            Allocation.Shields.Value,
-            Allocation.DirectedEnergyWeapons.Value,
-        ];
-        int[] shares = oldShares.Select(value => checked((int)((long)value * available / total))).ToArray();
-        DistributeRemainder(shares, oldShares, available - shares.Sum());
-        return AllocationFrom(shares);
+        }
+
+        long[] shares = new long[previous.Length];
+        long assigned = 0;
+        for (int index = 0; index < shares.Length; index++)
+        {
+            shares[index] = checked(previous[index] * available) / total;
+            assigned = checked(assigned + shares[index]);
+        }
+
+        DistributeRemainder(shares, previous, checked(available - assigned));
+        return AllocationFrom(consumers, shares);
     }
 
-    private static PowerAllocation AllocationFrom(int[] shares) =>
-        new(new PowerUnits(shares[0]), new PowerUnits(shares[1]), new PowerUnits(shares[2]), new PowerUnits(shares[3]));
-
-    private static void DistributeRemainder(int[] shares, int[] limits, int remainder)
-    {
-        // Proportional flooring leaves fewer than four units; each eligible consumer receives at most one.
-        for (int i = 0; i < shares.Length && remainder > 0; i++)
+    internal ShipEngineeringState WithCondition(InstalledSystemId id, SystemCondition condition) =>
+        this with
         {
-            if (shares[i] < limits[i])
+            Systems = Systems.WithCondition(id, condition),
+        };
+
+    internal ShipEngineeringState WithAllocation(PowerAllocation exact) =>
+        this with
+        {
+            Systems = Systems.WithAllocation(exact),
+        };
+
+    internal ShipEngineeringState WithRepair(SystemRepairState? repair) => this with { ActiveRepair = repair };
+
+    /// <summary>
+    /// Invariant form of the exact-allocation rules plus identity continuation, used by bootstrap, restore, and
+    /// every simulation validation.
+    /// </summary>
+    internal void Validate()
+    {
+        long largest = Systems.Count == 0 ? 0 : Systems.ByIdentity[^1].Id.Value;
+        if (InstallationIds.NextId <= largest)
+        {
+            throw new InvalidOperationException(
+                $"Installed system continuation {InstallationIds.NextId} must exceed retained identity {largest}."
+            );
+        }
+
+        foreach (InstalledSystem consumer in Systems.Consumers)
+        {
+            if (consumer.Allocation!.Value > consumer.Definition.Power!.NominalDemand)
             {
-                shares[i]++;
-                remainder--;
+                throw new InvalidOperationException(
+                    $"Engineering allocation exceeds authored demand of installed system {consumer.Id.Value}."
+                );
             }
         }
-    }
 
-    internal void Validate(ShipEngineeringDefinition definition)
-    {
-        ArgumentNullException.ThrowIfNull(definition);
-        if (
-            Allocation.Sensors > definition.NominalSensorDemand
-            || Allocation.ImpulsePropulsion > definition.NominalImpulseDemand
-            || Allocation.Shields > definition.NominalShieldDemand
-            || Allocation.DirectedEnergyWeapons > definition.NominalDirectedEnergyDemand
-        )
-        {
-            throw new InvalidOperationException("Engineering allocation exceeds authored consumer demand.");
-        }
-
-        int allocated = Allocation.Total;
-        if (allocated > AvailablePower(definition).Value)
+        if (Allocation.Total > AvailablePower.Value)
         {
             throw new InvalidOperationException("Engineering allocation exceeds currently available power.");
         }
     }
 
-    internal SystemCondition ConditionFor(ShipSystemId systemId) =>
-        systemId == ShipSystemId.Sensors ? SensorCondition
-        : systemId == ShipSystemId.ImpulsePropulsion ? ImpulseCondition
-        : systemId == ShipSystemId.Shields ? ShieldCondition
-        : systemId == ShipSystemId.DirectedEnergyWeapons ? DirectedEnergyCondition
-        : systemId == ShipSystemId.PowerGeneration ? GenerationCondition
-        : throw new ArgumentException("Ship system identity is invalid.", nameof(systemId));
+    private static PowerAllocation AllocationFrom(IReadOnlyList<InstalledSystem> consumers, long[] shares) =>
+        new(
+            consumers.Select(
+                (consumer, index) => new PowerAllocationEntry(consumer.Id, new PowerUnits((int)shares[index]))
+            )
+        );
 
-    internal ShipEngineeringState WithCondition(ShipSystemId systemId, SystemCondition condition) =>
-        systemId == ShipSystemId.Sensors ? this with { SensorCondition = condition }
-        : systemId == ShipSystemId.ImpulsePropulsion ? this with { ImpulseCondition = condition }
-        : systemId == ShipSystemId.Shields ? this with { ShieldCondition = condition }
-        : systemId == ShipSystemId.DirectedEnergyWeapons ? this with { DirectedEnergyCondition = condition }
-        : systemId == ShipSystemId.PowerGeneration ? this with { GenerationCondition = condition }
-        : throw new ArgumentException("Ship system identity is invalid.", nameof(systemId));
+    /// <summary>
+    /// Adds one unit to each still-eligible consumer in canonical order until the remainder is spent.
+    /// </summary>
+    /// <remarks>
+    /// One pass suffices for both callers: each exact proportional quotient is below its limit whenever the budget is
+    /// short, so every consumer that lost a fraction is eligible, and the remainder (the sum of those fractions) is
+    /// smaller than their count. Zero-limit consumers are skipped. A leftover remainder therefore means a broken
+    /// invariant, and silently dropping it would leak power out of the conservation rule.
+    /// </remarks>
+    private static void DistributeRemainder(long[] shares, long[] limits, long remainder)
+    {
+        for (int index = 0; index < shares.Length && remainder > 0; index++)
+        {
+            if (shares[index] < limits[index])
+            {
+                shares[index]++;
+                remainder--;
+            }
+        }
 
-    private static double Capability(SystemCondition condition, PowerUnits allocated, PowerUnits demand) =>
-        condition.Value * PowerSatisfaction(allocated, demand);
-
-    private static double PowerSatisfaction(PowerUnits allocated, PowerUnits demand) =>
-        demand.Value == 0 ? 0 : Math.Min(1, (double)allocated.Value / demand.Value);
+        if (remainder != 0)
+        {
+            throw new InvalidOperationException("Proportional allocation left an undistributable remainder.");
+        }
+    }
 }
