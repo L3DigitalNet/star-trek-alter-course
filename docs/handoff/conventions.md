@@ -2,17 +2,21 @@
 
 ## Quick reference
 
-| ID    | Convention                                            |
-| ----- | ----------------------------------------------------- |
-| C-001 | Run the canonical quality gate before completion.     |
-| C-002 | Keep simulation code independent from Godot.          |
-| C-003 | Make diagnostic exceptions explicit and narrow.       |
-| C-004 | Follow the protected branch and release lifecycle.    |
-| C-005 | Keep formatter and semantic-style ownership separate. |
-| C-006 | Keep Godot project metadata editor-discoverable.      |
-| C-007 | Keep Godot UI styling in the project-owned Theme.     |
-| C-008 | Record design in the wiki before anywhere else.       |
-| C-009 | Reconcile design evidence throughout active work.     |
+| ID    | Convention                                             |
+| ----- | ------------------------------------------------------ |
+| C-001 | Run the canonical quality gate before completion.      |
+| C-002 | Keep simulation code independent from Godot.           |
+| C-003 | Make diagnostic exceptions explicit and narrow.        |
+| C-004 | Follow the protected branch and release lifecycle.     |
+| C-005 | Keep formatter and semantic-style ownership separate.  |
+| C-006 | Keep Godot project metadata editor-discoverable.       |
+| C-007 | Keep Godot UI styling in the project-owned Theme.      |
+| C-008 | Record design in the wiki before anywhere else.        |
+| C-009 | Reconcile design evidence throughout active work.      |
+| C-010 | Observation-response migration invents no history.     |
+| C-011 | Name orchestration leg branches `task/<issue>-<slug>`. |
+| C-012 | Treat `rexec` sync as one-way; pull outputs back.      |
+| C-013 | Keep one analyzer-checked type per C# file (MA0048).   |
 
 ## C-001: Canonical quality gate
 
@@ -56,3 +60,15 @@ Record detailed game contracts on their owning `docs/wiki/` page in the same PR 
 ## C-010: Observation-response migration
 
 V7-to-V8 migration starts with no reports, deliveries, investigations, or completion watermarks. It never derives response history from legacy contacts.
+
+## C-011: Orchestration leg branch naming
+
+Multi-leg orchestrated work names each leg branch `task/<issue>-<slug>`. `./scripts/verify.sh` enforces this branch-name policy; an unmatched leg branch fails verification rather than merging.
+
+## C-012: `rexec` synchronization is one-way
+
+`rexec` mirrors the local checkout to the worker but never returns worker-side output automatically. Pass `--pull <path>` to retrieve generated artifacts, such as formatter output; anything not named there is discarded when the workspace tears down.
+
+## C-013: One analyzer-checked type per file (MA0048)
+
+Keep exactly one analyzer-checked type declaration per C# file. The MA0048 analyzer enforces this; splitting a file that declares multiple types is a correctness fix, not a style preference, and must not be suppressed.

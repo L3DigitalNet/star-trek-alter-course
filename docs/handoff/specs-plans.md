@@ -3,7 +3,8 @@
 ## Design entry points
 
 - [Project design wiki](../wiki/README.md) is the single source of truth for detailed game design contracts; external documents cover operations, ADRs, and legal records.
-- [Ship-system substrate](../wiki/ship-system-substrate.md) owns the selected Issue #121 migration and admission contract under [ADR 0014](../adr/0014-use-an-extensible-bounded-ship-system-substrate.md). Implement it before further systems or Damage Control gameplay; it is not yet implemented.
+- [Ship-system substrate](../wiki/ship-system-substrate.md) owns the Issue #121 migration and admission contract under [ADR 0014](../adr/0014-use-an-extensible-bounded-ship-system-substrate.md).
+- It is implemented on the feature branch; draft Final PR #123 is unmerged, with proof tests and the final gate in progress.
 - [Political model](../wiki/factions-and-organizations.md) records approved conceptual decisions; the bounded direct-faction assignment is implemented, while organization and hierarchy runtime remain future work.
 - [Open questions](../wiki/open-questions.md) separates resolved Q-05 and scoped decisions from the remaining unapproved topics.
 - [Faction assignment](../wiki/faction-intent-and-autonomous-assignment.md) owns the implemented bounded M5 slice and its six boundaries; broader political work remains future work.
@@ -41,4 +42,4 @@
 | Task #102 | Published / Done | v0.6.1 build-process correction release published through Final PR #103 as immutable source-only release `f0af265`; PR #104 synchronized it to `dev` as `5ad16bb`. |
 | Feature #111 | Merged / Done | M6A first combat engagement merged through Final PR #112 as `c2edae1` into `dev`; it remains unreleased. |
 | Issue #119 | Merged / Done | ADR 0014 adopted through PR #120 at `e16e1a8`; architectural approval only. |
-| Issue #121 | Selected / Not implemented | Complete the installed-system substrate migration before further ship systems or recovery gameplay; the owning wiki defines admission. |
+| Issue #121 | Implemented / In review | Draft Final PR #123 on `feature/121-extensible-ship-system-substrate`; five system kinds migrated, proof tests and final gate in progress. |
