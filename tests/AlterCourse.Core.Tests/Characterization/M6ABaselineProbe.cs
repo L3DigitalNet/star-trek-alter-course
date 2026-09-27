@@ -290,7 +290,7 @@ internal sealed class M6ABaselineProbe(ShipDefinitionCatalog catalog, bool exact
     private double CapabilityOf(ShipEngineeringState engineering, ShipSystemKind kind) =>
         Round(
             ShipSystemAdmission.SupportedSingle(engineering.Systems, kind) is { } system
-                ? ShipEngineeringState.Capability(system)
+                ? ShipEngineeringState.Capability(system).Value
                 : 0
         );
 

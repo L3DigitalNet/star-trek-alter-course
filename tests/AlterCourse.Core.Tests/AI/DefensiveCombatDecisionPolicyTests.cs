@@ -41,7 +41,10 @@ public sealed class DefensiveCombatDecisionPolicyTests
             {
                 Own = input.Own with { Position = new TacticalPosition(100, 0) },
             },
-            FireDirectedEnergyOutcome.WeaponUnpowered => input with { Own = input.Own with { WeaponCapability = 0 } },
+            FireDirectedEnergyOutcome.WeaponUnpowered => input with
+            {
+                Own = input.Own with { WeaponCapability = default },
+            },
             FireDirectedEnergyOutcome.WeaponOffline => input with
             {
                 Own = input.Own with { WeaponCondition = default },
@@ -86,7 +89,7 @@ public sealed class DefensiveCombatDecisionPolicyTests
         {
             Own = input.Own with
             {
-                WeaponCapability = 0,
+                WeaponCapability = default,
                 Position = coincident ? input.Contact!.LastObservedPosition : input.Own.Position,
                 MaximumSpeed = coincident ? input.Own.MaximumSpeed : default,
             },
@@ -109,7 +112,7 @@ public sealed class DefensiveCombatDecisionPolicyTests
             new InstalledSystemId(5),
             weapon,
             new SystemCondition(1),
-            1,
+            new SystemCapability(1),
             default
         );
         return new DefensiveCombatDecisionInput(

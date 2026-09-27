@@ -58,7 +58,7 @@ public sealed partial class GameSimulation
             system.Condition,
             system.Definition.Power?.NominalDemand,
             consumer ? system.Allocation : null,
-            consumer ? ShipEngineeringState.Capability(system) : null,
+            consumer ? ShipEngineeringState.Capability(system).Value : null,
             system.Definition.Repair?.FullRepairDuration
         );
     }
@@ -135,7 +135,7 @@ public sealed partial class GameSimulation
                 system.Id,
                 system.Condition,
                 system.Allocation ?? default,
-                ShipEngineeringState.Capability(system)
+                ShipEngineeringState.Capability(system).Value
             )
             : null;
 

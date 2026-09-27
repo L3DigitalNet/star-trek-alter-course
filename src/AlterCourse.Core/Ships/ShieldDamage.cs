@@ -7,12 +7,11 @@ public static class ShieldDamage
     public static ShieldDamageResult Resolve(
         double normalizedDamage,
         SystemCondition shieldCondition,
-        double powerSatisfaction
+        PowerSatisfactionRatio powerSatisfaction
     )
     {
         ValidateNormalized(normalizedDamage, nameof(normalizedDamage));
-        ValidateNormalized(powerSatisfaction, nameof(powerSatisfaction));
-        double absorbed = Math.Min(normalizedDamage, shieldCondition.Value * powerSatisfaction);
+        double absorbed = Math.Min(normalizedDamage, shieldCondition.Value * powerSatisfaction.Value);
         return new ShieldDamageResult(
             new SystemCondition(Math.Clamp(shieldCondition.Value - absorbed, 0, 1)),
             absorbed,

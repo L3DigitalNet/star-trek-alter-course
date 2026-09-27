@@ -552,7 +552,7 @@ internal sealed partial record SimulationState
             throw new InvalidOperationException("An active scan requires an installed sensor source on the observer.");
         }
 
-        if (ShipEngineeringState.Capability(sensor) <= 0)
+        if (ShipEngineeringState.Capability(sensor).Value <= 0)
         {
             throw new InvalidOperationException("An active scan requires effective sensor capability.");
         }

@@ -10,6 +10,57 @@ namespace AlterCourse.Core.Tests.Ships;
 /// <summary>Verifies deterministic combat engineering and normalized damage contracts.</summary>
 public sealed class CombatFoundationTests
 {
+    /// <summary>Confirms consequential power satisfaction stays typed across the engineering and damage boundary.</summary>
+    [Fact]
+    public void PowerSatisfactionUsesBoundedTypeAcrossSubsystems()
+    {
+        Type satisfaction = typeof(ShipEngineeringState)
+            .GetMethod(nameof(ShipEngineeringState.PowerSatisfaction))!
+            .ReturnType;
+        Assert.NotEqual(typeof(double), satisfaction);
+        Assert.Equal(
+            satisfaction,
+            typeof(ShieldDamage).GetMethod(nameof(ShieldDamage.Resolve))!.GetParameters()[2].ParameterType
+        );
+        Assert.Equal(typeof(PowerSatisfactionRatio), satisfaction);
+        Assert.Equal(
+            typeof(SystemCapability),
+            typeof(ShipEngineeringState).GetMethod(nameof(ShipEngineeringState.Capability))!.ReturnType
+        );
+        Assert.Equal(
+            typeof(SystemCapability),
+            typeof(CombatOwnFacts).GetProperty(nameof(CombatOwnFacts.WeaponCapability))!.PropertyType
+        );
+    }
+
+    /// <summary>Confirms distinct ratio concepts reject nonfinite and out-of-range boundary values.</summary>
+    [Theory]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    [InlineData(double.NegativeInfinity)]
+    [InlineData(-0.01)]
+    [InlineData(1.01)]
+    public void ConsequentialRatiosRejectInvalidValues(double value)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new PowerSatisfactionRatio(value));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new SystemCapability(value));
+    }
+
+    /// <summary>Confirms legal ratio endpoints, default values, fractions and normalized zero retain their meaning.</summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(0.5)]
+    [InlineData(1)]
+    public void ConsequentialRatiosPreserveLegalValues(double value)
+    {
+        Assert.Equal(value, new PowerSatisfactionRatio(value).Value);
+        Assert.Equal(value, new SystemCapability(value).Value);
+        Assert.Equal(0, default(PowerSatisfactionRatio).Value);
+        Assert.Equal(0, default(SystemCapability).Value);
+        Assert.Equal(0, BitConverter.DoubleToInt64Bits(new PowerSatisfactionRatio(-0.0).Value));
+        Assert.Equal(0, BitConverter.DoubleToInt64Bits(new SystemCapability(-0.0).Value));
+    }
+
     /// <summary>Confirms every supported system round trips through condition lookup and replacement.</summary>
     [Theory]
     [InlineData("power-generation")]
@@ -145,7 +196,11 @@ public sealed class CombatFoundationTests
         double penetration
     )
     {
-        ShieldDamageResult result = ShieldDamage.Resolve(damage, new SystemCondition(condition), power);
+        ShieldDamageResult result = ShieldDamage.Resolve(
+            damage,
+            new SystemCondition(condition),
+            new PowerSatisfactionRatio(power)
+        );
         Assert.Equal(next, result.ShieldCondition.Value, 12);
         Assert.Equal(absorbed, result.AbsorbedDamage, 12);
         Assert.Equal(penetration, result.PenetratingDamage, 12);
@@ -163,7 +218,11 @@ public sealed class CombatFoundationTests
             double lastPowerAbsorbed = 0;
             for (int p = 0; p <= 10; p++)
             {
-                ShieldDamageResult result = ShieldDamage.Resolve(0.75, new SystemCondition(c / 10d), p / 10d);
+                ShieldDamageResult result = ShieldDamage.Resolve(
+                    0.75,
+                    new SystemCondition(c / 10d),
+                    new PowerSatisfactionRatio(p / 10d)
+                );
                 Assert.Equal(0.75, result.AbsorbedDamage + result.PenetratingDamage, 12);
                 Assert.True(result.AbsorbedDamage >= lastPowerAbsorbed);
                 Assert.InRange(result.ShieldCondition.Value, 0, c / 10d);
@@ -182,8 +241,12 @@ public sealed class CombatFoundationTests
     [InlineData(1.01)]
     public void ShieldDamageRejectsInvalidInputs(double value)
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => ShieldDamage.Resolve(value, new SystemCondition(1), 1));
-        Assert.Throws<ArgumentOutOfRangeException>(() => ShieldDamage.Resolve(1, new SystemCondition(1), value));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            ShieldDamage.Resolve(value, new SystemCondition(1), new PowerSatisfactionRatio(1))
+        );
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            ShieldDamage.Resolve(1, new SystemCondition(1), new PowerSatisfactionRatio(value))
+        );
     }
 
     /// <summary>Confirms all consumer systems use the same repair slot while generation remains unrepairable.</summary>
@@ -273,7 +336,7 @@ public sealed class CombatFoundationTests
     }
 
     private static double Satisfaction(ShipEngineeringState state) =>
-        ShipEngineeringState.PowerSatisfaction(TestEngineering.Of(state, ShipSystemKind.Shields));
+        ShipEngineeringState.PowerSatisfaction(TestEngineering.Of(state, ShipSystemKind.Shields)).Value;
 
     private static PowerAllocation Allocation(int sensors, int impulse, int shields, int weapons) =>
         TestEngineering.Allocation(sensors, impulse, shields, weapons);

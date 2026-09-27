@@ -76,22 +76,22 @@ public sealed record ShipEngineeringState
     public PowerUnits Reserve => new(checked((int)(AvailablePower.Value - Allocation.Total)));
 
     /// <summary>Gets a consumer's demand satisfaction on the unit interval; nonconsumers are zero.</summary>
-    public static double PowerSatisfaction(InstalledSystem system)
+    public static PowerSatisfactionRatio PowerSatisfaction(InstalledSystem system)
     {
         ArgumentNullException.ThrowIfNull(system);
         if (system.Definition.Power is not { } power || system.Allocation is not { } allocation)
         {
-            return 0;
+            return default;
         }
 
-        return Math.Min(1, (double)allocation.Value / power.NominalDemand.Value);
+        return new PowerSatisfactionRatio(Math.Min(1, (double)allocation.Value / power.NominalDemand.Value));
     }
 
     /// <summary>Gets effective capability: condition times demand satisfaction.</summary>
-    public static double Capability(InstalledSystem system)
+    public static SystemCapability Capability(InstalledSystem system)
     {
         ArgumentNullException.ThrowIfNull(system);
-        return system.Condition.Value * PowerSatisfaction(system);
+        return new SystemCapability(system.Condition.Value * PowerSatisfaction(system).Value);
     }
 
     /// <summary>Generates the Balanced allocation over installed consumer demands.</summary>

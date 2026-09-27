@@ -191,11 +191,15 @@ public sealed class GeneratedSimulationInvariantTests
                     double damage = damageUnits / 10000d;
                     var condition = new SystemCondition(conditionUnits / 10000d);
                     double power = powerUnits / 10000d;
-                    ShieldDamageResult result = ShieldDamage.Resolve(damage, condition, power);
+                    ShieldDamageResult result = ShieldDamage.Resolve(
+                        damage,
+                        condition,
+                        new PowerSatisfactionRatio(power)
+                    );
                     ShieldDamageResult stronger = ShieldDamage.Resolve(
                         damage,
                         condition,
-                        Math.Min(1, power + (increaseUnits / 10000d))
+                        new PowerSatisfactionRatio(Math.Min(1, power + (increaseUnits / 10000d)))
                     );
                     Assert.Equal(damage, result.AbsorbedDamage + result.PenetratingDamage, 12);
                     Assert.Equal(condition.Value, result.ShieldCondition.Value + result.AbsorbedDamage, 12);
