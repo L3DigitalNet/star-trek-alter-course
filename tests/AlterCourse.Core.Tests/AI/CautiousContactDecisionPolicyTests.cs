@@ -329,6 +329,178 @@ public sealed class CautiousContactDecisionPolicyTests
         );
     }
 
+    /// <summary>Verifies the public evaluator rejects missing input before reading actor facts.</summary>
+    [Fact]
+    public void NullInputIsRejectedWithArgumentValidation()
+    {
+        Assert.Throws<ArgumentNullException>("input", () => CautiousContactDecisionPolicy.Evaluate(null!));
+    }
+
+    /// <summary>Characterizes every candidate score and reason for the approved cautious policy.</summary>
+    [Theory]
+    [InlineData(false, false, 10, 50, 100)]
+    [InlineData(true, false, 80, 30, 20)]
+    [InlineData(true, true, 100, 30, 20)]
+    public void CompleteCandidateExplanationReflectsIdentificationAndValidHail(
+        bool identified,
+        bool hailed,
+        int holdScore,
+        int approachScore,
+        int withdrawScore
+    )
+    {
+        SensorContactSnapshot contact = Contact(
+            1,
+            new TacticalPosition(3, 4),
+            identification: identified ? SensorContactIdentification.Identified : SensorContactIdentification.Detected
+        );
+        ShipContactDecisionExplanation result = CautiousContactDecisionPolicy.Evaluate(
+            Input([contact], incomingHail: hailed ? new IncomingHailFact(contact.Id, "Ship 1", "Design 1") : null)
+        );
+
+        Assert.Equal(contact.Id, result.PrimaryContactId);
+        Assert.Equal(
+            identified ? ShipContactDecisionAction.Hold : ShipContactDecisionAction.Withdraw,
+            result.SelectedAction
+        );
+        Assert.Equal(
+            new int?[] { holdScore, approachScore, withdrawScore },
+            result.Candidates.Select(candidate => candidate.Score)
+        );
+        Assert.Equal(
+            new[]
+            {
+                hailed ? ShipContactDecisionPolicyReason.IdentifiedHailHold
+                : identified ? ShipContactDecisionPolicyReason.IdentifiedContactHold
+                : ShipContactDecisionPolicyReason.UnidentifiedContactHoldAlternative,
+                identified
+                    ? ShipContactDecisionPolicyReason.IdentifiedContactApproachAlternative
+                    : ShipContactDecisionPolicyReason.CautiousApproachAlternative,
+                identified
+                    ? ShipContactDecisionPolicyReason.IdentifiedContactWithdrawAlternative
+                    : ShipContactDecisionPolicyReason.UnidentifiedContactWithdraw,
+            },
+            result.Candidates.Select(candidate => candidate.PolicyReason)
+        );
+        Assert.All(result.Candidates, candidate => Assert.True(candidate.HardConstraintsSatisfied));
+        if (identified)
+        {
+            Assert.Equal(27, result.ResultingCourse!.Value.Heading.Value);
+            Assert.Equal(0, result.ResultingCourse.Value.Speed.Value);
+        }
+    }
+
+    /// <summary>Verifies invalid hail evidence cannot override nearest current contact selection.</summary>
+    [Theory]
+    [InlineData(99, "Ship 2", "Design 2", SensorContactStatus.Current, SensorContactIdentification.Identified)]
+    [InlineData(2, "ship 2", "Design 2", SensorContactStatus.Current, SensorContactIdentification.Identified)]
+    [InlineData(2, "Ship 2", "design 2", SensorContactStatus.Current, SensorContactIdentification.Identified)]
+    [InlineData(2, "Ship 2", "Design 2", SensorContactStatus.Stale, SensorContactIdentification.Identified)]
+    [InlineData(2, "Ship 2", "Design 2", SensorContactStatus.Lost, SensorContactIdentification.Identified)]
+    [InlineData(2, "Ship 2", "Design 2", SensorContactStatus.Current, SensorContactIdentification.Detected)]
+    public void InvalidIncomingHailFallsBackToNearestCurrentContact(
+        long sourceId,
+        string vesselName,
+        string designName,
+        SensorContactStatus status,
+        SensorContactIdentification identification
+    )
+    {
+        SensorContactSnapshot nearest = Contact(1, new TacticalPosition(1, 0));
+        SensorContactSnapshot distant = Contact(2, new TacticalPosition(9, 0), status, identification);
+        ShipContactDecisionExplanation result = CautiousContactDecisionPolicy.Evaluate(
+            Input(
+                [distant, nearest],
+                incomingHail: new IncomingHailFact(new SensorContactId(sourceId), vesselName, designName)
+            )
+        );
+
+        Assert.Equal(nearest.Id, result.PrimaryContactId);
+        Assert.Equal(ShipContactDecisionAction.Withdraw, result.SelectedAction);
+        Assert.Equal(ShipContactDecisionPolicyReason.UnidentifiedContactWithdraw, result.Candidates[2].PolicyReason);
+    }
+
+    /// <summary>Verifies overflowing northward displacement retains its finite eastward component ratio.</summary>
+    [Fact]
+    public void WithdrawalPreservesHeadingWhenOnlyYDisplacementOverflows()
+    {
+        ShipContactDecisionExplanation result = CautiousContactDecisionPolicy.Evaluate(
+            Input(
+                [Contact(1, new TacticalPosition(double.MaxValue / 2, double.MaxValue))],
+                ownPosition: new TacticalPosition(0, -double.MaxValue)
+            )
+        );
+
+        Assert.Equal(ShipContactDecisionAction.Withdraw, result.SelectedAction);
+        Assert.Equal(Math.Atan2(0.5, 2) * 180 / Math.PI + 180, result.ResultingCourse!.Value.Heading.Value, 10);
+    }
+
+    /// <summary>Verifies minimum nonzero coordinates retain their diagonal withdrawal direction.</summary>
+    [Fact]
+    public void WithdrawalPreservesSmallestSubnormalDisplacementDirection()
+    {
+        ShipContactDecisionExplanation result = CautiousContactDecisionPolicy.Evaluate(
+            Input([Contact(1, new TacticalPosition(double.Epsilon, double.Epsilon))])
+        );
+
+        Assert.Equal(ShipContactDecisionAction.Withdraw, result.SelectedAction);
+        Assert.Equal(225, result.ResultingCourse!.Value.Heading.Value, 10);
+    }
+
+    /// <summary>Verifies nearest selection against independently ordered geometric distances.</summary>
+    [Theory]
+    [InlineData(3, 3, 5, 0)]
+    [InlineData(1e200, 1e-200, 2e200, 0)]
+    [InlineData(1e-200, 1e200, 0, 2e200)]
+    [InlineData(1e-300, 1e-310, 2e-300, 0)]
+    [InlineData(1e200, 1e199, 2e200, 2e199)]
+    public void NearestSelectionPreservesGeometricOrderAcrossComponentScales(
+        double nearX,
+        double nearY,
+        double farX,
+        double farY
+    )
+    {
+        // The diagonal (3,3) is inside radius five. For the other pairs, the near radius is below sqrt(2)
+        // times its dominant component, while the far radius is at least twice that component.
+        ShipContactDecisionExplanation result = CautiousContactDecisionPolicy.Evaluate(
+            Input([Contact(1, new TacticalPosition(farX, farY)), Contact(9, new TacticalPosition(nearX, nearY))])
+        );
+
+        Assert.Equal(new SensorContactId(9), result.PrimaryContactId);
+        Assert.Equal(ShipContactDecisionAction.Withdraw, result.SelectedAction);
+    }
+
+    /// <summary>Verifies subnormal diagonal distance remains nearer than twice its axis component.</summary>
+    [Fact]
+    public void NearestSelectionOrdersSubnormalDistancesByGeometry()
+    {
+        ShipContactDecisionExplanation result = CautiousContactDecisionPolicy.Evaluate(
+            Input([
+                Contact(1, new TacticalPosition(2 * double.Epsilon, 0)),
+                Contact(9, new TacticalPosition(double.Epsilon, double.Epsilon)),
+            ])
+        );
+
+        Assert.Equal(new SensorContactId(9), result.PrimaryContactId);
+        Assert.Equal(225, result.ResultingCourse!.Value.Heading.Value, 10);
+    }
+
+    /// <summary>Verifies unrepresentable displacement remains farther than a representable axis distance.</summary>
+    [Fact]
+    public void RepresentableDistanceIsNearerThanOverflowingDisplacement()
+    {
+        ShipContactDecisionExplanation result = CautiousContactDecisionPolicy.Evaluate(
+            Input(
+                [Contact(1, new TacticalPosition(double.MaxValue, 0)), Contact(9, new TacticalPosition(0, 0))],
+                ownPosition: new TacticalPosition(-double.MaxValue, 0)
+            )
+        );
+
+        Assert.Equal(new SensorContactId(9), result.PrimaryContactId);
+        Assert.Equal(270, result.ResultingCourse!.Value.Heading.Value);
+    }
+
     private static ShipContactDecisionInput Input(
         IEnumerable<SensorContactSnapshot> contacts,
         double maximumSpeed = 2,
