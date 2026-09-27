@@ -6,6 +6,7 @@ using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
 using AlterCourse.Core.Tactical;
+using Microsoft.Extensions.Logging;
 
 namespace AlterCourse.Core.Gameplay;
 
@@ -13,7 +14,7 @@ namespace AlterCourse.Core.Gameplay;
 public static class FirstGameSetup
 {
     /// <summary>Creates the representative four-ship proof world from validated content.</summary>
-    public static GameSimulation Create(ShipDefinitionCatalog catalog)
+    public static GameSimulation Create(ShipDefinitionCatalog catalog, ILogger<GameSimulation>? logger = null)
     {
         ArgumentNullException.ThrowIfNull(catalog);
         ShipDefinition playerShipDefinition = catalog.GetRequired(new ShipDefinitionId("pathfinder"));
@@ -21,14 +22,19 @@ public static class FirstGameSetup
         var initialTime = new SimulationTime(0);
         ShipStart[] starts = CreateShipStarts(playerShipDefinition, dawn, vesper, meridian, initialTime);
         GameSimulation simulation = new GameBootstrap(initialTime, map, starts[0].InstanceId, starts).CreateSimulation(
-            catalog
+            catalog,
+            logger
         );
         simulation.BootstrapHiddenCautiousContactObservation(starts[3].InstanceId);
         return simulation;
     }
 
     /// <summary>Creates the six-ship two-faction production proof from validated catalogs.</summary>
-    public static GameSimulation Create(ShipDefinitionCatalog shipCatalog, FactionDefinitionCatalog factionCatalog)
+    public static GameSimulation Create(
+        ShipDefinitionCatalog shipCatalog,
+        FactionDefinitionCatalog factionCatalog,
+        ILogger<GameSimulation>? logger = null
+    )
     {
         ArgumentNullException.ThrowIfNull(shipCatalog);
         ArgumentNullException.ThrowIfNull(factionCatalog);
@@ -61,7 +67,7 @@ public static class FirstGameSetup
             starts[0].InstanceId,
             starts,
             factions
-        ).CreateSimulation(shipCatalog, factionCatalog);
+        ).CreateSimulation(shipCatalog, factionCatalog, logger);
         simulation.BootstrapHiddenCautiousContactObservation(starts[3].InstanceId);
         return simulation;
     }
