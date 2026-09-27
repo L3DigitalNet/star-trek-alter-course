@@ -203,6 +203,14 @@ public static class CautiousContactDecisionPolicy
     {
         double deltaX = destination.XKilometers - origin.XKilometers;
         double deltaY = destination.YKilometers - origin.YKilometers;
+        if (!double.IsFinite(deltaX) || !double.IsFinite(deltaY))
+        {
+            // Atan2 needs the component ratio, not the displacement magnitude. Halving both endpoint
+            // differences prevents overflow while leaving ordinary and tiny local displacements unchanged.
+            deltaX = Math.ScaleB(destination.XKilometers, -1) - Math.ScaleB(origin.XKilometers, -1);
+            deltaY = Math.ScaleB(destination.YKilometers, -1) - Math.ScaleB(origin.YKilometers, -1);
+        }
+
         return new HeadingDegrees(Math.Atan2(deltaX, deltaY) * 180 / Math.PI);
     }
 

@@ -56,6 +56,40 @@ public sealed class CautiousContactDecisionPolicyTests
         Assert.Equal(ShipContactDecisionPolicyReason.UnidentifiedContactWithdraw, withdraw.PolicyReason);
     }
 
+    /// <summary>Confirms finite opposite extremes retain their geometric direction despite overflowing displacement.</summary>
+    [Fact]
+    public void WithdrawalPreservesHeadingWhenBothDisplacementComponentsOverflow()
+    {
+        ShipContactDecisionExplanation result = CautiousContactDecisionPolicy.Evaluate(
+            Input(
+                [Contact(1, new TacticalPosition(double.MaxValue, double.MaxValue / 2))],
+                ownPosition: new TacticalPosition(-double.MaxValue, -double.MaxValue)
+            )
+        );
+
+        Assert.Equal(ShipContactDecisionAction.Withdraw, result.SelectedAction);
+        // The endpoint differences have ratio 2:1.5, independently of their unrepresentable magnitudes.
+        double expectedHeading = Math.Atan2(2, 1.5) * 180 / Math.PI + 180;
+        Assert.Equal(expectedHeading, result.ResultingCourse!.Value.Heading.Value, 10);
+        Assert.Equal(0.5, result.ResultingCourse.Value.Speed.Value);
+    }
+
+    /// <summary>Confirms overflow in one component scales the other component by the same factor.</summary>
+    [Fact]
+    public void WithdrawalPreservesHeadingWhenOneDisplacementComponentOverflows()
+    {
+        ShipContactDecisionExplanation result = CautiousContactDecisionPolicy.Evaluate(
+            Input(
+                [Contact(1, new TacticalPosition(double.MaxValue, double.MaxValue / 2))],
+                ownPosition: new TacticalPosition(-double.MaxValue, 0)
+            )
+        );
+
+        Assert.Equal(ShipContactDecisionAction.Withdraw, result.SelectedAction);
+        double expectedHeading = Math.Atan2(2, 0.5) * 180 / Math.PI + 180;
+        Assert.Equal(expectedHeading, result.ResultingCourse!.Value.Heading.Value, 10);
+    }
+
     /// <summary>Confirms an identified current contact that hailed is selected first and causes a hold.</summary>
     [Fact]
     public void IdentifiedIncomingHailSelectsItsContactAndHolds()
@@ -272,6 +306,7 @@ public sealed class CautiousContactDecisionPolicyTests
         Assert.Equal(new SensorContactId(9), result.PrimaryContactId);
         Assert.Equal(ShipContactDecisionAction.Withdraw, result.SelectedAction);
         Assert.NotNull(result.ResultingCourse);
+        Assert.Equal(180, result.ResultingCourse.Value.Heading.Value);
     }
 
     /// <summary>Confirms hidden world and definition types cannot enter the public policy input graph.</summary>

@@ -1,4 +1,6 @@
 # Ambient time and randomness make simulation results depend on process state.
+# Directory.Build.props applies this list only to Core; scripts/test-core-boundaries.sh proves that scope.
+# Persistence may use Path.GetRandomFileName for temporary files because their names do not affect world state.
 P:System.DateTime.Now; Inject deterministic simulation time instead.
 P:System.DateTime.UtcNow; Inject deterministic simulation time instead.
 P:System.Random.Shared; Supply randomness explicitly at the simulation boundary.
@@ -7,3 +9,15 @@ M:System.Threading.Thread.Sleep(System.Int32); Simulation code must not block wa
 P:System.Environment.TickCount; Inject deterministic simulation time instead.
 P:System.Environment.TickCount64; Inject deterministic simulation time instead.
 M:System.Guid.NewGuid; Supply identifiers explicitly at the simulation boundary.
+P:System.DateTimeOffset.Now; Inject deterministic simulation time instead.
+P:System.DateTimeOffset.UtcNow; Inject deterministic simulation time instead.
+M:System.Threading.Thread.Sleep(System.TimeSpan); Simulation code must not block wall-clock time.
+M:System.Threading.Tasks.Task.Delay(System.Int32); Schedule explicit simulation work instead.
+M:System.Threading.Tasks.Task.Delay(System.Int32,System.Threading.CancellationToken); Schedule explicit simulation work instead.
+M:System.Threading.Tasks.Task.Delay(System.TimeSpan); Schedule explicit simulation work instead.
+M:System.Threading.Tasks.Task.Delay(System.TimeSpan,System.Threading.CancellationToken); Schedule explicit simulation work instead.
+M:System.Threading.Tasks.Task.Delay(System.TimeSpan,System.TimeProvider); Schedule explicit simulation work instead.
+M:System.Threading.Tasks.Task.Delay(System.TimeSpan,System.TimeProvider,System.Threading.CancellationToken); Schedule explicit simulation work instead.
+M:System.TimeProvider.GetUtcNow; TimeProvider is an application clock, not simulation authority.
+T:System.Diagnostics.Stopwatch; Supply explicit simulation time instead of elapsed wall-clock time.
+T:System.Security.Cryptography.RandomNumberGenerator; Supply deterministic randomness explicitly at the simulation boundary.
