@@ -93,7 +93,7 @@ func test_live_combat_exposes_core_refusal_and_four_consumer_engineering() -> vo
 	assert_bool((_find_action_button(screen, "fire-phasers") as Button).disabled).is_true()
 	assert_object(_command_deck(screen).get_node_or_null("%TargetSystemSelector")).is_instanceof(OptionButton)
 	screen.call("ShowEngineeringWorkspace")
-	(_find_engineering_action_button(screen, "allocate-balanced") as Button).emit_signal("pressed")
+	(_find_engineering_action_button(screen, "balance") as Button).emit_signal("pressed")
 	assert_int(screen.get_meta("engineering_sensor_allocation", -1)).is_equal(28)
 	assert_int(screen.get_meta("engineering_impulse_allocation", -1)).is_equal(20)
 	assert_int(screen.get_meta("engineering_shield_allocation", -1)).is_equal(16)
@@ -111,6 +111,12 @@ func test_public_controls_approach_identify_stop_allocate_and_fire_with_stable_s
 	var selector := workspace.get_node("%TargetSystemSelector") as OptionButton
 	var selector_id := selector.get_instance_id()
 	assert_int(selector.item_count).is_equal(5)
+	var aim_labels: Array[String] = []
+	for index in range(selector.item_count):
+		aim_labels.append(selector.get_item_text(index))
+	assert_array(aim_labels).is_equal(
+		["Power generation", "Sensors", "Impulse propulsion", "Shields", "Directed-energy weapons"]
+	)
 	var selected_index := -1
 	for index in range(selector.item_count):
 		if selector.get_item_text(index) == "Sensors":
@@ -147,10 +153,11 @@ func test_public_controls_approach_identify_stop_allocate_and_fire_with_stable_s
 	assert_float(screen.get_meta("engineering_shield_condition", 1.0)).is_less(1.0)
 	assert_str(_collect_control_text(screen.get_node("%EventLogContent"))).contains("Own Shields damaged")
 	screen.call("ShowEngineeringWorkspace")
-	var repair := _find_engineering_action_button(screen, "repair-shields") as Button
+	var repair := _find_engineering_action_button(screen, "repair:4") as Button
 	assert_bool(repair.disabled).is_false()
 	repair.emit_signal("pressed")
 	assert_str(screen.get_meta("engineering_repair_target", "")).is_equal("shields")
+	assert_str((screen.get_node("%Message") as Label).text).is_equal("Shield repair started.")
 	screen.call("ShowTacticalView")
 	assert_str(workspace.get_meta("selected_target_system", "")).is_equal("sensors")
 	_advance_fixed_steps(screen, 19)
@@ -181,7 +188,7 @@ func _prepare_combat_encounter(screen: Node) -> void:
 	assert_float(screen.get_meta("tactical_heading", -1.0)).is_equal(90.0)
 	assert_float(screen.get_meta("tactical_speed", -1.0)).is_equal(0.0)
 	screen.call("ShowEngineeringWorkspace")
-	(_find_engineering_action_button(screen, "allocate-balanced") as Button).emit_signal("pressed")
+	(_find_engineering_action_button(screen, "balance") as Button).emit_signal("pressed")
 	screen.call("ShowTacticalView")
 	assert_str(screen.get_meta("first_contact_status", "")).is_equal("Current")
 	assert_str(screen.get_meta("combat_target_outcome", "")).is_equal("Accepted")
@@ -206,15 +213,16 @@ func test_public_combat_damage_disables_weapon_and_weapon_repair_restores_capabi
 	assert_bool((_find_action_button(screen, "fire-phasers") as Button).disabled).is_true()
 	assert_str(_collect_control_text(_command_deck(screen))).contains("Weapon is offline")
 	screen.call("ShowEngineeringWorkspace")
-	(_find_engineering_action_button(screen, "repair-weapons") as Button).emit_signal("pressed")
+	(_find_engineering_action_button(screen, "repair:5") as Button).emit_signal("pressed")
 	assert_str(screen.get_meta("engineering_repair_target", "")).is_equal("directed-energy-weapons")
+	assert_str((screen.get_node("%Message") as Label).text).is_equal("Directed-energy weapon repair started.")
 	_advance_fixed_steps(screen, 60)
 	assert_float(screen.get_meta("engineering_weapon_condition", -1.0)).is_equal(1.0)
 	assert_str(screen.get_meta("engineering_repair_target", "")).is_empty()
-	(_find_engineering_action_button(screen, "prioritize-weapons") as Button).emit_signal("pressed")
+	(_find_engineering_action_button(screen, "prioritize:5") as Button).emit_signal("pressed")
 	assert_int(screen.get_meta("engineering_weapon_allocation", -1)).is_equal(30)
 	assert_int(screen.get_meta("engineering_impulse_allocation", -1)).is_equal(0)
-	(_find_engineering_action_button(screen, "prioritize-shields") as Button).emit_signal("pressed")
+	(_find_engineering_action_button(screen, "prioritize:4") as Button).emit_signal("pressed")
 	assert_int(screen.get_meta("engineering_shield_allocation", -1)).is_equal(40)
 
 
@@ -764,7 +772,7 @@ func test_live_engineering_projects_authoritative_power_capability_and_repair_st
 	assert_str(presented).contains("75 units")
 	assert_str(presented).contains("ENGINEERING CONTROLS")
 	assert_str(presented).contains("MAX TACTICAL SPEED")
-	(engineering.get_node("%EngineeringHierarchy").get_node("Hierarchy_sensors") as Button).emit_signal(
+	(engineering.get_node("%EngineeringHierarchy").get_node("Hierarchy_system_2") as Button).emit_signal(
 		"pressed"
 	)
 	var sensor_inspector := _collect_control_text(engineering.get_node("%ComponentInspectorContent"))
@@ -791,10 +799,10 @@ func test_live_engineering_projects_authoritative_power_capability_and_repair_st
 	assert_int(screen.get_meta("engineering_sensor_allocation", -1)).is_equal(44)
 	assert_int(screen.get_meta("engineering_impulse_allocation", -1)).is_equal(31)
 	assert_str(screen.get_meta("engineering_repair_target", "")).is_equal("sensors")
-	assert_bool((_find_engineering_action_button(screen, "allocate-balanced") as Button).disabled).is_false()
-	assert_bool((_find_engineering_action_button(screen, "repair-sensors") as Button).disabled).is_true()
+	assert_bool((_find_engineering_action_button(screen, "balance") as Button).disabled).is_false()
+	assert_bool((_find_engineering_action_button(screen, "repair:2") as Button).disabled).is_true()
 	assert_str(
-		(_find_engineering_action_button(screen, "repair-sensors") as Button).tooltip_text
+		(_find_engineering_action_button(screen, "repair:2") as Button).tooltip_text
 	).contains("another system repair is active")
 
 
@@ -802,30 +810,177 @@ func test_live_engineering_allocation_presets_submit_core_choices_and_refresh_pr
 	var screen := _create_screen()
 	screen.call("ShowEngineeringWorkspace")
 
-	(_find_engineering_action_button(screen, "prioritize-sensors") as Button).emit_signal("pressed")
+	(_find_engineering_action_button(screen, "prioritize:2") as Button).emit_signal("pressed")
 	assert_int(screen.get_meta("engineering_sensor_allocation", -1)).is_equal(70)
 	assert_int(screen.get_meta("engineering_impulse_allocation", -1)).is_equal(5)
 	assert_str(screen.get_meta("last_engineering_command", "")).is_equal(
-		"allocation:PrioritizeSensors:Accepted"
+		"Prioritize:2:Accepted"
 	)
 	assert_str((screen.get_node("%Message") as Label).text).contains("Sensor-priority allocation applied")
 
-	(_find_engineering_action_button(screen, "prioritize-propulsion") as Button).emit_signal("pressed")
+	(_find_engineering_action_button(screen, "prioritize:3") as Button).emit_signal("pressed")
 	assert_int(screen.get_meta("engineering_sensor_allocation", -1)).is_equal(25)
 	assert_int(screen.get_meta("engineering_impulse_allocation", -1)).is_equal(50)
 	assert_str(screen.get_meta("last_engineering_command", "")).is_equal(
-		"allocation:PrioritizePropulsion:Accepted"
+		"Prioritize:3:Accepted"
 	)
 
-	(_find_engineering_action_button(screen, "allocate-balanced") as Button).emit_signal("pressed")
+	(_find_engineering_action_button(screen, "balance") as Button).emit_signal("pressed")
 	assert_int(screen.get_meta("engineering_sensor_allocation", -1)).is_equal(28)
 	assert_int(screen.get_meta("engineering_impulse_allocation", -1)).is_equal(20)
 	assert_int(screen.get_meta("engineering_shield_allocation", -1)).is_equal(16)
 	assert_int(screen.get_meta("engineering_weapon_allocation", -1)).is_equal(11)
 	assert_int(screen.get_meta("engineering_reserve", -1)).is_equal(0)
 	assert_str(screen.get_meta("last_engineering_command", "")).is_equal(
-		"allocation:Balanced:Accepted"
+		"Balance:-:Accepted"
 	)
+
+
+func test_live_engineering_rows_actions_and_labels_reproduce_base_presentation() -> void:
+	# Pins every production Engineering string and the button order of the pre-substrate UI (#121): rows and
+	# buttons now come from Core's installed-system projection keyed by installed id, and the visible text from
+	# the Godot presentation table, so drift in either the projection order or the table fails here.
+	var screen := _create_screen()
+	screen.call("ShowEngineeringWorkspace")
+	var engineering := _engineering_workspace(screen)
+	assert_array(_button_texts(engineering.get_node("%EngineeringHierarchy"))).is_equal([
+		"Hierarchy_overview=OVERVIEW",
+		"Hierarchy_system_1=POWER",
+		"Hierarchy_system_2=SENSORS",
+		"Hierarchy_system_3=PROPULSION",
+		"Hierarchy_system_4=SHIELDS",
+		"Hierarchy_system_5=DIRECTED-ENERGY WEAPONS",
+		"Hierarchy_repairs=REPAIRS  [1 !]",
+	])
+	# The production start already runs the sensor repair, so every repair button is disabled.
+	assert_array(_button_texts(engineering.get_node("%EngineeringActionsContent"))).is_equal([
+		"Action_balance=Balance power allocation",
+		"Action_prioritize_2=Prioritize sensors",
+		"Action_prioritize_3=Prioritize propulsion",
+		"Action_prioritize_4=Prioritize shields",
+		"Action_prioritize_5=Prioritize weapons",
+		"Action_repair_4=Begin shield repair  [UNAVAILABLE]",
+		"Action_repair_5=Begin weapon repair  [UNAVAILABLE]",
+		"Action_repair_2=Begin sensor repair  [UNAVAILABLE]",
+		"Action_repair_3=Begin impulse repair  [UNAVAILABLE]",
+		"Action_return_command=Return to Command Deck",
+	])
+	assert_array(_section_rows(engineering.get_node("%ConnectedLoadsContent"))).is_equal([
+		"CONNECTED LOADS",
+		"SENSORS=44 units",
+		"IMPULSE PROPULSION=31 units",
+		"SHIELDS=0 units",
+		"DIRECTED-ENERGY WEAPONS=0 units",
+	])
+	assert_array(_section_rows(engineering.get_node("%PowerAllocationContent"))).is_equal([
+		"POWER ALLOCATION SUMMARY",
+		"NOMINAL GENERATION=120 units",
+		"AVAILABLE POWER=75 units",
+		"SENSORS=44 units",
+		"PROPULSION=31 units",
+		"SHIELDS=0 units",
+		"DIRECTED-ENERGY WEAPONS=0 units",
+		"RESERVE=0 units",
+	])
+	var expected_sections := {
+		"overview": ["ENGINEERING OVERVIEW", "AVAILABLE POWER", "RESERVE", "SENSOR RANGE", "MAX TACTICAL SPEED"],
+		"system_1": ["POWER GENERATION", "NOMINAL", "AVAILABLE", "CONDITION", "RESERVE"],
+		"system_2": ["SENSORS", "CONDITION", "ALLOCATION", "CAPABILITY", "PASSIVE RANGE"],
+		"system_3": ["IMPULSE PROPULSION", "CONDITION", "ALLOCATION", "CAPABILITY", "MAX TACTICAL SPEED"],
+		"system_4": ["SHIELDS", "CONDITION", "ALLOCATION", "DEMAND", "CAPABILITY"],
+		"system_5": ["DIRECTED-ENERGY WEAPONS", "CONDITION", "ALLOCATION", "DEMAND", "CAPABILITY"],
+		"repairs": ["ACTIVE REPAIR", "TARGET", "PROGRESS", "COMPLETION"],
+	}
+	var inspector := engineering.get_node("%ComponentInspectorContent")
+	for row_id in expected_sections:
+		(engineering.get_node("%EngineeringHierarchy").get_node("Hierarchy_" + row_id) as Button).emit_signal(
+			"pressed"
+		)
+		var labels: Array[String] = []
+		for row in _section_rows(inspector):
+			labels.append(row.get_slice("=", 0))
+		assert_array(labels).is_equal(expected_sections[row_id])
+	assert_array(_section_rows(inspector)).contains(["TARGET=Sensors"])
+
+	var message := screen.get_node("%Message") as Label
+	var accepted := {
+		"prioritize:2": "Sensor-priority allocation applied.",
+		"prioritize:3": "Propulsion-priority allocation applied.",
+		"prioritize:4": "Shield-priority allocation applied.",
+		"prioritize:5": "Weapon-priority allocation applied.",
+		"balance": "Balanced allocation applied.",
+	}
+	for action_id in accepted:
+		(_find_engineering_action_button(screen, action_id) as Button).emit_signal("pressed")
+		assert_str(message.text).is_equal(accepted[action_id])
+	# Refusals name the offending consumer by installed id (2 sensors, 3 impulse); shields and weapons never had a
+	# dedicated message, so they keep the base generic refusal.
+	assert_str(screen.call("DescribeDemandRefusal", 2)).is_equal(
+		"Allocation unavailable: sensor demand would be exceeded."
+	)
+	assert_str(screen.call("DescribeDemandRefusal", 3)).is_equal(
+		"Allocation unavailable: propulsion demand would be exceeded."
+	)
+	for silent_id in [4, 5]:
+		assert_str(screen.call("DescribeDemandRefusal", silent_id)).is_equal("Power allocation was not accepted.")
+
+
+func test_stale_engineering_control_is_refused_after_quick_load_but_acts_after_refresh() -> void:
+	# Codex disposition 1 / risk R6: installed ids are ship-local, so a control presented before a load must not
+	# act afterwards even though the loaded game exposes the identical "prioritize:3" key. The positive control
+	# shows the same kind of captured button still acting across an ordinary refresh.
+	var screen := _create_screen()
+	screen.call("ShowEngineeringWorkspace")
+	screen.call("QuickSave")
+	var refreshed := _find_engineering_action_button(screen, "prioritize:2") as Button
+	assert_int(screen.call("ProcessSyntheticDelta", 0.1)).is_equal(1)
+	assert_bool(_find_engineering_action_button(screen, "prioritize:2") == refreshed).is_true()
+	refreshed.emit_signal("pressed")
+	assert_str(screen.get_meta("last_engineering_command", "")).is_equal("Prioritize:2:Accepted")
+	assert_int(screen.get_meta("engineering_sensor_allocation", -1)).is_equal(70)
+
+	var stale := _find_engineering_action_button(screen, "prioritize:3") as Button
+	stale.grab_focus()
+	screen.call("QuickLoad")
+	assert_str(screen.get_meta("quick_save_status", "")).is_equal("loaded")
+	var current := _find_engineering_action_button(screen, "prioritize:3") as Button
+	assert_object(current).is_not_null()
+	assert_bool(current == stale).is_false()
+	assert_int(screen.get_meta("engineering_sensor_allocation", -1)).is_equal(44)
+
+	stale.emit_signal("pressed")
+	assert_str(screen.get_meta("last_engineering_command", "")).is_equal("Prioritize:2:Accepted")
+	assert_int(screen.get_meta("engineering_sensor_allocation", -1)).is_equal(44)
+	assert_int(screen.get_meta("engineering_impulse_allocation", -1)).is_equal(31)
+	assert_str(screen.get_meta("last_refused_action", "")).is_equal("prioritize:3")
+	assert_str((screen.get_node("%Message") as Label).text).contains("no longer available")
+	# The stale button's queued focus restore is dropped; the load's own focus request wins.
+	await get_tree().process_frame
+	assert_object(get_viewport().gui_get_focus_owner()).is_same(screen.get_node("%EngineeringStationButton"))
+
+	current.emit_signal("pressed")
+	assert_str(screen.get_meta("last_engineering_command", "")).is_equal("Prioritize:3:Accepted")
+	assert_int(screen.get_meta("engineering_impulse_allocation", -1)).is_equal(50)
+
+
+func test_stale_command_deck_control_is_refused_after_quick_load() -> void:
+	# The Command Deck binds its controls the same way; the refresh-survival positive control is
+	# test_live_context_action_identity_and_focus_survive_projection_refresh.
+	var screen := _create_screen()
+	screen.call("ShowTacticalView")
+	screen.call("QuickSave")
+	var stale := _find_action_button(screen, "advance-time") as Button
+	var time_before: int = screen.get_meta("simulation_time_milliseconds", -1)
+	screen.call("QuickLoad")
+	assert_str(screen.get_meta("quick_save_status", "")).is_equal("loaded")
+	assert_bool(_find_action_button(screen, "advance-time") == stale).is_false()
+
+	stale.emit_signal("pressed")
+	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_equal(time_before)
+	assert_str(screen.get_meta("last_refused_action", "")).is_equal("advance-time")
+	assert_str((screen.get_node("%Message") as Label).text).contains("no longer available")
+	(_find_action_button(screen, "advance-time") as Button).emit_signal("pressed")
+	assert_int(screen.get_meta("simulation_time_milliseconds", -1)).is_greater(time_before)
 
 
 func test_sensor_priority_refreshes_command_contacts_without_revealing_hidden_identity() -> void:
@@ -835,7 +990,7 @@ func test_sensor_priority_refreshes_command_contacts_without_revealing_hidden_id
 	assert_int(screen.get_meta("sensor_contact_count", -1)).is_equal(0)
 
 	screen.call("ShowEngineeringWorkspace")
-	(_find_engineering_action_button(screen, "prioritize-sensors") as Button).emit_signal("pressed")
+	(_find_engineering_action_button(screen, "prioritize:2") as Button).emit_signal("pressed")
 	assert_int(screen.get_meta("sensor_contact_count", -1)).is_equal(1)
 	assert_str(screen.get_meta("first_contact_label", "")).is_equal("Contact 1")
 	assert_str(screen.get_meta("first_contact_identification", "")).is_equal("Detected")
@@ -848,7 +1003,7 @@ func test_sensor_priority_refreshes_command_contacts_without_revealing_hidden_id
 func test_tactical_course_uses_current_core_propulsion_capability_after_allocation() -> void:
 	var screen := _create_screen()
 	screen.call("ShowEngineeringWorkspace")
-	(_find_engineering_action_button(screen, "prioritize-sensors") as Button).emit_signal("pressed")
+	(_find_engineering_action_button(screen, "prioritize:2") as Button).emit_signal("pressed")
 	screen.call("ShowTacticalView")
 	(_find_action_button(screen, "set-tactical-course") as Button).emit_signal("pressed")
 	assert_float(screen.get_meta("tactical_speed", -1.0)).is_equal_approx(0.0, 0.0001)
@@ -857,14 +1012,14 @@ func test_tactical_course_uses_current_core_propulsion_capability_after_allocati
 	)
 
 	screen.call("ShowEngineeringWorkspace")
-	(_find_engineering_action_button(screen, "prioritize-propulsion") as Button).emit_signal("pressed")
+	(_find_engineering_action_button(screen, "prioritize:3") as Button).emit_signal("pressed")
 	screen.call("ShowTacticalView")
 	(_find_action_button(screen, "set-tactical-course") as Button).emit_signal("pressed")
 	assert_float(screen.get_meta("tactical_speed", -1.0)).is_equal_approx(2.0, 0.0001)
 	assert_str((screen.get_node("%Message") as Label).text).contains("Tactical course set")
 
 	screen.call("ShowEngineeringWorkspace")
-	var sensor_priority := _find_engineering_action_button(screen, "prioritize-sensors") as Button
+	var sensor_priority := _find_engineering_action_button(screen, "prioritize:2") as Button
 	assert_bool(sensor_priority.disabled).is_true()
 	assert_str(sensor_priority.tooltip_text).contains("current speed")
 
@@ -874,9 +1029,9 @@ func test_live_engineering_identity_selection_current_payload_and_traversal_surv
 	screen.call("ShowEngineeringWorkspace")
 	var engineering := _engineering_workspace(screen)
 	var hierarchy := engineering.get_node("%EngineeringHierarchy")
-	var sensor_hierarchy := hierarchy.get_node("Hierarchy_sensors") as Button
-	var allocation := _find_engineering_action_button(screen, "prioritize-sensors") as Button
-	var repair := _find_engineering_action_button(screen, "repair-sensors") as Button
+	var sensor_hierarchy := hierarchy.get_node("Hierarchy_system_2") as Button
+	var allocation := _find_engineering_action_button(screen, "prioritize:2") as Button
+	var repair := _find_engineering_action_button(screen, "repair:2") as Button
 	var hierarchy_id := sensor_hierarchy.get_instance_id()
 	var allocation_id := allocation.get_instance_id()
 	var repair_id := repair.get_instance_id()
@@ -886,28 +1041,28 @@ func test_live_engineering_identity_selection_current_payload_and_traversal_surv
 
 	assert_int(screen.call("ProcessSyntheticDelta", 0.1)).is_equal(1)
 	await get_tree().process_frame
-	var refreshed_allocation := _find_engineering_action_button(screen, "prioritize-sensors") as Button
+	var refreshed_allocation := _find_engineering_action_button(screen, "prioritize:2") as Button
 	assert_int(
-		(hierarchy.get_node("Hierarchy_sensors") as Button).get_instance_id()
+		(hierarchy.get_node("Hierarchy_system_2") as Button).get_instance_id()
 	).is_equal(hierarchy_id)
 	assert_int(refreshed_allocation.get_instance_id()).is_equal(allocation_id)
 	assert_int(
-		(_find_engineering_action_button(screen, "repair-sensors") as Button).get_instance_id()
+		(_find_engineering_action_button(screen, "repair:2") as Button).get_instance_id()
 	).is_equal(repair_id)
 	assert_bool(refreshed_allocation.has_focus()).is_true()
-	assert_str(engineering.get_meta("selected_component_id", "")).is_equal("sensors")
+	assert_str(engineering.get_meta("selected_component_id", "")).is_equal("system:2")
 	assert_bool(refreshed_allocation.focus_next.is_empty()).is_false()
 	assert_object(screen.get_node_or_null(refreshed_allocation.focus_next)).is_not_null()
 
 	screen.call("AdvanceUntilNextPlayerRelevantEvent")
-	var completed_repair := _find_engineering_action_button(screen, "repair-sensors") as Button
+	var completed_repair := _find_engineering_action_button(screen, "repair:2") as Button
 	assert_int(completed_repair.get_instance_id()).is_equal(repair_id)
 	assert_str(completed_repair.tooltip_text).contains("already nominal")
-	assert_str(engineering.get_meta("selected_component_id", "")).is_equal("sensors")
+	assert_str(engineering.get_meta("selected_component_id", "")).is_equal("system:2")
 
 	(screen.get_node("%QuickSaveButton") as Button).emit_signal("pressed")
 	(screen.get_node("%QuickLoadButton") as Button).emit_signal("pressed")
-	assert_str(engineering.get_meta("selected_component_id", "")).is_equal("sensors")
+	assert_str(engineering.get_meta("selected_component_id", "")).is_equal("system:2")
 	assert_str(screen.get_meta("active_workspace", "")).is_equal("engineering")
 
 
@@ -924,38 +1079,38 @@ func test_live_impulse_repair_stays_focused_then_submits_through_core() -> void:
 	screen.call("QuickLoad")
 	assert_str(screen.get_meta("quick_save_status", "")).is_equal("loaded")
 	screen.call("ShowEngineeringWorkspace")
-	var impulse_repair := _find_engineering_action_button(screen, "repair-propulsion") as Button
+	var impulse_repair := _find_engineering_action_button(screen, "repair:3") as Button
 	assert_bool(impulse_repair.disabled).is_false()
 	var repair_button_id := impulse_repair.get_instance_id()
 	impulse_repair.grab_focus()
 
 	assert_int(screen.call("ProcessSyntheticDelta", 0.1)).is_equal(1)
 	await get_tree().process_frame
-	var refreshed_repair := _find_engineering_action_button(screen, "repair-propulsion") as Button
+	var refreshed_repair := _find_engineering_action_button(screen, "repair:3") as Button
 	assert_int(refreshed_repair.get_instance_id()).is_equal(repair_button_id)
 	assert_bool(refreshed_repair.has_focus()).is_true()
 	assert_bool(refreshed_repair.disabled).is_false()
 
 	refreshed_repair.emit_signal("pressed")
 	assert_str(screen.get_meta("last_engineering_command", "")).is_equal(
-		"repair:impulse-propulsion:Accepted"
+		"BeginRepair:3:Accepted"
 	)
 	assert_str(screen.get_meta("engineering_repair_target", "")).is_equal("impulse-propulsion")
 	assert_str((screen.get_node("%Message") as Label).text).contains(
 		"Impulse propulsion repair started"
 	)
 	assert_int(
-		(_find_engineering_action_button(screen, "repair-propulsion") as Button).get_instance_id()
+		(_find_engineering_action_button(screen, "repair:3") as Button).get_instance_id()
 	).is_equal(repair_button_id)
 	assert_bool(
-		(_find_engineering_action_button(screen, "repair-propulsion") as Button).disabled
+		(_find_engineering_action_button(screen, "repair:3") as Button).disabled
 	).is_true()
 
 
 func test_removed_live_engineering_action_cannot_fire_stale_intent_in_preview() -> void:
 	var screen := _create_screen()
 	screen.call("ShowEngineeringWorkspace")
-	var live_action := _find_engineering_action_button(screen, "prioritize-sensors") as Button
+	var live_action := _find_engineering_action_button(screen, "prioritize:2") as Button
 	live_action.emit_signal("pressed")
 	live_action.grab_focus()
 	assert_bool(live_action.has_focus()).is_true()
@@ -963,7 +1118,7 @@ func test_removed_live_engineering_action_cannot_fire_stale_intent_in_preview() 
 	var allocation_before: int = screen.get_meta("engineering_sensor_allocation", -1)
 
 	screen.call("ShowPreview", 3)
-	assert_object(_find_engineering_action_button(screen, "prioritize-sensors")).is_null()
+	assert_object(_find_engineering_action_button(screen, "prioritize:2")).is_null()
 	assert_bool(get_viewport().gui_get_focus_owner() == live_action).is_false()
 	live_action.emit_signal("pressed")
 	assert_str(screen.get_meta("last_engineering_command", "")).is_equal(command_before)
@@ -974,14 +1129,14 @@ func test_removed_live_engineering_action_cannot_fire_stale_intent_in_preview() 
 	assert_str(screen.get_meta("data_mode", "")).is_equal("Live")
 	assert_int(screen.get_meta("engineering_sensor_allocation", -1)).is_equal(allocation_before)
 	assert_bool(
-		(_find_engineering_action_button(screen, "prioritize-sensors") as Button).disabled
+		(_find_engineering_action_button(screen, "prioritize:2") as Button).disabled
 	).is_false()
 
 
 func test_space_pause_does_not_activate_focused_engineering_action() -> void:
 	var screen := _create_screen()
 	screen.call("ShowEngineeringWorkspace")
-	var action := _find_engineering_action_button(screen, "prioritize-sensors") as Button
+	var action := _find_engineering_action_button(screen, "prioritize:2") as Button
 	action.grab_focus()
 	var allocation_before: int = screen.get_meta("engineering_sensor_allocation", -1)
 	var command_before: String = screen.get_meta("last_engineering_command", "")
@@ -1250,7 +1405,7 @@ func test_travel_departure_presents_contact_and_scan_events_in_log() -> void:
 func test_batched_events_render_their_distinct_core_clocks_in_log() -> void:
 	var screen := _create_screen()
 	screen.call("ShowEngineeringWorkspace")
-	(_find_engineering_action_button(screen, "prioritize-sensors") as Button).emit_signal("pressed")
+	(_find_engineering_action_button(screen, "prioritize:2") as Button).emit_signal("pressed")
 	for _batch in range(12):
 		assert_int(screen.call("ProcessSyntheticDelta", 0.6)).is_equal(6)
 	assert_int(screen.call("ProcessSyntheticDelta", 0.2)).is_equal(2)
@@ -1310,7 +1465,7 @@ func test_live_unsupported_values_and_engineering_actions_are_explicitly_unavail
 	assert_str(hierarchy_text).contains("SHIELDS")
 	assert_str(hierarchy_text).contains("DIRECTED-ENERGY WEAPONS")
 	assert_str(hierarchy_text).not_contains("EPS")
-	assert_bool((_find_engineering_action_button(screen, "allocate-balanced") as Button).disabled).is_false()
+	assert_bool((_find_engineering_action_button(screen, "balance") as Button).disabled).is_false()
 	assert_bool(
 		_engineering_workspace(screen).get_node("%EngineeringSchematic").get_meta(
 			"topology_available", true
@@ -2031,7 +2186,7 @@ func _send_action(screen: Node, action: StringName) -> void:
 func _prepare_detected_contact(screen: Node) -> void:
 	screen.call("AdvanceUntilNextPlayerRelevantEvent")
 	screen.call("ShowEngineeringWorkspace")
-	(_find_engineering_action_button(screen, "prioritize-sensors") as Button).emit_signal("pressed")
+	(_find_engineering_action_button(screen, "prioritize:2") as Button).emit_signal("pressed")
 	assert_int(screen.get_meta("sensor_contact_count", 0)).is_equal(1)
 
 
@@ -2102,9 +2257,28 @@ func _find_action_button(screen: Node, action_id: String) -> Button:
 	return null
 
 
+func _button_texts(container: Node) -> Array[String]:
+	var texts: Array[String] = []
+	for child in container.get_children():
+		if child is Button:
+			texts.append("%s=%s" % [child.name, (child as Button).text])
+	return texts
+
+
+func _section_rows(container: Node) -> Array[String]:
+	# Headings render as bare labels and fields as label/value rows; see EngineeringWorkspace.RebuildSection.
+	var rows: Array[String] = []
+	for child in container.get_children():
+		if child is Label:
+			rows.append((child as Label).text)
+		elif child is HBoxContainer and child.get_child_count() == 2:
+			rows.append("%s=%s" % [(child.get_child(0) as Label).text, (child.get_child(1) as Label).text])
+	return rows
+
+
 func _find_engineering_action_button(screen: Node, action_id: String) -> Button:
 	for child in _engineering_workspace(screen).get_node("%EngineeringActionsContent").get_children():
-		if child is Button and child.name == "Action_" + action_id.replace("-", "_"):
+		if child is Button and child.name == "Action_" + action_id.replace("-", "_").replace(":", "_"):
 			return child
 	return null
 

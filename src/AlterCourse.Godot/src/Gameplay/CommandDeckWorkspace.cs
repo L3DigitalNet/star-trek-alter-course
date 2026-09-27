@@ -32,7 +32,8 @@ public partial class CommandDeckWorkspace : Control
     }
 
     private readonly Dictionary<string, Button> _actionButtons = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, CommandInterfaceAction> _presentedActions = new(StringComparer.Ordinal);
+    private readonly Dictionary<Button, ActionSlot> _actionSlots = [];
+    private OwnShipActionBinding? _presentedBinding;
     private readonly Dictionary<int, ShipSystemKind> _targetSystems = [];
     private readonly Dictionary<string, int> _targetItemIds = new(StringComparer.Ordinal);
     private OptionButton _targetSelector = null!;
@@ -119,6 +120,20 @@ public partial class CommandDeckWorkspace : Control
         PresentMap(presentation);
         PresentInspector(presentation);
         PresentTargetSystems(presentation);
+
+        // Same rule as EngineeringWorkspace: no action button survives a change of owner or simulation generation,
+        // so a control captured before a load keeps its old binding and the shell refuses it instead of the button
+        // being retargeted by key onto whatever the loaded game now calls the same local contact.
+        if (presentation.Binding != _presentedBinding)
+        {
+            foreach (string actionId in _actionButtons.Keys.ToArray())
+            {
+                RemoveActionButton(actionId);
+            }
+
+            _presentedBinding = presentation.Binding;
+        }
+
         PresentActions(presentation);
     }
 
@@ -337,12 +352,17 @@ public partial class CommandDeckWorkspace : Control
 
         foreach (string removedActionId in _actionButtons.Keys.Where(id => !retainedActionIds.Contains(id)).ToArray())
         {
-            Button button = _actionButtons[removedActionId];
-            _actionButtons.Remove(removedActionId);
-            _presentedActions.Remove(removedActionId);
-            _contextActions.RemoveChild(button);
-            button.QueueFree();
+            RemoveActionButton(removedActionId);
         }
+    }
+
+    private void RemoveActionButton(string actionId)
+    {
+        Button button = _actionButtons[actionId];
+        _actionButtons.Remove(actionId);
+        _actionSlots.Remove(button);
+        _contextActions.RemoveChild(button);
+        button.QueueFree();
     }
 
     private void ReconcileActionButton(CommandInterfaceAction action, CommandInterfaceDataMode dataMode, int index)
@@ -353,10 +373,13 @@ public partial class CommandDeckWorkspace : Control
         if (!_actionButtons.TryGetValue(action.Id, out Button? button))
         {
             string actionId = action.Id;
+            var slot = new ActionSlot(action);
             button = new Button { Name = $"Action_{actionId}", FocusMode = FocusModeEnum.All };
-            button.Pressed += () => OnActionPressed(actionId);
+            Button pressed = button;
+            button.Pressed += () => OnActionPressed(pressed, slot);
             _contextActions.AddChild(button);
             _actionButtons.Add(actionId, button);
+            _actionSlots.Add(button, slot);
         }
 
         string text = action.Label + ActionSuffix(action.Availability, canSubmit);
@@ -389,7 +412,7 @@ public partial class CommandDeckWorkspace : Control
             button.ThemeTypeVariation = variation;
         }
 
-        _presentedActions[action.Id] = action;
+        _actionSlots[button].Action = action;
         if (button.GetIndex() != index)
         {
             _contextActions.MoveChild(button, index);
@@ -417,12 +440,15 @@ public partial class CommandDeckWorkspace : Control
         ContactSelected?.Invoke(this, new ContactEventArgs(args.ContactId));
     }
 
-    private void OnActionPressed(string actionId)
+    // Emits the action this button was last presented with, so a button removed by a binding change still carries
+    // its old binding to the shell.
+    private void OnActionPressed(Button button, ActionSlot slot)
     {
+        CommandInterfaceAction action = slot.Action;
         if (
             CurrentDataMode == CommandInterfaceDataMode.Live
-            && IsActionEnabled(actionId)
-            && _presentedActions.TryGetValue(actionId, out CommandInterfaceAction? action)
+            && !button.Disabled
+            && action.Availability == CommandInterfaceActionAvailability.Submittable
         )
         {
             if (action.Intent == CommandInterfaceIntent.FireDirectedEnergy)
@@ -473,5 +499,11 @@ public partial class CommandDeckWorkspace : Control
             parent.RemoveChild(child);
             child.QueueFree();
         }
+    }
+
+    /// <summary>Holds the action a button currently represents; updated in place by an ordinary refresh.</summary>
+    private sealed class ActionSlot(CommandInterfaceAction action)
+    {
+        public CommandInterfaceAction Action { get; set; } = action;
     }
 }

@@ -1157,6 +1157,20 @@ public partial class GameScreen : Control
         }
     }
 
+    /// <summary>
+    /// Returns the refusal text shown when an allocation exceeds the demand of the player's installation
+    /// <paramref name="installedId"/>, resolved through the current projection exactly as <see cref="ApplyAllocation"/>
+    /// resolves the offending consumer. Balance and priority allocations never exceed demand, so the label-pinning
+    /// gdUnit test reads the production strings through this instead of through a button.
+    /// </summary>
+    public string DescribeDemandRefusal(long installedId) =>
+        _projection is null ? string.Empty : DemandRefusal(_projection, new InstalledSystemId(installedId));
+
+    private static string DemandRefusal(PlayerProjection projection, InstalledSystemId? consumer) =>
+        EngineeringKindPresentation.DemandExceededMessage(
+            projection.Ship.Engineering.Systems.SingleOrDefault(row => row.Id == consumer)?.Kind
+        );
+
     private bool IsCurrentBinding(OwnShipActionBinding? binding, PlayerProjection current) =>
         binding is not null
         && binding.SimulationGeneration == _simulationGeneration
@@ -1183,9 +1197,7 @@ public partial class GameScreen : Control
             PowerAllocationOutcome.Accepted => $"{label} applied.",
             PowerAllocationOutcome.CurrentSpeedExceedsResultingMaximum =>
                 "Allocation unavailable: reduce current speed before lowering propulsion power.",
-            PowerAllocationOutcome.ConsumerDemandExceeded => EngineeringKindPresentation.DemandExceededMessage(
-                before.Ship.Engineering.Systems.SingleOrDefault(row => row.Id == result.Consumer)?.Kind
-            ),
+            PowerAllocationOutcome.ConsumerDemandExceeded => DemandRefusal(before, result.Consumer),
             PowerAllocationOutcome.AvailablePowerExceeded =>
                 "Allocation unavailable: requested load exceeds available power.",
             _ => "Power allocation was not accepted.",
