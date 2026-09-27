@@ -8,7 +8,7 @@ namespace AlterCourse.Core.Tests.Support;
 /// <summary>Builds ship and system content for tests: the production files, or typed test catalogs.</summary>
 /// <remarks>
 /// Test catalogs keep the production definition ids (<c>pathfinder.*</c>) and installed ids 1–5 so worlds built from
-/// them stay representable by the temporary V9 persistence bridge; only tuning differs.
+/// them keep the production installed-system identities; only tuning differs.
 /// </remarks>
 internal static class TestShipContent
 {
@@ -79,8 +79,7 @@ internal static class TestShipContent
 
     /// <summary>
     /// Builds a catalog of several designs, each with its own tuned definitions under a distinct id prefix so their
-    /// system definitions do not collide. Such worlds are not representable by the V9 bridge unless a design keeps
-    /// the <c>pathfinder</c> prefix.
+    /// system definitions do not collide.
     /// </summary>
     internal static ShipDefinitionCatalog Designs(
         params (string Id, string DisplayName, PathfinderTuning Tuning, string Prefix)[] designs
