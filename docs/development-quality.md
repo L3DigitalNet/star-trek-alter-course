@@ -6,7 +6,7 @@ description: 'Canonical setup and verification workflow for Godot, C#, and Asset
 doc_type: 'runbook'
 status: 'active'
 created: '2026-09-01'
-updated: '2026-09-26'
+updated: '2026-09-27'
 tags:
   - 'development'
   - 'testing'
@@ -82,7 +82,7 @@ Stryker is pinned but has no mutation-score threshold until the simulation suite
 
 ## Testing framework availability
 
-xUnit is installed for ordinary .NET tests, and vendored GdUnit4 runs the current Godot integration tests. ADR 0009 selects CsCheck for qualifying property/model tests, GdUnit4Net for C# tests that genuinely require the engine runtime, and ArchUnitNET for architecture rules that the project graph cannot express. Those three remain admission-triggered and must not be added until their stated need exists.
+xUnit is installed for ordinary .NET tests, and vendored GdUnit4 runs the current Godot integration tests. The September 27 [test dependency admission](dependency-admission/architecture-testing.md) introduces CsCheck for bounded generated scheduler, power, and shield invariants and ArchUnitNET for durable namespace dependencies beyond the project graph. Specialized behavioral and IL probes remain alongside those rules. GdUnit4Net remains admission-triggered for C# tests that genuinely require the engine runtime; the existing GDScript fixtures remain permitted by ADR 0009.
 
 ## Managed Markdown policy
 

@@ -2,11 +2,11 @@
 
 ## Current focus
 
-- Issue #121 substrate migration merged into `dev` as `17637dd` (Final PR #123); unreleased. Next work awaits owner selection.
-- M6A is merged into `dev`; M6 remains partial and unreleased. Q-10 is resolved for M6A; M3/M5 remain incomplete.
-- Full semantic sweep completed 2026-09-26; next sweep is due 2026-10-03. Targeted substrate review does not reset it.
+- Initiative #127 ADR conformance is active on `task/127-adr-conformance`; #128-#131 are In progress and Supporting PR #132 is draft.
+- The 191-obligation register is [ADR conformance review](../reviews/adr-conformance-2026-09-27.md); focused source suites pass.
+- Full-candidate, deep, and hosted checks remain pending; final review fixes save-stream-disposal masking. Do not claim Ready or completion.
+- Ship content V6, system definitions V1, and saves V10 remain unreleased. The 2026-09-26 full semantic sweep is due again 2026-10-03.
 
 ## Active incidents
 
 - No active outage.
-- The `grab_focus` diagnostic from [PR #117](https://github.com/L3DigitalNet/star-trek-alter-course/pull/117) is fixed via `DeferFocus`.

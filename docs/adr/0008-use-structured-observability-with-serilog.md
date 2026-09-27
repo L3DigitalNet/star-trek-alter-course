@@ -6,8 +6,8 @@ description: 'Defines the logging backend, Core abstraction, simulation trace fi
 doc_type: 'adr'
 status: 'active'
 created: '2026-09-01'
-updated: '2026-09-01'
-reviewed: '2026-09-01'
+updated: '2026-09-27'
+reviewed: '2026-09-27'
 owner: 'project-maintainers'
 consumer: 'mix'
 tags:
@@ -210,7 +210,11 @@ Player-facing history that must survive must be represented in durable domain st
 
 Exceptions are logged at a boundary that can add operation context and decide recovery. Lower layers should not repeatedly catch, log, and rethrow the same exception, which produces duplicate records without adding meaning.
 
-Validation and expected failure paths favor structured result objects over exceptions. Unexpected exceptions carry the original exception object and stable contextual fields.
+Validation and expected failure paths favor structured result objects over exceptions. Recovery retains the original exception and its classification in the operation's control flow. Default diagnostic output carries an allowlisted failure classification and stable contextual fields, without forwarding the original exception object, message, inner exception, stack, or arbitrary data to a sink. A sanitized message alone is insufficient if the sink can still serialize the original exception.
+
+This September 27 clarification resolves the original exception-object sentence's conflict with the sensitive-data requirements above. It does not weaken exception propagation, alter domain recovery, or authorize an unsanitized diagnostic mode. Regression proof must inspect both structured event properties and actual rendered output, including logger/provider/sink construction, emission, and disposal failures.
+
+Classification follows explicit typed results or known failure signals. A broad BCL exception such as `InvalidOperationException` does not establish a domain-invariant diagnosis: it can also represent a disposed object or a programming error in a collection operation. Unexpected untyped failures are conservatively classified as programming defects until a more specific cause is established; diagnostics must not invent certainty from the exception's base type. Expected negative gameplay outcomes remain typed results and need not produce error-level log events.
 
 Logs must distinguish:
 

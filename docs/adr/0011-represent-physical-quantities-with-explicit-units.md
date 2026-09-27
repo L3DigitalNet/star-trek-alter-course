@@ -6,8 +6,8 @@ description: 'Defines quantity typing, canonical serialization units, UnitsNet u
 doc_type: 'adr'
 status: 'active'
 created: '2026-09-01'
-updated: '2026-09-01'
-reviewed: '2026-09-01'
+updated: '2026-09-27'
+reviewed: '2026-09-27'
 owner: 'project-maintainers'
 consumer: 'mix'
 tags:
@@ -140,6 +140,8 @@ Before its first production use, a focused proof must verify:
 
 If the proof succeeds, the package may be admitted through central package management without another ADR. If it fails materially, the implementation uses focused project-owned quantity structs and records the evidence before choosing another library.
 
+The owner-approved September 27, 2026 amendment permits the existing canonical distance and speed structs to remain, with their finite/nonnegative invariants and conversion, overflow, and runtime-boundary tests. This narrow exception does not claim that UnitsNet fails those dimensions. The [present-day evaluation](../dependency-admission/unitsnet-evaluation.md) records the evidence and missing historical provenance. UnitsNet remains the preferred first candidate when a new standard physical dimension or concrete cross-unit conversion requirement arises; that admission must repeat the focused comparison above. Exact integer simulation time, normalized headings, signed coordinate composites, and fictional quantities retain their independently required domain semantics.
+
 UnitsNet types may appear in Core domain APIs and calculations. They do not appear directly as the canonical JSON schema, save wire format, Godot exported-property contract, or public mod contract.
 
 ### Canonical units
@@ -245,7 +247,7 @@ A change is in scope when it introduces or changes a dimensioned value, unit con
 
 Conformance is confirmed by:
 
-- APIs that expose typed or explicitly named quantities at subsystem boundaries;
+- APIs that expose strongly typed physical quantities at public domain and cross-subsystem runtime boundaries, including projections; explicit primitive names alone do not satisfy that runtime contract;
 - schemas that declare canonical units and bounds;
 - tests for conversions, extreme values, nonfinite values, and incompatible dimensions;
 - persistence migration review when canonical units or meaning change;
@@ -253,6 +255,8 @@ Conformance is confirmed by:
 - property or metamorphic tests that equivalent units produce equivalent domain outcomes;
 - representative performance tests before quantity wrappers are used in hot high-volume paths;
 - review that displayed precision does not exceed the model's meaning.
+
+The September 27 clarification aligns confirmation with the existing stronger decision body. Canonical numeric wire fields, explicit adapter extraction/construction, validated composite coordinate values, discrete counts, fictional quantities, scalar tuning, and local intermediates retain their respective classifications above; this does not require every number to become a physical quantity or change any save unit.
 
 ## Pros and Cons of the Options
 

@@ -6,8 +6,8 @@ description: 'Defines the simulation clock, event ordering, random-source contra
 doc_type: 'adr'
 status: 'active'
 created: '2026-09-01'
-updated: '2026-09-01'
-reviewed: '2026-09-01'
+updated: '2026-09-27'
+reviewed: '2026-09-27'
 owner: 'project-maintainers'
 consumer: 'mix'
 tags:
@@ -46,7 +46,7 @@ project:
 
 The galaxy in Star Trek: Alter Course must continue to act while the player travels, repairs, negotiates, waits, or fights. Tactical actions may resolve in seconds, repairs in minutes or days, travel in hours or weeks, and faction strategy on longer cadences. The game therefore needs one authoritative simulation-time model that supports multiple operational scales without binding simulation progress to frame rate or wall-clock time.
 
-Randomness is also necessary for uncertain sensors, damage, procedural generation, AI variation, and events. Uncontrolled use of ambient time, `System.Random`, unordered collections, asynchronous callbacks, or unspecified tie-breaking would make defects difficult to reproduce and saves unable to continue the same simulation reliably.
+Future rules may use randomness for uncertain sensors, damage, procedural generation, AI variation, or events. These systems do not require randomness merely because their names appear here. Uncontrolled use of ambient time, `System.Random`, unordered collections, asynchronous callbacks, or unspecified tie-breaking would make defects difficult to reproduce and saves unable to continue the same simulation reliably.
 
 This decision governs all time advancement, scheduled simulation work, random choices, and deterministic ordering in `AlterCourse.Core`. It applies whenever a rule reads time, schedules future consequences, consumes randomness, or resolves multiple state changes.
 
@@ -157,7 +157,11 @@ This policy favors reproducibility over speculative throughput. Performance opti
 
 ### Random-source abstraction
 
-Domain code receives randomness through an injected project-owned abstraction, conceptually an `IRandomSource`, rather than constructing or accessing a process-global generator.
+Domain code that consumes authoritative randomness receives it through an injected project-owned abstraction, conceptually an `IRandomSource`, rather than constructing or accessing a process-global generator.
+
+The current navigation, sensors, damage, and AI rules have no authoritative random consumer. There is no active generator or stream state to persist, and no placeholder seed, algorithm, or save-version change is required. Temporary-file identities, diagnostic correlation, and test generation are nonauthoritative and cannot influence simulation choices. The [September 27 conformance record](../reviews/adr-conformance-2026-09-27.md) retains the call-path evidence and the original wording mismatch.
+
+The first authoritative random feature must admit the generator and consumer together: owned abstraction, documented supported algorithm identity/version, deterministic stream ownership and derivation, full state capture/validation, save compatibility and migration treatment, reference vectors, and exact continuation tests. Adding a random call before those controls is nonconformant; this applicability clarification does not defer them after the first consumer.
 
 The abstraction supports the operations actually needed by the domain, such as:
 
@@ -247,8 +251,8 @@ Conformance is confirmed by:
 
 - banned-API or architecture checks for ambient Core time and random sources;
 - scheduler tests covering same-time ordering, cancellation, rescheduling, zero-time loops, and load continuation;
-- reference-vector tests for the selected random algorithm;
-- tests that save and restore active random streams;
+- reference-vector tests for the selected random algorithm when authoritative randomness is introduced;
+- tests that save and restore all active random streams when such streams exist;
 - replay tests from identical snapshots and command sequences;
 - stable-order tests that vary dictionary insertion or entity construction order;
 - tests proving frame rate and wall-clock time do not change Core outcomes;

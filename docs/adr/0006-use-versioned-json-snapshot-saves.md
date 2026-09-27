@@ -6,8 +6,8 @@ description: 'Defines save ownership, serialization, migration, validation, atom
 doc_type: 'adr'
 status: 'active'
 created: '2026-09-01'
-updated: '2026-09-01'
-reviewed: '2026-09-01'
+updated: '2026-09-27'
+reviewed: '2026-09-27'
 owner: 'project-maintainers'
 consumer: 'mix'
 tags:
@@ -110,6 +110,8 @@ A compact binary format such as MessagePack may be evaluated later only when rep
 
 ### Save envelope
 
+Random-state fields are applicable only when the rules own authoritative randomness under ADR 0007. Current non-stochastic rules have no generator state; the first random feature must introduce supported algorithm identity, complete stream state, validation, compatibility/migration treatment, and continuation proof together. This September 27 clarification preserves the original envelope obligation for that trigger without inventing current state.
+
 Each save contains an envelope sufficient to determine compatibility before constructing the world. The exact property names are implementation details, but the envelope must represent:
 
 - a save-schema version;
@@ -118,7 +120,7 @@ Each save contains an envelope sufficient to determine compatibility before cons
 - the simulation time;
 - the simulation-rules or build compatibility identity needed to interpret the snapshot;
 - the content-set identity or required content references;
-- the random algorithm version and persisted random-source states;
+- the random algorithm version and complete persisted random-source states when authoritative rules consume randomness;
 - the next stable scheduler sequence or equivalent event-order state;
 - the authoritative world snapshot;
 - optional integrity metadata;
@@ -182,7 +184,7 @@ Before exposing loaded state to the simulation, the loader must validate:
 - finite and in-range numeric values;
 - valid enum and state-machine states;
 - scheduler ordering and event targets;
-- random-state shape;
+- random-state shape and supported algorithm identity when authoritative random state exists;
 - cross-object domain invariants;
 - compatibility with the selected content set.
 
