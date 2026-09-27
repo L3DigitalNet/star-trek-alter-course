@@ -15,40 +15,44 @@ aliases: []
 related:
   - 'docs/adr/0001-separate-simulation-from-godot.md'
   - 'docs/adr/0002-use-one-canonical-quality-gate.md'
+  - 'docs/adr/0017-generate-assets-outside-the-game-through-bounded-validated-publication.md'
+  - 'docs/adr/README.md'
 ---
 
 # Development quality
 
-`./scripts/verify.sh` is the canonical quality gate for local developers, agents, editors, and CI. It is read-only for tracked files and must pass before code is complete.
+`./scripts/verify.sh` is the canonical quality gate for local developers, agents, editors, and CI. It is read-only for tracked files and must pass before work is admitted as complete. Read [CONTRIBUTING](../CONTRIBUTING.md) and the [ADR catalog](adr/README.md) for governing scope and admission.
 
 ## Required environment
 
 - Linux x86_64 with Git, Bash, `curl`, `tar` with xz support, `unzip`, and `sha256sum`.
-- The exact .NET SDK selected by [`global.json`](../global.json), with roll-forward disabled. The resolver supplies that SDK plus the .NET 8 runtime required by Godot. `scripts/resolve-dotnet.sh` downloads the checksum-pinned SDK to the user cache and links it as the untracked repository-root `.dotnet`, which `global.json` searches before the running host's own SDKs. Editors and shells that start a system `dotnet` with a different patch SDK therefore still resolve the pinned SDK. If an editor reports that no required SDK was found, run `./scripts/resolve-dotnet.sh` once from the repository root and reload the workspace.
-- Node 24 with `npx`, selected by [`.node-version`](../.node-version). Repository scripts reject a different Node major before running npm-based tools.
-- Godot 4.7.2 stable .NET/C#. The verifier accepts an exact matching `GODOT_BIN` or `godot` command, or downloads the checksum-pinned official editor to the user cache.
+- The exact .NET SDK in [global.json](../global.json), with roll-forward disabled. The resolver supplies that SDK and the .NET 8 runtime Godot needs. `scripts/resolve-dotnet.sh` downloads the checksum-pinned SDK to the user cache and links untracked root `.dotnet`, which `global.json` searches before host SDKs. If an editor cannot resolve it, run the resolver once and reload the workspace.
+- Node 24 with `npx`, selected by [`.node-version`](../.node-version). Scripts reject another Node major before npm-based tools run.
+- Godot 4.7.2 stable .NET/C#. The verifier accepts an exact matching `GODOT_BIN` or `godot`, or downloads the checksum-pinned editor to the user cache.
 - GdUnit4 6.2.0, vendored from upstream commit `d18770221c2df4a3c991a42fdce7907df40eea75` under the Godot project.
 
-The Core, Godot, and Core-test projects target .NET 8. AssetCtl and its tests target .NET 10. All projects use the repository-wide C# 12 baseline from [`Directory.Build.props`](../Directory.Build.props).
+Core, Godot, and Core tests target .NET 8; AssetCtl and its tests target .NET 10. All use the C# 12 baseline from [Directory.Build.props](../Directory.Build.props). Exact package/tool versions remain in configuration and lock files; these are repository selections, not claims about newest upstream releases.
 
-Repository-local .NET tools and checksum-pinned native tools are restored automatically. Native binaries are cached outside the repository and never replace globally installed tools.
+Repository-local .NET tools and checksum-pinned native tools restore automatically. Native binaries are cached outside the repository without replacing global installations.
 
 ## Normal workflow
 
-Apply safe formatting, then run the complete gate:
+Apply supported formatting, then run the complete gate:
 
 ```bash
 ./scripts/fix.sh
 ./scripts/verify.sh
 ```
 
-`fix.sh` runs CSharpier for repository-owned C#, Prettier for tracked Markdown and structured configuration, and `shfmt` for shell scripts and Git hooks. `verify.sh` checks their output, locked dependencies, markdownlint, ShellCheck, actionlint, gitleaks, diagnostic-suppression and solution-configuration policy, a warning-free solution-wide Release build, Core and AssetCtl .NET tests, offline read-only AssetCtl configuration and catalog validation, project language-server transport tests, and Godot integration. After proving the solution's Release mapping, verification builds the Godot project explicitly as Debug because the Godot editor runtime loads that managed configuration for GdUnit and headless smoke tests.
+`fix.sh` runs CSharpier for repository-owned C#, Prettier for tracked Markdown/configuration, and shfmt for shell/hooks. `verify.sh` checks those outputs, locked dependencies, markdownlint, ShellCheck, actionlint, gitleaks, diagnostic/solution policies, warning-free solution Release build, Core and AssetCtl tests, offline read-only asset configuration/catalog validation, language-server transport tests, and Godot integration/smoke.
 
-CSharpier is the sole C# whitespace formatter. Bare `dotnet format` and `dotnet format whitespace` are noncanonical because Roslyn's formatter can produce whitespace that CSharpier changes. `.editorconfig`, SDK analyzers, and Meziantou own semantic style; the compiler owns language correctness. Private instance fields use `_camelCase`, while private constants and static readonly fields use PascalCase.
+After proving the solution's Release mapping, verification explicitly builds Godot as Debug because the editor runtime loads that managed configuration for GdUnit and smoke. This is not permission to silently remap Release to Debug in the solution.
+
+CSharpier alone owns C# whitespace. Bare `dotnet format` and `dotnet format whitespace` are noncanonical because Roslyn formatting can conflict with it. EditorConfig, SDK analyzers, and Meziantou own semantic style; the compiler owns language correctness. Private instance fields use `_camelCase`; private constants and static readonly fields use PascalCase.
 
 ## AssetCtl development
 
-The standalone .NET 10 tool references neither game project nor Godot. Run it from any directory inside the repository; it locates the repository root and keeps command results on standard output while diagnostics go to standard error.
+The independent .NET 10 CLI references neither game project nor Godot. It locates the repository root from an internal directory, writes command results to stdout, and diagnostics to stderr. [ADR 0017](adr/0017-generate-assets-outside-the-game-through-bounded-validated-publication.md) owns isolation, side effects, publication, and approval; the [tool contract](wiki/asset-pipeline-tool.md) owns detailed commands and schemas.
 
 ```bash
 dotnet run --project tools/AlterCourse.AssetCtl -- validate-config --offline --output json
@@ -56,9 +60,9 @@ dotnet run --project tools/AlterCourse.AssetCtl -- doctor --output json
 dotnet run --project tools/AlterCourse.AssetCtl -- status --output json
 ```
 
-Tracked configuration in `config/assets/` is authoritative for provider instances, endpoints, credential environment-variable names, models, capabilities, economics, routes, quality tiers, and styles. Never put credential values in YAML. The committed policy denies paid generation; enabling it requires an untracked `.assetctl/config.local.yaml` owner override with bounded spend limits. Provider calls are never part of canonical verification.
+Tracked `config/assets/` is authoritative for provider instances, endpoints, credential environment-variable names, models, capabilities, economics, routes, quality, and styles. Never place credential values in YAML. Committed policy denies paid generation; enabling it requires an authorized untracked `.assetctl/config.local.yaml` override with bounded spend. Provider calls are never part of canonical verification.
 
-To create or refresh a development placeholder, first search the catalog, then generate from an existing manifest. `--offline` selects only a local endpoint-free target, and `--dry-run` reports the plan without provider calls or tracked writes.
+Search before generating a duplicate. `--offline` selects an endpoint-free local target; `--dry-run` reports the plan without provider calls or tracked writes.
 
 ```bash
 dotnet run --project tools/AlterCourse.AssetCtl -- find --query engineering --output json
@@ -68,32 +72,37 @@ dotnet run --project tools/AlterCourse.AssetCtl -- generate \
   --output json
 ```
 
-Every published asset and manifest move as one rollback-safe pair. An approved asset is immutable: replacement requires a new semantic asset ID and `supersedes` record. Run `approve` or deprecate an approved asset only with explicit current owner authorization; approval requires the exact asset ID confirmation, actor, note, unchanged hash, passing validation, and complete non-placeholder rights data.
+Selected bytes and manifest are one recoverable publication unit. Staging, journal/lease, ownership, and rollback/recovery preserve the pair across supported failures; this is not a claim of one atomic two-file filesystem operation or universal power-loss durability. Secure descriptor-bound state/publication currently requires Linux.
+
+Approved assets are immutable: replacement uses a new semantic ID and `supersedes`. Approval or deprecation of an approved asset requires explicit current owner instruction. Approval requires exact-ID confirmation, actor, note, unchanged hash, passing validation, and complete non-placeholder rights data. Automated review cannot supply owner authorization or legal clearance.
 
 ## Deep validation
 
-Mutation testing is intentionally outside the fast gate. Run it when simulation behavior or its tests change materially:
+Mutation testing is intentionally outside the fast gate. Run it when simulation behavior or tests change materially:
 
 ```bash
 ./scripts/test-mutation.sh
 ```
 
-Stryker is pinned but has no mutation-score threshold until the simulation suite supplies an evidence-based baseline.
+Stryker is pinned but has no mutation-score threshold until an evidence-based baseline exists.
 
 ## Testing framework availability
 
-xUnit is installed for ordinary .NET tests, and vendored GdUnit4 runs the current Godot integration tests. The September 27 [test dependency admission](dependency-admission/architecture-testing.md) introduces CsCheck for bounded generated scheduler, power, and shield invariants and ArchUnitNET for durable namespace dependencies beyond the project graph. Specialized behavioral and IL probes remain alongside those rules. GdUnit4Net remains admission-triggered for C# tests that genuinely require the engine runtime; the existing GDScript fixtures remain permitted by ADR 0009.
+xUnit supports ordinary .NET tests; vendored GdUnit4 runs current Godot integration. The [architecture-testing admission](dependency-admission/architecture-testing.md) adds CsCheck for bounded scheduler/power/shield invariants and ArchUnitNET for durable namespace rules beyond the project graph. Specialized behavioral and IL probes remain alongside them. Both packages stay Core-test-only.
+
+GdUnit4Net remains conditional on a C# subject that genuinely requires engine runtime; current GDScript fixtures remain permitted by ADR 0009. An ADR's preferred future package is not an installed dependency.
 
 ## Managed Markdown policy
 
-The repository-owned gate runs Prettier and markdownlint over the same tracked Markdown and structured-text configuration adopted by Project Standards. Managed Project Standards workflows remain complementary: they own externally managed formatting, Markdown structure, and frontmatter policy and are intentionally not reproduced by `verify.sh`. Keep overlapping formatter and linter versions aligned when the managed package changes.
+Repository verification runs Prettier and markdownlint over tracked Markdown/structured text. Complementary managed Project Standards workflows own their formatting, structure, and frontmatter policy; they are intentionally not reproduced by `verify.sh`. Keep overlapping formatter/linter versions aligned when the managed package changes.
+
+Follow [ADR maintenance guidance](adr/README.md#adding-or-changing-a-record) for stable IDs, record scope, and amendments. Keep source inspection, actual execution, and historical verification distinct. A link check or frontmatter date change does not establish semantic agreement or implementation conformance.
 
 ## Enforcement philosophy
 
-- Canonical CI runs the same `./scripts/verify.sh` implementation used locally; managed Project Standards workflows remain separate policy checks under ADR 0002.
-- Compiler and analyzer warnings are build failures. Fix causes instead of suppressing diagnostics or weakening central settings.
-- CSharpier owns C# whitespace; EditorConfig owns semantic style and analyzer severity; editor integrations are conveniences.
-- `AlterCourse.Core` must remain independently buildable and testable without Godot. Godot nodes and resources belong in `AlterCourse.Godot`.
-- Behavioral changes and regressions require tests at the lowest layer that can prove them.
+- Canonical CI uses the same `verify.sh` as local work; managed Project Standards checks remain complementary under ADR 0002.
+- Warnings are failures. Fix causes rather than suppressing diagnostics or weakening central settings.
+- Core remains independently buildable/testable without Godot. Engine types stay in the adapter project.
+- Behavior changes and regressions require tests at the lowest layer that can prove them; new ADR documentation does not certify unexecuted paths.
 
-Repository settings should require the `Canonical verification` status check before merging to `main`.
+Repository settings should require the `Canonical verification` status check before merging to `main`. ADR 0013 and the installed workflow govern branch admission, readiness, and merge; a missing execution capability is a disclosed blocker, not an alternative verification path.
