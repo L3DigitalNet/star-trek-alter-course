@@ -16,7 +16,7 @@
 - Strategic Contact Reporting merged into `dev` as `80c3084` (Final PR #78) and shipped in v0.5.0 through release Task #80 / Final PR #82 on 2026-09-06.
 - Released v0.6.0 rules remain `observation-driven-faction-response-v1`, content schema V4, and save schema V8; V6/V7 migrations remain noninventive.
 - M6A first combat engagement merged into `dev` as `c2edae1` through Final PR #112; Feature #111 is Done.
-- M6A is unreleased: V5 ship content and V9 saves use `first-combat-engagement-v1`; no release, tag, or `main` mutation occurred.
+- M6A remains unreleased; its original V5/V9 `first-combat-engagement-v1` admission baseline is superseded by the substrate formats above.
 - Final M6A canonical verification passed at `42fba73`: 789 Core, 324 AssetCtl, 76 Godot, smoke, and zero C# build warnings or errors.
 - All five hosted checks passed on `42fba73`; native and Claude reviews confirmed the current-context correction.
 - PR #117's nonfatal Godot `grab_focus` diagnostic is fixed via `GameScreen.DeferFocus`, recorded under Issue #121's work.

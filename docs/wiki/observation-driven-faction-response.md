@@ -6,7 +6,7 @@ description: 'Implemented bounded contract for delayed ship-to-faction observati
 doc_type: 'spec'
 status: 'active'
 created: '2026-09-07'
-updated: '2026-09-26'
+updated: '2026-09-27'
 tags:
   - 'design'
   - 'simulation'
@@ -27,7 +27,7 @@ related:
 
 ## Status and purpose
 
-**Implemented by Feature #93 / Final PR #94 and released in v0.6.0 with V8.** This bounded gameplay slice follows Faction Intent and Autonomous Assignment. It connects existing local sensor knowledge to existing faction decision and ship-order machinery without introducing a general intelligence service, political hierarchy, affiliation inference, combat, or communications-network simulation. These are this slice's boundaries, not a claim that later M6A combat is absent. Current development uses V9 through M6A; [content and persistence](content-assets-and-persistence.md) owns the complete compatibility contract. v0.5.0 remains the historical V6 release and V7 is the intervening development schema.
+**Implemented by Feature #93 / Final PR #94 and released in v0.6.0 with V8.** This bounded gameplay slice follows Faction Intent and Autonomous Assignment. It connects existing local sensor knowledge to existing faction decision and ship-order machinery without introducing a general intelligence service, political hierarchy, affiliation inference, combat, or communications-network simulation. These are this slice's boundaries, not a claim that later M6A combat is absent. Current development uses V10 through the installed-system substrate migration, superseding M6A's V9 baseline; [content and persistence](content-assets-and-persistence.md) owns the complete compatibility contract. v0.5.0 remains the historical V6 release and V7 is the intervening development schema.
 
 The required causal proof is:
 
@@ -103,7 +103,7 @@ When received retention would exceed 16 after expired/handled entries are remove
 
 The implementation must derive scheduler capacity conservatively from the maximum allowed work shape, including all per-faction report-delivery slots. It must derive both the total consequence-execution budget and the same-boundary execution budget from the maximum reachable work and bounded consequences that can execute in one advancement or become due together. All three limits retain explicit finite-cycle guards; they must not be weakened merely to make a maximum-shape test pass. The maximum-shape proof must combine same-time report deliveries with the existing scheduled-work maximum and must obey real source-authority, player-exclusion, ship, and faction limits rather than constructing an unreachable fixture.
 
-The implemented V8 bounds were **68,864** outstanding work items, **68,853** same-boundary consequence executions, and **78,853** total consequence executions. The V8 shape remains within the unchanged 128 MiB save envelope. These are historical V8 bounds, not current V9 scheduler limits; [world and time](world-navigation-and-time.md#one-timeline-several-update-rates) and [persistence](content-assets-and-persistence.md) own the current limits and their distinct proof measurements.
+The implemented V8 bounds were **68,864** outstanding work items, **68,853** same-boundary consequence executions, and **78,853** total consequence executions. The V8 shape remains within the unchanged 128 MiB save envelope. These are historical V8 bounds, not current scheduler limits; [world and time](world-navigation-and-time.md#one-timeline-several-update-rates) and [persistence](content-assets-and-persistence.md) own the current limits and their distinct proof measurements.
 
 ## Investigation policy
 

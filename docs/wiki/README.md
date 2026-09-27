@@ -38,7 +38,7 @@ The [recurring design-reconciliation procedure](development-and-governance.md#re
 
 ## Implemented substrate migration (development branch)
 
-[Issue #121](https://github.com/L3DigitalNet/star-trek-alter-course/issues/121) implements the [ship-system substrate migration](ship-system-substrate.md) required by [ADR 0014](../adr/0014-use-an-extensible-bounded-ship-system-substrate.md). Runtime, content, persistence (ship content V6, system-definition content V1, save schema V10), and Godot's generic Engineering presentation are implemented on the development branch toward Final PR #123, unreleased. Read the owning contract before changing ship systems. Further systems and Damage Control gameplay remain future work; this is not M6B or a release. Earlier recovery prompts are superseded, and detailed recovery semantics remain open.
+[Issue #121](https://github.com/L3DigitalNet/star-trek-alter-course/issues/121) implements the [ship-system substrate migration](ship-system-substrate.md) required by [ADR 0014](../adr/0014-use-an-extensible-bounded-ship-system-substrate.md). Runtime, content, persistence (ship content V6, system-definition content V1, save schema V10), and Godot's generic Engineering presentation are implemented on `dev` through merged Final PR #123, unreleased. Read the owning contract before changing ship systems. Further systems and Damage Control gameplay remain future work; this is not M6B or a release. Earlier recovery prompts are superseded, and detailed recovery semantics remain open.
 
 ## Start here
 

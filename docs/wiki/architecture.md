@@ -6,7 +6,7 @@ description: 'Simulation authority, project boundaries, dependency policy, and a
 doc_type: 'reference'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-26'
+updated: '2026-09-27'
 tags:
   - 'architecture'
 aliases: []
@@ -46,25 +46,25 @@ The policy input is a narrow own-asset administrative projection, not unrestrict
 
 Faction Intent and Autonomous Assignment introduced V7 with a non-inventive V6→V7 migration and zero-faction validity. Observation-Driven Faction Response advances the released format to V8 without inventing report or investigation history. v0.5.0 remains the historical V6 release. No organization/controller abstraction, hierarchy runtime, random policy, new dependency/framework, or political UI is part of these slices. These choices implement existing ADRs 0005-0007 and 0010; no ADR changes.
 
-The Godot adapter privately loads faction content to construct and restore a valid Core aggregate. Current development uses V9 saves and retains the supported migration chain; V8 remains the released format. The adapter does not project hidden controller, faction, objective, report, investigation, or scheduled-work state; ordinary observed vessels remain available through player-safe contact projections. Malformed faction or response data fails without corrupting the live shell.
+The Godot adapter privately loads faction content to construct and restore a valid Core aggregate. Current development uses V10 saves and retains the supported migration chain; V8 remains the released format. The adapter does not project hidden controller, faction, objective, report, investigation, or scheduled-work state; ordinary observed vessels remain available through player-safe contact projections. Malformed faction or response data fails without corrupting the live shell.
 
 ## Implemented first combat engagement
 
-[M6A](engineering-and-combat.md#implemented-m6a-first-engagement), implemented by [PR #112](https://github.com/L3DigitalNet/star-trek-alter-course/pull/112), extends the existing ship aggregate rather than creating a second combat world. Engineering owns five system conditions, four power allocations, and the one repair slot. Ship-owned combat state adds absolute directed-energy readiness and at most one correlated defensive stimulus. Tactical position, local sensor knowledge, system condition, and power are not duplicated in an encounter object.
+[M6A](engineering-and-combat.md#implemented-m6a-first-engagement), implemented by [PR #112](https://github.com/L3DigitalNet/star-trek-alter-course/pull/112), extends the existing ship aggregate rather than creating a second combat world. Following the substrate migration in PR #123, Engineering owns the installed-system collection, installation identity continuation, and one repair slot. Installations own condition, applicable power allocation, and typed specialized state, including directed-energy readiness on the installed weapon. Ship-owned combat state retains at most one correlated defensive stimulus. Tactical position, local sensor knowledge, system condition, and power are not duplicated in an encounter object.
 
 The shared Core shot transition validates an observer-local contact, applies shield absorption and subsystem penetration, reconciles involuntary power/speed changes, cancels an affected repair by exact work identity, and reconciles observations before committing a valid candidate. Voluntary allocation/course rejection remains distinct from forced damage reconciliation. Godot never repairs an invalid Core aggregate.
 
 The separate defensive policy receives only the acting ship's own facts and local contact knowledge. One delayed ship-targeted decision wake consumes a bounded stimulus and proposes Return Fire, Withdraw, or Hold through existing command paths. It does not introduce political hostility, autonomous strategic preemption, periodic weapon scheduling, or an external AI dependency. The Combat workspace is a presentation mode, not a Core encounter state.
 
-The detailed rules belong to [Engineering and combat](engineering-and-combat.md); [content and persistence](content-assets-and-persistence.md) owns V5 ship definitions and V9 continuation. M6A is unreleased development, M6 remains partial, and these implementation boundaries do not approve later combat refinements.
+The detailed rules belong to [Engineering and combat](engineering-and-combat.md); [content and persistence](content-assets-and-persistence.md) owns current V6 ship definitions, V1 system definitions, and V10 continuation, as well as the historical V5/V9 M6A boundary. M6A is unreleased development, M6 remains partial, and these implementation boundaries do not approve later combat refinements.
 
 ## Extensible ship-system boundary
 
-[ADR 0014](../adr/0014-use-an-extensible-bounded-ship-system-substrate.md) requires the current field-oriented five-system representation to become an extensible bounded ship-system substrate before the next behavior-affecting ship-system expansion. The existing `ShipSystemId` values are valid semantic system kinds, but kind, reusable system definition, and installed system instance are distinct identities. A ship design owns an initial loadout; each live ship instance owns its actual installed systems, so ships of the same class may diverge through future refit/replacement/removal/installation without mutating the class definition.
+[ADR 0014](../adr/0014-use-an-extensible-bounded-ship-system-substrate.md) governs the implemented extensible bounded ship-system substrate. `ShipSystemKind`, `SystemDefinitionId`, and `InstalledSystemId` distinguish semantic kind, reusable system definition, and installed system instance. A ship design owns an initial loadout; each live ship instance owns its actual installed systems. Same-class ships can retain different live loadouts across save/load independently of later class defaults; refit/replacement/removal/installation gameplay remains future work.
 
 The substrate supports zero, one, or multiple installed instances of a kind when that kind's typed domain rules permit it. Common mechanics—condition, damage, repair, power allocation, persistence, generic projection, and Engineering presentation—must operate over the bounded installed-system set rather than repeated named fields/switches. System-specific effects remain explicit typed domain behavior; ADR 0014 does not admit an ECS, generic behavior engine, or arbitrary component framework.
 
-[Issue #121](https://github.com/L3DigitalNet/star-trek-alter-course/issues/121) is the selected implementation, governed by the [ship-system substrate contract](ship-system-substrate.md). This is a complete vertical migration, not a collection facade over legacy mutable fields. Current runtime has not yet migrated. Historical DTOs and isolated migration adapters may retain old field names; current capture and generic mechanics may not depend on a lossy historical shape.
+[Issue #121](https://github.com/L3DigitalNet/star-trek-alter-course/issues/121) is complete through Final [PR #123](https://github.com/L3DigitalNet/star-trek-alter-course/pull/123), merged into `dev` as `17637dd` and unreleased, governed by the [ship-system substrate contract](ship-system-substrate.md). Runtime, content, persistence, projections, and Godot Engineering use the installed-system model. Historical DTOs and isolated migration adapters retain old field names; current capture writes V10 directly from live installations without flattening through a historical shape.
 
 Common cardinality support is separate from current typed zero-or-one gameplay restrictions. Generic own-ship operations address installations; external targeting uses actor knowledge and semantic aim, not hidden installed inventory. The owning contract defines these distinctions and the evidence required before conformance can be claimed. It deliberately does not select recovery gameplay or refit costs, slots, or aggregation mechanics.
 

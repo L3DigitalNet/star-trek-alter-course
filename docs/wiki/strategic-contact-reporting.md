@@ -6,7 +6,7 @@ description: 'Implemented slice connecting local contact knowledge to durable st
 doc_type: 'decision'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-26'
+updated: '2026-09-27'
 tags:
   - 'design'
   - 'simulation'
@@ -42,7 +42,7 @@ This resolved the sequencing question in Q-01. The slice bridges M3A's local obs
 
 The historical sequence after v0.5.0 was [Faction Intent and Autonomous Assignment](faction-intent-and-autonomous-assignment.md), followed by [Observation-Driven Faction Response](observation-driven-faction-response.md), both included in v0.6.0. The first M5 contribution uses only own-asset administrative knowledge. The second implements a direct NPC ship-to-direct-faction historical report channel and bounded investigation. That channel is no longer future work; broader sharing remains open. Neither later slice changes Strategic Contact Reporting's original ownership or non-goals.
 
-Do **not** canonically rename this slice `M3B`. Its historical milestone classification remains separate from the approved name **Strategic Contact Reporting**. Current development has V9 saves through M6A; references to V6 below identify this slice's introduction and historical migration, not the current writer format.
+Do **not** canonically rename this slice `M3B`. Its historical milestone classification remains separate from the approved name **Strategic Contact Reporting**. Current development has V10 saves through the installed-system substrate migration, superseding M6A's V9 baseline; references to V6 below identify this slice's introduction and historical migration, not the current writer format.
 
 ### Implementation outcome
 
