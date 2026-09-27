@@ -1,4 +1,4 @@
-using AlterCourse.Core.Content;
+using System.Diagnostics.CodeAnalysis;
 using AlterCourse.Core.Ships;
 
 namespace AlterCourse.Core.Persistence;
@@ -24,7 +24,7 @@ internal static class HistoricalShipSystemsV9
 
     private const string PathfinderShip = "pathfinder";
 
-    private static readonly Row[] Rows =
+    private static readonly IReadOnlyList<Row> Rows =
     [
         new(
             "power-generation",
@@ -54,47 +54,43 @@ internal static class HistoricalShipSystemsV9
         ),
     ];
 
+    /// <summary>
+    /// Gets every row for a historical ship definition, or false when it has no V9 mapping (the caller fails the
+    /// load as incompatible content, naming the ship).
+    /// </summary>
+    internal static bool TryGetRows(string shipDefinitionId, [MaybeNullWhen(false)] out IReadOnlyList<Row> rows)
+    {
+        rows = string.Equals(shipDefinitionId, PathfinderShip, StringComparison.Ordinal) ? Rows : null;
+        return rows is not null;
+    }
+
     /// <summary>Gets the installed identity a V9 kind maps to for a historical ship definition.</summary>
     internal static InstalledSystemId InstalledIdFor(string shipDefinitionId, string kind) =>
         new(RowFor(shipDefinitionId, kind).InstalledSystemId);
 
+    /// <summary>Gets the system definition identity a V9 kind maps to for a historical ship definition.</summary>
+    internal static string DefinitionIdFor(string shipDefinitionId, string kind) =>
+        RowFor(shipDefinitionId, kind).DefinitionId;
+
     /// <summary>Gets the pinned semantics descriptor of the definition a V9 kind maps to.</summary>
+    /// <remarks>
+    /// The V9→V10 migration compares the supplied catalog's descriptor for the mapped definition with this value and
+    /// fails closed on any difference, so a V9 world is never reinterpreted under changed tuning.
+    /// </remarks>
     internal static string ExpectedSemanticsFor(string shipDefinitionId, string kind) =>
         RowFor(shipDefinitionId, kind).ExpectedSemantics;
 
-    /// <summary>Resolves the supplied catalog's definition for the identity a V9 kind maps to.</summary>
-    /// <remarks>
-    /// Resolution is by mapped identity only. Comparing the resolved definition with
-    /// <see cref="ExpectedSemanticsFor"/> — and failing incompatible content with a dedicated failure — belongs to
-    /// the V9→V10 migration (leg L4), which is this map's consumer. The temporary V9 bridge in
-    /// <c>GamePersistence.V9.cs</c> deliberately does not read this map: while V9 is still the current wire format it
-    /// resolves definitions from the saved ship's own design, as pre-substrate V9 loading did.
-    /// </remarks>
-    /// <exception cref="KeyNotFoundException">The ship definition or kind has no V9 mapping.</exception>
-    /// <exception cref="InvalidOperationException">The supplied catalog lacks the mapped definition.</exception>
-    internal static SystemDefinition ResolveDefinition(
-        string shipDefinitionId,
-        string kind,
-        SystemDefinitionCatalog catalog
-    )
-    {
-        Row row = RowFor(shipDefinitionId, kind);
-        return catalog.TryGet(new SystemDefinitionId(row.DefinitionId), out SystemDefinition? definition)
-            ? definition
-            : throw new InvalidOperationException(
-                $"V9 ship definition '{shipDefinitionId}' maps '{kind}' to system definition '{row.DefinitionId}', "
-                    + "which the supplied content does not provide."
-            );
-    }
-
+    // Callers resolve the ship through TryGetRows first, so an unknown ship here is a programming error; an unknown
+    // kind cannot pass V9 validation either (the kind strings are the V9 fixed fields and the parsed repair target).
     private static Row RowFor(string shipDefinitionId, string kind) =>
-        string.Equals(shipDefinitionId, PathfinderShip, StringComparison.Ordinal)
-            ? Rows.SingleOrDefault(row => string.Equals(row.Kind, kind, StringComparison.Ordinal))
-                ?? throw new KeyNotFoundException($"V9 system kind '{kind}' has no installed-system mapping.")
-            : throw new KeyNotFoundException(
-                $"V9 ship definition '{shipDefinitionId}' has no installed-system mapping; load it with a build that "
-                    + "supports it or start a new game."
+        TryGetRows(shipDefinitionId, out IReadOnlyList<Row>? rows)
+            ? rows.SingleOrDefault(row => string.Equals(row.Kind, kind, StringComparison.Ordinal))
+                ?? throw new InvalidOperationException($"V9 system kind '{kind}' has no installed-system mapping.")
+            : throw new SaveContentIncompatibleException(
+                $"uses V9 ship definition '{shipDefinitionId}', which has no installed-system mapping; load it with a "
+                    + "build that supports it or start a new game."
             );
 
-    private sealed record Row(string Kind, string DefinitionId, long InstalledSystemId, string ExpectedSemantics);
+    /// <summary>One frozen mapping row: historical kind → target definition, installed identity, and semantics.</summary>
+    internal sealed record Row(string Kind, string DefinitionId, long InstalledSystemId, string ExpectedSemantics);
 }

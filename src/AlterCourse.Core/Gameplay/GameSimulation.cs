@@ -425,6 +425,10 @@ public sealed partial class GameSimulation
 
     internal FactionDefinitionCatalog FactionCatalog => _factionCatalog;
 
+    // V10 capture persists the aim-vocabulary descriptor derived from the whole ship catalog, so the save writer
+    // needs the catalog this simulation was validated against (GamePersistence.CaptureV10).
+    internal ShipDefinitionCatalog ShipCatalog => _shipCatalog;
+
     internal void BootstrapHiddenCautiousContactObservation(ShipInstanceId observerId)
     {
         ShipState observer = _state.GetRequiredShip(observerId);

@@ -13,7 +13,7 @@ namespace AlterCourse.Core.Persistence;
 /// </para>
 /// <para>
 /// Never add rows or edit values to make a test pass: an unknown historical ship definition must fail, not be
-/// adopted. Only the current catalog check in the V9→current migration consults current content.
+/// adopted. Only the compatibility check in the V9→V10 migration consults current content.
 /// </para>
 /// </remarks>
 internal sealed record HistoricalShipContentV5(
@@ -47,13 +47,15 @@ internal sealed record HistoricalShipContentV5(
     );
 
     /// <summary>Gets the frozen tuning for one historical ship definition, or throws for an unknown one.</summary>
-    /// <exception cref="KeyNotFoundException">The historical ship definition has no frozen tuning.</exception>
+    /// <exception cref="SaveContentIncompatibleException">
+    /// The historical ship definition has no frozen tuning; the load fails as incompatible content, not corrupt data.
+    /// </exception>
     internal static HistoricalShipContentV5 GetRequired(string definitionId) =>
         string.Equals(definitionId, Pathfinder.DefinitionId, StringComparison.Ordinal)
             ? Pathfinder
-            : throw new KeyNotFoundException(
-                $"Historical ship definition '{definitionId}' has no frozen V1–V9 tuning; load it with a build that "
-                    + "supports it or start a new game."
+            : throw new SaveContentIncompatibleException(
+                $"uses historical ship definition '{definitionId}', which has no frozen V1–V9 tuning; load it with a "
+                    + "build that supports it or start a new game."
             );
 
     /// <summary>Gets the historical repair duration for a repairable kind string, or throws.</summary>

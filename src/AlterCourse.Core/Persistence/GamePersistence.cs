@@ -72,7 +72,11 @@ public static partial class GamePersistence
     private const int V6SchemaVersion = 6;
     private const int V7SchemaVersion = 7;
     private const int V8SchemaVersion = 8;
-    private const int CurrentSchemaVersion = 9;
+
+    // The current aliases name the V10 constants and are used only by Serialize, the Deserialize dispatch arm, and
+    // V10 capture/validation. No migration or historical validator may read them: each declares its own fixed
+    // source and target labels, so adding a schema never relabels an older document's migration output.
+    private const int CurrentSchemaVersion = V10SchemaVersion;
     private const string V1SimulationRulesVersion = "first-playable-v1";
     private const string V2SimulationRulesVersion = "first-playable-v1";
     private const string V3SimulationRulesVersion = "active-world-orders-v1";
@@ -85,10 +89,8 @@ public static partial class GamePersistence
 
     private const string V7SimulationRulesVersion = "faction-intent-autonomous-assignment-v1";
 
-    // Godot's gameplay shell asserts the current literal from the written save in
-    // src/AlterCourse.Godot/tests/GameplayShellTest.gd, so changing it requires updating that end.
     private const string V8SimulationRulesVersion = "observation-driven-faction-response-v1";
-    private const string CurrentSimulationRulesVersion = "first-combat-engagement-v1";
+    private const string CurrentSimulationRulesVersion = V10SimulationRulesVersion;
     private const string TravelArrivalKind = "travelArrival";
     private const string SensorRepairCompletionKind = "sensorRepairCompletion";
     private const string SystemRepairCompletionKind = "systemRepairCompletion";
@@ -128,19 +130,33 @@ public static partial class GamePersistence
         MaxDepth = MaximumJsonDepth,
     };
 
-    /// <summary>Serializes a validated simulation and caller-supplied organization metadata as V9 UTF-8 JSON.</summary>
+    /// <summary>Serializes a validated simulation and caller-supplied organization metadata as V10 UTF-8 JSON.</summary>
     public static byte[] Serialize(GameSimulation simulation, GameSaveMetadata metadata)
     {
         ArgumentNullException.ThrowIfNull(simulation);
         ArgumentNullException.ThrowIfNull(metadata);
         ValidateMetadata(metadata);
 
-        SaveModelsV9.SaveEnvelopeV9 envelope = CaptureV9(simulation.CaptureState(), metadata);
+        SaveModelsV10.SaveEnvelopeV10 envelope = CaptureV10(
+            simulation.CaptureState(),
+            simulation.ShipCatalog,
+            metadata
+        );
+        if (
+            envelope.SchemaVersion != CurrentSchemaVersion
+            || !string.Equals(envelope.SimulationRulesVersion, CurrentSimulationRulesVersion, StringComparison.Ordinal)
+        )
+        {
+            throw new InvalidOperationException(
+                "The save writer produced a document other than the current schema and rules identity."
+            );
+        }
+
         byte[] json = JsonSerializer.SerializeToUtf8Bytes(envelope, SerializerOptions);
         if (json.Length > MaximumSaveBytes)
         {
             throw new InvalidOperationException(
-                $"The V9 save is {json.Length} bytes and exceeds the {MaximumSaveBytes}-byte contract limit."
+                $"The V10 save is {json.Length} bytes and exceeds the {MaximumSaveBytes}-byte contract limit."
             );
         }
 
@@ -191,7 +207,8 @@ public static partial class GamePersistence
                 V6SchemaVersion => LoadV6(documentBytes, catalog, factionCatalog, sourceIdentity),
                 V7SchemaVersion => LoadV7(documentBytes, catalog, factionCatalog, sourceIdentity),
                 V8SchemaVersion => LoadV8(documentBytes, catalog, factionCatalog, sourceIdentity),
-                CurrentSchemaVersion => LoadV9(documentBytes, catalog, factionCatalog, sourceIdentity),
+                V9SchemaVersion => LoadV9(documentBytes, catalog, factionCatalog, sourceIdentity),
+                CurrentSchemaVersion => LoadV10(documentBytes, catalog, factionCatalog, sourceIdentity),
                 _ => throw Failure(
                     GamePersistenceFailure.UnsupportedVersion,
                     sourceIdentity,
@@ -202,6 +219,10 @@ public static partial class GamePersistence
         catch (GamePersistenceException)
         {
             throw;
+        }
+        catch (SaveContentIncompatibleException exception)
+        {
+            throw Failure(GamePersistenceFailure.IncompatibleContent, sourceIdentity, exception.Message, exception);
         }
         catch (JsonException exception)
         {
@@ -375,30 +396,6 @@ public static partial class GamePersistence
             ],
         };
 
-    private static ShipSnapshotV7 CaptureShipV7(ShipState ship, SaveModelsV5.EngineeringSnapshotV5 engineering) =>
-        new()
-        {
-            InstanceId = ship.InstanceId.Value,
-            DefinitionId = ship.DefinitionId.Value,
-            DisplayName = ship.VesselDisplayName,
-            TacticalPosition = new TacticalPositionSnapshotV2
-            {
-                XKilometers = ship.TacticalPosition.XKilometers,
-                YKilometers = ship.TacticalPosition.YKilometers,
-            },
-            TacticalMotion = new TacticalMotionSnapshotV2
-            {
-                HeadingDegrees = ship.TacticalMotion.Heading.Value,
-                SpeedKilometersPerSecond = ship.TacticalMotion.Speed.Value,
-            },
-            Engineering = engineering,
-            StrategicState = CaptureStrategicStateV2(ship.StrategicState),
-            ActiveOrder = CaptureOrderV3(ship.ActiveOrder),
-            SensorKnowledge = CaptureSensorKnowledgeV6(ship.SensorKnowledge),
-            AutonomousState = CaptureAutonomousStateV4(ship.AutonomousState),
-            DirectControllerFactionId = ship.DirectControllerFactionId?.Value,
-        };
-
     private static SaveModelsV7.FactionSnapshotV7 CaptureFactionV7(FactionState faction) =>
         new()
         {
@@ -506,22 +503,6 @@ public static partial class GamePersistence
             Identification = CaptureContactIdentification(report.Identification),
             KnownVesselDisplayName = report.KnownVesselDisplayName,
             KnownDesignDisplayName = report.KnownDesignDisplayName,
-        };
-
-    private static SaveModelsV6.SensorKnowledgeSnapshotV6 CaptureSensorKnowledgeV6(SensorKnowledge knowledge) =>
-        new()
-        {
-            NextContactId = knowledge.NextContactId,
-            Contacts = [.. knowledge.Contacts.Select(CaptureContactV6)],
-            ActiveScan = knowledge.ActiveScan is null
-                ? null
-                : new SaveModelsV4.ActiveSensorScanSnapshotV4
-                {
-                    TargetContactId = knowledge.ActiveScan.TargetContactId.Value,
-                    StartedAtMilliseconds = knowledge.ActiveScan.StartedAt.Milliseconds,
-                    ExpectedCompletionMilliseconds = knowledge.ActiveScan.ExpectedCompletion.Milliseconds,
-                    ScheduledCompletionId = knowledge.ActiveScan.ScheduledCompletionId.Value,
-                },
         };
 
     private static SaveModelsV6.SensorContactSnapshotV6 CaptureContactV6(SensorContactTrack contact) =>
@@ -1005,7 +986,7 @@ public static partial class GamePersistence
                 JsonSerializer.Deserialize<SaveEnvelopeV8>(json, SerializerOptions)
                 ?? throw new JsonException("The save root must be an object.");
             ValidateCandidateV8(envelope, catalog);
-            return RestoreV9(MigrateV8ToV9(envelope), catalog, factionCatalog);
+            return RestoreThroughV10(MigrateV8ToV9(envelope), catalog, factionCatalog);
         }
         catch (GamePersistenceException)
         {
@@ -1054,7 +1035,7 @@ public static partial class GamePersistence
         return new SaveEnvelopeV2
         {
             SchemaVersion = V2SchemaVersion,
-            SimulationRulesVersion = envelope.SimulationRulesVersion,
+            SimulationRulesVersion = V2SimulationRulesVersion,
             Metadata = new SaveMetadataV2
             {
                 SaveId = envelope.Metadata.SaveId,
@@ -1579,7 +1560,7 @@ public static partial class GamePersistence
         ValidateCandidateV7(envelope, catalog);
         SaveEnvelopeV8 migrated = MigrateV7ToV8(envelope);
         ValidateCandidateV8(migrated, catalog);
-        return RestoreV9(MigrateV8ToV9(migrated), catalog, factionCatalog);
+        return RestoreThroughV10(MigrateV8ToV9(migrated), catalog, factionCatalog);
     }
 
     private static void ValidateCandidateV2(SaveEnvelopeV2 envelope, ShipDefinitionCatalog catalog)
@@ -1808,11 +1789,7 @@ public static partial class GamePersistence
         ValidateSchedulerCandidateV7(snapshot);
     }
 
-    private static void ValidateCandidateV8(
-        SaveEnvelopeV8 envelope,
-        ShipDefinitionCatalog catalog,
-        Func<string, HistoricalShipContentV5>? tuning = null
-    )
+    private static void ValidateCandidateV8(SaveEnvelopeV8 envelope, ShipDefinitionCatalog catalog)
     {
         if (envelope.SchemaVersion != V8SchemaVersion)
         {
@@ -1854,7 +1831,7 @@ public static partial class GamePersistence
         // graph is validated only after reconstruction by SimulationState.Validate. Passing V8 through
         // the frozen V7 presence-only graph validator would reject valid response continuations.
         SimulationSnapshotV7 baseSnapshot = ToV7Snapshot(snapshot);
-        ValidateSimulationCandidateV5(ToBaseSnapshotV5(baseSnapshot), catalog, V6SchemaVersion, tuning);
+        ValidateSimulationCandidateV5(ToBaseSnapshotV5(baseSnapshot), catalog, V6SchemaVersion);
         ValidateObservedLocationCandidatesV6(ToObservedSnapshotV6(baseSnapshot));
         ValidateFactionShapeV8(snapshot);
         ValidateSchedulerCandidate(
@@ -2157,15 +2134,10 @@ public static partial class GamePersistence
     /// <param name="snapshot">The candidate simulation.</param>
     /// <param name="catalog">The supplied content (checked for presence only; historical tuning is frozen).</param>
     /// <param name="sourceSchemaVersion">The schema version whose scheduler rules apply.</param>
-    /// <param name="tuning">
-    /// Resolves a ship definition's tuning. Every V1–V8 caller uses the frozen table (the default); only the
-    /// temporary V9 bridge supplies a current-content projection, and leg L4 removes that caller.
-    /// </param>
     private static void ValidateSimulationCandidateV5(
         SimulationSnapshotV5 snapshot,
         ShipDefinitionCatalog catalog,
-        int sourceSchemaVersion,
-        Func<string, HistoricalShipContentV5>? tuning = null
+        int sourceSchemaVersion
     )
     {
         if (snapshot.Ships is null || snapshot.Scheduler is null || snapshot.StrategicMap is null)
@@ -2174,8 +2146,7 @@ public static partial class GamePersistence
         }
 
         SimulationSnapshotV3 baseSnapshot = ToBaseSnapshotV3(snapshot);
-        tuning ??= HistoricalShipContentV5.GetRequired;
-        ValidateSimulationCandidateV2(ToBaseSnapshotV2(baseSnapshot), catalog, V4SchemaVersion, tuning);
+        ValidateSimulationCandidateV2(ToBaseSnapshotV2(baseSnapshot), catalog, V4SchemaVersion);
         ValidateOrderCandidatesV3(baseSnapshot);
         ValidateSensorCandidatesV4(ToSensorSnapshotV4(snapshot));
 
@@ -2185,7 +2156,7 @@ public static partial class GamePersistence
         {
             ValidateEngineeringCandidateV5(
                 ship,
-                tuning(ship.DefinitionId),
+                HistoricalShipContentV5.GetRequired(ship.DefinitionId),
                 snapshot.Scheduler,
                 snapshot.TimeMilliseconds
             );
@@ -2703,8 +2674,7 @@ public static partial class GamePersistence
     private static void ValidateSimulationCandidateV2(
         SimulationSnapshotV2 snapshot,
         ShipDefinitionCatalog catalog,
-        int sourceSchemaVersion,
-        Func<string, HistoricalShipContentV5>? tuning = null
+        int sourceSchemaVersion
     )
     {
         if (snapshot.Scheduler is null || snapshot.StrategicMap is null || snapshot.Ships is null)
@@ -2729,8 +2699,7 @@ public static partial class GamePersistence
 
         (HashSet<long> shipIds, Dictionary<long, HistoricalShipContentV5> definitions) = ValidateShipIdentitiesV2(
             snapshot.Ships,
-            catalog,
-            tuning ?? HistoricalShipContentV5.GetRequired
+            catalog
         );
 
         if (snapshot.PlayerShipId <= 0 || !shipIds.Contains(snapshot.PlayerShipId))
@@ -2761,8 +2730,7 @@ public static partial class GamePersistence
 
     private static (HashSet<long> Ids, Dictionary<long, HistoricalShipContentV5> Definitions) ValidateShipIdentitiesV2(
         ShipSnapshotV2[] ships,
-        ShipDefinitionCatalog catalog,
-        Func<string, HistoricalShipContentV5> tuning
+        ShipDefinitionCatalog catalog
     )
     {
         if (ships.Length == 0)
@@ -2788,7 +2756,7 @@ public static partial class GamePersistence
             ValidateText(ship.DefinitionId, "Ship definition identity", ShipDefinitionId.MaximumLength);
             ValidateText(ship.DisplayName, "Ship display name", ShipState.MaximumVesselDisplayNameLength);
             ArgumentNullException.ThrowIfNull(catalog);
-            definitions.Add(ship.InstanceId, tuning(ship.DefinitionId));
+            definitions.Add(ship.InstanceId, HistoricalShipContentV5.GetRequired(ship.DefinitionId));
         }
 
         return (shipIds, definitions);
@@ -3446,13 +3414,14 @@ public static partial class GamePersistence
             snapshot.KnownDesignDisplayName
         );
 
-    private static SensorKnowledge RestoreSensorKnowledgeV6(
-        SaveModelsV6.SensorKnowledgeSnapshotV6 snapshot,
-        InstalledSystemId scanSensor
+    private static SensorKnowledge RestoreSensorKnowledge(
+        long nextContactId,
+        SaveModelsV6.SensorContactSnapshotV6[] contacts,
+        ActiveSensorScanState? activeScan
     ) =>
         new(
-            snapshot.NextContactId,
-            snapshot.Contacts.Select(contact => new SensorContactTrack(
+            nextContactId,
+            contacts.Select(contact => new SensorContactTrack(
                 new SensorContactId(contact.Id),
                 new ShipInstanceId(contact.TargetShipId),
                 new TacticalPosition(
@@ -3477,15 +3446,7 @@ public static partial class GamePersistence
                     ? null
                     : new SimulationTime(contact.LossDueTimeMilliseconds.Value)
             )),
-            snapshot.ActiveScan is null
-                ? null
-                : new ActiveSensorScanState(
-                    new SensorContactId(snapshot.ActiveScan.TargetContactId),
-                    scanSensor,
-                    new SimulationTime(snapshot.ActiveScan.StartedAtMilliseconds),
-                    new SimulationTime(snapshot.ActiveScan.ExpectedCompletionMilliseconds),
-                    new ScheduledWorkId(snapshot.ActiveScan.ScheduledCompletionId)
-                )
+            activeScan
         );
 
     private static ShipAutonomousState RestoreAutonomousStateV4(SaveModelsV4.ShipAutonomousSnapshotV4 snapshot) =>
@@ -3519,18 +3480,6 @@ public static partial class GamePersistence
             ),
             _ => throw new InvalidOperationException("Active ship order kind is unknown."),
         };
-
-    private static SystemRepairState? RestoreSystemRepairV5(SaveModelsV5.SystemRepairSnapshotV5? snapshot) =>
-        snapshot is null
-            ? null
-            : new SystemRepairState(
-                BridgeInstalledIdV9(snapshot.TargetSystem),
-                new SystemCondition(snapshot.StartingCondition),
-                new SystemCondition(snapshot.TargetCondition),
-                new SimulationTime(snapshot.StartedAtMilliseconds),
-                new SimulationTime(snapshot.ExpectedCompletionMilliseconds),
-                new ScheduledWorkId(snapshot.ScheduledCompletionId)
-            );
 
     private static ShipStrategicState RestoreStrategicStateV2(StrategicStateSnapshotV2 snapshot) =>
         snapshot.Kind switch
@@ -3658,8 +3607,10 @@ public static partial class GamePersistence
                     or ScheduledWorkKind.ShipContactDecisionWake
                     or ScheduledWorkKind.FactionDecisionWake
                     or ScheduledWorkKind.ObservationReportDelivery,
-            CurrentSchemaVersion => IsWorkKindAllowed(parsed, V8SchemaVersion)
+            V9SchemaVersion => IsWorkKindAllowed(parsed, V8SchemaVersion)
                 || parsed == ScheduledWorkKind.ShipCombatDecisionWake,
+            // V10 adds no work kind: repair and scan stay one per ship and readiness is a time, not scheduled work.
+            V10SchemaVersion => IsWorkKindAllowed(parsed, V9SchemaVersion),
             _ => false,
         };
 
