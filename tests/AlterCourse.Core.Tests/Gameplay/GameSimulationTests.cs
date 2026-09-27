@@ -360,7 +360,7 @@ public sealed class GameSimulationTests
         TacticalProjection traveling = game.GetPlayerProjection().Ship.Tactical;
 
         Assert.Equal(before, traveling.Position);
-        Assert.Equal(0, traveling.SpeedKilometersPerSecond);
+        Assert.Equal(0, traveling.SpeedKilometersPerSecond.Value);
     }
 
     /// <summary>Confirms input at an arrival boundary observes the resolved local state.</summary>

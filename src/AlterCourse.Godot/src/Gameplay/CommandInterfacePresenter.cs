@@ -105,7 +105,7 @@ public static class CommandInterfacePresenter
                 "PROP",
                 Available(
                     "SPEED",
-                    FormatSpeed(projection.Ship.Tactical.SpeedKilometersPerSecond),
+                    FormatSpeed(projection.Ship.Tactical.SpeedKilometersPerSecond.Value),
                     CommandInterfaceTone.Nominal
                 )
             ),
@@ -174,8 +174,8 @@ public static class CommandInterfacePresenter
                 [
                     Available("POSITION X", FormatKilometers(projection.Ship.Tactical.Position.XKilometers)),
                     Available("POSITION Y", FormatKilometers(projection.Ship.Tactical.Position.YKilometers)),
-                    Available("HEADING", FormatHeading(projection.Ship.Tactical.HeadingDegrees)),
-                    Available("SPEED", FormatSpeed(projection.Ship.Tactical.SpeedKilometersPerSecond)),
+                    Available("HEADING", FormatHeading(projection.Ship.Tactical.HeadingDegrees.Value)),
+                    Available("SPEED", FormatSpeed(projection.Ship.Tactical.SpeedKilometersPerSecond.Value)),
                 ]
             ),
             new CommandInterfaceTelemetrySection(
@@ -625,8 +625,8 @@ public static class CommandInterfacePresenter
                 [
                     Available("POSITION X", FormatKilometers(projection.Ship.Tactical.Position.XKilometers)),
                     Available("POSITION Y", FormatKilometers(projection.Ship.Tactical.Position.YKilometers)),
-                    Available("HEADING", FormatHeading(projection.Ship.Tactical.HeadingDegrees)),
-                    Available("SPEED", FormatSpeed(projection.Ship.Tactical.SpeedKilometersPerSecond)),
+                    Available("HEADING", FormatHeading(projection.Ship.Tactical.HeadingDegrees.Value)),
+                    Available("SPEED", FormatSpeed(projection.Ship.Tactical.SpeedKilometersPerSecond.Value)),
                 ]
             )
         );
