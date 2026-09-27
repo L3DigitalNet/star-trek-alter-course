@@ -2,11 +2,11 @@
 schema_version: '1.1'
 id: 'reference-k7zc82-jsonschema-net-core'
 title: 'JsonSchema.Net Core Dependency Admission'
-description: 'Records ADR 0003 evidence for JsonSchema.Net as AlterCourse.Core structural ship-content validation.'
+description: 'Records ADR 0003 evidence for JsonSchema.Net as AlterCourse.Core structural game-content validation.'
 doc_type: 'reference'
 status: 'active'
 created: '2026-09-02'
-updated: '2026-09-02'
+updated: '2026-09-27'
 reviewed: '2026-09-02'
 owner: 'project-maintainers'
 consumer: 'agent'
@@ -35,7 +35,7 @@ This record admits `JsonSchema.Net` 9.4.0 as a direct `AlterCourse.Core` consume
 
 ## Current consumer and alternatives
 
-`ShipDefinitionCatalogLoader` uses `Json.Schema.JsonSchema` to construct the canonical V2 ship schema and evaluate each raw JSON document before typed mapping. The loader then keeps project-owned responsibilities: strict UTF-8 JSON parsing, duplicate-member detection, semantic validation, stable-ID registration, and diagnostics. `ShipDefinition`, runtime ship state, snapshots, and player projections do not expose `JsonSchema.Net` types.
+`ShipDefinitionCatalogLoader`, `SystemDefinitionCatalogLoader`, and `FactionDefinitionCatalogLoader` use `Json.Schema.JsonSchema` through the shared strict-content path to construct their canonical schemas and evaluate each raw JSON document before typed mapping. The loaders retain project-owned responsibilities: strict UTF-8 JSON parsing, duplicate-member detection, semantic validation, stable-ID registration, and diagnostics. Definitions, runtime ship state, snapshots, and player projections do not expose `JsonSchema.Net` types.
 
 `System.Text.Json` remains the parser and typed-mapping implementation, but it does not implement JSON Schema drafts, keyword evaluation, instance locations, or schema locations. Reimplementing that generic standards surface would add a larger and less reliable project-owned validator at an untrusted-content boundary. The BCL-only alternative is therefore insufficient; the focused package is the smallest concrete fit for ADR 0005's structural-validation requirement.
 
@@ -63,8 +63,8 @@ Schema construction and evaluation run wholly in headless Core tests. The loader
 
 Malformed schemas, malformed JSON, duplicate members, structural violations, and semantic violations fail closed with source-aware diagnostics before a definition can enter the catalog. If the package cannot restore, load, or evaluate, content loading fails rather than substituting a permissive parser; locked restore and the canonical verification gate make that failure visible before a release candidate is accepted.
 
-All direct Core package API use is confined to `AlterCourse.Core/Content/ShipDefinitionCatalogLoader.cs`. Replacing or removing the dependency means replacing schema construction and evaluation behind that loader while retaining the project-owned content input, semantic checks, catalog, runtime definitions, and save contract. No save JSON or authored ship definition serializes package types, so the replacement does not itself require a save-format migration.
+Direct Core package API use is confined to the content-schema loaders and their shared strict-content helper. Replacing or removing the dependency means replacing schema construction and evaluation behind those loaders while retaining the project-owned content input, semantic checks, catalogs, runtime definitions, and save contract. No save JSON or authored definition serializes package types, so the replacement does not itself require a save-format migration.
 
 ## Review result
 
-Admitted for this one Core structural-validation consumer. The dependency is focused, managed, compatible with the repository's .NET 8 runtime, deterministic under the established loader path, and bounded behind a concrete content adapter. This admission does not authorize `JsonSchema.Net` use in unrelated Core subsystems or create a generic validation framework.
+Admitted for these bounded Core structural-content-validation consumers. The dependency is focused, managed, compatible with the repository's .NET 8 runtime, deterministic under the established loader paths, and bounded behind concrete content adapters. This admission does not authorize `JsonSchema.Net` use in unrelated Core subsystems or create a generic validation framework.

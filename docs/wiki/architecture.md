@@ -72,9 +72,9 @@ Common cardinality support is separate from current typed zero-or-one gameplay r
 
 Start with existing domain code and the .NET standard library for Core, and native Godot capabilities for presentation. Admit focused packages for demonstrated needs, with compatibility, licensing, transitive/native dependency, headless determinism, and replacement-boundary evidence. Central versions and lock files remain authoritative; the wiki is not a competing version catalog.
 
-At this baseline, central package declarations include xUnit, JsonSchema.Net, Serilog and logging adapters, analyzers, and AssetCtl packages such as YamlDotNet, SkiaSharp, and Svg.Skia. Package presence does not mean every project consumes it. Inspect project references and the [dependency admission records](../dependency-admission/) before extending usage.
+At this baseline, central package declarations include xUnit, JsonSchema.Net, Serilog and logging adapters, analyzers, Core-test-only CsCheck and ArchUnitNET, and AssetCtl packages such as YamlDotNet, SkiaSharp, and Svg.Skia. Package presence does not mean every project consumes it. Inspect project references and the [dependency admission records](../dependency-admission/) before extending usage.
 
-CsCheck, ArchUnitNET, GdUnit4Net, UnitsNet, Stateless, LogicBlocks, Ink, and the geometry/addon candidates named by ADRs are conditional selections or evaluation candidates, not blanket installed dependencies. Current Godot integration uses vendored GdUnit4; do not confuse that with installed GdUnit4Net.
+The reviewed ADR-conformance implementation admits CsCheck 4.9.1 and ArchUnitNET 0.13.4 only to `AlterCourse.Core.Tests`, with `PrivateAssets` boundaries and committed lockfile closure; it does not introduce either into Core, Godot, saves, or exports. GdUnit4Net remains conditional because there is no qualifying C# Godot integration test. ADR 0011 approves selective, bounded UnitsNet use for standard physical dimensions while retaining project-owned JSON, save, Godot-export, and fictional-quantity contracts. Stateless, LogicBlocks, Ink, and geometry/addon candidates remain conditional. Current Godot integration uses vendored GdUnit4; do not confuse that with installed GdUnit4Net.
 
 ## Cross-cutting decisions
 
@@ -82,10 +82,10 @@ The complete ADR catalog is indexed in [Sources](sources.md). Its governing boun
 
 - ADRs 0001-0003: one-way Core/Godot separation, one canonical quality gate, and demand-driven dependency admission.
 - ADRs 0004-0007: semantic multi-scale space, validated ordinary JSON content, explicit versioned JSON saves, and deterministic time/scheduling/randomness.
-- ADRs 0008-0011: structured diagnostics, layered tests, information-limited explainable AI, and explicit quantities/units.
+- ADRs 0008-0011: structured diagnostics, layered tests and Core-only architecture/property checks where their qualifying rules exist, information-limited explainable AI, and explicit quantities/units.
 - ADRs 0012-0014: narrative subordinate to simulation, permanent `dev` with release-only `main`, and an extensible bounded ship-system substrate with typed system-specific behavior.
 
-Logs are not state, events are not serialized delegates, and presentation clocks are not simulation clocks. Determinism means equivalent semantic outcomes for the same supported rules/content/snapshot/commands, not permanent bitwise replay compatibility across arbitrary versions.
+Gameplay composes Serilog at the Godot scene boundary through Microsoft logging abstractions. Core receives only an optional `ILogger<GameSimulation>` and emits allowlisted decision facts after a successful commit; logging failure cannot change the command or simulation outcome. The game composition owns the bounded file sink and fallback behavior; [gameplay logging admission](../dependency-admission/gameplay-logging.md) owns its concrete limits and removal boundary. Logs are not state, events are not serialized delegates, and presentation clocks are not simulation clocks. Determinism means equivalent semantic outcomes for the same supported rules/content/snapshot/commands, not permanent bitwise replay compatibility across arbitrary versions.
 
 ## Testing and observability
 

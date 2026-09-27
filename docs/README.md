@@ -6,7 +6,7 @@ description: 'Entry point to the design wiki, the single source of truth for des
 doc_type: 'index'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-07'
+updated: '2026-09-27'
 tags:
   - 'design'
 aliases: []
@@ -33,6 +33,7 @@ The remaining documents have distinct authority:
 | [Roadmap](../ROADMAP.md), [root README](../README.md) | Sequence and onboarding pointers | Detailed game contracts |
 | [Development quality](development-quality.md), [agent skills](development-agent-skills.md) | Tool setup, verification and harness maintenance | Gameplay semantics |
 | [Dependency admission](dependency-admission/) | Package-admission evidence under ADR 0003 | Game features or blanket approval of future dependencies |
+| [ADR conformance review](reviews/adr-conformance-2026-09-27.md) | Point-in-time evidence that implementation and documentation were checked against active ADRs | An ADR amendment or a replacement for source, tests, or release evidence |
 | [License](../LICENSE.md), [legal notice](../LEGAL.md) | Licensing and rights boundaries | Game-design authority |
 
 Historical discussions are linked to fixed Git revisions in the wiki's [provenance record](wiki/sources.md#historical-provenance), rather than maintained as competing design files. Source/schema/tests establish what the implementation actually does; they do not silently approve a change to intended design.
