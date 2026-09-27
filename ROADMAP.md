@@ -28,12 +28,12 @@ The current source-only release is v0.6.2; its latest gameplay baseline is v0.6.
 
 [Observation-Driven Faction Response](docs/wiki/observation-driven-faction-response.md) is implemented by Feature #93 / Final PR #94 and released in v0.6.0. V8 uses `observation-driven-faction-response-v1`; v0.5.0 remains the historical V6 release. The slice closes one legitimate observation→faction knowledge→investigation loop with reviewed scenario, Godot/player-safe, and bounded persistence evidence. Full M3 or M5 completion was not required before beginning the first combat refinement.
 
-M6A first combat engagement is implemented on `dev` as an unreleased contribution: one directed-energy weapon family, all-aspect shields, four-consumer Engineering, actor-safe targeting, bounded defensive reaction, and V9 continuation. M6 remains partial.
+M6A first combat engagement is implemented on `dev` as an unreleased contribution: one directed-energy weapon family, all-aspect shields, four-consumer Engineering, actor-safe targeting, and bounded defensive reaction. It introduced V9 continuation; the subsequent installed-system migration uses V10. M6 remains partial.
 
-## Required next implementation
+## Completed substrate prerequisite and next selection
 
-The owner selected [Issue #121](https://github.com/L3DigitalNet/star-trek-alter-course/issues/121): implement [ADR 0014](docs/adr/0014-use-an-extensible-bounded-ship-system-substrate.md) by migrating the five existing systems to independently owned installed-system instances. The [ship-system substrate contract](docs/wiki/ship-system-substrate.md) owns scope, compatibility, information safety, and admission evidence. The architecture is approved; the migration is not yet implemented.
+[Issue #121](https://github.com/L3DigitalNet/star-trek-alter-course/issues/121) implemented [ADR 0014](docs/adr/0014-use-an-extensible-bounded-ship-system-substrate.md) by migrating the five existing systems to independently owned installed-system instances. Final [PR #123](https://github.com/L3DigitalNet/star-trek-alter-course/pull/123) merged into `dev` as `17637dd`; the migration is unreleased. The [ship-system substrate contract](docs/wiki/ship-system-substrate.md) owns scope, compatibility, information safety, and admission evidence. Current development uses ship content V6, system-definition content V1, and V10 saves.
 
-Complete this prerequisite before adding systems or Damage Control gameplay. It is not M6B, a release, or completion of M3/M5/M6. Recovery semantics and later tactical refinements require their own bounded design after the substrate is corrected; the earlier recovery implementation prompt is not the current work order.
+The substrate prerequisite is complete; next work awaits owner selection. This migration is not M6B, a release, or completion of M3/M5/M6. Recovery semantics and later tactical refinements require their own bounded design; the earlier recovery implementation prompt is not the current work order.
 
 Maintain behavior and acceptance detail in the wiki, architecture changes through ADRs, and work/release state in the operational records. Review the [milestone proof record](docs/wiki/milestone-proofs.md) when changing sequence; do not silently turn an example or future proof into approved implementation scope.

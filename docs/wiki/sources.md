@@ -33,6 +33,10 @@ The [documentation authority map](../README.md) defines distinct roles outside t
 
 ## Review record
 
+### Post-merge substrate documentation correction — 2026-09-27
+
+Reviewed `dev` at `a090c33` (runtime merge `17637dd`) against `ShipEngineeringState`, installed-system identities, `GamePersistence`/V10 mapping, Godot catalog loading, and faction persistence, V10 compatibility, and heterogeneous-continuation tests. Corrected stale next-implementation and pre-merge claims in the roadmap, wiki home, architecture, faction-assignment, observation-response, and strategic-reporting pages, this catalog, and STATUS. Current development uses ship content V6, system-definition V1, and saves V10; Issue #121 and PRs #123/#124 are complete. Historical admission reviews below remain historical. This targeted source review does not claim a fresh gameplay test execution or reset the next full sweep due **2026-10-03**.
+
 ### Ship-system substrate implementation review — 2026-09-27
 
 - **Baseline:** `ac9d5ac9bf173375aa1aeb2e4d65cb1b820b4063` on `feature/121-extensible-ship-system-substrate` (branched from the PR #122 admission baseline `a86206d`; supersedes this review's earlier pass at `c9c7ed6`), containing implemented runtime, content, persistence, and Godot generic Engineering presentation for the installed-system substrate. Integrated proof tests (architecture conformance, extension demo, heterogeneous continuation, long horizon) are being written by a later leg (L6) and are not yet part of this baseline.
@@ -135,7 +139,7 @@ V9 proof values were 88,137,170 bytes for the faction fixture, 108,935,516 for t
 
 [PR #84](https://github.com/L3DigitalNet/star-trek-alter-course/pull/84) records the September 6 faction-slice approval. [Task #91 / PR #92](https://github.com/L3DigitalNet/star-trek-alter-course/pull/92) records September 7 observation-response admission and subsequent M6/Engineering sequence. [Feature #111 / PR #112](https://github.com/L3DigitalNet/star-trek-alter-course/pull/112) records September 26 M6A refinement and implementation. Those records are not approval of later recovery gameplay.
 
-[PR #120](https://github.com/L3DigitalNet/star-trek-alter-course/pull/120) adopts ADR 0014. The owner then selected [Issue #121](https://github.com/L3DigitalNet/star-trek-alter-course/issues/121) for implementation before further systems. [PR #122](https://github.com/L3DigitalNet/star-trek-alter-course/pull/122) reconciled that migration's admission documentation and handoff before implementation began. Runtime, content, and persistence are now implemented on `feature/121-extensible-ship-system-substrate` toward Final PR #123, which is the runtime Final for #121 and remains open pending the Godot presentation and integrated proof legs.
+[PR #120](https://github.com/L3DigitalNet/star-trek-alter-course/pull/120) adopts ADR 0014. The owner then selected [Issue #121](https://github.com/L3DigitalNet/star-trek-alter-course/issues/121) for implementation before further systems. [PR #122](https://github.com/L3DigitalNet/star-trek-alter-course/pull/122) reconciled that migration's admission documentation and handoff before implementation began. Final [PR #123](https://github.com/L3DigitalNet/star-trek-alter-course/pull/123) completed runtime, content, persistence, Godot presentation, and integrated proof, merging into `dev` as `17637dd`. Issue #121 is closed Done; [PR #124](https://github.com/L3DigitalNet/star-trek-alter-course/pull/124) records its operational handoff. The migration remains unreleased.
 
 ## Visual references
 
