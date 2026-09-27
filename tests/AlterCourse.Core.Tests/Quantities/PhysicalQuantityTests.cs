@@ -117,6 +117,16 @@ public sealed class PhysicalQuantityTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new DistanceKilometers(value));
     }
 
+    /// <summary>Subnormal movement rounds to zero without creating nonfinite or reversed coordinates.</summary>
+    [Fact]
+    public void TacticalMotionUnderflowPreservesFinitePosition()
+    {
+        var position = new TacticalPosition(0, 0);
+        var motion = new TacticalMotion(new HeadingDegrees(90), new SpeedKilometersPerSecond(double.Epsilon));
+
+        Assert.Equal(position, position.Advance(motion, new SimulationDuration(100)));
+    }
+
     /// <summary>Confirms speed accepts finite nonnegative kilometers per second.</summary>
     [Fact]
     public void SpeedAcceptsFiniteNonnegativeKilometersPerSecond()

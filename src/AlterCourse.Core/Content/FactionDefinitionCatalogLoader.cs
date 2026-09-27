@@ -12,6 +12,7 @@ public sealed class FactionDefinitionCatalogLoader
     /// <summary>Gets the maximum number of authored definitions admitted into one development catalog.</summary>
     public const int MaximumDefinitions = 256;
 
+    private const int MaximumJsonDepth = 64;
     private static readonly Uri SchemaBaseUri = new(
         "https://l3digital.net/star-trek-alter-course/schemas/faction-definition-v1.schema.json"
     );
@@ -103,7 +104,15 @@ public sealed class FactionDefinitionCatalogLoader
             // Duplicate detection precedes JsonDocument construction because System.Text.Json otherwise keeps
             // duplicate object members, allowing schema evaluation and typed mapping to observe different values.
             DetectDuplicateMembers(content.Utf8Json.Span, content.SourceIdentity);
-            return JsonDocument.Parse(content.Utf8Json);
+            return JsonDocument.Parse(
+                content.Utf8Json,
+                new JsonDocumentOptions
+                {
+                    AllowTrailingCommas = false,
+                    CommentHandling = JsonCommentHandling.Disallow,
+                    MaxDepth = MaximumJsonDepth,
+                }
+            );
         }
         catch (JsonException exception)
         {
@@ -134,7 +143,12 @@ public sealed class FactionDefinitionCatalogLoader
     {
         var reader = new Utf8JsonReader(
             utf8Json,
-            new JsonReaderOptions { AllowTrailingCommas = false, CommentHandling = JsonCommentHandling.Disallow }
+            new JsonReaderOptions
+            {
+                AllowTrailingCommas = false,
+                CommentHandling = JsonCommentHandling.Disallow,
+                MaxDepth = MaximumJsonDepth,
+            }
         );
         var objectMembers = new Stack<HashSet<string>>();
 
@@ -149,7 +163,7 @@ public sealed class FactionDefinitionCatalogLoader
                     objectMembers.Pop();
                     break;
                 case JsonTokenType.PropertyName:
-                    string member = reader.GetString()!;
+                    string member = StrictContentJson.ReadValidatedString(ref reader);
                     if (!objectMembers.Peek().Add(member))
                     {
                         throw Failure(
@@ -161,6 +175,9 @@ public sealed class FactionDefinitionCatalogLoader
                         );
                     }
 
+                    break;
+                case JsonTokenType.String:
+                    _ = StrictContentJson.ReadValidatedString(ref reader);
                     break;
             }
         }

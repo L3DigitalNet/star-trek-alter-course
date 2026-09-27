@@ -202,15 +202,7 @@ internal static class StrictContentJson
             {
                 case JsonTokenType.StartObject:
                 case JsonTokenType.StartArray:
-                    if (objectMembers.Count >= maxDepth)
-                    {
-                        throw Failure(
-                            "json.too-deep",
-                            sourceIdentity,
-                            $"byte:{reader.TokenStartIndex.ToString(CultureInfo.InvariantCulture)}",
-                            $"JSON nesting exceeds the {maxDepth.ToString(CultureInfo.InvariantCulture)}-level limit."
-                        );
-                    }
+                    ValidateContainerDepth(objectMembers.Count, maxDepth, reader.TokenStartIndex, sourceIdentity);
 
                     // Arrays push a null frame so depth counts every container while member tracking stays
                     // scoped to the enclosing object.
@@ -225,7 +217,7 @@ internal static class StrictContentJson
                     objectMembers.Pop();
                     break;
                 case JsonTokenType.PropertyName:
-                    string member = reader.GetString()!;
+                    string member = ReadValidatedString(ref reader);
                     if (!objectMembers.Peek()!.Add(member))
                     {
                         throw Failure(
@@ -237,7 +229,39 @@ internal static class StrictContentJson
                     }
 
                     break;
+                case JsonTokenType.String:
+                    // Schema evaluation may decode string values itself. Reject malformed Unicode
+                    // here so library decoder failures keep the content boundary's typed contract.
+                    _ = ReadValidatedString(ref reader);
+                    break;
             }
+        }
+    }
+
+    internal static string ReadValidatedString(ref Utf8JsonReader reader)
+    {
+        try
+        {
+            return reader.GetString()!;
+        }
+        catch (InvalidOperationException exception)
+        {
+            // Callers restrict this operation to string/name tokens; this translates only the
+            // decoder's malformed UTF-8/UTF-16 signal, not arbitrary schema or domain failures.
+            throw new JsonException("A JSON string contains invalid Unicode.", exception);
+        }
+    }
+
+    private static void ValidateContainerDepth(int depth, int maximum, long tokenStartIndex, string sourceIdentity)
+    {
+        if (depth >= maximum)
+        {
+            throw Failure(
+                "json.too-deep",
+                sourceIdentity,
+                $"byte:{tokenStartIndex.ToString(CultureInfo.InvariantCulture)}",
+                $"JSON nesting exceeds the {maximum.ToString(CultureInfo.InvariantCulture)}-level limit."
+            );
         }
     }
 
