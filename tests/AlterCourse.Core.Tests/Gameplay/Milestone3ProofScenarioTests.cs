@@ -70,7 +70,7 @@ public sealed class Milestone3ProofScenarioTests
         );
 
         JsonObject root = JsonNode.Parse(GamePersistence.Serialize(game, Milestone3ProofFixture.Metadata))!.AsObject();
-        Assert.Equal(9, root["schemaVersion"]!.GetValue<int>());
+        Assert.Equal(10, root["schemaVersion"]!.GetValue<int>());
         Assert.Equal(5, root["simulation"]!["shipAllocatorNextId"]!.GetValue<long>());
         Assert.Equal(4, root["simulation"]!["ships"]!.AsArray().Count);
     }

@@ -14,7 +14,10 @@ using AlterCourse.Core.Tests.Support;
 
 namespace AlterCourse.Core.Tests.Persistence;
 
-/// <summary>Verifies that combat state survives the explicit V9 snapshot boundary.</summary>
+/// <summary>
+/// Verifies that combat state survives the save boundary: current worlds round-trip through V10, and historical V9
+/// documents (produced from a live pathfinder world by the test fixture writer) keep their V9 validation semantics.
+/// </summary>
 public sealed class GamePersistenceV9CombatTests
 {
     /// <summary>Current snapshots retain new-game conditions instead of silently dropping them.</summary>
@@ -25,9 +28,9 @@ public sealed class GamePersistenceV9CombatTests
         GameSimulation game = fixture.CreateDefault();
         byte[] json = GamePersistence.Serialize(game, Milestone3ProofFixture.Metadata);
         JsonObject root = JsonNode.Parse(json)!.AsObject();
-        Assert.Equal(9, root["schemaVersion"]!.GetValue<int>());
-        Assert.Equal("first-combat-engagement-v1", root["simulationRulesVersion"]!.GetValue<string>());
-        GameSimulation restored = GamePersistence.Deserialize(json, fixture.Catalog, "combat-v9.json").Simulation;
+        Assert.Equal(10, root["schemaVersion"]!.GetValue<int>());
+        Assert.Equal(SaveJsonV10.V10RulesVersion, root["simulationRulesVersion"]!.GetValue<string>());
+        GameSimulation restored = GamePersistence.Deserialize(json, fixture.Catalog, "combat-v10.json").Simulation;
         foreach (ShipState ship in game.CaptureState().Ships)
         {
             ShipState loaded = restored.CaptureState().GetRequiredShip(ship.InstanceId);
@@ -195,6 +198,7 @@ public sealed class GamePersistenceV9CombatTests
         game.FireDirectedEnergy(new(contact, ShipSystemKind.Sensors));
         byte[] valid = GamePersistence.Serialize(game, Milestone3ProofFixture.Metadata);
         JsonObject root = Parse(valid);
+        SaveJsonV10.ToV9(root);
         JsonObject npc = root["simulation"]!["ships"]![1]!.AsObject();
         if (!TryMutateEngineeringV9(npc, mutation))
             MutateStimulusV9(root, mutation);
@@ -388,6 +392,7 @@ public sealed class GamePersistenceV9CombatTests
         foreach (string mutation in new[] { "workId", "dueTime", "duration", "condition", "target", "owner", "orphan" })
         {
             JsonObject root = Parse(valid);
+            SaveJsonV10.ToV9(root);
             JsonObject engineering = root["simulation"]!["ships"]![0]!["engineering"]!.AsObject();
             JsonObject repair = engineering["activeRepair"]!.AsObject();
             JsonObject work = root["simulation"]!["scheduler"]!["outstandingWork"]!
@@ -458,6 +463,7 @@ public sealed class GamePersistenceV9CombatTests
         )
         {
             JsonObject root = Parse(valid);
+            SaveJsonV10.ToV9(root);
             JsonObject ship = root["simulation"]!["ships"]![1]!.AsObject();
             JsonObject target = string.Equals(parent, "stimulus", StringComparison.Ordinal)
                 ? ship["combat"]!["pendingStimulus"]!.AsObject()
@@ -484,7 +490,11 @@ public sealed class GamePersistenceV9CombatTests
         (GameSimulation game, Milestone3ProofFixture fixture, SensorContactId contact) = Pair(15);
         game.FireDirectedEnergy(new(contact, ShipSystemKind.Sensors));
         byte[] valid = GamePersistence.Serialize(game, Milestone3ProofFixture.Metadata);
-        string json = Encoding.UTF8.GetString(valid);
+        JsonObject historical = Parse(valid);
+        SaveJsonV10.ToV9(historical);
+        string validV9 = historical.ToJsonString();
+        GamePersistence.Deserialize(Encoding.UTF8.GetBytes(validV9), fixture.Catalog, "valid-v9-json.json");
+        string json = validV9;
         json = mutation switch
         {
             "duplicate" => json.Replace(
@@ -504,15 +514,21 @@ public sealed class GamePersistenceV9CombatTests
             ),
             _ => json.Replace("\"shieldCondition\":0.75", "\"shieldCondition\":" + mutation, StringComparison.Ordinal),
         };
-        Assert.False(string.Equals(Encoding.UTF8.GetString(valid), json, StringComparison.Ordinal));
+        Assert.False(string.Equals(validV9, json, StringComparison.Ordinal));
         Assert.Throws<GamePersistenceException>(() =>
             GamePersistence.Deserialize(Encoding.UTF8.GetBytes(json), fixture.Catalog, "malformed-v9-json.json")
         );
         Assert.Equal(valid, GamePersistence.Serialize(game, Milestone3ProofFixture.Metadata));
     }
 
+    /// <summary>
+    /// Reduces a written save to the V8 ship shape (no combat members): a current V10 save is first re-expressed as
+    /// its V9 equivalent through the test fixture writer, then the V9 combat additions are removed.
+    /// </summary>
     internal static void StripCombat(JsonObject root)
     {
+        if (root["schemaVersion"]!.GetValue<int>() == 10)
+            SaveJsonV10.ToV9(root);
         foreach (JsonNode? node in root["simulation"]!["ships"]!.AsArray())
         {
             JsonObject ship = node!.AsObject();

@@ -9,6 +9,7 @@ using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
 using AlterCourse.Core.Tactical;
+using AlterCourse.Core.Tests.Persistence;
 using AlterCourse.Core.Tests.Support;
 
 namespace AlterCourse.Core.Tests.Gameplay;
@@ -130,8 +131,8 @@ public sealed class WorldBootstrapSignatureTests
         JsonArray atFourSeconds = Ships(Parse(game));
 
         Assert.Equal(11.25, game.GetPlayerProjection().Ship.Tactical.Position.XKilometers, 10);
-        Assert.Equal(0.7, atFourSeconds[0]!["engineering"]!["sensorCondition"]!.GetValue<double>(), 10);
-        Assert.Equal(0.7, atFourSeconds[1]!["engineering"]!["sensorCondition"]!.GetValue<double>(), 10);
+        Assert.Equal(0.7, SaveJsonV10.Condition(atFourSeconds[0]!, TestShipContent.Sensors.Value), 10);
+        Assert.Equal(0.7, SaveJsonV10.Condition(atFourSeconds[1]!, TestShipContent.Sensors.Value), 10);
         Assert.NotNull(atFourSeconds[0]!["engineering"]!["activeRepair"]);
         Assert.NotNull(atFourSeconds[1]!["engineering"]!["activeRepair"]);
         Assert.Equal("atLocation", atFourSeconds[1]!["strategicState"]!["kind"]!.GetValue<string>());

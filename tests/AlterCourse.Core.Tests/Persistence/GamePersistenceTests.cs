@@ -25,8 +25,8 @@ public sealed class GamePersistenceTests
         JsonArray ships = simulation["ships"]!.AsArray();
         JsonArray work = simulation["scheduler"]!["outstandingWork"]!.AsArray();
 
-        Assert.Equal(9, root["schemaVersion"]!.GetValue<int>());
-        Assert.Equal("first-combat-engagement-v1", root["simulationRulesVersion"]!.GetValue<string>());
+        Assert.Equal(10, root["schemaVersion"]!.GetValue<int>());
+        Assert.Equal("installed-ship-system-substrate-v1", root["simulationRulesVersion"]!.GetValue<string>());
         Assert.Equal(1, simulation["orderAllocatorNextId"]!.GetValue<long>());
         Assert.Equal(2, simulation["playerShipId"]!.GetValue<long>());
         Assert.Equal([1L, 2L, 3L], ships.Select(ship => ship!["instanceId"]!.GetValue<long>()));
@@ -118,7 +118,13 @@ public sealed class GamePersistenceTests
         AssertFailure(MutateV2(root => Ship(root, 1)["instanceId"] = 1), "duplicate-ship.json", "unique");
         AssertFailure(MutateV2(root => Ship(root, 0)["instanceId"] = 0), "zero-ship.json", "positive");
         AssertFailure(MutateV2(root => root["simulation"]!["playerShipId"] = 99), "player.json", "player");
-        AssertFailure(MutateV2(root => Ship(root, 0)["definitionId"] = "missing"), "definition.json", "missing");
+        // An unknown historical design is unsupported history (no frozen tuning), not corrupt data.
+        AssertFailure(
+            MutateV2(root => Ship(root, 0)["definitionId"] = "missing"),
+            "definition.json",
+            "missing",
+            GamePersistenceFailure.IncompatibleContent
+        );
         AssertFailure(MutateV2(root => root["simulation"]!["shipAllocatorNextId"] = 3), "allocator.json", "allocator");
         AssertFailure(
             MutateV2(root => root["simulation"]!["scheduler"]!["outstandingWork"]![0]!["targetShipId"] = 99),
@@ -300,7 +306,7 @@ public sealed class GamePersistenceTests
             GamePersistence.Deserialize(candidate, CreateCatalog(maximumId), "maximum-definition-id.json")
         );
 
-        Assert.Equal(GamePersistenceFailure.InvalidData, exception.Failure);
+        Assert.Equal(GamePersistenceFailure.IncompatibleContent, exception.Failure);
         Assert.Contains("no frozen V1", exception.Message, StringComparison.Ordinal);
     }
 
@@ -573,8 +579,8 @@ public sealed class GamePersistenceTests
         JsonObject simulation = v4["simulation"]!.AsObject();
         JsonObject ship = simulation["ships"]![0]!.AsObject();
 
-        Assert.Equal(9, v4["schemaVersion"]!.GetValue<int>());
-        Assert.Equal("first-combat-engagement-v1", v4["simulationRulesVersion"]!.GetValue<string>());
+        Assert.Equal(10, v4["schemaVersion"]!.GetValue<int>());
+        Assert.Equal("installed-ship-system-substrate-v1", v4["simulationRulesVersion"]!.GetValue<string>());
         Assert.Equal(1, simulation["orderAllocatorNextId"]!.GetValue<long>());
         Assert.All(simulation["ships"]!.AsArray(), candidate => Assert.Null(candidate!["activeOrder"]));
         Assert.Equal(7, simulation["playerShipId"]!.GetValue<long>());
@@ -590,10 +596,12 @@ public sealed class GamePersistenceTests
         // V1 records no contacts at all, so the full chain must reach V6 without inventing one to
         // carry the observed-location frame V6 introduced.
         Assert.Empty(ship["sensorKnowledge"]!["contacts"]!.AsArray());
+        // The V1 sensor repair and the V4→V5 frozen allocations land on the mapped installations (2 sensors,
+        // 3 impulse) of the V9→V10 map.
         Assert.NotNull(ship["engineering"]!["activeRepair"]);
-        Assert.Equal("sensors", ship["engineering"]!["activeRepair"]!["targetSystem"]!.GetValue<string>());
-        Assert.Equal(70, ship["engineering"]!["sensorAllocation"]!.GetValue<int>());
-        Assert.Equal(50, ship["engineering"]!["impulseAllocation"]!.GetValue<int>());
+        Assert.Equal(2, ship["engineering"]!["activeRepair"]!["targetInstalledSystemId"]!.GetValue<long>());
+        Assert.Equal(70, SaveJsonV10.Installation(ship, 2)["allocation"]!.GetValue<int>());
+        Assert.Equal(50, SaveJsonV10.Installation(ship, 3)["allocation"]!.GetValue<int>());
         Assert.Contains(
             simulation["scheduler"]!["outstandingWork"]!.AsArray(),
             work => string.Equals(work!["kind"]!.GetValue<string>(), "systemRepairCompletion", StringComparison.Ordinal)
@@ -667,7 +675,7 @@ public sealed class GamePersistenceTests
     public void RejectsUnsupportedDuplicateOversizedDeepAndUnknownInput()
     {
         AssertFailure(
-            MutateV2(root => root["schemaVersion"] = 10),
+            MutateV2(root => root["schemaVersion"] = 11),
             "future.json",
             "unsupported",
             GamePersistenceFailure.UnsupportedVersion
@@ -682,15 +690,38 @@ public sealed class GamePersistenceTests
         AssertFailure(MutateV2(root => root["unexpected"] = true), "unknown.json", "incompatible");
     }
 
-    /// <summary>Confirms ordinary live plural construction serializes only schema V8.</summary>
+    /// <summary>
+    /// Every adjacent migration emits its own fixed labels, so bumping the current schema or rules constants can never
+    /// relabel an older migration's output; the chain from V1 ends at V10.
+    /// </summary>
     [Fact]
-    public void SerializeEmitsOnlyV9()
+    public void EveryMigrationEmitsItsOwnFixedLabels()
+    {
+        Assert.Equal(
+            [
+                (2, "first-playable-v1"),
+                (3, "active-world-orders-v1"),
+                (4, "sensor-knowledge-first-contact-v1"),
+                (5, "engineering-backbone-v1"),
+                (6, "strategic-contact-reporting-v1"),
+                (7, "faction-intent-autonomous-assignment-v1"),
+                (8, "observation-driven-faction-response-v1"),
+                (9, "first-combat-engagement-v1"),
+                (10, "installed-ship-system-substrate-v1"),
+            ],
+            GamePersistence.MigrationOutputLabelsFromV1(CreateV1(activeWork: true), CreateCatalog())
+        );
+    }
+
+    /// <summary>Confirms ordinary live plural construction serializes only schema V10.</summary>
+    [Fact]
+    public void SerializeEmitsOnlyV10()
     {
         GameSimulation game = FirstGameSetup.Create(CreateCatalog());
         JsonObject root = Parse(GamePersistence.Serialize(game, CreateMetadata()));
 
-        Assert.Equal(9, root["schemaVersion"]!.GetValue<int>());
-        Assert.Equal("first-combat-engagement-v1", root["simulationRulesVersion"]!.GetValue<string>());
+        Assert.Equal(10, root["schemaVersion"]!.GetValue<int>());
+        Assert.Equal("installed-ship-system-substrate-v1", root["simulationRulesVersion"]!.GetValue<string>());
         Assert.Equal(1, root["simulation"]!["orderAllocatorNextId"]!.GetValue<long>());
         Assert.NotNull(root["simulation"]!["ships"]);
         Assert.Null(root["simulation"]!["playerShip"]);

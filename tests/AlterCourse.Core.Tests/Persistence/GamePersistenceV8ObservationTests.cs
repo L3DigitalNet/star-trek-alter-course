@@ -52,8 +52,8 @@ public sealed class GamePersistenceV8ObservationTests
         JsonObject migrated = Parse(GamePersistence.Serialize(loaded.Simulation, loaded.Metadata));
         JsonNode migratedSimulation = migrated["simulation"]!;
 
-        Assert.Equal(9, migrated["schemaVersion"]!.GetValue<int>());
-        Assert.Equal("first-combat-engagement-v1", migrated["simulationRulesVersion"]!.GetValue<string>());
+        Assert.Equal(10, migrated["schemaVersion"]!.GetValue<int>());
+        Assert.Equal("installed-ship-system-substrate-v1", migrated["simulationRulesVersion"]!.GetValue<string>());
         Assert.Equal(1, migratedSimulation["observationReportAllocatorNextId"]!.GetValue<long>());
         Assert.Equal(
             originalSimulation["timeMilliseconds"]!.ToJsonString(),
@@ -121,7 +121,7 @@ public sealed class GamePersistenceV8ObservationTests
         LoadedGameSave loaded = GamePersistence.Deserialize(saved, fixture.Catalog, "zero-factions-v8.json");
         JsonObject root = Parse(saved);
 
-        Assert.Equal(9, root["schemaVersion"]!.GetValue<int>());
+        Assert.Equal(10, root["schemaVersion"]!.GetValue<int>());
         Assert.Empty(root["simulation"]!["factions"]!.AsArray());
         Assert.Equal(1, root["simulation"]!["observationReportAllocatorNextId"]!.GetValue<long>());
         Assert.Equal(saved, GamePersistence.Serialize(loaded.Simulation, loaded.Metadata));
@@ -440,7 +440,22 @@ public sealed class GamePersistenceV8ObservationTests
         source["simulationRulesVersion"] = "observation-driven-faction-response-v1";
         RetargetToProductionDesign(source);
 
-        ShipDefinitionCatalog historicalCatalog = FactionTestWorld.CreateShipCatalog("pathfinder");
+        // The test world's pathfinder-named design carries test tuning; V1–V9 play only ever used production tuning,
+        // so that content cannot interpret a V9 world and the frozen map fails closed, naming the definition.
+        GamePersistenceException incompatible = Assert.Throws<GamePersistenceException>(() =>
+            GamePersistence.Deserialize(
+                Encoding.UTF8.GetBytes(source.ToJsonString()),
+                FactionTestWorld.CreateShipCatalog("pathfinder"),
+                FactionTestWorld.FactionCatalog,
+                "historical-v8-observation.json"
+            )
+        );
+        Assert.Equal(GamePersistenceFailure.IncompatibleContent, incompatible.Failure);
+        Assert.Contains("pathfinder.sensors", incompatible.Message, StringComparison.Ordinal);
+
+        // Under production system semantics (keeping the test world's design label, which contacts recorded) the
+        // same history migrates.
+        ShipDefinitionCatalog historicalCatalog = TestShipContent.Pathfinder(designDisplayName: "Test Ship");
         LoadedGameSave loaded = GamePersistence.Deserialize(
             Encoding.UTF8.GetBytes(source.ToJsonString()),
             historicalCatalog,
@@ -487,6 +502,7 @@ public sealed class GamePersistenceV8ObservationTests
                 "historical-v8-observation.json"
             )
         );
+        Assert.Equal(GamePersistenceFailure.IncompatibleContent, unsupported.Failure);
         Assert.Contains("no frozen V1", unsupported.Message, StringComparison.Ordinal);
         foreach (JsonNode? ship in source["simulation"]!["ships"]!.AsArray())
         {

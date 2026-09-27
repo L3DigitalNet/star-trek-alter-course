@@ -43,7 +43,7 @@ public sealed class GamePersistenceV6ContactReportTests
         JsonObject contact = FirstPlayerContact(Parse(saved));
         LoadedGameSave loaded = GamePersistence.Deserialize(saved, _fixture.Catalog, "native-v8.json");
 
-        Assert.Equal(9, Parse(saved)["schemaVersion"]!.GetValue<int>());
+        Assert.Equal(10, Parse(saved)["schemaVersion"]!.GetValue<int>());
         Assert.Equal("dawn-anchor", contact["observedAtLocationId"]!.GetValue<string>());
         Assert.Equal(Dawn, Assert.Single(Player(loaded.Simulation).SensorKnowledge.Contacts).ObservedAtLocationId);
         Assert.Equal(before, Reports(loaded.Simulation));
@@ -71,7 +71,7 @@ public sealed class GamePersistenceV6ContactReportTests
         Assert.Null(migrated.ObservedAtLocationId);
         Assert.Equal(original with { ObservedAtLocationId = null }, migrated);
         Assert.Equal(
-            9,
+            10,
             Parse(GamePersistence.Serialize(loaded.Simulation, loaded.Metadata))["schemaVersion"]!.GetValue<int>()
         );
         Assert.Null(

@@ -9,6 +9,7 @@ using AlterCourse.Core.Sensors;
 using AlterCourse.Core.Ships;
 using AlterCourse.Core.Simulation;
 using AlterCourse.Core.Strategic;
+using AlterCourse.Core.Tests.Persistence;
 using AlterCourse.Core.Tests.Support;
 
 namespace AlterCourse.Core.Tests.Gameplay;
@@ -224,11 +225,12 @@ public sealed class Milestone4EngineeringScenarioTests
         JsonNode persistedPlayer = persistedSimulation["ships"]![0]!;
         JsonNode persistedKestrel = persistedSimulation["ships"]![3]!;
 
-        Assert.Equal(9, root["schemaVersion"]!.GetValue<int>());
+        Assert.Equal(10, root["schemaVersion"]!.GetValue<int>());
         Assert.Equal(4_500, persistedSimulation["timeMilliseconds"]!.GetValue<long>());
-        Assert.Equal(70, persistedPlayer["engineering"]!["sensorAllocation"]!.GetValue<int>());
-        Assert.Equal(5, persistedPlayer["engineering"]!["impulseAllocation"]!.GetValue<int>());
-        Assert.Equal(0.7375, persistedPlayer["engineering"]!["sensorCondition"]!.GetValue<double>(), 12);
+        // Production installed ids: 2 = sensors, 3 = impulse.
+        Assert.Equal(70, SaveJsonV10.Installation(persistedPlayer, 2)["allocation"]!.GetValue<int>());
+        Assert.Equal(5, SaveJsonV10.Installation(persistedPlayer, 3)["allocation"]!.GetValue<int>());
+        Assert.Equal(0.7375, SaveJsonV10.Condition(persistedPlayer, 2), 12);
         Assert.Equal(contactId.Value, persistedPlayer["sensorKnowledge"]!["contacts"]![0]!["id"]!.GetValue<long>());
         Assert.Equal(
             scan.ScheduledCompletionId.Value,

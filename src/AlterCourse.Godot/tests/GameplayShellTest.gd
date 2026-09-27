@@ -274,13 +274,16 @@ func test_core_out_of_range_reason_uses_legitimate_contact_and_player_only_alloc
 	screen.call("QuickSave")
 	var save_text := FileAccess.get_file_as_string(TEST_QUICK_SAVE_PATH)
 	var parsed: Dictionary = JSON.parse_string(save_text)
-	assert_int(int(parsed.get("schemaVersion", -1))).is_equal(9)
+	assert_int(int(parsed.get("schemaVersion", -1))).is_equal(10)
 	var simulation: Dictionary = parsed.get("simulation", {})
 	var player_id := int(simulation.get("playerShipId", 0))
 	# Presets cannot jointly power weapons and sense beyond 20 km with 75 units. Only own allocation
 	# changes in this fixture; scan acquired the Current/Identified contact through ordinary controls.
-	save_text = _replace_saved_object_field(save_text, "ships", "instanceId", player_id, "impulseAllocation", 5, 0)
-	save_text = _replace_saved_object_field(save_text, "ships", "instanceId", player_id, "directedEnergyAllocation", 0, 5)
+	# V10 installations are ship-local; the player (ship 1) is written first, so the first installedSystems array
+	# is the player's. Production installed ids: 3 = impulse, 5 = directed-energy weapons.
+	assert_int(player_id).is_equal(1)
+	save_text = _replace_saved_object_field(save_text, "installedSystems", "installedSystemId", 3, "allocation", 5, 0)
+	save_text = _replace_saved_object_field(save_text, "installedSystems", "installedSystemId", 5, "allocation", 0, 5)
 	_write_text(TEST_QUICK_SAVE_PATH, save_text)
 	screen.call("QuickLoad")
 	assert_str(screen.get_meta("quick_save_status", "")).is_equal("loaded")
@@ -1527,9 +1530,9 @@ func test_default_quick_save_writes_production_v9_without_touching_legacy_slot()
 	var save_json: Dictionary = JSON.parse_string(
 		FileAccess.get_file_as_string(DEFAULT_QUICK_SAVE_PATH)
 	)
-	assert_int(int(save_json.get("schemaVersion", -1))).is_equal(9)
+	assert_int(int(save_json.get("schemaVersion", -1))).is_equal(10)
 	assert_str(save_json.get("simulationRulesVersion", "")).is_equal(
-		"first-combat-engagement-v1"
+		"installed-ship-system-substrate-v1"
 	)
 	var simulation: Dictionary = save_json.get("simulation", {})
 	assert_int((simulation.get("factions", []) as Array).size()).is_equal(2)
@@ -1562,9 +1565,9 @@ func test_default_quick_load_discovers_legacy_slot_path_then_saves_generic_v9() 
 	var save_json: Dictionary = JSON.parse_string(
 		FileAccess.get_file_as_string(DEFAULT_QUICK_SAVE_PATH)
 	)
-	assert_int(int(save_json.get("schemaVersion", -1))).is_equal(9)
+	assert_int(int(save_json.get("schemaVersion", -1))).is_equal(10)
 	assert_str(save_json.get("simulationRulesVersion", "")).is_equal(
-		"first-combat-engagement-v1"
+		"installed-ship-system-substrate-v1"
 	)
 	assert_str(FileAccess.get_file_as_string(LEGACY_DEFAULT_QUICK_SAVE_PATH)).is_equal(
 		legacy_contents
@@ -2210,8 +2213,11 @@ func _rewrite_v5_for_damaged_impulse(save_text: String) -> String:
 	assert_int(player_ship_id).is_greater(0)
 	assert_bool(repair.is_empty()).is_false()
 	assert_int(repair_work_id).is_greater(0)
+	# V10 installations are ship-local; the player (ship 1) is written first, so the first installedSystems array
+	# is the player's. Production installed id 3 is impulse.
+	assert_int(player_ship_id).is_equal(1)
 	save_text = _replace_saved_object_field(
-		save_text, "ships", "instanceId", player_ship_id, "impulseCondition", 1, 0.5
+		save_text, "installedSystems", "installedSystemId", 3, "condition", 1, 0.5
 	)
 
 	var repair_member := _find_saved_object_field(

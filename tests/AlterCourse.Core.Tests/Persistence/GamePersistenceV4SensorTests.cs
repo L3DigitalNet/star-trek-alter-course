@@ -43,8 +43,8 @@ public sealed class GamePersistenceV4SensorTests
         JsonArray ships = root["simulation"]!["ships"]!.AsArray();
 
         Assert.Equal(first, second);
-        Assert.Equal(9, root["schemaVersion"]!.GetValue<int>());
-        Assert.Equal("first-combat-engagement-v1", root["simulationRulesVersion"]!.GetValue<string>());
+        Assert.Equal(10, root["schemaVersion"]!.GetValue<int>());
+        Assert.Equal("installed-ship-system-substrate-v1", root["simulationRulesVersion"]!.GetValue<string>());
         Assert.Equal(
             "identified",
             ships[0]!["sensorKnowledge"]!["contacts"]![0]!["identification"]!.GetValue<string>()
@@ -68,7 +68,7 @@ public sealed class GamePersistenceV4SensorTests
         JsonNode simulation = current["simulation"]!;
         JsonNode npc = simulation["ships"]![1]!;
 
-        Assert.Equal(9, current["schemaVersion"]!.GetValue<int>());
+        Assert.Equal(10, current["schemaVersion"]!.GetValue<int>());
         Assert.Equal("holdUntil", npc["activeOrder"]!["kind"]!.GetValue<string>());
         Assert.Equal("orderWake", simulation["scheduler"]!["outstandingWork"]![0]!["kind"]!.GetValue<string>());
         Assert.Equal(1, npc["sensorKnowledge"]!["nextContactId"]!.GetValue<long>());
@@ -148,7 +148,7 @@ public sealed class GamePersistenceV4SensorTests
     private static void AssertCurrentOrdering(byte[] migratedCurrent)
     {
         JsonObject current = Parse(migratedCurrent);
-        Assert.Equal(9, current["schemaVersion"]!.GetValue<int>());
+        Assert.Equal(10, current["schemaVersion"]!.GetValue<int>());
         Assert.Equal(
             [1L, 2L, 3L],
             current["simulation"]!["ships"]!.AsArray().Select(ship => ship!["instanceId"]!.GetValue<long>())
@@ -287,7 +287,7 @@ public sealed class GamePersistenceV4SensorTests
         );
 
         Assert.InRange(saved.Length, 1, 128 * 1024 * 1024);
-        Assert.Equal(88_137_170, saved.Length);
+        Assert.Equal(88_239_425, saved.Length);
         Assert.Equal(256, loaded.Simulation.CaptureState().Ships.Length);
         Assert.Equal(256, loaded.Simulation.CaptureState().Factions.Length);
         Assert.Equal(66_302, loaded.Simulation.CaptureState().Scheduler.OutstandingWork.Length);
@@ -331,7 +331,7 @@ public sealed class GamePersistenceV4SensorTests
         Assert.Equal(saved, GamePersistence.Serialize(loaded.Simulation, loaded.Metadata));
     }
 
-    /// <summary>Confirms compact V8 output admits a validated maximum-width report world.</summary>
+    /// <summary>Confirms compact V10 output admits a validated maximum-width report world.</summary>
     /// <remarks>
     /// The measured vertex saturates contacts, report history, work correlations, identity widths, times, positions,
     /// and escaped names. The derived ceiling then adds complete maximum encodings for every omitted bounded shape;
@@ -347,14 +347,14 @@ public sealed class GamePersistenceV4SensorTests
         var metadata = new GameSaveMetadata(new string('\u0080', 128), new string('\u0080', 128), Timestamp, Timestamp);
 
         byte[] saved = GamePersistence.Serialize(simulation, metadata);
-        LoadedGameSave loaded = GamePersistence.Deserialize(saved, catalog, factionCatalog, "maximum-width-v9.json");
-        long conservativeSupportedShapeCeiling = CompactV9SizeBound.FromMeasuredReportVertex(
+        LoadedGameSave loaded = GamePersistence.Deserialize(saved, catalog, factionCatalog, "maximum-width-v10.json");
+        long conservativeSupportedShapeCeiling = CompactV10SizeBound.FromMeasuredReportVertex(
             saved.Length,
             populated.Scheduler.OutstandingWork.Length
         );
 
-        Assert.Equal(108_935_516, saved.Length);
-        Assert.Equal(113_292_140, conservativeSupportedShapeCeiling);
+        Assert.Equal(109_030_603, saved.Length);
+        Assert.Equal(114_536_452, conservativeSupportedShapeCeiling);
         Assert.InRange(conservativeSupportedShapeCeiling, 1, 128L * 1024 * 1024);
         Assert.Equal(saved, GamePersistence.Serialize(loaded.Simulation, loaded.Metadata));
     }
@@ -423,7 +423,7 @@ public sealed class GamePersistenceV4SensorTests
             Scheduler = SimulationScheduler.Restore(state.Scheduler.NextWorkId, state.Scheduler.NextSequence, []),
         };
         int emptyBytes = GamePersistence.Serialize(GameSimulation.RestoreState(empty, catalog), Metadata()).Length;
-        Assert.InRange(savedBytes - emptyBytes, 1, CompactV9SizeBound.MaximumCombatAlternativesBytes());
+        Assert.InRange(savedBytes - emptyBytes, 1, CompactV10SizeBound.MaximumCombatAlternativesBytes());
     }
 
     private static (GameSimulation Game, ShipDefinitionCatalog Catalog) CreateMaximumCombatWorld()
@@ -1325,16 +1325,39 @@ public sealed class GamePersistenceV4SensorTests
     private static string ShipJson(long id, string name, string order) =>
         $$"""{ "instanceId": {{id}}, "definitionId": "pathfinder", "displayName": "{{name}}", "tacticalPosition": { "xKilometers": 0, "yKilometers": 0 }, "tacticalMotion": { "headingDegrees": 0, "speedKilometersPerSecond": 0 }, "sensorIntegrity": 1, "sensorRepair": null, "strategicState": { "kind": "atLocation", "locationId": "alpha", "travel": null }, "activeOrder": {{order}} }""";
 
-    private static class CompactV9SizeBound
+    /// <summary>
+    /// Derives the conservative compact V10 size ceiling from a measured high-width vertex.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Formula: measured bytes + the maximum strategic map + per ship (256) the complete maximum encoding of every
+    /// bounded per-ship alternative + per faction (256) the complete faction alternatives + a maximum scheduled-work
+    /// item for every unoccupied work slot + the maximum V10 system-definition table + the maximum aim-vocabulary
+    /// member. Whole alternatives are added on top of the measured document instead of their deltas, which
+    /// deliberately overcounts mutually exclusive states and every member the vertex already contains.
+    /// </para>
+    /// <para>
+    /// The V10 per-ship engineering alternative uses the storage maximum of 16 installations (a valid typed world
+    /// holds at most 5), each at nineteen-digit installed id, a 64-character definition id, a maximum finite
+    /// condition, and a nineteen-digit allocation; readiness uses 16 nineteen-digit entries. The measured vertex
+    /// carries production five-slot loadouts with short identities, so every installation and readiness width is
+    /// covered by these added maxima rather than by measurement.
+    /// </para>
+    /// </remarks>
+    private static class CompactV10SizeBound
     {
         private const int MaximumLongBytes = 19;
         private const int MaximumFiniteDoubleBytes = 24;
         private const int MaximumAsciiIdentityTokenBytes = LocationId.MaximumLength + 2;
+        private const int MaximumSystemDefinitionIdTokenBytes = SystemDefinitionId.MaximumLength + 2;
+        private const int MaximumInstallations = ShipSystemLimits.MaximumInstalledSystemsPerShip;
 
         internal static long FromMeasuredReportVertex(int measuredBytes, int occupiedWorkSlots)
         {
             int unoccupiedWorkSlots = SimulationScheduler.MaximumOutstandingWork - occupiedWorkSlots;
             return measuredBytes
+                + MaximumSystemDefinitionTableBytes()
+                + MaximumAimVocabularyBytes()
                 + MaximumStrategicMapBytes()
                 + (SimulationState.MaximumShips * MaximumPerShipAlternativeBytes())
                 + (SimulationState.MaximumFactions * MaximumPerFactionAlternativeBytes())
@@ -1364,26 +1387,40 @@ public sealed class GamePersistenceV4SensorTests
             );
         }
 
+        // "systemDefinitions": one row per distinct referenced definition, at most 256, each with a maximum id and a
+        // maximum (256-character) semantics descriptor.
+        private static int MaximumSystemDefinitionTableBytes() =>
+            ",\"systemDefinitions\":".Length
+            + Array(
+                GamePersistence.MaximumSystemDefinitionReferences,
+                Object(
+                    ("definitionId", MaximumSystemDefinitionIdTokenBytes),
+                    ("semantics", SystemDefinitionSemantics.MaximumLength + 2)
+                )
+            );
+
+        private static int MaximumAimVocabularyBytes() =>
+            ",\"aimVocabulary\":".Length + AimVocabularySemantics.MaximumLength + 2;
+
         private static int MaximumPerShipAlternativeBytes()
         {
             int repair = Object(
-                ("targetSystem", MaximumAsciiIdentityTokenBytes),
+                ("targetInstalledSystemId", MaximumLongBytes),
                 ("startingCondition", MaximumFiniteDoubleBytes),
                 ("targetCondition", MaximumFiniteDoubleBytes),
                 ("startedAtMilliseconds", MaximumLongBytes),
                 ("expectedCompletionMilliseconds", MaximumLongBytes),
                 ("scheduledCompletionId", MaximumLongBytes)
             );
+            int installation = Object(
+                ("installedSystemId", MaximumLongBytes),
+                ("definitionId", MaximumSystemDefinitionIdTokenBytes),
+                ("condition", MaximumFiniteDoubleBytes),
+                ("allocation", MaximumLongBytes)
+            );
             int engineering = Object(
-                ("generationCondition", MaximumFiniteDoubleBytes),
-                ("sensorCondition", MaximumFiniteDoubleBytes),
-                ("impulseCondition", MaximumFiniteDoubleBytes),
-                ("shieldCondition", MaximumFiniteDoubleBytes),
-                ("directedEnergyCondition", MaximumFiniteDoubleBytes),
-                ("sensorAllocation", MaximumLongBytes),
-                ("impulseAllocation", MaximumLongBytes),
-                ("shieldAllocation", MaximumLongBytes),
-                ("directedEnergyAllocation", MaximumLongBytes),
+                ("nextInstalledSystemId", MaximumLongBytes),
+                ("installedSystems", Array(MaximumInstallations, installation)),
                 ("activeRepair", repair)
             );
             return MaximumMotionBytes()
@@ -1478,6 +1515,7 @@ public sealed class GamePersistenceV4SensorTests
         private static int MaximumActiveScanBytes() =>
             Object(
                 ("targetContactId", MaximumLongBytes),
+                ("sensorInstalledSystemId", MaximumLongBytes),
                 ("startedAtMilliseconds", MaximumLongBytes),
                 ("expectedCompletionMilliseconds", MaximumLongBytes),
                 ("scheduledCompletionId", MaximumLongBytes)
@@ -1491,7 +1529,13 @@ public sealed class GamePersistenceV4SensorTests
 
         private static int MaximumCombatStateBytes() =>
             Object(
-                ("nextDirectedEnergyReadyAtMilliseconds", MaximumLongBytes),
+                (
+                    "directedEnergyReadiness",
+                    Array(
+                        MaximumInstallations,
+                        Object(("weaponInstalledSystemId", MaximumLongBytes), ("readyAtMilliseconds", MaximumLongBytes))
+                    )
+                ),
                 (
                     "pendingStimulus",
                     Object(
