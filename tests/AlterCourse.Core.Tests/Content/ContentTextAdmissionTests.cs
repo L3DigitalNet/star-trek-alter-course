@@ -204,6 +204,32 @@ public sealed class ContentTextAdmissionTests
         Assert.Equivalent(text, Load(family, json, 2), strict: true);
     }
 
+    /// <summary>Pins the dependency's invalid-root exception used by GameScreen's constructor-only catch filter.</summary>
+    [Theory]
+    [InlineData(0, "[]")]
+    [InlineData(0, "17")]
+    [InlineData(0, "null")]
+    [InlineData(1, "[]")]
+    [InlineData(1, "17")]
+    [InlineData(1, "null")]
+    [InlineData(2, "[]")]
+    [InlineData(2, "17")]
+    [InlineData(2, "null")]
+    public void SchemaConstructorsRejectInvalidRootsWithExactParameterlessArgumentException(int family, string json)
+    {
+        ArgumentException exception = Assert.Throws<ArgumentException>(() =>
+        {
+            _ = family switch
+            {
+                0 => (object)new ShipDefinitionCatalogLoader(json, TestShipContent.ProductionSystems()),
+                1 => new SystemDefinitionCatalogLoader(json),
+                2 => new FactionDefinitionCatalogLoader(json),
+                _ => throw new ArgumentOutOfRangeException(nameof(family)),
+            };
+        });
+        Assert.Null(exception.ParamName);
+    }
+
     private static string ValidDocument(int family, string label = ValidLabel)
     {
         return family switch

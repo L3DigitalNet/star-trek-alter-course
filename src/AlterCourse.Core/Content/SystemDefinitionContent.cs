@@ -59,7 +59,8 @@ public sealed class SystemDefinitionContent
             throw TooLarge(sourceIdentity);
         }
 
-        return new SystemDefinitionContent(sourceIdentity, utf8Json.ToArray());
+        // Bounds count the encoding preamble; text factories retain literal leading FEFF as JSON input.
+        return new SystemDefinitionContent(sourceIdentity, StrictContentJson.WithoutUtf8Preamble(utf8Json).ToArray());
     }
 
     /// <summary>Reads one UTF-8 JSON document from the stream's current position.</summary>
@@ -85,7 +86,10 @@ public sealed class SystemDefinitionContent
             }
         }
 
-        return new SystemDefinitionContent(sourceIdentity, buffer.ToArray());
+        return new SystemDefinitionContent(
+            sourceIdentity,
+            StrictContentJson.WithoutUtf8Preamble(buffer.GetBuffer().AsSpan(0, checked((int)buffer.Length))).ToArray()
+        );
     }
 
     private static ShipContentValidationException TooLarge(string sourceIdentity) =>

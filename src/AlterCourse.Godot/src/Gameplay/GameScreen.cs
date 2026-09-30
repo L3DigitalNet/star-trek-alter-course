@@ -814,7 +814,14 @@ public partial class GameScreen : Control
         byte[] bytes = ReadRequiredBytes(path, MaximumSchemaBytes, "content.size-limit", faction);
         try
         {
-            return StrictUtf8.GetString(bytes);
+            // Native GetAsText recognized this encoding metadata. Strip one preamble only after raw byte bounds.
+            ReadOnlySpan<byte> json = bytes;
+            if (json.StartsWith([0xEF, 0xBB, 0xBF]))
+            {
+                json = json[3..];
+            }
+
+            return StrictUtf8.GetString(json);
         }
         catch (DecoderFallbackException)
         {
@@ -829,7 +836,12 @@ public partial class GameScreen : Control
         {
             return new SystemDefinitionCatalogLoader(text);
         }
-        catch (Exception exception) when (exception is JsonException or JsonSchemaException)
+        // JsonSchema.Net rejects non-object/non-boolean roots with an exact, parameterless ArgumentException.
+        // Constructor arguments are already valid; derived argument exceptions remain programming failures.
+        catch (Exception exception)
+            when (exception is JsonException or JsonSchemaException
+                || (exception.GetType() == typeof(ArgumentException)
+                    && exception is ArgumentException { ParamName: null }))
         {
             throw ContentFailure(
                 SystemDefinitionSchemaResourcePath,
@@ -847,7 +859,12 @@ public partial class GameScreen : Control
         {
             return new ShipDefinitionCatalogLoader(text, systems);
         }
-        catch (Exception exception) when (exception is JsonException or JsonSchemaException)
+        // JsonSchema.Net rejects non-object/non-boolean roots with an exact, parameterless ArgumentException.
+        // Constructor arguments are already valid; derived argument exceptions remain programming failures.
+        catch (Exception exception)
+            when (exception is JsonException or JsonSchemaException
+                || (exception.GetType() == typeof(ArgumentException)
+                    && exception is ArgumentException { ParamName: null }))
         {
             throw ContentFailure(
                 ShipSchemaResourcePath,
@@ -865,7 +882,12 @@ public partial class GameScreen : Control
         {
             return new FactionDefinitionCatalogLoader(text);
         }
-        catch (Exception exception) when (exception is JsonException or JsonSchemaException)
+        // JsonSchema.Net rejects non-object/non-boolean roots with an exact, parameterless ArgumentException.
+        // Constructor arguments are already valid; derived argument exceptions remain programming failures.
+        catch (Exception exception)
+            when (exception is JsonException or JsonSchemaException
+                || (exception.GetType() == typeof(ArgumentException)
+                    && exception is ArgumentException { ParamName: null }))
         {
             throw ContentFailure(FactionSchemaPath, "schema.invalid", "Required schema is invalid.", faction: true);
         }
