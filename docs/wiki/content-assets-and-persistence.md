@@ -6,7 +6,7 @@ description: 'Distinct contracts for reusable definitions, durable saves, visual
 doc_type: 'reference'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-27'
+updated: '2026-09-30'
 tags:
   - 'architecture'
   - 'validation'
@@ -48,6 +48,8 @@ Definition IDs are not display names or file paths. Content migration and save m
 
 ADR 0006 selects explicit versioned JSON snapshots, not live C# graph serialization, Godot scenes, an event store, or a database. Persist consequential state, stable references, ordering, and allocator continuation. Do not persist derived UI values, caches, loggers, callbacks, or package runtime identities. [ADR 0016](../adr/0016-own-actor-knowledge-and-share-immutable-observation-reports.md) governs the provenance and historical meaning of persisted actor knowledge.
 
+The owner's September 30, 2026 [ADR 0006 amendment](../adr/0006-use-versioned-json-snapshot-saves.md#amendment--september-30-2026) starts explicit cross-version save compatibility and migration-maintenance obligations at v1.0.0. Earlier development/testing saves have no cross-build compatibility or exact-continuation guarantee, may be invalidated, and need no migration for every development change. Existing readers and fixtures below describe implemented behavior, not a continuing support promise. Strict bounded validation, explicit snapshot identities, fail-closed rejection, and same-build deterministic round trips and continuation remain required.
+
 Before materializing a save document, persistence pre-scans arrays, strings, and member names against aggregate/schema bounds. Malformed Unicode and historical V5/V6 null work entries fail through controlled validation rather than reaching migrations or escaping as decoder errors. Write tests inject candidate-write, flush, close, replacement, and cleanup failures, preserving the previous target and original failure when cleanup also fails. This is bounded failure handling, not universal power-loss durability or a new format.
 
 Historical save V6 uses `strategic-contact-reporting-v1`. It includes ships, player identity, strategic/tactical state, Engineering condition/allocation/repair, orders, actor-local contacts, scans, posture, observation-location frames, correlated work, and counters. `KnownContactReports` is derived from retained knowledge, not a separately serialized UI authority.
@@ -64,7 +66,7 @@ Released V8 supports adjacent V1→V2→V3→V4→V5→V6→V7→V8 migrations. 
 
 Loading validates a complete candidate before live replacement. The current envelope is 128 MiB. Historical V6's maximum-shape test measured 106,775,347 bytes, versus 95,677,740 under V5; neither is a normal save size or a current-format maximum.
 
-The shell uses `user://quick-save.json`. It consults legacy `quick-save-v1.json` only when the generic default slot is absent; custom paths do not use that fallback. Autosave, distribution, and broader compatibility promises require separate decisions. Pre-1.0 does not promise perpetual migration support. A successful load's session invalidation and preference handling belong in [Interface](interface-and-player-commands.md#session-replacement).
+The shell uses `user://quick-save.json`. It consults legacy `quick-save-v1.json` only when the generic default slot is absent; custom paths do not use that fallback. Autosave, distribution, and the supported compatibility range from v1.0.0 require separate decisions. A successful load's session invalidation and preference handling belong in [Interface](interface-and-player-commands.md#session-replacement).
 
 ## Implemented V7 and V8
 
@@ -95,6 +97,8 @@ V9's faction fixture measured 88,137,170 bytes; its high-width report vertex mea
 ## Implemented substrate content and persistence
 
 Issue #121's [installed-system contract](ship-system-substrate.md#compatibility-and-current-format-capture) is implemented and unreleased: ship V6, system-definition V1, and save V10 under `installed-ship-system-substrate-v1`. Ship definitions retain design identity and initial loadout with stable installed IDs, definition references, and next-ID continuation.
+
+Under the September 30 compatibility decision, Issue #135's defensive-heading underflow correction (R3) is an implementation correction with no wire-format change and retains `installed-ship-system-substrate-v1`. Its development edge-case outcomes may differ from earlier builds; this is not a claim of exact historical cross-build continuation. Historical identifiers, DTOs, and fixtures retain their meaning, while same-build deterministic continuation and strict load validation remain required. The policy authorizes the correction; implementation and executed verification belong to its governing change.
 
 Equipment tuning formerly held directly by ship V5—generation, demands, sensor range/scan time, tactical speed, weapon range/damage/cooldown, and repair durations—now lives in [`pathfinder-systems.json`](../../src/AlterCourse.Godot/content/systems/pathfinder-systems.json), governed by its [V1 schema](../../src/AlterCourse.Godot/content/schemas/system-definition-v1.schema.json). Loadouts refer to reusable system definitions; they are not current live-state authority.
 

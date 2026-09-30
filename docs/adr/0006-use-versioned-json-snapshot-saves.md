@@ -6,8 +6,8 @@ description: 'Defines save ownership, serialization, migration, validation, atom
 doc_type: 'adr'
 status: 'active'
 created: '2026-09-01'
-updated: '2026-09-27'
-reviewed: '2026-09-27'
+updated: '2026-09-30'
+reviewed: '2026-09-30'
 owner: 'project-maintainers'
 consumer: 'mix'
 tags:
@@ -79,7 +79,13 @@ How should the project persist the authoritative world state so that saves are d
 
 Chosen option: "Explicit versioned snapshot models serialized as JSON", because it creates an intentional compatibility contract that remains inspectable, testable, and independent from the runtime object graph.
 
-This decision governs recoverable simulation state. It does not require indefinite support for every development save, nor does it guarantee that all pre-release saves will remain compatible. It requires any supported compatibility promise to be explicit and mechanically tested.
+This decision governs recoverable simulation state. Explicit cross-version save compatibility and migration-maintenance obligations begin with v1.0.0. From that release onward, supported compatibility promises must be explicit and mechanically tested.
+
+### Amendment — September 30, 2026
+
+The project owner selected v1.0.0 as the compatibility activation point because maintaining cross-build saves during development and testing would be unrealistic and cumbersome. Before v1.0.0, saves have no cross-build compatibility or exact-continuation guarantee: development changes may invalidate them, and developers need not add or maintain migrations for every change. Existing historical readers, migrations, and fixtures remain implementation evidence, not a promise of continued support or a requirement to preserve every earlier build's outcomes.
+
+This amendment changes compatibility maintenance, not the persistence trust boundary. Explicit versioned snapshot identities, strict bounded validation, fail-closed admission, isolated construction, and same-build deterministic round trips and continuation remain required. An unsupported or invalid save must be rejected rather than silently reinterpreted. Historical identifiers and frozen representations retain their recorded meanings.
 
 ### Snapshot boundary
 
@@ -153,14 +159,14 @@ The implementation must document any expensive derived state deliberately persis
 
 ### Migration policy
 
-Save compatibility is handled by an ordered migration pipeline.
+From v1.0.0 onward, compatibility for supported source versions is handled by an ordered migration pipeline. Before that point, a build may reject development saves instead of providing a migration. Any migration a build does provide follows the validation and non-invention rules below.
 
 A loader:
 
 1. reads and bounds-checks the envelope;
 2. identifies the source schema version;
 3. rejects versions newer than it understands with a clear diagnostic;
-4. applies a tested sequence of migrations to a current persistence model;
+4. applies a tested sequence of migrations to a current persistence model when a supported migration path is needed, or rejects an unsupported source version;
 5. validates structural and semantic invariants;
 6. resolves required content references;
 7. constructs runtime state only after the snapshot is trustworthy.
@@ -169,7 +175,7 @@ Migrations operate on persistence representations, not live domain entities. Eac
 
 A migration does not silently invent consequential state. When old data lacks a required value, the migration uses a documented deterministic rule, a safe default whose meaning is understood, or rejects the save with an actionable explanation.
 
-The project may declare development-era save versions unsupported. Removing support is an explicit compatibility decision accompanied by release notes or project documentation appropriate to the current distribution stage.
+Pre-v1.0.0 development saves need not become supported source versions at v1.0.0. From v1.0.0 onward, removing declared support is an explicit compatibility decision accompanied by release notes or project documentation appropriate to the current distribution stage.
 
 ### Validation and trust boundary
 
@@ -245,9 +251,9 @@ Conformance is confirmed by:
 - migration fixtures for every supported source version;
 - corruption, truncation, unknown-member, broken-reference, and oversized-input tests;
 - atomic-write interruption and recovery tests where the platform abstraction permits them;
-- deterministic continuation tests that compare post-load behavior with uninterrupted behavior;
+- same-build deterministic continuation tests that compare post-load behavior with uninterrupted behavior, plus cross-version continuation tests wherever a supported compatibility promise requires them;
 - architecture tests that reject Godot types from persistence models;
-- explicit lock-step updates to schema version and migrations when serialized meaning changes.
+- explicit schema-version updates when serialized meaning changes, with corresponding migrations for supported compatibility paths from v1.0.0 onward; pre-v1.0.0 changes may instead invalidate development saves.
 
 ## Pros and Cons of the Options
 
