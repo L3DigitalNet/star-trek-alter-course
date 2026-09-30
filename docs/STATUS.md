@@ -2,11 +2,11 @@
 
 ## Current snapshot
 
-- Bug #135 R1-R3 remediation is In progress on PR #138; owner review is the next focus after final gates and admission.
-- Candidate `e1c89f9` passed rexec verification: Core 1376, AssetCtl 324, Godot 1+2+103, smoke, and zero warnings, errors, or skips.
+- Bug #135 R1-R3 corrections are verified on PR #138; its final execution receipt owns the exact head, acceptance, and owner-review state.
+- Candidate `5a1b8ea` passed rexec verification: Core 1411, AssetCtl 324, Godot 1+2+106, smoke, and zero build warnings or test failures/skips.
 - R1 bounds native content reads; R2 strictly admits UTF-16 text; R3 preserves finite withdrawal displacement and deterministic save continuation.
 - [Remediation evidence](reviews/adr-remediation-2026-09-30.md) and [PR #138](https://github.com/L3DigitalNet/star-trek-alter-course/pull/138) own final receipts.
-- Native scoped reviews found no defects; mutation, Claude cross-review, final hosted checks, and Ready remain pending at closeout authoring.
+- Native and two Claude reviews completed; BOM, schema-classification and numeric-coverage follow-ups passed. Final acceptance belongs to PR #138.
 - All 18 ADRs bind after PR #137 merged `7e2df74`; Task #136 is Done and PR #134 closed superseded. Reconciliation changed no source.
 - Save cross-version compatibility starts at 1.0.0 under amended ADRs 0006/0007; same-build continuation and fail-closed bounds remain required.
 - Initiative #127 ADR conformance is Done after PR #132 squash `9b4f6a7` and documentation-closeout PR #133 squash `d034e1d`; both merged trees exactly match tested heads.
