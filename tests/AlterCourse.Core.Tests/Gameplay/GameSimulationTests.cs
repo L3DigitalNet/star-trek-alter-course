@@ -427,9 +427,10 @@ public sealed class GameSimulationTests
     {
         const int shipCount = 256;
         const int stepCount = 5_000;
-        var location = new StrategicLocation(new LocationId("shared-location"), "Shared Location", default);
-        // Unpowered sensors keep pairwise range checks and contact creation out of the ship-step budget proof.
-        // Sensor condition still changes through repair, independently of its allocated power.
+        // Isolate motion and sensor repair from local targets so contact work cannot dominate the ship-step proof.
+        var moverLocation = new StrategicLocation(new LocationId("mover-location"), "Mover Location", default);
+        var repairLocation = new StrategicLocation(new LocationId("repair-location"), "Repair Location", default);
+        var inactiveLocation = new StrategicLocation(new LocationId("inactive-location"), "Inactive Location", default);
         ShipStart[] starts =
         [
             .. Enumerable
@@ -444,7 +445,9 @@ public sealed class GameSimulationTests
                         $"USS Test {index}",
                         isMover ? default : new TacticalPosition(index, -index),
                         isMover ? new TacticalMotion(new HeadingDegrees(90), new SpeedKilometersPerSecond(1)) : default,
-                        new AtLocationStart(location.Id),
+                        new AtLocationStart(
+                            isMover ? moverLocation.Id : isRepairing ? repairLocation.Id : inactiveLocation.Id
+                        ),
                         TestShipStarts.Pathfinder(sensors: isRepairing ? 0.4 : 1, sensorPower: 0),
                         isRepairing
                             ? new SystemRepairStart(
@@ -459,7 +462,7 @@ public sealed class GameSimulationTests
         ];
         GameSimulation game = new GameBootstrap(
             new SimulationTime(0),
-            new StrategicMap([location], []),
+            new StrategicMap([moverLocation, repairLocation, inactiveLocation], []),
             new ShipInstanceId(1),
             starts
         ).CreateSimulation(CreateCatalog());
