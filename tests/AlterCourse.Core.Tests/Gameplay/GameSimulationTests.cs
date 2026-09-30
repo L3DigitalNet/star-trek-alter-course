@@ -446,7 +446,9 @@ public sealed class GameSimulationTests
                         isMover ? default : new TacticalPosition(index, -index),
                         isMover ? new TacticalMotion(new HeadingDegrees(90), new SpeedKilometersPerSecond(1)) : default,
                         new AtLocationStart(
-                            isMover ? moverLocation.Id : isRepairing ? repairLocation.Id : inactiveLocation.Id
+                            isMover ? moverLocation.Id
+                            : isRepairing ? repairLocation.Id
+                            : inactiveLocation.Id
                         ),
                         TestShipStarts.Pathfinder(sensors: isRepairing ? 0.4 : 1, sensorPower: 0),
                         isRepairing

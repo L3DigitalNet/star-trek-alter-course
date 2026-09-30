@@ -840,8 +840,11 @@ public partial class GameScreen : Control
         // Constructor arguments are already valid; derived argument exceptions remain programming failures.
         catch (Exception exception)
             when (exception is JsonException or JsonSchemaException
-                || (exception.GetType() == typeof(ArgumentException)
-                    && exception is ArgumentException { ParamName: null }))
+                || (
+                    exception.GetType() == typeof(ArgumentException)
+                    && exception is ArgumentException { ParamName: null }
+                )
+            )
         {
             throw ContentFailure(
                 SystemDefinitionSchemaResourcePath,
@@ -863,8 +866,11 @@ public partial class GameScreen : Control
         // Constructor arguments are already valid; derived argument exceptions remain programming failures.
         catch (Exception exception)
             when (exception is JsonException or JsonSchemaException
-                || (exception.GetType() == typeof(ArgumentException)
-                    && exception is ArgumentException { ParamName: null }))
+                || (
+                    exception.GetType() == typeof(ArgumentException)
+                    && exception is ArgumentException { ParamName: null }
+                )
+            )
         {
             throw ContentFailure(
                 ShipSchemaResourcePath,
@@ -886,8 +892,11 @@ public partial class GameScreen : Control
         // Constructor arguments are already valid; derived argument exceptions remain programming failures.
         catch (Exception exception)
             when (exception is JsonException or JsonSchemaException
-                || (exception.GetType() == typeof(ArgumentException)
-                    && exception is ArgumentException { ParamName: null }))
+                || (
+                    exception.GetType() == typeof(ArgumentException)
+                    && exception is ArgumentException { ParamName: null }
+                )
+            )
         {
             throw ContentFailure(FactionSchemaPath, "schema.invalid", "Required schema is invalid.", faction: true);
         }
