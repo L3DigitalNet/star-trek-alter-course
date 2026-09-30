@@ -478,14 +478,9 @@ public sealed class GameSimulationTests
         Assert.Equal(stepCount * 100, result.FinalTime.Milliseconds);
         Assert.Equal(500, final.GetRequiredShip(new ShipInstanceId(1)).TacticalPosition.XKilometers, 8);
         Assert.Equal(inactivePosition, final.GetRequiredShip(new ShipInstanceId(shipCount)).TacticalPosition);
-        Assert.Equal(
-            1,
-            TestEngineering.ConditionOf(
-                final.GetRequiredShip(new ShipInstanceId(2)).Engineering,
-                ShipSystemKind.Sensors
-            )
-        );
-        Assert.Null(final.GetRequiredShip(new ShipInstanceId(2)).Engineering.ActiveRepair);
+        ShipEngineeringState repaired = final.GetRequiredShip(new ShipInstanceId(2)).Engineering;
+        Assert.Equal(1, TestEngineering.ConditionOf(repaired, ShipSystemKind.Sensors));
+        Assert.Null(repaired.ActiveRepair);
     }
 
     /// <summary>Confirms bootstrap cannot admit scheduled work that persistence would reject for time exhaustion.</summary>
