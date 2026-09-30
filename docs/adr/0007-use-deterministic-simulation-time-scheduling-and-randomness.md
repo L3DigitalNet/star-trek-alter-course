@@ -6,8 +6,8 @@ description: 'Defines the simulation clock, event ordering, random-source contra
 doc_type: 'adr'
 status: 'active'
 created: '2026-09-01'
-updated: '2026-09-27'
-reviewed: '2026-09-27'
+updated: '2026-09-30'
+reviewed: '2026-09-30'
 owner: 'project-maintainers'
 consumer: 'mix'
 tags:
@@ -161,7 +161,7 @@ Domain code that consumes authoritative randomness receives it through an inject
 
 The current navigation, sensors, damage, and AI rules have no authoritative random consumer. There is no active generator or stream state to persist, and no placeholder seed, algorithm, or save-version change is required. Temporary-file identities, diagnostic correlation, and test generation are nonauthoritative and cannot influence simulation choices. The [September 27 conformance record](../reviews/adr-conformance-2026-09-27.md) retains the call-path evidence and the original wording mismatch.
 
-The first authoritative random feature must admit the generator and consumer together: owned abstraction, documented supported algorithm identity/version, deterministic stream ownership and derivation, full state capture/validation, save compatibility and migration treatment, reference vectors, and exact continuation tests. Adding a random call before those controls is nonconformant; this applicability clarification does not defer them after the first consumer.
+The first authoritative random feature must admit the generator and consumer together: owned abstraction, documented supported algorithm identity/version, deterministic stream ownership and derivation, full state capture/validation, save compatibility and migration treatment under ADR 0006's activation policy, reference vectors, and exact continuation tests. Adding a random call before those controls is nonconformant; this applicability clarification does not defer them after the first consumer.
 
 The abstraction supports the operations actually needed by the domain, such as:
 
@@ -210,7 +210,7 @@ Loading rejects unsupported algorithm versions rather than silently substituting
 
 ### Determinism contract
 
-Within one supported simulation-rules version, the following inputs must reproduce the same semantically observable Core outcome:
+Within the same build, and across builds wherever an explicit supported simulation-rules compatibility promise applies, the following inputs must reproduce the same semantically observable Core outcome:
 
 - the same valid initial snapshot;
 - the same compatible content set;
@@ -222,6 +222,8 @@ Within one supported simulation-rules version, the following inputs must reprodu
 The implementation must avoid nondeterminism from unordered iteration, culture-sensitive parsing, ambient locale, unspecified tie-breaking, unbounded floating-point equality, and concurrency races.
 
 The current contract is semantic determinism for supported single-player environments and automated tests. It is not yet a guarantee of bit-for-bit identical serialized bytes across all platforms, deterministic networking, or permanent replay compatibility across arbitrary rules changes.
+
+The September 30, 2026 owner amendment to [ADR 0006](0006-use-versioned-json-snapshot-saves.md#amendment--september-30-2026) activates cross-version save compatibility obligations at v1.0.0. Before that release, a rules identifier does not promise identical outcomes across development builds. An implementation correction that leaves serialized representation unchanged may retain the current identifier; development edge-case outcomes may change. Same-build reproducibility and exact save/load continuation still apply, and unsupported identities or invalid snapshots still fail closed.
 
 If future multiplayer or verified replay requires stricter cross-platform determinism, that requirement needs a separate ADR addressing numeric representation, platform variation, command synchronization, and compatibility.
 

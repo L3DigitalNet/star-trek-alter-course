@@ -6,7 +6,7 @@ description: 'Stable index of architectural records, approved gameplay direction
 doc_type: 'index'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-27'
+updated: '2026-09-30'
 tags:
   - 'design'
   - 'architecture'
@@ -41,6 +41,12 @@ The owner selected four supplementary records after the additional-ADR review:
 - [ADR 0018](../adr/0018-separate-simulation-session-lifetime-from-workspaces.md) formalizes D-05's session lifetime and context-bound actions, without prescribing another workspace or permanent ownership by one class.
 
 These records do not renumber the D/P decisions, change detailed gameplay, select the next development slice, or extend the historical 14-ADR conformance result to new obligations. Their owning wiki contracts remain below.
+
+### Save-compatibility amendment — September 30, 2026
+
+The owner amended [ADR 0006](../adr/0006-use-versioned-json-snapshot-saves.md#amendment--september-30-2026): explicit cross-version save compatibility and migration-maintenance obligations begin with v1.0.0. Development/testing saves before that release have no cross-build compatibility or exact-continuation guarantee and may be invalidated without a migration for every change. Existing historical readers and fixtures do not promise continued support. Explicit snapshot identities, strict bounded fail-closed validation, and same-build deterministic round trips and continuation remain required; [ADR 0007](../adr/0007-use-deterministic-simulation-time-scheduling-and-randomness.md#determinism-contract) reflects that scope.
+
+Issue #135's defensive-heading underflow correction (R3) may retain V10's `installed-ship-system-substrate-v1` identifier because it changes no wire representation. Development edge-case outcomes may change across builds. [Persistence](content-assets-and-persistence.md#implemented-substrate-content-and-persistence) records this disposition without rewriting historical decisions or claiming implementation verification.
 
 ## Existing implementation and presentation decisions
 

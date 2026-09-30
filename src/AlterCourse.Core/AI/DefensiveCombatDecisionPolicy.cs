@@ -1,5 +1,4 @@
 using AlterCourse.Core.Gameplay;
-using AlterCourse.Core.Quantities;
 using AlterCourse.Core.Sensors;
 using AlterCourse.Core.Ships;
 
@@ -39,15 +38,8 @@ internal static class DefensiveCombatDecisionPolicy
         SetTacticalCourseIntent? course = null;
         if (selected == DefensiveCombatDecisionAction.Withdraw)
         {
-            // Scale both endpoints before subtraction so opposite finite extremes produce a finite heading.
-            double deltaX =
-                Math.ScaleB(input.Own.Position.XKilometers, -1)
-                - Math.ScaleB(input.Contact!.LastObservedPosition.XKilometers, -1);
-            double deltaY =
-                Math.ScaleB(input.Own.Position.YKilometers, -1)
-                - Math.ScaleB(input.Contact.LastObservedPosition.YKilometers, -1);
             course = new SetTacticalCourseIntent(
-                new HeadingDegrees(Math.Atan2(deltaX, deltaY) * 180 / Math.PI),
+                DecisionGeometry.HeadingBetween(input.Contact!.LastObservedPosition, input.Own.Position),
                 input.Own.MaximumSpeed
             );
         }

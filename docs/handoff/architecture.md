@@ -7,15 +7,20 @@ This is the current operational component map, not an alternate design contract.
 - `AlterCourse.Core` owns pure simulation, immutable definitions, command application, and snapshot mapping. It has no Godot reference and remains independently testable.
 - `AlterCourse.Godot` owns nodes, scenes, resources, input, UI, rendering, and adapters. It references Core; the reverse dependency is prohibited.
 - `AlterCourse.AssetCtl` is independent development tooling with no references to/from either game assembly. Godot consumes selected asset files rather than provider APIs.
-- Core tests use xUnit with focused architecture/property checks; current Godot integration uses vendored GdUnit4 against the engine runtime. Package admission and exact versions remain in their owning records/configuration.
+- Core tests use xUnit with focused architecture/property checks; current Godot integration uses vendored GdUnit4 against the engine runtime.
+- Package admission and exact versions remain in their owning records/configuration.
 
 ## World, commands, and time
 
 `GameSimulation` owns live authoritative state. `SimulationState` retains canonically ordered ships/factions, map, scheduler, player identity, and identity allocators. Player identity selects an ordinary vessel rather than a separate encounter model.
 
-Core mutations stage correlated candidates and validate the complete boundary before commitment. Expected refusal of an atomic command preserves state, time, IDs, and work. Post-commit diagnostic or presentation failure does not make the operation unapplied. [ADR 0015](../adr/0015-use-staged-core-command-application-and-explicit-commit-outcomes.md) owns this contract while preserving ADR 0007's separately specified safely incremental alternative.
+Core mutations stage correlated candidates and validate the complete boundary before commitment. Expected refusal of an atomic command preserves state, time, IDs, and work. Post-commit diagnostic or presentation failure does not make the operation unapplied.
 
-The scheduler uses closed Ship/Faction targets, known data-only work kinds, exact ownership/correlation, stable same-time sequence, and finite budgets. Strategic-only intervals advance event-to-event; tactical/contact-sensitive work uses 100 ms boundaries when required, and repairs materialize analytically. Wall-clock time and scene lifecycle are not simulation authority. Numeric exhaustion fails explicitly rather than promising an indefinite successor.
+[ADR 0015](../adr/0015-use-staged-core-command-application-and-explicit-commit-outcomes.md) owns this contract while preserving ADR 0007's separately specified safely incremental alternative.
+
+The scheduler uses closed Ship/Faction targets, known data-only work kinds, exact ownership/correlation, stable same-time sequence, and finite budgets. Strategic-only intervals advance event-to-event; tactical/contact-sensitive work uses 100 ms boundaries when required, and repairs materialize analytically.
+
+Wall-clock time and scene lifecycle are not simulation authority. Numeric exhaustion fails explicitly rather than promising an indefinite successor.
 
 Ordinary ships may own `TravelTo`, `PatrolRoute`, or `HoldUntil` orders. Orders and physical travel are distinct. Execution reuses targetable travel; cancellation removes only the order and exact work it owns, not a voyage already underway. Collection ordering and scheduler sequence are deterministic; authored map ordering retains its defined meaning.
 
@@ -47,13 +52,17 @@ Current development uses ship content V6, system-definition content V1, and save
 
 The adjacent supported migration chain extends V1 through V10. Frozen historical validators and the V9→V10 table preserve earlier semantics; definitions and whole-catalog aim vocabulary must pass compatibility checks. Mismatch fails as `IncompatibleContent`, not silent reinterpretation. A zero-condition installation remains installed, not absent.
 
-Loading constructs and validates a separate candidate before live installation. Definitions are supplied by the compatible immutable catalog rather than serialized live objects. Historical V1 name reconstruction and later non-inventive faction/combat additions remain version-specific migration facts. [Content, assets, and persistence](../wiki/content-assets-and-persistence.md) owns exact bounds, compatibility, failure handling, and historical measurements; this operational map does not duplicate those numbers.
+Loading constructs and validates a separate candidate before live installation. Definitions are supplied by the compatible immutable catalog rather than serialized live objects. Historical V1 name reconstruction and later non-inventive faction/combat additions remain version-specific migration facts.
+
+[Content, assets, and persistence](../wiki/content-assets-and-persistence.md) owns exact bounds, compatibility, failure handling, and historical measurements; this operational map does not duplicate those numbers.
 
 ## Godot session and presentation
 
 `GameScreen` currently owns one session-lifetime simulation. Command, Engineering, and Combat are views, not separate worlds. [ADR 0018](../adr/0018-separate-simulation-session-lifetime-from-workspaces.md) permits a focused ownership extraction for a concrete consumer without requiring a global manager.
 
-Successful replacement advances the presentation generation and invalidates retained actionable context even when IDs match. Own-ship Engineering uses owner/generation binding and current payload resolution. Ordinary refresh preserves valid selection/focus; deferred work rechecks target lifetime. Failed load preserves the playable world. Rate preference and fractional pre-load time carry have distinct replacement rules.
+Successful replacement advances the presentation generation and invalidates retained actionable context even when IDs match. Own-ship Engineering uses owner/generation binding and current payload resolution. Ordinary refresh preserves valid selection/focus; deferred work rechecks target lifetime.
+
+Failed load preserves the playable world. Rate preference and fractional pre-load time carry have distinct replacement rules.
 
 Godot owns display transforms, selection, input, and formatting. The tactical plot is player-centered; numeric Core coordinates remain truth. Preview fixtures are explicit, frozen presentation and cannot submit live commands, persist state, or substitute for unavailable Core data. [Interface](../wiki/interface-and-player-commands.md) owns concrete controls and lifecycle behavior.
 

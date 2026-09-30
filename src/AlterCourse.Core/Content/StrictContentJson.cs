@@ -11,8 +11,8 @@ namespace AlterCourse.Core.Content;
 /// </summary>
 /// <remarks>
 /// Intended as the single admission path for every content family that reports
-/// <see cref="ShipContentDiagnostic"/>. The faction loader reports a different diagnostic type and is deliberately
-/// not a consumer.
+/// <see cref="ShipContentDiagnostic"/>. The faction loader reports a different diagnostic type and does not consume
+/// parsing or schema evaluation; its byte factories share only encoding-preamble admission.
 /// </remarks>
 internal static class StrictContentJson
 {
@@ -21,6 +21,10 @@ internal static class StrictContentJson
         OutputFormat = OutputFormat.List,
         Culture = CultureInfo.InvariantCulture,
     };
+
+    /// <summary>Removes one initial UTF-8 encoding preamble from an already bounded byte document.</summary>
+    internal static ReadOnlySpan<byte> WithoutUtf8Preamble(ReadOnlySpan<byte> bytes) =>
+        bytes.StartsWith("\uFEFF"u8) ? bytes[3..] : bytes;
 
     /// <summary>
     /// Parses one document after rejecting duplicate members and nesting deeper than <paramref name="maxDepth"/>

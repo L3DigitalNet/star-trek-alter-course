@@ -5,6 +5,15 @@ const TEST_QUICK_SAVE_PATH := "user://gameplay-shell-test-quick-save.json"
 const DEFAULT_QUICK_SAVE_PATH := "user://quick-save.json"
 const LEGACY_DEFAULT_QUICK_SAVE_PATH := "user://quick-save-v1.json"
 const INVALID_CONTENT_PATH := "user://gameplay-shell-invalid-content.json"
+const CONTENT_INGRESS_PATHS := [
+	"res://content/systems/pathfinder-systems.json",
+	"res://content/ships/pathfinder.json",
+	"res://content/factions/faction-a.json",
+	"res://content/factions/faction-b.json",
+	"res://content/schemas/system-definition-v1.schema.json",
+	"res://content/schemas/ship-definition-v6.schema.json",
+	"res://content/schemas/faction-definition-v1.schema.json",
+]
 # Installed identities of the canonical production loadout (content/ships/pathfinder.json). Test-only convenience: the
 # shell publishes engineering hooks by installed identity and never by kind, so this mapping must not move into it.
 const SENSORS_ID := 2
@@ -1841,6 +1850,312 @@ func test_invalid_content_bootstrap_is_fail_closed_and_player_safe() -> void:
 		"%EngineeringStationButton",
 	]:
 		assert_bool((screen.get_node(control_name) as Button).disabled).is_true()
+
+
+func test_content_ingress_rejects_oversized_files_before_reading_or_decoding() -> void:
+	for path: String in CONTENT_INGRESS_PATHS:
+		var probe: RefCounted = load("res://tests/ContentAdmissionProbe.cs").new()
+		var text := FileAccess.get_file_as_string(path)
+		var limit: int = probe.call("GetResourceLimit", path)
+		# Trailing JSON whitespace preserves every content/schema rule; only the byte envelope is exceeded.
+		_write_text(INVALID_CONTENT_PATH, text + " ".repeat(limit + 1 - text.to_utf8_buffer().size()))
+		var screen := _create_content_probe_screen(probe, path)
+		_assert_content_bootstrap_rejected(screen)
+		assert_int(probe.get("TextReads")).is_equal(0)
+		assert_int(probe.get("RequestedBytes")).is_equal(0)
+		assert_int(probe.get("DisposedHandles")).is_equal(1)
+
+
+func test_content_ingress_preserves_invalid_raw_utf8_until_rejection() -> void:
+	var labels := ["Power generation", "Pathfinder class", "Faction A", "Faction B"]
+	for index in range(CONTENT_INGRESS_PATHS.size()):
+		var path: String = CONTENT_INGRESS_PATHS[index]
+		var probe: RefCounted = load("res://tests/ContentAdmissionProbe.cs").new()
+		var text := FileAccess.get_file_as_string(path)
+		var marker: String = labels[index] if index < labels.size() else "Definition"
+		var position := text.find(marker)
+		assert_int(position).is_greater_equal(0)
+		if position < 0:
+			continue
+		var bytes := text.to_utf8_buffer()
+		# Invalid raw UTF-8 inside a permitted label/title distinguishes byte admission from replacement decoding.
+		bytes[text.substr(0, position).to_utf8_buffer().size()] = 0xff
+		var file := FileAccess.open(INVALID_CONTENT_PATH, FileAccess.WRITE)
+		file.store_buffer(bytes)
+		file.close()
+		var screen := _create_content_probe_screen(probe, path)
+		_assert_content_bootstrap_rejected(screen)
+		assert_int(probe.get("TextReads")).is_equal(0)
+		assert_int(probe.get("DisposedHandles")).is_equal(1)
+
+
+func test_content_ingress_probe_preserves_canonical_resource_bootstrap() -> void:
+	for path: String in CONTENT_INGRESS_PATHS:
+		var probe: RefCounted = load("res://tests/ContentAdmissionProbe.cs").new()
+		var scene := _load_main_scene()
+		var screen := _track_screen(scene.instantiate())
+		probe.call("Redirect", screen, path, path)
+		add_child(screen)
+		screen.set_process(false)
+		assert_bool(screen.get("IsGameplayReady")).is_true()
+		assert_str(screen.get_meta("load_error", "")).is_empty()
+		assert_int(probe.get("DisposedHandles")).is_equal(1)
+		_assert_content_read_budget(probe, path)
+
+
+func test_content_ingress_accepts_otherwise_valid_exact_limit_native_files() -> void:
+	for path: String in CONTENT_INGRESS_PATHS:
+		var probe: RefCounted = load("res://tests/ContentAdmissionProbe.cs").new()
+		var text := FileAccess.get_file_as_string(path)
+		var limit: int = probe.call("GetResourceLimit", path)
+		_write_text(INVALID_CONTENT_PATH, text + " ".repeat(limit - text.to_utf8_buffer().size()))
+		var screen := _create_content_probe_screen(probe, path)
+		assert_bool(screen.get("IsGameplayReady")).is_true()
+		assert_int(probe.get("ReturnedBytes")).is_equal(limit)
+		assert_int(probe.get("DisposedHandles")).is_equal(1)
+		_assert_content_read_budget(probe, path)
+
+
+func test_content_ingress_preserves_native_leading_utf8_bom_compatibility() -> void:
+	for path: String in CONTENT_INGRESS_PATHS:
+		var probe: RefCounted = load("res://tests/ContentAdmissionProbe.cs").new()
+		var canonical := FileAccess.get_file_as_bytes(path)
+		var bytes := PackedByteArray([0xef, 0xbb, 0xbf])
+		bytes.append_array(canonical)
+		_write_content_bytes(bytes)
+		# The native text control pins the compatibility of the former GameScreen reader.
+		var control := FileAccess.open(INVALID_CONTENT_PATH, FileAccess.READ)
+		assert_str(control.get_as_text()).is_equal(FileAccess.get_file_as_string(path))
+		control.close()
+		var screen := _create_content_probe_screen(probe, path)
+		assert_bool(screen.get("IsGameplayReady")).is_true()
+		assert_str(screen.get_meta("load_error", "")).is_empty()
+		assert_int(probe.get("ReturnedBytes")).is_equal(bytes.size())
+		assert_int(probe.get("DisposedHandles")).is_equal(1)
+		_assert_content_read_budget(probe, path)
+
+
+func test_content_ingress_counts_utf8_bom_bytes_in_native_file_limit() -> void:
+	for path: String in CONTENT_INGRESS_PATHS:
+		for excess: int in [0, 1]:
+			var probe: RefCounted = load("res://tests/ContentAdmissionProbe.cs").new()
+			var limit: int = probe.call("GetResourceLimit", path)
+			var bytes := PackedByteArray([0xef, 0xbb, 0xbf])
+			bytes.append_array(FileAccess.get_file_as_bytes(path))
+			bytes.append_array(" ".repeat(limit + excess - bytes.size()).to_utf8_buffer())
+			assert_int(bytes.size()).is_equal(limit + excess)
+			_write_content_bytes(bytes)
+			var screen := _create_content_probe_screen(probe, path)
+			if excess == 0:
+				assert_bool(screen.get("IsGameplayReady")).is_true()
+				assert_str(screen.get_meta("load_error", "")).is_empty()
+				assert_int(probe.get("ReturnedBytes")).is_equal(limit)
+			else:
+				_assert_content_bootstrap_rejected(screen)
+				assert_int(probe.get("RequestedBytes")).is_equal(0)
+			assert_int(probe.get("DisposedHandles")).is_equal(1)
+			_assert_content_read_budget(probe, path)
+
+
+func test_content_ingress_rejects_double_truncated_and_invalid_utf8_bom_documents() -> void:
+	for path: String in CONTENT_INGRESS_PATHS:
+		var canonical := FileAccess.get_file_as_bytes(path)
+		var double_bom := PackedByteArray([0xef, 0xbb, 0xbf, 0xef, 0xbb, 0xbf])
+		double_bom.append_array(canonical)
+		var invalid_suffix := PackedByteArray([0xef, 0xbb, 0xbf])
+		invalid_suffix.append_array(canonical)
+		invalid_suffix.append(0xff)
+		for bytes: PackedByteArray in [
+			double_bom, PackedByteArray([0xef]), PackedByteArray([0xef, 0xbb]), invalid_suffix
+		]:
+			var probe: RefCounted = load("res://tests/ContentAdmissionProbe.cs").new()
+			_write_content_bytes(bytes)
+			var screen := _create_content_probe_screen(probe, path)
+			_assert_content_bootstrap_rejected(screen)
+			assert_int(probe.get("ReturnedBytes")).is_equal(bytes.size())
+			assert_int(probe.get("DisposedHandles")).is_equal(1)
+			_assert_content_read_budget(probe, path)
+
+
+func _write_content_bytes(bytes: PackedByteArray) -> void:
+	var file := FileAccess.open(INVALID_CONTENT_PATH, FileAccess.WRITE)
+	assert_object(file).is_not_null()
+	file.store_buffer(bytes)
+	file.close()
+
+
+func test_content_ingress_assembles_partial_buffers_even_when_they_report_eof() -> void:
+	for path: String in CONTENT_INGRESS_PATHS:
+		for partial_eof: bool in [false, true]:
+			var probe: RefCounted = load("res://tests/ContentAdmissionProbe.cs").new()
+			probe.set("MaximumChunkBytes", 17)
+			probe.set("EofWithPartialReads", partial_eof)
+			var bytes := FileAccess.get_file_as_bytes(path)
+			var screen := _create_fake_content_screen(probe, path, bytes)
+			assert_bool(screen.get("IsGameplayReady")).is_true()
+			assert_int(probe.get("ReturnedBytes")).is_equal(bytes.size())
+			assert_int(probe.get("DisposedHandles")).is_equal(1)
+			_assert_content_read_budget(probe, path)
+
+
+func test_content_ingress_rejects_misreported_short_long_and_huge_lengths() -> void:
+	for path: String in CONTENT_INGRESS_PATHS:
+		var bytes := FileAccess.get_file_as_bytes(path)
+		for reported: int in [0, bytes.size() - 1, bytes.size() + 1, 9223372036854775807]:
+			var probe: RefCounted = load("res://tests/ContentAdmissionProbe.cs").new()
+			probe.set("ReportedLength", reported)
+			var screen := _create_fake_content_screen(probe, path, bytes)
+			_assert_content_bootstrap_rejected(screen)
+			assert_int(probe.get("DisposedHandles")).is_equal(1)
+			if reported == 9223372036854775807:
+				assert_int(probe.get("RequestedBytes")).is_equal(0)
+			else:
+				assert_int(probe.get("ReturnedBytes")).is_equal(bytes.size())
+			_assert_content_read_budget(probe, path)
+
+
+func test_content_ingress_rejects_growth_using_only_the_bounded_sentinel() -> void:
+	for path: String in CONTENT_INGRESS_PATHS:
+		var probe: RefCounted = load("res://tests/ContentAdmissionProbe.cs").new()
+		var limit: int = probe.call("GetResourceLimit", path)
+		var text := FileAccess.get_file_as_string(path)
+		var bytes := (text + " ".repeat(limit + 1 - text.to_utf8_buffer().size())).to_utf8_buffer()
+		probe.set("ReportedLength", limit)
+		var screen := _create_fake_content_screen(probe, path, bytes)
+		_assert_content_bootstrap_rejected(screen)
+		assert_int(probe.get("ReturnedBytes")).is_equal(limit + 1)
+		assert_int(probe.get("DisposedHandles")).is_equal(1)
+		_assert_content_read_budget(probe, path)
+
+
+func test_content_ingress_rejects_truncation_even_when_the_retained_prefix_is_valid_json() -> void:
+	for path: String in CONTENT_INGRESS_PATHS:
+		var probe: RefCounted = load("res://tests/ContentAdmissionProbe.cs").new()
+		var text := FileAccess.get_file_as_string(path)
+		var retained := text.to_utf8_buffer().size()
+		probe.set("TruncateAfterBytes", retained)
+		probe.set("MaximumChunkBytes", 19)
+		var screen := _create_fake_content_screen(probe, path, (text + "          ").to_utf8_buffer())
+		_assert_content_bootstrap_rejected(screen)
+		assert_int(probe.get("ReturnedBytes")).is_equal(retained)
+		assert_int(probe.get("DisposedHandles")).is_equal(1)
+		_assert_content_read_budget(probe, path)
+
+
+func test_content_ingress_rejects_zero_without_eof_even_after_valid_declared_prefix() -> void:
+	for path: String in CONTENT_INGRESS_PATHS:
+		var probe: RefCounted = load("res://tests/ContentAdmissionProbe.cs").new()
+		var text := FileAccess.get_file_as_string(path)
+		var retained := text.to_utf8_buffer().size()
+		probe.set("ReportedLength", retained)
+		probe.set("ZeroWithoutEofAfterBytes", retained)
+		var screen := _create_fake_content_screen(probe, path, (text + " trailing-suffix").to_utf8_buffer())
+		_assert_content_bootstrap_rejected(screen)
+		assert_int(probe.get("ReturnedBytes")).is_equal(retained)
+		assert_int(probe.get("DisposedHandles")).is_equal(1)
+		_assert_content_read_budget(probe, path)
+
+
+func test_content_ingress_open_length_and_read_failures_leave_no_playable_simulation() -> void:
+	for path: String in CONTENT_INGRESS_PATHS:
+		for failure: String in ["FailOpen", "FailLength", "ReadErrorAfterBytes"]:
+			var probe: RefCounted = load("res://tests/ContentAdmissionProbe.cs").new()
+			if failure == "ReadErrorAfterBytes":
+				probe.set("ReadErrorAfterBytes", 3)
+				probe.set("MaximumChunkBytes", 3)
+			else:
+				probe.set(failure, true)
+			var screen := _create_fake_content_screen(probe, path, FileAccess.get_file_as_bytes(path))
+			_assert_content_bootstrap_rejected(screen)
+			assert_int(probe.get("DisposedHandles")).is_equal(0 if failure == "FailOpen" else 1)
+			if failure != "ReadErrorAfterBytes":
+				assert_int(probe.get("RequestedBytes")).is_equal(0)
+			_assert_content_read_budget(probe, path)
+
+
+func test_content_ingress_rejects_malformed_schema_json() -> void:
+	for path: String in CONTENT_INGRESS_PATHS:
+		if not path.contains("/schemas/"):
+			continue
+		for malformed: String in ["{\"type\":", "{\"type\":17}", "[]", "17", "null"]:
+			var probe: RefCounted = load("res://tests/ContentAdmissionProbe.cs").new()
+			_write_text(INVALID_CONTENT_PATH, malformed)
+			probe.call("BeginLogCapture")
+			var screen := _create_content_probe_screen(probe, path)
+			_assert_content_bootstrap_rejected(screen)
+			assert_int(probe.get("DisposedHandles")).is_equal(1)
+			_assert_content_read_budget(probe, path)
+			# _ExitTree emits Stopped and disposes the scene's sink; inspect only after that normal lifecycle.
+			_screens_to_free.erase(screen)
+			screen.queue_free()
+			await get_tree().process_frame
+			assert_bool(is_instance_valid(screen)).is_false()
+			_assert_invalid_content_log_capture(probe)
+
+
+func _assert_invalid_content_log_capture(probe: RefCounted) -> void:
+	var rows: PackedStringArray = probe.call("ReadCapturedLogRows")
+	assert_int(rows.size()).is_equal(3)
+	var sessions: Array[String] = []
+	var phases: Array[String] = []
+	var classifications: Array[String] = []
+	for row: String in rows:
+		var event: Variant = JSON.parse_string(row)
+		assert_bool(event is Dictionary).is_true()
+		if not event is Dictionary:
+			continue
+		var properties: Dictionary = event.get("Properties", {})
+		var session: String = properties.get("SessionCorrelation", "")
+		assert_str(session).is_not_empty()
+		if not sessions.has(session):
+			sessions.append(session)
+		if properties.has("Phase"):
+			phases.append(properties["Phase"])
+		if properties.has("FailureClassification"):
+			assert_str(properties.get("Operation", "")).is_equal("Content")
+			assert_str(event.get("Level", "")).is_equal("Error")
+			classifications.append(properties["FailureClassification"])
+	# BeginLogCapture excludes stale rows; one shared correlation binds the failure to this Started/Stopped pair.
+	assert_int(sessions.size()).is_equal(1)
+	phases.sort()
+	assert_array(phases).is_equal(["Started", "Stopped"])
+	assert_array(classifications).is_equal(["InvalidExternalInput"])
+
+
+func _create_fake_content_screen(probe: RefCounted, canonical_path: String, bytes: PackedByteArray) -> Node:
+	var scene := _load_main_scene()
+	var screen := _track_screen(scene.instantiate())
+	probe.call("Fake", screen, canonical_path, bytes)
+	add_child(screen)
+	screen.set_process(false)
+	return screen
+
+
+func _assert_content_read_budget(probe: RefCounted, canonical_path: String) -> void:
+	var limit: int = probe.call("GetResourceLimit", canonical_path)
+	assert_int(probe.get("TextReads")).is_equal(0)
+	assert_int(probe.get("ReturnedBytes")).is_less_equal(limit + 1)
+	assert_int(probe.get("MaximumRequestBytes")).is_less_equal(probe.get("MaximumReadChunkBytes"))
+	assert_int(probe.get("RequestsBeyondBudget")).is_equal(0)
+	assert_int(probe.get("DisposedHandles")).is_equal(probe.get("OpenedHandles"))
+	assert_int(probe.get("LengthReads")).is_equal(probe.get("OpenedHandles"))
+
+
+func _create_content_probe_screen(probe: RefCounted, canonical_path: String) -> Node:
+	var scene := _load_main_scene()
+	var screen := _track_screen(scene.instantiate())
+	probe.call("Redirect", screen, canonical_path, INVALID_CONTENT_PATH)
+	add_child(screen)
+	screen.set_process(false)
+	return screen
+
+
+func _assert_content_bootstrap_rejected(screen: Node) -> void:
+	assert_bool(screen.get("IsGameplayReady")).is_false()
+	assert_int(screen.get("SimulationIdentity")).is_equal(0)
+	assert_str(screen.get_meta("load_error", "")).contains("Gameplay content is unavailable")
+	assert_bool((screen.get_node("%QuickSaveButton") as Button).disabled).is_true()
+	assert_str((screen.get_node("%Message") as Label).text).not_contains(INVALID_CONTENT_PATH)
 
 
 func test_normal_shell_never_projects_hidden_vessel_or_scheduler_truth() -> void:

@@ -16,6 +16,8 @@ related: []
 
 ## Scope and evidence rules
 
+The [September 30 R1–R3 follow-up](adr-remediation-2026-09-30.md) is a separate draft evidence register for Issue #135. It preserves this historical baseline and its dispositions; pending follow-up hypotheses do not constitute reproduced defects or final remediation proof.
+
 This is an evidence register for [Issue #127](https://github.com/L3DigitalNet/star-trek-alter-course/issues/127), not a gameplay specification. [Active ADRs](../adr/) own architecture; the [wiki](../wiki/README.md) owns gameplay; source and executed tests establish actual behavior. The [documentation authority map](../README.md) governs those roles.
 
 Fetched `origin/dev` baseline: `2ef6c77aa4587719aac0b59cfda3d6ee7c560e5a`, identical to the supplied audit baseline. Working tree was clean; no open issues or PRs preceded this work. The separately named audit attachment was not required or assumed present. Fourteen active ADRs are in scope. Ship content V6, system-definition content V1 and save V10 are implemented and unreleased.

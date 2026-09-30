@@ -5,8 +5,10 @@ namespace AlterCourse.Core.Content;
 /// <summary>Pairs one UTF-8 authored ship document with its stable diagnostic identity.</summary>
 public sealed class ShipDefinitionContent
 {
-    private const int MaximumDocumentBytes = 256 * 1024;
+    /// <summary>Gets the byte bound enforced before any JSON is parsed.</summary>
+    public const int MaximumDocumentBytes = 256 * 1024;
     private readonly byte[] _utf8Json;
+    private static readonly UTF8Encoding StrictUtf8 = new(false, true);
 
     private ShipDefinitionContent(string sourceIdentity, byte[] utf8Json)
     {
@@ -20,17 +22,32 @@ public sealed class ShipDefinitionContent
 
     internal ReadOnlyMemory<byte> Utf8Json => _utf8Json;
 
-    /// <summary>Creates content from JSON text encoded as UTF-8.</summary>
+    /// <summary>Creates content from strictly encoded JSON text without replacing invalid UTF-16 code units.</summary>
     public static ShipDefinitionContent FromText(string sourceIdentity, string json)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sourceIdentity);
         ArgumentNullException.ThrowIfNull(json);
-        if (Encoding.UTF8.GetByteCount(json) > MaximumDocumentBytes)
+        try
         {
-            throw TooLarge(sourceIdentity);
-        }
+            if (StrictUtf8.GetByteCount(json) > MaximumDocumentBytes)
+            {
+                throw TooLarge(sourceIdentity);
+            }
 
-        return new ShipDefinitionContent(sourceIdentity, Encoding.UTF8.GetBytes(json));
+            return new ShipDefinitionContent(sourceIdentity, StrictUtf8.GetBytes(json));
+        }
+        catch (EncoderFallbackException)
+        {
+            throw new ShipContentValidationException([
+                new ShipContentDiagnostic(
+                    "json.invalid",
+                    sourceIdentity,
+                    "#",
+                    string.Empty,
+                    "JSON text contains invalid Unicode."
+                ),
+            ]);
+        }
     }
 
     /// <summary>Creates content from UTF-8 JSON bytes, isolated from later caller mutation.</summary>
@@ -42,7 +59,8 @@ public sealed class ShipDefinitionContent
             throw TooLarge(sourceIdentity);
         }
 
-        return new ShipDefinitionContent(sourceIdentity, utf8Json.ToArray());
+        // Bounds count the encoding preamble; text factories retain literal leading FEFF as JSON input.
+        return new ShipDefinitionContent(sourceIdentity, StrictContentJson.WithoutUtf8Preamble(utf8Json).ToArray());
     }
 
     /// <summary>Reads one UTF-8 JSON document from the stream's current position.</summary>
@@ -68,7 +86,10 @@ public sealed class ShipDefinitionContent
             }
         }
 
-        return new ShipDefinitionContent(sourceIdentity, buffer.ToArray());
+        return new ShipDefinitionContent(
+            sourceIdentity,
+            StrictContentJson.WithoutUtf8Preamble(buffer.GetBuffer().AsSpan(0, checked((int)buffer.Length))).ToArray()
+        );
     }
 
     private static ShipContentValidationException TooLarge(string sourceIdentity) =>
