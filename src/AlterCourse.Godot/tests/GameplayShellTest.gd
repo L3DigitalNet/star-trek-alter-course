@@ -5,6 +5,15 @@ const TEST_QUICK_SAVE_PATH := "user://gameplay-shell-test-quick-save.json"
 const DEFAULT_QUICK_SAVE_PATH := "user://quick-save.json"
 const LEGACY_DEFAULT_QUICK_SAVE_PATH := "user://quick-save-v1.json"
 const INVALID_CONTENT_PATH := "user://gameplay-shell-invalid-content.json"
+const CONTENT_INGRESS_PATHS := [
+	"res://content/systems/pathfinder-systems.json",
+	"res://content/ships/pathfinder.json",
+	"res://content/factions/faction-a.json",
+	"res://content/factions/faction-b.json",
+	"res://content/schemas/system-definition-v1.schema.json",
+	"res://content/schemas/ship-definition-v6.schema.json",
+	"res://content/schemas/faction-definition-v1.schema.json",
+]
 # Installed identities of the canonical production loadout (content/ships/pathfinder.json). Test-only convenience: the
 # shell publishes engineering hooks by installed identity and never by kind, so this mapping must not move into it.
 const SENSORS_ID := 2
@@ -1841,6 +1850,73 @@ func test_invalid_content_bootstrap_is_fail_closed_and_player_safe() -> void:
 		"%EngineeringStationButton",
 	]:
 		assert_bool((screen.get_node(control_name) as Button).disabled).is_true()
+
+
+func test_content_ingress_rejects_oversized_files_before_reading_or_decoding() -> void:
+	for path: String in CONTENT_INGRESS_PATHS:
+		var probe: RefCounted = load("res://tests/ContentAdmissionProbe.cs").new()
+		var text := FileAccess.get_file_as_string(path)
+		var limit: int = probe.get("MaximumDocumentBytes")
+		# Trailing JSON whitespace preserves every content/schema rule; only the byte envelope is exceeded.
+		_write_text(INVALID_CONTENT_PATH, text + " ".repeat(limit + 1 - text.to_utf8_buffer().size()))
+		var screen := _create_content_probe_screen(probe, path)
+		_assert_content_bootstrap_rejected(screen)
+		assert_int(probe.get("TextReads")).is_equal(0)
+		assert_int(probe.get("RequestedBytes")).is_equal(0)
+		assert_int(probe.get("DisposedHandles")).is_equal(1)
+
+
+func test_content_ingress_preserves_invalid_raw_utf8_until_rejection() -> void:
+	var labels := ["Power generation", "Pathfinder class", "Faction A", "Faction B"]
+	for index in range(CONTENT_INGRESS_PATHS.size()):
+		var path: String = CONTENT_INGRESS_PATHS[index]
+		var probe: RefCounted = load("res://tests/ContentAdmissionProbe.cs").new()
+		var text := FileAccess.get_file_as_string(path)
+		var marker: String = labels[index] if index < labels.size() else "Definition"
+		var position := text.find(marker)
+		assert_int(position).is_greater_equal(0)
+		if position < 0:
+			continue
+		var bytes := text.to_utf8_buffer()
+		# Invalid raw UTF-8 inside a permitted label/title distinguishes byte admission from replacement decoding.
+		bytes[text.substr(0, position).to_utf8_buffer().size()] = 0xff
+		var file := FileAccess.open(INVALID_CONTENT_PATH, FileAccess.WRITE)
+		file.store_buffer(bytes)
+		file.close()
+		var screen := _create_content_probe_screen(probe, path)
+		_assert_content_bootstrap_rejected(screen)
+		assert_int(probe.get("TextReads")).is_equal(0)
+		assert_int(probe.get("DisposedHandles")).is_equal(1)
+
+
+func test_content_ingress_probe_preserves_canonical_packed_resource_bootstrap() -> void:
+	var probe: RefCounted = load("res://tests/ContentAdmissionProbe.cs").new()
+	var canonical_path: String = CONTENT_INGRESS_PATHS[0]
+	var scene := _load_main_scene()
+	var screen := _track_screen(scene.instantiate())
+	probe.call("Redirect", screen, canonical_path, canonical_path)
+	add_child(screen)
+	screen.set_process(false)
+	assert_bool(screen.get("IsGameplayReady")).is_true()
+	assert_str(screen.get_meta("load_error", "")).is_empty()
+	assert_int(probe.get("DisposedHandles")).is_equal(1)
+
+
+func _create_content_probe_screen(probe: RefCounted, canonical_path: String) -> Node:
+	var scene := _load_main_scene()
+	var screen := _track_screen(scene.instantiate())
+	probe.call("Redirect", screen, canonical_path, INVALID_CONTENT_PATH)
+	add_child(screen)
+	screen.set_process(false)
+	return screen
+
+
+func _assert_content_bootstrap_rejected(screen: Node) -> void:
+	assert_bool(screen.get("IsGameplayReady")).is_false()
+	assert_int(screen.get("SimulationIdentity")).is_equal(0)
+	assert_str(screen.get_meta("load_error", "")).contains("Gameplay content is unavailable")
+	assert_bool((screen.get_node("%QuickSaveButton") as Button).disabled).is_true()
+	assert_str((screen.get_node("%Message") as Label).text).not_contains(INVALID_CONTENT_PATH)
 
 
 func test_normal_shell_never_projects_hidden_vessel_or_scheduler_truth() -> void:

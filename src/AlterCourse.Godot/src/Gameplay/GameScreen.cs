@@ -12,7 +12,6 @@ using AlterCourse.Core.Strategic;
 using AlterCourse.Godot.Gameplay.Logging;
 using Godot;
 using Serilog.Events;
-using GodotFile = Godot.FileAccess;
 
 namespace AlterCourse.Godot.Gameplay;
 
@@ -134,6 +133,8 @@ public partial class GameScreen : Control
     /// <summary>Gets or sets the canonical player-ship definition resource used during bootstrap.</summary>
     [Export]
     public string ShipDefinitionResourcePath { get; set; } = ShipPath;
+
+    internal Func<string, IContentFileAccess?> ContentFileOpener { get; set; } = GodotContentFileAccess.Open;
 
     /// <summary>Gets the latest fresh player-known projection.</summary>
     public PlayerProjection? Projection => _projection;
@@ -772,9 +773,9 @@ public partial class GameScreen : Control
         );
     }
 
-    private static string ReadRequiredText(string path)
+    private string ReadRequiredText(string path)
     {
-        using var file = GodotFile.Open(path, GodotFile.ModeFlags.Read);
+        using var file = ContentFileOpener(path);
         if (file is null)
         {
             throw new IOException($"Godot could not open required file '{path}'.");
