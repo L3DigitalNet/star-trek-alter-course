@@ -6,7 +6,7 @@ description: 'Canonical setup and verification workflow for Godot, C#, and Asset
 doc_type: 'runbook'
 status: 'active'
 created: '2026-09-01'
-updated: '2026-09-27'
+updated: '2026-09-30'
 tags:
   - 'development'
   - 'testing'
@@ -105,4 +105,4 @@ Follow [ADR maintenance guidance](adr/README.md#adding-or-changing-a-record) for
 - Core remains independently buildable/testable without Godot. Engine types stay in the adapter project.
 - Behavior changes and regressions require tests at the lowest layer that can prove them; new ADR documentation does not certify unexecuted paths.
 
-Repository settings should require the `Canonical verification` status check before merging to `main`. ADR 0013 and the installed workflow govern branch admission, readiness, and merge; a missing execution capability is a disclosed blocker, not an alternative verification path.
+[ADR 0013](adr/0013-use-dev-for-development-and-main-for-releases.md) requires both `Canonical verification` and `Branch policy` for PR admission to `dev` and `main`, together with its other protection requirements and explicitly bounded owner exception on `dev`. ADR 0013 and the installed workflow govern branch admission, readiness, and merge; a missing execution capability is a disclosed blocker, not an alternative verification path.
