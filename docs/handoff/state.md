@@ -10,4 +10,4 @@
 ## Active incidents
 
 - No active outage.
-- Bug #139 awaits owner disposition: pre-push rejects deletion of PR #134's legacy branch; no enforcement bypass is authorized.
+- Legacy branch cleanup is complete; Bug #139's hook correction still awaits owner disposition. No enforcement code was changed.

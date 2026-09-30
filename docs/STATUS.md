@@ -9,7 +9,7 @@
 - Native/two Claude reviews, follow-ups and five PR #138 checks passed; mutation 75.60%. Execution `5921171255` and Ready `5921229076` own details.
 - Post-merge hosted Verify `36789819736` completed successfully; `gh run watch` exited 0.
 - Removed 14 worktrees and 15 local branches after clean status, patch/tree proof, archived receipts, branch-history bundle, and successful rexec release.
-- PR #138/#137 remote branches were auto-deleted; legacy `docs/adr-0015-0018-and-polish` remains because pre-push rejected its historical name.
+- PR #138/#137 remote branches were auto-deleted; the owner explicitly authorized GitHub deletion of PR #134's legacy branch, now verified absent.
 - [Bug #139](https://github.com/L3DigitalNet/star-trek-alter-course/issues/139) is Blocked pending owner disposition; workflow enforcement changes require escalation.
 - All 18 ADRs bind after PR #137 merged `7e2df74`; Task #136 is Done and PR #134 closed superseded. Reconciliation changed no source.
 - Save cross-version compatibility starts at 1.0.0 under amended ADRs 0006/0007; same-build continuation and fail-closed bounds remain required.
