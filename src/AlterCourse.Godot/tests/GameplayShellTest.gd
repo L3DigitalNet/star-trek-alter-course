@@ -1916,6 +1916,74 @@ func test_content_ingress_accepts_otherwise_valid_exact_limit_native_files() -> 
 		_assert_content_read_budget(probe, path)
 
 
+func test_content_ingress_preserves_native_leading_utf8_bom_compatibility() -> void:
+	for path: String in CONTENT_INGRESS_PATHS:
+		var probe: RefCounted = load("res://tests/ContentAdmissionProbe.cs").new()
+		var canonical := FileAccess.get_file_as_bytes(path)
+		var bytes := PackedByteArray([0xef, 0xbb, 0xbf])
+		bytes.append_array(canonical)
+		_write_content_bytes(bytes)
+		# The native text control pins the compatibility of the former GameScreen reader.
+		var control := FileAccess.open(INVALID_CONTENT_PATH, FileAccess.READ)
+		assert_str(control.get_as_text()).is_equal(FileAccess.get_file_as_string(path))
+		control.close()
+		var screen := _create_content_probe_screen(probe, path)
+		assert_bool(screen.get("IsGameplayReady")).is_true()
+		assert_str(screen.get_meta("load_error", "")).is_empty()
+		assert_int(probe.get("ReturnedBytes")).is_equal(bytes.size())
+		assert_int(probe.get("DisposedHandles")).is_equal(1)
+		_assert_content_read_budget(probe, path)
+
+
+func test_content_ingress_counts_utf8_bom_bytes_in_native_file_limit() -> void:
+	for path: String in CONTENT_INGRESS_PATHS:
+		for excess: int in [0, 1]:
+			var probe: RefCounted = load("res://tests/ContentAdmissionProbe.cs").new()
+			var limit: int = probe.call("GetResourceLimit", path)
+			var bytes := PackedByteArray([0xef, 0xbb, 0xbf])
+			bytes.append_array(FileAccess.get_file_as_bytes(path))
+			bytes.append_array(" ".repeat(limit + excess - bytes.size()).to_utf8_buffer())
+			assert_int(bytes.size()).is_equal(limit + excess)
+			_write_content_bytes(bytes)
+			var screen := _create_content_probe_screen(probe, path)
+			if excess == 0:
+				assert_bool(screen.get("IsGameplayReady")).is_true()
+				assert_str(screen.get_meta("load_error", "")).is_empty()
+				assert_int(probe.get("ReturnedBytes")).is_equal(limit)
+			else:
+				_assert_content_bootstrap_rejected(screen)
+				assert_int(probe.get("RequestedBytes")).is_equal(0)
+			assert_int(probe.get("DisposedHandles")).is_equal(1)
+			_assert_content_read_budget(probe, path)
+
+
+func test_content_ingress_rejects_double_truncated_and_invalid_utf8_bom_documents() -> void:
+	for path: String in CONTENT_INGRESS_PATHS:
+		var canonical := FileAccess.get_file_as_bytes(path)
+		var double_bom := PackedByteArray([0xef, 0xbb, 0xbf, 0xef, 0xbb, 0xbf])
+		double_bom.append_array(canonical)
+		var invalid_suffix := PackedByteArray([0xef, 0xbb, 0xbf])
+		invalid_suffix.append_array(canonical)
+		invalid_suffix.append(0xff)
+		for bytes: PackedByteArray in [
+			double_bom, PackedByteArray([0xef]), PackedByteArray([0xef, 0xbb]), invalid_suffix
+		]:
+			var probe: RefCounted = load("res://tests/ContentAdmissionProbe.cs").new()
+			_write_content_bytes(bytes)
+			var screen := _create_content_probe_screen(probe, path)
+			_assert_content_bootstrap_rejected(screen)
+			assert_int(probe.get("ReturnedBytes")).is_equal(bytes.size())
+			assert_int(probe.get("DisposedHandles")).is_equal(1)
+			_assert_content_read_budget(probe, path)
+
+
+func _write_content_bytes(bytes: PackedByteArray) -> void:
+	var file := FileAccess.open(INVALID_CONTENT_PATH, FileAccess.WRITE)
+	assert_object(file).is_not_null()
+	file.store_buffer(bytes)
+	file.close()
+
+
 func test_content_ingress_assembles_partial_buffers_even_when_they_report_eof() -> void:
 	for path: String in CONTENT_INGRESS_PATHS:
 		for partial_eof: bool in [false, true]:
@@ -2009,7 +2077,7 @@ func test_content_ingress_rejects_malformed_schema_json() -> void:
 	for path: String in CONTENT_INGRESS_PATHS:
 		if not path.contains("/schemas/"):
 			continue
-		for malformed: String in ["{\"type\":", "{\"type\":17}"]:
+		for malformed: String in ["{\"type\":", "{\"type\":17}", "[]", "17", "null"]:
 			var probe: RefCounted = load("res://tests/ContentAdmissionProbe.cs").new()
 			_write_text(INVALID_CONTENT_PATH, malformed)
 			var screen := _create_content_probe_screen(probe, path)

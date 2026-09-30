@@ -108,6 +108,102 @@ public sealed class ContentTextAdmissionTests
         }
     }
 
+    /// <summary>Byte and stream factories recognize a single encoding preamble without changing catalog meaning.</summary>
+    [Theory]
+    [InlineData(0, 1)]
+    [InlineData(0, 2)]
+    [InlineData(1, 1)]
+    [InlineData(1, 2)]
+    [InlineData(2, 1)]
+    [InlineData(2, 2)]
+    public void InitialUtf8PreamblePreservesByteAndStreamCatalogs(int family, int form)
+    {
+        string json = ValidDocument(family);
+        object expected = Load(family, json, 0);
+        Assert.Equivalent(expected, Load(family, "\uFEFF" + json, form), strict: true);
+    }
+
+    /// <summary>A literal leading text character remains JSON input rather than encoding metadata.</summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void TextFactoriesRetainLeadingFeffRejection(int family)
+    {
+        AssertFailure(family, () => Load(family, "\uFEFF" + ValidDocument(family), 0), "json.invalid");
+    }
+
+    /// <summary>The encoding preamble occupies three bytes of the original admission envelope.</summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void Utf8PreambleCountsTowardExactByteLimit(int family)
+    {
+        string json = ValidDocument(family);
+        string exact =
+            "\uFEFF"
+            + json
+            + new string(' ', SystemDefinitionContent.MaximumDocumentBytes - 3 - Encoding.UTF8.GetByteCount(json));
+        Assert.Equal(SystemDefinitionContent.MaximumDocumentBytes, Encoding.UTF8.GetByteCount(exact));
+        for (int form = 1; form <= 2; form++)
+        {
+            int inputForm = form;
+            Assert.Equivalent(Load(family, json, 0), Load(family, exact, inputForm), strict: true);
+            AssertFailure(
+                family,
+                () => Load(family, exact + " ", inputForm),
+                family == 1 ? "content.too-large" : "content.size-limit"
+            );
+        }
+    }
+
+    /// <summary>Preamble recognition cannot discard repeated markers, incomplete prefixes, or invalid UTF-8.</summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void ByteAndStreamFactoriesRejectMalformedPreambleDocuments(int family)
+    {
+        byte[] json = Encoding.UTF8.GetBytes(ValidDocument(family));
+        byte[][] invalid =
+        [
+            [0xEF, 0xBB, 0xBF, 0xEF, 0xBB, 0xBF, .. json],
+            [0xEF],
+            [0xEF, 0xBB],
+            [0xEF, 0xBB, 0xBF, .. json, 0xFF],
+        ];
+        foreach (byte[] bytes in invalid)
+        {
+            for (int form = 1; form <= 2; form++)
+            {
+                int inputForm = form;
+                AssertFailure(family, () => Load(family, string.Empty, inputForm, bytes), "json.invalid");
+            }
+        }
+    }
+
+    /// <summary>An authored interior FEFF remains part of the display label in every input form.</summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void InteriorFeffIsPreserved(int family)
+    {
+        string json = ValidDocument(family, ValidLabel + "\uFEFF");
+        object text = Load(family, json, 0);
+        string label = family switch
+        {
+            0 => Assert.IsAssignableFrom<IEnumerable<ShipDefinition>>(text).Single().DesignDisplayName,
+            1 => Assert.IsAssignableFrom<IEnumerable<SystemDefinition>>(text).First().ComponentLabel,
+            2 => Assert.IsAssignableFrom<IEnumerable<FactionDefinition>>(text).Single().DisplayName,
+            _ => throw new ArgumentOutOfRangeException(nameof(family)),
+        };
+        Assert.Equal(ValidLabel + "\uFEFF", label);
+        Assert.Equivalent(text, Load(family, json, 1), strict: true);
+        Assert.Equivalent(text, Load(family, json, 2), strict: true);
+    }
+
     private static string ValidDocument(int family, string label = ValidLabel)
     {
         return family switch
@@ -132,9 +228,9 @@ public sealed class ContentTextAdmissionTests
             _ => throw new ArgumentOutOfRangeException(nameof(family)),
         };
 
-    private static object Load(int family, string json, int form)
+    private static object Load(int family, string json, int form, byte[]? rawBytes = null)
     {
-        byte[] bytes = Encoding.UTF8.GetBytes(json);
+        byte[] bytes = rawBytes ?? Encoding.UTF8.GetBytes(json);
         using var stream = new MemoryStream(bytes);
         return family switch
         {
