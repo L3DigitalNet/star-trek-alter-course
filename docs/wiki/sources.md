@@ -6,7 +6,7 @@ description: 'Coverage index of architectural records, game contracts, implement
 doc_type: 'index'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-27'
+updated: '2026-09-30'
 tags:
   - 'design'
   - 'architecture'
@@ -34,6 +34,14 @@ The wiki owns gameplay design; ADRs own architectural decisions; source, schemas
 The [authority map](../README.md) distinguishes documents outside the wiki. This catalog is a navigation and coverage record, not an unbounded session log. Fixed revisions and governing PRs retain detailed history. No entry claims every external reference, live provider, or third-party tool was reverified.
 
 ## Review record
+
+### Content admission and withdrawal geometry follow-up — 2026-09-30
+
+[Issue #135](https://github.com/L3DigitalNet/star-trek-alter-course/issues/135) and [Final draft PR #138](https://github.com/L3DigitalNet/star-trek-alter-course/pull/138) own the bounded R1–R3 follow-up. The [dated report](../reviews/adr-remediation-2026-09-30.md) preserves the September 27 register and records exact reproduction revisions, executor commands, outcomes, the September 30 compatibility decision, and remaining verification gaps. Documentation adoption through [PR #137](https://github.com/L3DigitalNet/star-trek-alter-course/pull/137) merged as `7e2df746688f63df9936988d20978710e0aaf2d4`, with source/tests/scripts unchanged from `efd4ac93894fc28ea0c3ea40ca1be008dd4d6631`; it did not fix these defects or certify the four additional ADRs.
+
+The targeted review compared content/persistence, Engineering/combat, world/navigation/time, sensors/knowledge/AI, and implementation status with `GameScreen`, all three `DefinitionContent.FromText` factories, both contact policies, and the reproduction/focused tests. R1's real Godot ingress failure and R2's actual UTF-16 text failures are confirmed; their correction receipts remain pending. R3's corrected worker `7bd42bd7d3154d01028e3228be04a537f732562d` passed 147 numerical and command/save-load cases. Continuous domain coordinates, actor-local nonzero-displacement constraints, ordinary course application, and same-build continuation already have exact owning contracts; the spatial/policy pages are preserved. Content and implementation-status prose now expose the measured gaps rather than treating inherited tests as full boundary proof.
+
+The ADR 0006/0007 compatibility amendments are integrated in documentation baseline `27a393d36b02da8dfcaa46ab07d0fdebc9ce5639`: cross-version obligations start at v1.0.0; strict admission and same-build continuation still apply. Final integrated SHA, canonical/documentation gates, independent review, and final remediation dispositions remain pending in the report. This is a targeted review, not a full semantic sweep, manual playtest, release, or broad ADR certification. The next full sweep remains **2026-10-03**; UnitsNet's bounded exception and future-trigger deferrals remain unchanged.
 
 ### Additional ADRs and documentation polish — 2026-09-27
 

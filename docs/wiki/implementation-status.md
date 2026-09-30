@@ -6,7 +6,7 @@ description: 'Reviewed gameplay baseline and explicit boundaries between runtime
 doc_type: 'reference'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-27'
+updated: '2026-09-30'
 tags:
   - 'simulation'
   - 'design'
@@ -39,6 +39,8 @@ Current `dev` additionally has **unreleased M6A First Combat Engagement**, imple
 Independently owned heterogeneous live loadouts and common installed-ID mechanics replace the earlier fixed-field representation: ship content V6, system-definition content V1, and save schema V10 under rules identity `installed-ship-system-substrate-v1` are implemented and tested (`InstalledSystemIdentityTests`, `HeterogeneousBootstrapTests`, `GamePersistenceV10CompatibilityTests`, `GamePersistenceV10SubstrateTests`). Godot's generic Engineering presentation is also implemented: generic Balance/Prioritize/Begin Repair actions keyed by installed ID (`EngineeringProjectionTests`, `GameplayShellTest.gd`), reproducing the base M6A hierarchy, labels, and button order for the production loadout. The per-kind `EngineeringAction`, `PowerAllocationPreset`, and the temporary `GameSimulation.EngineeringAdapter.cs` bridge are removed. Neither this migration nor this documentation completes M3, M5, or M6, or is a release. Recovery mechanics and player refits remain outside this implementation. Integrated conformance tests guard the result: architecture conformance with negative probes (`SubstrateConformanceTests`), an alternate same-kind definition through unchanged common code (`SubstrateExtensionTests`), heterogeneous same-class continuation across a compatible class-default change (`HeterogeneousLoadoutContinuationTests`), and long-horizon and high-width continuation within the save envelope (`M6CombatLongHorizonTests`).
 
 ## Implemented gameplay
+
+The [September 30 ADR follow-up](../reviews/adr-remediation-2026-09-30.md) confirms development content-admission gaps at the Godot resource and .NET text boundaries (R1/R2). Their corrections and final integrated gates remain pending. Defensive-heading arithmetic (R3) has a corrected worker with 147 passing focused numerical and real command/save-load cases; that focused result does not establish final integrated admission. [Issue #135 / draft PR #138](https://github.com/L3DigitalNet/star-trek-alter-course/pull/138) owns the correction and final evidence. Existing gameplay and unreleased V6/V1/V10 status below remain distinct from those pending verification results.
 
 Core owns multiple ordinary persistent ships and an explicit `PlayerShipId`; the production default world contains six ships across three strategic locations. The ship-catalog-only bootstrap overload retains the earlier four-ship, zero-faction proof. The player ship is not a separate world-root entity type. Typed bootstrap distinguishes reusable design definitions from vessel names and starting condition.
 
