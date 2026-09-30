@@ -40,7 +40,11 @@ public sealed class FactionDefinitionContent
         {
             throw new FactionContentValidationException([
                 new FactionContentDiagnostic(
-                    "json.invalid", sourceIdentity, "#", string.Empty, "JSON text contains invalid Unicode."
+                    "json.invalid",
+                    sourceIdentity,
+                    "#",
+                    string.Empty,
+                    "JSON text contains invalid Unicode."
                 ),
             ]);
         }

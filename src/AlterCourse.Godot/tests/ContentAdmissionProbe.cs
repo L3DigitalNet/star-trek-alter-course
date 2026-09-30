@@ -117,9 +117,8 @@ public partial class ContentAdmissionProbe : RefCounted
     }
 
     /// <summary>Gets the actual family envelope without maintaining a second test-side ceiling.</summary>
-    public int GetResourceLimit(string canonicalPath) => canonicalPath.Contains("/schemas/", StringComparison.Ordinal)
-        ? MaximumSchemaBytes
-        : MaximumDocumentBytes;
+    public int GetResourceLimit(string canonicalPath) =>
+        canonicalPath.Contains("/schemas/", StringComparison.Ordinal) ? MaximumSchemaBytes : MaximumDocumentBytes;
 
     private void RecordRequest(long length)
     {
@@ -198,9 +197,10 @@ public partial class ContentAdmissionProbe : RefCounted
             byte[] chunk = bytes.AsSpan(_position, count).ToArray();
             _position += count;
             probe.ReturnedBytes += count;
-            _error = probe.ZeroWithoutEofAfterBytes >= 0
-                ? Error.Ok
-                : count == 0 || _position == end || probe.EofWithPartialReads ? Error.FileEof : Error.Ok;
+            _error =
+                probe.ZeroWithoutEofAfterBytes >= 0 ? Error.Ok
+                : count == 0 || _position == end || probe.EofWithPartialReads ? Error.FileEof
+                : Error.Ok;
             return chunk;
         }
 

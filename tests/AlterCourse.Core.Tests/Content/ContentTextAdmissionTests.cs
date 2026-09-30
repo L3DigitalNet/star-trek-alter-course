@@ -91,7 +91,8 @@ public sealed class ContentTextAdmissionTests
     public void MultibyteDocumentsHonorExactByteLimit(int family)
     {
         string json = ValidDocument(family);
-        string exact = json + new string(' ', SystemDefinitionContent.MaximumDocumentBytes - Encoding.UTF8.GetByteCount(json));
+        string exact =
+            json + new string(' ', SystemDefinitionContent.MaximumDocumentBytes - Encoding.UTF8.GetByteCount(json));
         Assert.True(exact.Length < SystemDefinitionContent.MaximumDocumentBytes);
         Assert.Equivalent(Load(family, json, 0), Load(family, exact, 0), strict: true);
         Assert.Equivalent(Load(family, exact, 0), Load(family, exact, 1), strict: true);
@@ -99,7 +100,11 @@ public sealed class ContentTextAdmissionTests
         for (int form = 0; form < 3; form++)
         {
             int inputForm = form;
-            AssertFailure(family, () => Load(family, exact + " ", inputForm), family == 1 ? "content.too-large" : "content.size-limit");
+            AssertFailure(
+                family,
+                () => Load(family, exact + " ", inputForm),
+                family == 1 ? "content.too-large" : "content.size-limit"
+            );
         }
     }
 
@@ -107,22 +112,25 @@ public sealed class ContentTextAdmissionTests
     {
         return family switch
         {
-            0 => TestShipContent.ReadRepositoryFile("src/AlterCourse.Godot/content/ships/pathfinder.json")
+            0 => TestShipContent
+                .ReadRepositoryFile("src/AlterCourse.Godot/content/ships/pathfinder.json")
                 .Replace("Pathfinder class", label, StringComparison.Ordinal),
-            1 => TestShipContent.ReadRepositoryFile("src/AlterCourse.Godot/content/systems/pathfinder-systems.json")
+            1 => TestShipContent
+                .ReadRepositoryFile("src/AlterCourse.Godot/content/systems/pathfinder-systems.json")
                 .Replace("Power generation", label, StringComparison.Ordinal),
             2 => "{\"schemaVersion\":1,\"id\":\"faction-a\",\"displayName\":\"" + label + "\"}",
             _ => throw new ArgumentOutOfRangeException(nameof(family)),
         };
     }
 
-    private static object CreateTextContent(int family, string json) => family switch
-    {
-        0 => ShipDefinitionContent.FromText(Source, json),
-        1 => SystemDefinitionContent.FromText(Source, json),
-        2 => FactionDefinitionContent.FromText(Source, json),
-        _ => throw new ArgumentOutOfRangeException(nameof(family)),
-    };
+    private static object CreateTextContent(int family, string json) =>
+        family switch
+        {
+            0 => ShipDefinitionContent.FromText(Source, json),
+            1 => SystemDefinitionContent.FromText(Source, json),
+            2 => FactionDefinitionContent.FromText(Source, json),
+            _ => throw new ArgumentOutOfRangeException(nameof(family)),
+        };
 
     private static object Load(int family, string json, int form)
     {
@@ -130,26 +138,45 @@ public sealed class ContentTextAdmissionTests
         using var stream = new MemoryStream(bytes);
         return family switch
         {
-            0 => TestShipContent.ShipLoader(TestShipContent.ProductionSystems()).LoadCatalog([form switch
-            {
-                0 => ShipDefinitionContent.FromText(Source, json),
-                1 => ShipDefinitionContent.FromUtf8(Source, bytes),
-                _ => ShipDefinitionContent.FromStream(Source, stream),
-            }]).Definitions,
-            1 => new SystemDefinitionCatalogLoader(TestShipContent.ReadRepositoryFile("src/AlterCourse.Godot/content/schemas/system-definition-v1.schema.json"))
-                .LoadCatalog([form switch
-                {
-                    0 => SystemDefinitionContent.FromText(Source, json),
-                    1 => SystemDefinitionContent.FromUtf8(Source, bytes),
-                    _ => SystemDefinitionContent.FromStream(Source, stream),
-                }]).Definitions,
-            2 => new FactionDefinitionCatalogLoader(TestShipContent.ReadRepositoryFile("src/AlterCourse.Godot/content/schemas/faction-definition-v1.schema.json"))
-                .LoadCatalog([form switch
-                {
-                    0 => FactionDefinitionContent.FromText(Source, json),
-                    1 => FactionDefinitionContent.FromUtf8(Source, bytes),
-                    _ => FactionDefinitionContent.FromStream(Source, stream),
-                }]).Definitions,
+            0 => TestShipContent
+                .ShipLoader(TestShipContent.ProductionSystems())
+                .LoadCatalog([
+                    form switch
+                    {
+                        0 => ShipDefinitionContent.FromText(Source, json),
+                        1 => ShipDefinitionContent.FromUtf8(Source, bytes),
+                        _ => ShipDefinitionContent.FromStream(Source, stream),
+                    },
+                ])
+                .Definitions,
+            1 => new SystemDefinitionCatalogLoader(
+                TestShipContent.ReadRepositoryFile(
+                    "src/AlterCourse.Godot/content/schemas/system-definition-v1.schema.json"
+                )
+            )
+                .LoadCatalog([
+                    form switch
+                    {
+                        0 => SystemDefinitionContent.FromText(Source, json),
+                        1 => SystemDefinitionContent.FromUtf8(Source, bytes),
+                        _ => SystemDefinitionContent.FromStream(Source, stream),
+                    },
+                ])
+                .Definitions,
+            2 => new FactionDefinitionCatalogLoader(
+                TestShipContent.ReadRepositoryFile(
+                    "src/AlterCourse.Godot/content/schemas/faction-definition-v1.schema.json"
+                )
+            )
+                .LoadCatalog([
+                    form switch
+                    {
+                        0 => FactionDefinitionContent.FromText(Source, json),
+                        1 => FactionDefinitionContent.FromUtf8(Source, bytes),
+                        _ => FactionDefinitionContent.FromStream(Source, stream),
+                    },
+                ])
+                .Definitions,
             _ => throw new ArgumentOutOfRangeException(nameof(family)),
         };
     }
@@ -158,13 +185,17 @@ public sealed class ContentTextAdmissionTests
     {
         if (family == 2)
         {
-            FactionContentDiagnostic diagnostic = Assert.Single(Assert.Throws<FactionContentValidationException>(action).Diagnostics);
+            FactionContentDiagnostic diagnostic = Assert.Single(
+                Assert.Throws<FactionContentValidationException>(action).Diagnostics
+            );
             Assert.Equal(code, diagnostic.Code);
             Assert.Equal(Source, diagnostic.SourceIdentity);
             return;
         }
 
-        ShipContentDiagnostic shipDiagnostic = Assert.Single(Assert.Throws<ShipContentValidationException>(action).Diagnostics);
+        ShipContentDiagnostic shipDiagnostic = Assert.Single(
+            Assert.Throws<ShipContentValidationException>(action).Diagnostics
+        );
         Assert.Equal(code, shipDiagnostic.Code);
         Assert.Equal(Source, shipDiagnostic.SourceIdentity);
     }

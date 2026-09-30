@@ -763,20 +763,44 @@ public partial class GameScreen : Control
         SystemDefinitionCatalog systemCatalog = systemLoader.LoadCatalog([
             SystemDefinitionContent.FromUtf8(
                 ContentSource(SystemDefinitionResourcePath),
-                ReadRequiredBytes(SystemDefinitionResourcePath, SystemDefinitionContent.MaximumDocumentBytes, "content.too-large")
+                ReadRequiredBytes(
+                    SystemDefinitionResourcePath,
+                    SystemDefinitionContent.MaximumDocumentBytes,
+                    "content.too-large"
+                )
             ),
         ]);
         ShipDefinitionCatalogLoader shipLoader = CreateShipDefinitionLoader(systemCatalog);
         ShipDefinitionCatalog shipCatalog = shipLoader.LoadCatalog([
-            ShipDefinitionContent.FromUtf8(ContentSource(ShipDefinitionResourcePath),
-                ReadRequiredBytes(ShipDefinitionResourcePath, ShipDefinitionContent.MaximumDocumentBytes, "content.size-limit")),
+            ShipDefinitionContent.FromUtf8(
+                ContentSource(ShipDefinitionResourcePath),
+                ReadRequiredBytes(
+                    ShipDefinitionResourcePath,
+                    ShipDefinitionContent.MaximumDocumentBytes,
+                    "content.size-limit"
+                )
+            ),
         ]);
         FactionDefinitionCatalogLoader factionLoader = CreateFactionDefinitionLoader();
         FactionDefinitionCatalog factionCatalog = factionLoader.LoadCatalog([
-            FactionDefinitionContent.FromUtf8(ContentSource(FactionAPath),
-                ReadRequiredBytes(FactionAPath, FactionDefinitionContent.MaximumDocumentBytes, "content.size-limit", faction: true)),
-            FactionDefinitionContent.FromUtf8(ContentSource(FactionBPath),
-                ReadRequiredBytes(FactionBPath, FactionDefinitionContent.MaximumDocumentBytes, "content.size-limit", faction: true)),
+            FactionDefinitionContent.FromUtf8(
+                ContentSource(FactionAPath),
+                ReadRequiredBytes(
+                    FactionAPath,
+                    FactionDefinitionContent.MaximumDocumentBytes,
+                    "content.size-limit",
+                    faction: true
+                )
+            ),
+            FactionDefinitionContent.FromUtf8(
+                ContentSource(FactionBPath),
+                ReadRequiredBytes(
+                    FactionBPath,
+                    FactionDefinitionContent.MaximumDocumentBytes,
+                    "content.size-limit",
+                    faction: true
+                )
+            ),
         ]);
         return (
             shipCatalog,
@@ -807,7 +831,12 @@ public partial class GameScreen : Control
         }
         catch (Exception exception) when (exception is JsonException or JsonSchemaException)
         {
-            throw ContentFailure(SystemDefinitionSchemaResourcePath, "schema.invalid", "Required schema is invalid.", faction: false);
+            throw ContentFailure(
+                SystemDefinitionSchemaResourcePath,
+                "schema.invalid",
+                "Required schema is invalid.",
+                faction: false
+            );
         }
     }
 
@@ -820,7 +849,12 @@ public partial class GameScreen : Control
         }
         catch (Exception exception) when (exception is JsonException or JsonSchemaException)
         {
-            throw ContentFailure(ShipSchemaResourcePath, "schema.invalid", "Required schema is invalid.", faction: false);
+            throw ContentFailure(
+                ShipSchemaResourcePath,
+                "schema.invalid",
+                "Required schema is invalid.",
+                faction: false
+            );
         }
     }
 
@@ -899,16 +933,18 @@ public partial class GameScreen : Control
     private static IOException ContentReadFailure(string path) =>
         new($"Godot could not read required content resource '{ContentSource(path)}'.");
 
-    private static Exception ContentFailure(string path, string code, string message, bool faction) => faction
-        ? new FactionContentValidationException([
-            new FactionContentDiagnostic(code, ContentSource(path), "#", string.Empty, message),
-        ])
-        : new ShipContentValidationException([
-            new ShipContentDiagnostic(code, ContentSource(path), "#", string.Empty, message),
-        ]);
+    private static Exception ContentFailure(string path, string code, string message, bool faction) =>
+        faction
+            ? new FactionContentValidationException([
+                new FactionContentDiagnostic(code, ContentSource(path), "#", string.Empty, message),
+            ])
+            : new ShipContentValidationException([
+                new ShipContentDiagnostic(code, ContentSource(path), "#", string.Empty, message),
+            ]);
 
     private static string ContentSource(string path) =>
-        path.Length <= 512 && (path.StartsWith("res://", StringComparison.Ordinal) || path.StartsWith("user://", StringComparison.Ordinal))
+        path.Length <= 512
+        && (path.StartsWith("res://", StringComparison.Ordinal) || path.StartsWith("user://", StringComparison.Ordinal))
             ? path
             : "content-resource";
 

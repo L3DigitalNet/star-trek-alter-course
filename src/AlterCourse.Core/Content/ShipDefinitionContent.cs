@@ -40,7 +40,11 @@ public sealed class ShipDefinitionContent
         {
             throw new ShipContentValidationException([
                 new ShipContentDiagnostic(
-                    "json.invalid", sourceIdentity, "#", string.Empty, "JSON text contains invalid Unicode."
+                    "json.invalid",
+                    sourceIdentity,
+                    "#",
+                    string.Empty,
+                    "JSON text contains invalid Unicode."
                 ),
             ]);
         }
