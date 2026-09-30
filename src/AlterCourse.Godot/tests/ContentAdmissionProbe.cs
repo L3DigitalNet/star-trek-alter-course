@@ -1,5 +1,5 @@
-using AlterCourse.Godot.Gameplay;
 using AlterCourse.Core.Content;
+using AlterCourse.Godot.Gameplay;
 using Godot;
 
 namespace AlterCourse.Godot.Tests;
@@ -9,7 +9,7 @@ namespace AlterCourse.Godot.Tests;
 public partial class ContentAdmissionProbe : RefCounted
 {
     /// <summary>Gets the existing Core definition envelope for runtime boundary fixtures.</summary>
-    public int MaximumDocumentBytes => SystemDefinitionContent.MaximumDocumentBytes;
+    public int MaximumDocumentBytes { get; } = SystemDefinitionContent.MaximumDocumentBytes;
 
     /// <summary>Gets whole-text reads of the redirected resource.</summary>
     public int TextReads { get; private set; }

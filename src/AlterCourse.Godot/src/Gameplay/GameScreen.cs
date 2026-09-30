@@ -775,7 +775,7 @@ public partial class GameScreen : Control
 
     private string ReadRequiredText(string path)
     {
-        using var file = ContentFileOpener(path);
+        using IContentFileAccess? file = ContentFileOpener(path);
         if (file is null)
         {
             throw new IOException($"Godot could not open required file '{path}'.");
