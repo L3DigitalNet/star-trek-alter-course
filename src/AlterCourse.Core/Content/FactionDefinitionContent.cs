@@ -5,8 +5,10 @@ namespace AlterCourse.Core.Content;
 /// <summary>Pairs one UTF-8 authored faction document with its stable diagnostic identity.</summary>
 public sealed class FactionDefinitionContent
 {
-    private const int MaximumDocumentBytes = 256 * 1024;
+    /// <summary>Gets the byte bound enforced before any JSON is parsed.</summary>
+    public const int MaximumDocumentBytes = 256 * 1024;
     private readonly byte[] _utf8Json;
+    private static readonly UTF8Encoding StrictUtf8 = new(false, true);
 
     private FactionDefinitionContent(string sourceIdentity, byte[] utf8Json)
     {
@@ -20,17 +22,28 @@ public sealed class FactionDefinitionContent
 
     internal ReadOnlyMemory<byte> Utf8Json => _utf8Json;
 
-    /// <summary>Creates content from JSON text encoded as UTF-8.</summary>
+    /// <summary>Creates content from strictly encoded JSON text without replacing invalid UTF-16 code units.</summary>
     public static FactionDefinitionContent FromText(string sourceIdentity, string json)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sourceIdentity);
         ArgumentNullException.ThrowIfNull(json);
-        if (Encoding.UTF8.GetByteCount(json) > MaximumDocumentBytes)
+        try
         {
-            throw TooLarge(sourceIdentity);
-        }
+            if (StrictUtf8.GetByteCount(json) > MaximumDocumentBytes)
+            {
+                throw TooLarge(sourceIdentity);
+            }
 
-        return new FactionDefinitionContent(sourceIdentity, Encoding.UTF8.GetBytes(json));
+            return new FactionDefinitionContent(sourceIdentity, StrictUtf8.GetBytes(json));
+        }
+        catch (EncoderFallbackException)
+        {
+            throw new FactionContentValidationException([
+                new FactionContentDiagnostic(
+                    "json.invalid", sourceIdentity, "#", string.Empty, "JSON text contains invalid Unicode."
+                ),
+            ]);
+        }
     }
 
     /// <summary>Creates content from UTF-8 JSON bytes, isolated from later caller mutation.</summary>

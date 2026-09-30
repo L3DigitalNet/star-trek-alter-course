@@ -8,6 +8,7 @@ public sealed class SystemDefinitionContent
     /// <summary>Gets the byte bound enforced before any JSON is parsed.</summary>
     public const int MaximumDocumentBytes = 256 * 1024;
     private readonly byte[] _utf8Json;
+    private static readonly UTF8Encoding StrictUtf8 = new(false, true);
 
     private SystemDefinitionContent(string sourceIdentity, byte[] utf8Json)
     {
@@ -21,17 +22,28 @@ public sealed class SystemDefinitionContent
 
     internal ReadOnlyMemory<byte> Utf8Json => _utf8Json;
 
-    /// <summary>Creates content from JSON text encoded as UTF-8.</summary>
+    /// <summary>Creates content from strictly encoded JSON text without replacing invalid UTF-16 code units.</summary>
     public static SystemDefinitionContent FromText(string sourceIdentity, string json)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sourceIdentity);
         ArgumentNullException.ThrowIfNull(json);
-        if (Encoding.UTF8.GetByteCount(json) > MaximumDocumentBytes)
+        try
         {
-            throw TooLarge(sourceIdentity);
-        }
+            if (StrictUtf8.GetByteCount(json) > MaximumDocumentBytes)
+            {
+                throw TooLarge(sourceIdentity);
+            }
 
-        return new SystemDefinitionContent(sourceIdentity, Encoding.UTF8.GetBytes(json));
+            return new SystemDefinitionContent(sourceIdentity, StrictUtf8.GetBytes(json));
+        }
+        catch (EncoderFallbackException)
+        {
+            throw new ShipContentValidationException([
+                new ShipContentDiagnostic(
+                    "json.invalid", sourceIdentity, "#", string.Empty, "JSON text contains invalid Unicode."
+                ),
+            ]);
+        }
     }
 
     /// <summary>Creates content from UTF-8 JSON bytes, isolated from later caller mutation.</summary>

@@ -1,5 +1,7 @@
 using System.Globalization;
 using System.Runtime.CompilerServices;
+using System.Text;
+using System.Text.Json;
 using AlterCourse.Core.Content;
 using AlterCourse.Core.Gameplay;
 using AlterCourse.Core.Identity;
@@ -11,6 +13,7 @@ using AlterCourse.Core.Ships;
 using AlterCourse.Core.Strategic;
 using AlterCourse.Godot.Gameplay.Logging;
 using Godot;
+using Json.Schema;
 using Serilog.Events;
 
 namespace AlterCourse.Godot.Gameplay;
@@ -41,6 +44,12 @@ public partial class GameScreen : Control
     private const string ActionEngageTravel = "engage_selected_travel";
     private const string ActionSetCourse = "set_tactical_course";
     private const int RecentActivityLimit = 64;
+
+    // The committed system/ship/faction schemas are 5,014/1,525/544 bytes. 16 KiB admits more than three times
+    // the largest current schema while bounding the engine read and strict text decode independently of definitions.
+    internal const int MaximumSchemaBytes = 16 * 1024;
+    internal const int ContentReadChunkBytes = 8192;
+    private static readonly UTF8Encoding StrictUtf8 = new(false, true);
 
     private static readonly double[] RunningRates = [0.5, 1, 2, 4];
 
@@ -750,21 +759,24 @@ public partial class GameScreen : Control
     {
         // Explicit paths, no directory discovery. System definitions load first because ship loadouts are resolved
         // against the complete system catalog.
-        var systemLoader = new SystemDefinitionCatalogLoader(ReadRequiredText(SystemDefinitionSchemaResourcePath));
+        SystemDefinitionCatalogLoader systemLoader = CreateSystemDefinitionLoader();
         SystemDefinitionCatalog systemCatalog = systemLoader.LoadCatalog([
-            SystemDefinitionContent.FromText(
-                SystemDefinitionResourcePath,
-                ReadRequiredText(SystemDefinitionResourcePath)
+            SystemDefinitionContent.FromUtf8(
+                ContentSource(SystemDefinitionResourcePath),
+                ReadRequiredBytes(SystemDefinitionResourcePath, SystemDefinitionContent.MaximumDocumentBytes, "content.too-large")
             ),
         ]);
-        var shipLoader = new ShipDefinitionCatalogLoader(ReadRequiredText(ShipSchemaResourcePath), systemCatalog);
+        ShipDefinitionCatalogLoader shipLoader = CreateShipDefinitionLoader(systemCatalog);
         ShipDefinitionCatalog shipCatalog = shipLoader.LoadCatalog([
-            ShipDefinitionContent.FromText(ShipDefinitionResourcePath, ReadRequiredText(ShipDefinitionResourcePath)),
+            ShipDefinitionContent.FromUtf8(ContentSource(ShipDefinitionResourcePath),
+                ReadRequiredBytes(ShipDefinitionResourcePath, ShipDefinitionContent.MaximumDocumentBytes, "content.size-limit")),
         ]);
-        var factionLoader = new FactionDefinitionCatalogLoader(ReadRequiredText(FactionSchemaPath));
+        FactionDefinitionCatalogLoader factionLoader = CreateFactionDefinitionLoader();
         FactionDefinitionCatalog factionCatalog = factionLoader.LoadCatalog([
-            FactionDefinitionContent.FromText(FactionAPath, ReadRequiredText(FactionAPath)),
-            FactionDefinitionContent.FromText(FactionBPath, ReadRequiredText(FactionBPath)),
+            FactionDefinitionContent.FromUtf8(ContentSource(FactionAPath),
+                ReadRequiredBytes(FactionAPath, FactionDefinitionContent.MaximumDocumentBytes, "content.size-limit", faction: true)),
+            FactionDefinitionContent.FromUtf8(ContentSource(FactionBPath),
+                ReadRequiredBytes(FactionBPath, FactionDefinitionContent.MaximumDocumentBytes, "content.size-limit", faction: true)),
         ]);
         return (
             shipCatalog,
@@ -773,22 +785,132 @@ public partial class GameScreen : Control
         );
     }
 
-    private string ReadRequiredText(string path)
+    private string ReadRequiredSchema(string path, bool faction = false)
+    {
+        byte[] bytes = ReadRequiredBytes(path, MaximumSchemaBytes, "content.size-limit", faction);
+        try
+        {
+            return StrictUtf8.GetString(bytes);
+        }
+        catch (DecoderFallbackException)
+        {
+            throw ContentFailure(path, "json.invalid", "Required schema contains invalid UTF-8.", faction);
+        }
+    }
+
+    private SystemDefinitionCatalogLoader CreateSystemDefinitionLoader()
+    {
+        string text = ReadRequiredSchema(SystemDefinitionSchemaResourcePath);
+        try
+        {
+            return new SystemDefinitionCatalogLoader(text);
+        }
+        catch (Exception exception) when (exception is JsonException or JsonSchemaException)
+        {
+            throw ContentFailure(SystemDefinitionSchemaResourcePath, "schema.invalid", "Required schema is invalid.", faction: false);
+        }
+    }
+
+    private ShipDefinitionCatalogLoader CreateShipDefinitionLoader(SystemDefinitionCatalog systems)
+    {
+        string text = ReadRequiredSchema(ShipSchemaResourcePath);
+        try
+        {
+            return new ShipDefinitionCatalogLoader(text, systems);
+        }
+        catch (Exception exception) when (exception is JsonException or JsonSchemaException)
+        {
+            throw ContentFailure(ShipSchemaResourcePath, "schema.invalid", "Required schema is invalid.", faction: false);
+        }
+    }
+
+    private FactionDefinitionCatalogLoader CreateFactionDefinitionLoader()
+    {
+        string text = ReadRequiredSchema(FactionSchemaPath, faction: true);
+        try
+        {
+            return new FactionDefinitionCatalogLoader(text);
+        }
+        catch (Exception exception) when (exception is JsonException or JsonSchemaException)
+        {
+            throw ContentFailure(FactionSchemaPath, "schema.invalid", "Required schema is invalid.", faction: true);
+        }
+    }
+
+    private byte[] ReadRequiredBytes(string path, int maximumBytes, string sizeCode, bool faction = false)
     {
         using IContentFileAccess? file = ContentFileOpener(path);
         if (file is null)
         {
-            throw new IOException($"Godot could not open required file '{path}'.");
+            throw ContentReadFailure(path);
         }
 
-        string text = file.GetAsText();
+        ulong declaredLength = file.GetLength();
         if (file.GetError() != Error.Ok)
         {
-            throw new IOException($"Godot could not read required file '{path}'.");
+            throw ContentReadFailure(path);
         }
 
-        return text;
+        if (declaredLength > (ulong)maximumBytes)
+        {
+            throw ContentFailure(path, sizeCode, "Required content exceeds its byte limit.", faction);
+        }
+
+        using var buffer = new MemoryStream();
+        while (true)
+        {
+            // Length is only an early-rejection hint. Read to actual exhaustion with one bounded sentinel byte
+            // so growth or a misleading length cannot admit a valid prefix while ignoring an unread suffix.
+            int request = Math.Min(ContentReadChunkBytes, maximumBytes + 1 - checked((int)buffer.Length));
+            byte[] chunk = file.GetBuffer(request);
+            Error error = file.GetError();
+            if (chunk.Length > request || (error != Error.Ok && error != Error.FileEof))
+            {
+                throw ContentReadFailure(path);
+            }
+
+            if (chunk.Length == 0)
+            {
+                if (error != Error.FileEof)
+                {
+                    throw ContentReadFailure(path);
+                }
+
+                break;
+            }
+
+            buffer.Write(chunk);
+            if (buffer.Length > maximumBytes)
+            {
+                throw ContentFailure(path, sizeCode, "Required content exceeds its byte limit.", faction);
+            }
+        }
+
+        // A partial final buffer with EOF is normal. An exhausted stream shorter or longer than its declared
+        // length is not: even an otherwise-valid JSON prefix cannot prove that the complete resource was read.
+        if ((ulong)buffer.Length != declaredLength)
+        {
+            throw ContentReadFailure(path);
+        }
+
+        return buffer.ToArray();
     }
+
+    private static IOException ContentReadFailure(string path) =>
+        new($"Godot could not read required content resource '{ContentSource(path)}'.");
+
+    private static Exception ContentFailure(string path, string code, string message, bool faction) => faction
+        ? new FactionContentValidationException([
+            new FactionContentDiagnostic(code, ContentSource(path), "#", string.Empty, message),
+        ])
+        : new ShipContentValidationException([
+            new ShipContentDiagnostic(code, ContentSource(path), "#", string.Empty, message),
+        ]);
+
+    private static string ContentSource(string path) =>
+        path.Length <= 512 && (path.StartsWith("res://", StringComparison.Ordinal) || path.StartsWith("user://", StringComparison.Ordinal))
+            ? path
+            : "content-resource";
 
     private static string ResolveQuickSavePath(string userPath)
     {
