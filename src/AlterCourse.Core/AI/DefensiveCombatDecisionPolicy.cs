@@ -1,5 +1,4 @@
 using AlterCourse.Core.Gameplay;
-using AlterCourse.Core.Quantities;
 using AlterCourse.Core.Sensors;
 using AlterCourse.Core.Ships;
 
