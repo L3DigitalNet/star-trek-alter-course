@@ -2,9 +2,9 @@
 
 ## Purpose and authority
 
-This file records development sequence and milestone status. Game behavior and detailed acceptance criteria live in the [design wiki](docs/wiki/README.md), including [milestone proofs](docs/wiki/milestone-proofs.md). It does not define additional game rules or authorize implementation of a future slice.
+This roadmap records sequence and milestone status. Game behavior and detailed acceptance criteria belong in the [design wiki](docs/wiki/README.md), including [milestone proofs](docs/wiki/milestone-proofs.md). A future milestone is not an implementation authorization.
 
-[Implementation status](docs/wiki/implementation-status.md) distinguishes current `dev` from released behavior. [STATUS](docs/STATUS.md) and [TODO](docs/TODO.md) own operational work; [ADR 0013](docs/adr/0013-use-dev-for-development-and-main-for-releases.md) owns releases. Completing a milestone does not itself create a release.
+[Implementation status](docs/wiki/implementation-status.md) distinguishes development from release. [STATUS](docs/STATUS.md) and [TODO](docs/TODO.md) own operational work; [ADR 0013](docs/adr/0013-use-dev-for-development-and-main-for-releases.md) owns release admission. Completing a milestone does not create a release.
 
 ## Sequence
 
@@ -15,25 +15,27 @@ This file records development sequence and milestone status. Game behavior and d
 | M3 — Sensors, Knowledge, and First Contact | Partial: M3A and Strategic Contact Reporting implemented | [Remaining M3 scope](docs/wiki/milestone-proofs.md#milestone-3-completion-remains-open-beyond-the-implemented-slices) |
 | M4 — Engineering Backbone and Degraded Operations | Implemented | [Engineering proof](docs/wiki/milestone-proofs.md#milestone-4--engineering-backbone-and-degraded-operations) |
 | M5 — Living Sector and Faction Autonomy | Partial: faction assignment and Observation-Driven Faction Response implemented | [Broader autonomy proof](docs/wiki/milestone-proofs.md#milestone-5--living-sector-and-faction-autonomy) |
-| M6 — Tactical Combat Foundation | Partial: M6A first combat engagement implemented on `dev` | [Combat proof](docs/wiki/milestone-proofs.md#milestone-6--tactical-combat-foundation) |
+| M6 — Tactical Combat Foundation | Partial: M6A first combat engagement implemented on dev | [Combat proof](docs/wiki/milestone-proofs.md#milestone-6--tactical-combat-foundation) |
 | M7 — Diplomacy, Incidents, and Durable Consequences | Future | [Political consequence proof](docs/wiki/milestone-proofs.md#milestone-7--diplomacy-incidents-and-durable-consequences) |
 | M8 — Canon-Anchored Campaign Bootstrap and Divergent History | Future | [Campaign proof](docs/wiki/milestone-proofs.md#milestone-8--canon-anchored-campaign-bootstrap-and-divergent-history) |
 | M9 — Persistent Regional Campaign Integration | Future | [Regional integration proof](docs/wiki/milestone-proofs.md#milestone-9--persistent-regional-campaign-integration) |
 
-The order expresses dependency and risk, not a fixed release schedule. Governed refinement may split or combine work when evidence justifies it. Resolve only the [open questions](docs/wiki/open-questions.md) needed by the next selected slice; preserve the scope and history of completed slices.
+The order expresses dependencies and risk, not a dated release schedule. Governed refinement may split or combine work when evidence justifies it. Resolve only the [open questions](docs/wiki/open-questions.md) required by the next selected slice; preserve completed slices' scope and history.
 
 ## Current position
 
-The current source-only release is v0.6.2; its latest gameplay baseline is v0.6.0. It includes [Faction Intent and Autonomous Assignment](docs/wiki/faction-intent-and-autonomous-assignment.md), the first bounded M5 contribution, and [Observation-Driven Faction Response](docs/wiki/observation-driven-faction-response.md). M3 and M5 remain incomplete. [Strategic Contact Reporting](docs/wiki/strategic-contact-reporting.md) remains its original bounded slice, not a renamed M3B or a claim of faction autonomy.
+The current source-only release is v0.6.2; its gameplay baseline remains v0.6.0 with V8 saves. It includes [Faction Intent and Autonomous Assignment](docs/wiki/faction-intent-and-autonomous-assignment.md) and [Observation-Driven Faction Response](docs/wiki/observation-driven-faction-response.md), two bounded M5 contributions. The latter closes a legitimate observation → faction knowledge → investigation loop without completing M3 or M5.
 
-[Observation-Driven Faction Response](docs/wiki/observation-driven-faction-response.md) is implemented by Feature #93 / Final PR #94 and released in v0.6.0. V8 uses `observation-driven-faction-response-v1`; v0.5.0 remains the historical V6 release. The slice closes one legitimate observation→faction knowledge→investigation loop with reviewed scenario, Godot/player-safe, and bounded persistence evidence. Full M3 or M5 completion was not required before beginning the first combat refinement.
+[Strategic Contact Reporting](docs/wiki/strategic-contact-reporting.md) retains its original scope and historical v0.5.0/V6 admission. It is not a renamed M3B and did not itself introduce faction autonomy. Full M3/M5 completion was not required before the first combat refinement.
 
-M6A first combat engagement is implemented on `dev` as an unreleased contribution: one directed-energy weapon family, all-aspect shields, four-consumer Engineering, actor-safe targeting, and bounded defensive reaction. It introduced V9 continuation; the subsequent installed-system migration uses V10. M6 remains partial.
+M6A first engagement is implemented and unreleased: directed-energy combat, all-aspect shields, power/damage reconciliation, actor-safe targeting, and bounded defensive reaction. Its V9 admission is historical; current development uses V10 after the substrate migration. [Content and persistence](docs/wiki/content-assets-and-persistence.md) owns the complete compatibility record.
 
 ## Completed substrate prerequisite and next selection
 
-[Issue #121](https://github.com/L3DigitalNet/star-trek-alter-course/issues/121) implemented [ADR 0014](docs/adr/0014-use-an-extensible-bounded-ship-system-substrate.md) by migrating the five existing systems to independently owned installed-system instances. Final [PR #123](https://github.com/L3DigitalNet/star-trek-alter-course/pull/123) merged into `dev` as `17637dd`; the migration is unreleased. The [ship-system substrate contract](docs/wiki/ship-system-substrate.md) owns scope, compatibility, information safety, and admission evidence. Current development uses ship content V6, system-definition content V1, and V10 saves.
+[Issue #121](https://github.com/L3DigitalNet/star-trek-alter-course/issues/121) implemented [ADR 0014](docs/adr/0014-use-an-extensible-bounded-ship-system-substrate.md) for the five existing system kinds. Final [PR #123](https://github.com/L3DigitalNet/star-trek-alter-course/pull/123) merged as `17637dd` and remains unreleased. The [substrate contract](docs/wiki/ship-system-substrate.md) owns compatibility, information safety, and admission evidence. Current development uses ship content V6, system-definition V1, and V10 saves.
 
-The substrate prerequisite is complete; next work awaits owner selection. This migration is not M6B, a release, or completion of M3/M5/M6. Recovery semantics and later tactical refinements require their own bounded design; the earlier recovery implementation prompt is not the current work order.
+The prerequisite is complete; the next gameplay slice awaits owner selection. Recovery, refit, aggregation, and later tactical refinements need their own bounded design. The earlier recovery prompt is not the current work order. This migration is not M6B, a release, or completion of M3/M5/M6.
 
-Maintain behavior and acceptance detail in the wiki, architecture changes through ADRs, and work/release state in the operational records. Review the [milestone proof record](docs/wiki/milestone-proofs.md) when changing sequence; do not silently turn an example or future proof into approved implementation scope.
+The September 27 documentation work adds ADRs 0015–0018 for existing command, knowledge, asset, and session boundaries. These [architectural records](docs/adr/README.md) do not select another gameplay milestone or change release status.
+
+Keep behavior and proof details in the wiki, architecture through ADRs, and operational work in its existing records. Do not turn an illustrative future proof into approved scope merely by moving it on the roadmap.

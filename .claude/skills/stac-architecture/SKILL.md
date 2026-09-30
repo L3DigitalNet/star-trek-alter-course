@@ -1,80 +1,72 @@
 ---
 name: stac-architecture
-description: Route Star Trek: Alter Course work across the pure deterministic Core, Godot presentation, ship-system substrate, content, persistence, observability, testing, AI, units, narrative, dependencies, and canonical verification boundaries.
+description: Route ST:AC work through the pure Core, Godot, installed-system, command, knowledge, asset, session, content, persistence, AI, and verification boundaries.
 ---
 
 # ST:AC architecture router
 
-Load this skill before project implementation. The design wiki under `docs/wiki/` is the single source of truth for game design, and active ADRs record architectural decisions; this is a compact routing aid, not a substitute for either.
+Load this skill before implementation. The design wiki under `docs/wiki/` owns game contracts; active ADRs own architectural decisions. This project-owned skill is a routing aid, not a replacement for either. Keep its `.claude/` and `.codex/` copies identical.
 
 ## Boundary
 
-- `AlterCourse.Core` owns authoritative deterministic simulation/domain state: semantic multi-scale space, ships, factions, systems, sectors, actors/entities, diplomacy/treaties, damage, missions, schedules, domain AI, typed physical quantities, explicit time, seeded randomness, content models, and versioned persistence models.
-- `AlterCourse.Godot` owns scenes, nodes, input, UI, rendering, animation, audio, and engine adapters. It projects Core state and submits typed intent.
-- Core never references Godot. Nodes, transforms, Resources, scene lifecycle, timers, signal order, wall clock, ambient RNG, and runtime graph saves never become domain authority.
+- `AlterCourse.Core` owns authoritative simulation and domain rules. Future diplomacy, campaigns, narrative consequences, or stochastic features belong behind that authority when admitted; listing a domain here does not mean it is implemented.
+- `AlterCourse.Godot` owns scenes, nodes, input, workspaces, rendering, animation, audio, and engine adapters. It projects actor-safe Core state and submits typed intent.
+- `AlterCourse.AssetCtl` is independent development tooling. Neither game project references it, and it references neither game project. The game consumes selected files, not providers.
+- Core never depends on Godot. Scene lifecycle, transforms, Resources, timers, signal order, wall clock, ambient RNG, and runtime graph serialization do not become domain authority.
 
 ## Cross-cutting routes
 
-- Canonical ordinary domain content is UTF-8 JSON with versioned schemas plus semantic validation. Resources remain presentation assets.
-- Saves are versioned JSON snapshots of explicit Core models, with compatibility validation and migration policy—not scene trees.
-- Simulation time, scheduling, and randomness are explicit and deterministic. Presentation may interpolate or animate without changing truth.
-- Application logging uses Serilog with Microsoft logging abstractions at the Godot composition boundary. Core receives only an optional logger, records allowlisted post-commit diagnostics, and cannot let a provider failure alter simulation state.
-- Tests are layered. The installed baseline is xUnit for .NET tests and GdUnit4 for current Godot integration tests. CsCheck 4.9.1 and ArchUnitNET 0.13.4 are admitted Core-test-only for qualifying generated invariants and architecture-conformance rules. GdUnit4Net remains conditional because no C# engine-integration subject exists. ADR 0011 permits selective UnitsNet use for standard physical dimensions while preserving project-owned persistence and fictional-quantity contracts. Named scenarios and long-running simulations cover behavior and stability as the implemented systems justify them.
-- AI is explainable, deterministic where authoritative, and project-owned. Do not select or embed an LLM by product/model name as the decision authority.
-- Physical quantities use explicit units and conversions. Never pass ambiguous numeric distance, duration, velocity, mass, or energy values.
-- Branching narrative consumes read-only typed context and requests finite typed consequences. Core validates outcomes; narrative flow never becomes a second rules engine.
-- Prefer native Godot/.NET capabilities. Add packages, addons, frameworks, or managers only with demonstrated need and ADR 0003 admission evidence.
+- **Content and saves:** ADRs 0005/0006 own strict ordinary JSON definitions and explicit versioned snapshots, with compatibility, bounded admission, semantic validation, and non-inventive migrations. Resources remain presentation assets.
+- **Time and randomness:** ADR 0007 owns deterministic simulation time, stable scheduled work, and bounded advancement. There is no current authoritative RNG consumer; do not introduce a random call before the required versioned source, stream ownership, state capture, and continuation proof.
+- **Commands:** ADR 0015 owns candidate composition, complete commit boundaries, refusal preservation, and truthful post-commit outcomes. Validate current intent in Core; do not let UI availability become legality. Preserve ADR 0007's separately specified safely incremental alternative rather than silently changing atomic operations.
+- **Knowledge:** ADR 0016 owns actor-local information, source provenance, immutable historical reports, and disclosure through selectors/refusal reasons as well as projections. Own-asset administration is not a shared sensor network. Hidden target correlation is not a public identity.
+- **Sessions:** ADR 0018 keeps workspace lifetime separate from simulation lifetime. Resolve current action payloads and invalidate stale context on simulation replacement even when IDs match. Preview is explicit and never live authority.
+- **Assets:** ADR 0017 owns capability-based routing, bounded external operations, untrusted-output validation, recoverable paired publication, provenance, and owner-controlled approval. Offline verification needs no generation, credentials, or paid provider calls.
+- **Diagnostics:** ADR 0008 composes Serilog through Microsoft logging abstractions. Core records allowlisted post-commit facts through an optional logger; logging failure cannot change a committed result.
+- **Tests:** ADR 0009 owns layered evidence. xUnit and vendored GdUnit4 support current tests; CsCheck and ArchUnitNET remain admitted Core-test-only consumers. GdUnit4Net is conditional, not presumed installed. Named scenarios, negative cases, and long horizons complement structural tests.
+- **AI and quantities:** ADR 0010 owns explainable information-limited policies and typed proposals; no LLM becomes core decision authority. ADR 0011 owns explicit physical/fictional quantities and the recorded bounded existing-quantity exception. Do not turn selective UnitsNet admission into a claim that it is installed everywhere.
+- **Narrative and dependencies:** ADR 0012 keeps conditional branching narrative subordinate to Core. ADR 0003 requires a concrete need and admission evidence before packages, addons, frameworks, or managers are added.
 
 ## Ship-system conformance
 
-Before any ship-system expansion, read ADR 0014 and `docs/wiki/ship-system-substrate.md`. Issue #121's substrate migration is implemented on the development branch (Final PR #123, unreleased): runtime, content, persistence, and Godot's generic Engineering presentation use installed systems. Damage Control gameplay and additional system kinds must not be folded into that migration.
+Before ship-system expansion, read ADR 0014 and `docs/wiki/ship-system-substrate.md`. Issue #121's migration is implemented through Final PR #123 and remains unreleased. Current runtime, content, persistence, and generic Engineering use installed systems; recovery gameplay and additional system kinds remain separate decisions.
 
-Common state, condition, repair, allocation, current snapshots, and generic Engineering controls use installed-system identity. Kind, reusable definition, and installation are distinct. Live ship loadouts are authoritative; a class default is only bootstrap input. Specialized behavior stays typed. Historical DTO fields and isolated legacy translators are permitted; parallel current mutable fields behind a collection facade are not.
+Common condition, repair, allocation, current snapshots, and generic controls use installed-system identity. Kind, reusable definition, and installation are distinct. Live loadouts are authoritative; class defaults are bootstrap input. Specialized effects and cardinality stay typed. Frozen historical DTO fields and isolated translators are valid; parallel current fields behind a collection facade are not.
 
-Require the owning contract's conformance evidence before claiming implementation complete: heterogeneous same-class loadouts, arbitrary IDs/order, exact continuation, absent capabilities, separate cardinality validation, direct current-format capture, and paired hidden-loadout tests. Do not expose another ship's inventory through target selectors, action availability, or absence-specific fire rejection. Generic UI commands address own installations, while remote aim remains observer-safe.
+Preserve the owning contract's evidence for heterogeneous same-class loadouts, arbitrary IDs/order, exact continuation, absent capabilities, cardinality validation, direct current-format capture, and hidden-loadout safety. Do not expose remote inventory through target choices, action availability, or absence-specific rejection. Own-ship operations and remote semantic aim have different information contracts.
 
 ## Design routing
 
-Read the owning wiki page before changing a system, and record the design change on that page in the same change that implements it. Keep detailed game contracts inside `docs/wiki/`, including milestone proofs; do not create a parallel design/specification tree. README and ROADMAP are entry points, while ADRs retain architectural decision authority. Unapproved ideas belong in the open-question register, not on a system page.
+Read the owning wiki page before changing behavior and reconcile it in the same governed work. Keep formulas, failure rules, and milestone acceptance in the wiki. README/ROADMAP are entry points; ADRs retain architectural authority. Unapproved ideas belong in open questions rather than becoming requirements through an agent prompt.
 
-Follow `docs/wiki/development-and-governance.md#recurring-design-reconciliation` for task-start, behavior/bug-fix, Ready, and landing reviews. Check `docs/wiki/sources.md#review-record` for overdue full sweeps. Record named pages and source/test evidence in PR Acceptance coverage; an unforeseen implementation constraint does not silently amend approved design.
+Follow `docs/wiki/development-and-governance.md#recurring-design-reconciliation` at task start, behavior/bug checkpoints, Ready, and landing. Check `docs/wiki/sources.md#review-record` for overdue full sweeps. Record named pages and source/test evidence in PR acceptance coverage; an implementation constraint does not silently amend approved design.
 
 | Concern | Wiki page |
 | --- | --- |
 | Vision, non-goals, priorities | `docs/wiki/vision-and-scope.md` |
 | Implemented versus planned | `docs/wiki/implementation-status.md` |
-| Project boundaries, dependencies, testing | `docs/wiki/architecture.md` |
-| Ship-system substrate and migration admission | `docs/wiki/ship-system-substrate.md` |
+| Project boundaries and cross-cutting ownership | `docs/wiki/architecture.md` |
+| Installed-system substrate and admission | `docs/wiki/ship-system-substrate.md` |
 | Ships, bootstrap, orders, space, time | `docs/wiki/world-navigation-and-time.md` |
 | Sensors, contacts, scan/hail, AI | `docs/wiki/sensors-knowledge-and-ai.md` |
-| Power, condition, repair, combat plans | `docs/wiki/engineering-and-combat.md` |
+| Historical contact information | `docs/wiki/strategic-contact-reporting.md` |
+| Own-asset administrative assignment | `docs/wiki/faction-intent-and-autonomous-assignment.md` |
+| Delayed reports and investigation | `docs/wiki/observation-driven-faction-response.md` |
+| Power, condition, repair, combat | `docs/wiki/engineering-and-combat.md` |
 | Factions, organizations, jurisdiction | `docs/wiki/factions-and-organizations.md` |
 | Diplomacy, economy, campaigns, narrative | `docs/wiki/diplomacy-economy-and-campaigns.md` |
-| Command Deck, Engineering UI, controls | `docs/wiki/interface-and-player-commands.md` |
+| Workspaces, controls, session replacement | `docs/wiki/interface-and-player-commands.md` |
 | Content JSON, saves, AssetCtl | `docs/wiki/content-assets-and-persistence.md` |
+| Detailed development-tool contract | `docs/wiki/asset-pipeline-tool.md` |
 | Toolchain, gate, branches, documentation | `docs/wiki/development-and-governance.md` |
-| Settled decisions | `docs/wiki/decision-register.md` |
-| Unresolved questions | `docs/wiki/open-questions.md` |
+| Settled decisions and unresolved choices | `docs/wiki/decision-register.md`, `docs/wiki/open-questions.md` |
 
 ## ADR routing
 
-| Concern | Actual file |
-| --- | --- |
-| Core/Godot boundary | `docs/adr/0001-separate-simulation-from-godot.md` |
-| Canonical gate | `docs/adr/0002-use-one-canonical-quality-gate.md` |
-| Dependencies/native-first | `docs/adr/0003-prefer-native-capabilities-and-demand-driven-dependencies.md` |
-| Semantic spatial model | `docs/adr/0004-own-semantic-spatial-model-and-adapt-godot-rendering.md` |
-| Canonical content | `docs/adr/0005-use-json-and-schema-validation-for-domain-content.md` |
-| Snapshot saves | `docs/adr/0006-use-versioned-json-snapshot-saves.md` |
-| Time/scheduling/randomness | `docs/adr/0007-use-deterministic-simulation-time-scheduling-and-randomness.md` |
-| Observability | `docs/adr/0008-use-structured-observability-with-serilog.md` |
-| Testing | `docs/adr/0009-use-layered-testing-and-architecture-conformance.md` |
-| Explainable AI | `docs/adr/0010-use-explainable-domain-ai-and-demand-driven-state-machines.md` |
-| Physical units | `docs/adr/0011-represent-physical-quantities-with-explicit-units.md` |
-| Narrative | `docs/adr/0012-keep-branching-narrative-subordinate-to-simulation.md` |
-| Branch/release | `docs/adr/0013-use-dev-for-development-and-main-for-releases.md` |
-| Extensible installed ship systems | `docs/adr/0014-use-an-extensible-bounded-ship-system-substrate.md` |
+Use `docs/adr/README.md` for the complete active catalog, scope overlap, and amendment discipline. The catalog links the actual files; this router does not maintain a second title inventory.
+
+ADRs 0001–0014 retain their existing scopes. ADRs 0015–0018 add focused ownership for commands, knowledge, AssetCtl, and session lifetime. The September 27 191-obligation conformance register covers the original fourteen records; it is not automatic certification of later ADRs. Inspect applicability before demanding a conditional package or future component.
 
 ## Verification
 
-Run the narrowest relevant test while iterating. Use `./scripts/fix.sh` when automated formatting is appropriate. Before declaring integrated implementation complete, run the canonical read-only `./scripts/verify.sh`; ADR 0002 owns that gate. Do not weaken analyzers, central settings, or tests to make a failure disappear.
+Run the narrowest relevant tests while iterating. Use `./scripts/fix.sh` when formatting is appropriate, then run the canonical read-only `./scripts/verify.sh` before declaring integrated implementation complete. Keep inspected tests, inherited results, and fresh execution distinct. Do not weaken analyzers, settings, tests, or admission mechanisms to make a failure disappear.
