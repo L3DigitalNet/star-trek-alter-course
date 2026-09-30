@@ -428,6 +428,8 @@ public sealed class GameSimulationTests
         const int shipCount = 256;
         const int stepCount = 5_000;
         var location = new StrategicLocation(new LocationId("shared-location"), "Shared Location", default);
+        // Unpowered sensors keep pairwise range checks and contact creation out of the ship-step budget proof.
+        // Sensor condition still changes through repair, independently of its allocated power.
         ShipStart[] starts =
         [
             .. Enumerable
@@ -443,7 +445,7 @@ public sealed class GameSimulationTests
                         isMover ? default : new TacticalPosition(index, -index),
                         isMover ? new TacticalMotion(new HeadingDegrees(90), new SpeedKilometersPerSecond(1)) : default,
                         new AtLocationStart(location.Id),
-                        TestShipStarts.Pathfinder(sensors: isRepairing ? 0.4 : 1),
+                        TestShipStarts.Pathfinder(sensors: isRepairing ? 0.4 : 1, sensorPower: 0),
                         isRepairing
                             ? new SystemRepairStart(
                                 TestShipContent.Sensors,
