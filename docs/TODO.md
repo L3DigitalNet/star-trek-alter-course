@@ -6,7 +6,7 @@
 
 ## Agent tasks
 
-- Await owner review of PR #138 for Bug #135; its execution receipt owns final admission. Remediation merge and release are not authorized.
+- Obtain owner disposition for Bug #139: pre-push rejects deletion of legacy PR #134 branch; workflow enforcement changes require escalation.
 - Keep the full semantic wiki sweep due 2026-10-03; V6 ship content, V1 systems, and V10 saves remain unreleased and M6 partial.
 - Damage Control and tactical refinement require separate owner selection; further systems are not started and not automatic.
 - Preserve the bounded faction slice; do not expand into deferred intelligence, organizations, hierarchy, RNG, or political UI.
