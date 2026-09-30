@@ -24,7 +24,7 @@ internal static class StrictContentJson
 
     /// <summary>Removes one initial UTF-8 encoding preamble from an already bounded byte document.</summary>
     internal static ReadOnlySpan<byte> WithoutUtf8Preamble(ReadOnlySpan<byte> bytes) =>
-        bytes.StartsWith([0xEF, 0xBB, 0xBF]) ? bytes[3..] : bytes;
+        bytes.StartsWith("\uFEFF"u8) ? bytes[3..] : bytes;
 
     /// <summary>
     /// Parses one document after rejecting duplicate members and nesting deeper than <paramref name="maxDepth"/>

@@ -816,7 +816,7 @@ public partial class GameScreen : Control
         {
             // Native GetAsText recognized this encoding metadata. Strip one preamble only after raw byte bounds.
             ReadOnlySpan<byte> json = bytes;
-            if (json.StartsWith([0xEF, 0xBB, 0xBF]))
+            if (json.StartsWith("\uFEFF"u8))
             {
                 json = json[3..];
             }
