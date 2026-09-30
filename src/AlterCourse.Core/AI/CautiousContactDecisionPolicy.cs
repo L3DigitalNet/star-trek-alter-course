@@ -187,7 +187,11 @@ public static class CautiousContactDecisionPolicy
         ShipContactDecisionFacts facts,
         SensorContactSnapshot primary,
         double speed
-    ) => new(DecisionGeometry.HeadingBetween(facts.OwnPosition, primary.LastObservedPosition), new SpeedKilometersPerSecond(speed));
+    ) =>
+        new(
+            DecisionGeometry.HeadingBetween(facts.OwnPosition, primary.LastObservedPosition),
+            new SpeedKilometersPerSecond(speed)
+        );
 
     private static SetTacticalCourseIntent WithdrawCourse(
         ShipContactDecisionFacts facts,
@@ -195,7 +199,9 @@ public static class CautiousContactDecisionPolicy
         double speed
     ) =>
         new(
-            new HeadingDegrees(DecisionGeometry.HeadingBetween(facts.OwnPosition, primary.LastObservedPosition).Value + 180),
+            new HeadingDegrees(
+                DecisionGeometry.HeadingBetween(facts.OwnPosition, primary.LastObservedPosition).Value + 180
+            ),
             new SpeedKilometersPerSecond(speed)
         );
 

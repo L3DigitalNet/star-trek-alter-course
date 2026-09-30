@@ -58,17 +58,19 @@ public sealed class WithdrawalGeometryTests
             foreach (int exponent in new[] { -1074, -1073, -1022, -500, 0, 500, 1023 })
             {
                 double scale = Math.ScaleB(1, exponent);
-                foreach ((int x, int y, double heading) in new[]
-                {
-                    (1, 0, 90.0),
-                    (-1, 0, 270.0),
-                    (0, 1, 0.0),
-                    (0, -1, 180.0),
-                    (1, 1, 45.0),
-                    (1, -1, 135.0),
-                    (-1, -1, 225.0),
-                    (-1, 1, 315.0),
-                })
+                foreach (
+                    (int x, int y, double heading) in new[]
+                    {
+                        (1, 0, 90.0),
+                        (-1, 0, 270.0),
+                        (0, 1, 0.0),
+                        (0, -1, 180.0),
+                        (1, 1, 45.0),
+                        (1, -1, 135.0),
+                        (-1, -1, 225.0),
+                        (-1, 1, 315.0),
+                    }
+                )
                 {
                     yield return [defensive, x * scale, y * scale, 0.0, 0.0, heading];
                 }
@@ -119,9 +121,14 @@ public sealed class WithdrawalGeometryTests
             );
             Assert.Equal(DefensiveCombatDecisionAction.Hold, decision.SelectedAction);
             Assert.Null(decision.ResultingCourse);
-            Assert.False(decision.Candidates[1].Constraints.Single(
-                constraint => constraint.Constraint == DefensiveCombatConstraint.KnownDisplacement
-            ).Satisfied);
+            Assert.False(
+                decision
+                    .Candidates[1]
+                    .Constraints.Single(constraint =>
+                        constraint.Constraint == DefensiveCombatConstraint.KnownDisplacement
+                    )
+                    .Satisfied
+            );
         }
         else
         {
@@ -170,7 +177,12 @@ public sealed class WithdrawalGeometryTests
             ),
             Contact(contact, SensorContactIdentification.Identified),
             true,
-            new CombatStimulus(new SensorContactId(1), new SimulationTime(1000), new SimulationTime(1200), new ScheduledWorkId(1))
+            new CombatStimulus(
+                new SensorContactId(1),
+                new SimulationTime(1000),
+                new SimulationTime(1200),
+                new ScheduledWorkId(1)
+            )
         );
 
     private static ShipContactDecisionInput CautiousInput(TacticalPosition own, TacticalPosition contact) =>
@@ -189,7 +201,10 @@ public sealed class WithdrawalGeometryTests
             )
         );
 
-    private static SensorContactSnapshot Contact(TacticalPosition position, SensorContactIdentification identification) =>
+    private static SensorContactSnapshot Contact(
+        TacticalPosition position,
+        SensorContactIdentification identification
+    ) =>
         new(
             new SensorContactId(1),
             position,

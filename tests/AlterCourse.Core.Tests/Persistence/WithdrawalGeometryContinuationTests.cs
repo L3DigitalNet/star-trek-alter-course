@@ -99,7 +99,10 @@ public sealed class WithdrawalGeometryContinuationTests
                     new ShipContactDecisionWake(work.Id, work.DueTime)
                 ),
             }
-        ) with { Scheduler = scheduler };
+        ) with
+        {
+            Scheduler = scheduler,
+        };
         game = GameSimulation.RestoreState(state, fixture.Catalog);
         GameSimulation resumed = fixture.RoundTrip(game, "cautious-geometry.json");
         Assert.Equal(Bytes(game), Bytes(resumed));
@@ -147,7 +150,8 @@ public sealed class WithdrawalGeometryContinuationTests
         Assert.NotEqual(applied.TacticalPosition, game.CaptureState().GetRequiredShip(NpcId).TacticalPosition);
     }
 
-    private static byte[] Bytes(GameSimulation game) => GamePersistence.Serialize(game, Milestone3ProofFixture.Metadata);
+    private static byte[] Bytes(GameSimulation game) =>
+        GamePersistence.Serialize(game, Milestone3ProofFixture.Metadata);
 
     private static GameSimulation ObservedPair(Milestone3ProofFixture fixture, TacticalPosition npcPosition)
     {
