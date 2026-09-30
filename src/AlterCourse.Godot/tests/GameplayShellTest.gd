@@ -2080,10 +2080,46 @@ func test_content_ingress_rejects_malformed_schema_json() -> void:
 		for malformed: String in ["{\"type\":", "{\"type\":17}", "[]", "17", "null"]:
 			var probe: RefCounted = load("res://tests/ContentAdmissionProbe.cs").new()
 			_write_text(INVALID_CONTENT_PATH, malformed)
+			probe.call("BeginLogCapture")
 			var screen := _create_content_probe_screen(probe, path)
 			_assert_content_bootstrap_rejected(screen)
 			assert_int(probe.get("DisposedHandles")).is_equal(1)
 			_assert_content_read_budget(probe, path)
+			# _ExitTree emits Stopped and disposes the scene's sink; inspect only after that normal lifecycle.
+			_screens_to_free.erase(screen)
+			screen.queue_free()
+			await get_tree().process_frame
+			assert_bool(is_instance_valid(screen)).is_false()
+			_assert_invalid_content_log_capture(probe)
+
+
+func _assert_invalid_content_log_capture(probe: RefCounted) -> void:
+	var rows: PackedStringArray = probe.call("ReadCapturedLogRows")
+	assert_int(rows.size()).is_equal(3)
+	var sessions: Array[String] = []
+	var phases: Array[String] = []
+	var classifications: Array[String] = []
+	for row: String in rows:
+		var event: Variant = JSON.parse_string(row)
+		assert_bool(event is Dictionary).is_true()
+		if not event is Dictionary:
+			continue
+		var properties: Dictionary = event.get("Properties", {})
+		var session: String = properties.get("SessionCorrelation", "")
+		assert_str(session).is_not_empty()
+		if not sessions.has(session):
+			sessions.append(session)
+		if properties.has("Phase"):
+			phases.append(properties["Phase"])
+		if properties.has("FailureClassification"):
+			assert_str(properties.get("Operation", "")).is_equal("Content")
+			assert_str(event.get("Level", "")).is_equal("Error")
+			classifications.append(properties["FailureClassification"])
+	# BeginLogCapture excludes stale rows; one shared correlation binds the failure to this Started/Stopped pair.
+	assert_int(sessions.size()).is_equal(1)
+	phases.sort()
+	assert_array(phases).is_equal(["Started", "Stopped"])
+	assert_array(classifications).is_equal(["InvalidExternalInput"])
 
 
 func _create_fake_content_screen(probe: RefCounted, canonical_path: String, bytes: PackedByteArray) -> Node:

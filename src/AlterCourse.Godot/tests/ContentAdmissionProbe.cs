@@ -63,9 +63,68 @@ public partial class ContentAdmissionProbe : RefCounted
     public int ZeroWithoutEofAfterBytes { get; set; } = -1;
 
     private int _resourceLimit;
+    private readonly Dictionary<string, long> _logOffsets = new(StringComparer.Ordinal);
+    private string? _logDirectory;
 
     /// <summary>Gets disposed handles of the redirected resource.</summary>
     public int DisposedHandles { get; private set; }
+
+    /// <summary>Starts a capture of real gameplay log rows before a screen enters the tree.</summary>
+    public void BeginLogCapture()
+    {
+        _logDirectory = ProjectSettings.GlobalizePath("user://logs");
+        _logOffsets.Clear();
+        if (!Directory.Exists(_logDirectory))
+        {
+            return;
+        }
+
+        foreach (string path in Directory.EnumerateFiles(_logDirectory, "gameplay-*.json"))
+        {
+            _logOffsets.Add(path, new FileInfo(path).Length);
+        }
+    }
+
+    /// <summary>Reads only newly appended JSON rows after the captured screen exits the tree and disposes its sink.</summary>
+    public string[] ReadCapturedLogRows()
+    {
+        if (_logDirectory is null)
+        {
+            throw new InvalidOperationException("Begin a gameplay log capture before reading its rows.");
+        }
+
+        if (!Directory.Exists(_logDirectory))
+        {
+            return [];
+        }
+
+        List<string> rows = [];
+        // A new scene can get a different file while another sink holds the daily file, or after rollover.
+        // Snapshot byte offsets exclude old receipts; session assertions in GameplayShellTest reject other writers.
+        foreach (string path in Directory.EnumerateFiles(_logDirectory, "gameplay-*.json"))
+        {
+            using FileStream stream = new(
+                path,
+                FileMode.Open,
+                System.IO.FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete
+            );
+            long offset = _logOffsets.GetValueOrDefault(path);
+            if (stream.Length < offset)
+            {
+                throw new InvalidOperationException("A captured gameplay log was truncated before inspection.");
+            }
+
+            stream.Position = offset;
+            using StreamReader reader = new(stream);
+            while (reader.ReadLine() is { } row)
+            {
+                rows.Add(row);
+            }
+        }
+
+        return rows.ToArray();
+    }
 
     /// <summary>Installs recording before the screen enters the tree and performs its actual bootstrap.</summary>
     public void Redirect(Node screen, string canonicalPath, string fixturePath)
