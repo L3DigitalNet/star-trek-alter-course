@@ -6,7 +6,7 @@ description: 'Records the scope, preservation boundaries, and verification limit
 doc_type: 'reference'
 status: 'active'
 created: '2026-09-27'
-updated: '2026-09-27'
+updated: '2026-09-30'
 tags:
   - 'architecture'
   - 'documentation'
@@ -25,6 +25,10 @@ related:
 The owner requested the four additional ADRs identified in the preceding repository review, necessary documentation reconciliation, a general documentation polish, and a PR/merge. [PR #134](https://github.com/L3DigitalNet/star-trek-alter-course/pull/134) is the construction/review record from `dev` at `efd4ac93894fc28ea0c3ea40ca1be008dd4d6631`.
 
 This is documentation work, not a gameplay slice, release, runtime refactor, or new conformance certification. The [prior 191-obligation register](adr-conformance-2026-09-27.md) retains its original ADR 0001–0014 scope and execution evidence. This record does not amend that result or claim that every confirmation criterion in the new ADRs was freshly tested.
+
+### September 30 admission follow-up
+
+The owner authorized landing this work on September 30. [Issue #136](https://github.com/L3DigitalNet/star-trek-alter-course/issues/136) and [replacement PR #137](https://github.com/L3DigitalNet/star-trek-alter-course/pull/137) preserve the four construction commits while supplying the issue-numbered branch required by ADR 0013. PR #134 remains the original review record; its invalid branch name failed Branch policy. Independent source review found no contradictions in the four new records, and canonical verification passed at construction head `9e31f9e9ac8795ac7e145c774f1a6caee61ff3d9`. The replacement PR records final admission checks; this addendum does not claim a merge or release before it occurs.
 
 ## New architectural records
 
