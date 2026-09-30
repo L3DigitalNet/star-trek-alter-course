@@ -83,6 +83,10 @@ public sealed class WithdrawalGeometryTests
             yield return [defensive, double.MaxValue / 2, double.MaxValue, 0.0, -double.MaxValue, 14.036243467926479];
             yield return [defensive, double.MaxValue, double.Epsilon, 0.0, 0.0, 90.0];
             yield return [defensive, double.Epsilon, -double.MaxValue, 0.0, 0.0, 180.0];
+            yield return [defensive, double.MaxValue, -double.Epsilon, -double.MaxValue, 0.0, 90.0];
+            yield return [defensive, -double.MaxValue, double.Epsilon, double.MaxValue, 0.0, 270.0];
+            yield return [defensive, -double.Epsilon, double.MaxValue, 0.0, -double.MaxValue, 0.0];
+            yield return [defensive, double.Epsilon, -double.MaxValue, 0.0, double.MaxValue, 180.0];
             yield return [defensive, double.MaxValue, double.Epsilon, double.MaxValue, 0.0, 0.0];
             yield return [defensive, double.Epsilon, double.MaxValue, 0.0, double.MaxValue, 90.0];
         }
