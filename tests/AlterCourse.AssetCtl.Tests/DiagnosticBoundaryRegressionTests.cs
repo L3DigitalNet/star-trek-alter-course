@@ -11,46 +11,81 @@ public sealed class DiagnosticBoundaryRegressionTests
     /// <summary>Preserves the result and applied state when only the diagnostic boundary varies.</summary>
     [Theory]
     [InlineData("status", "none")]
+    [InlineData("status", "null")]
     [InlineData("status", "constructor")]
     [InlineData("status", "create")]
     [InlineData("status", "enabled")]
     [InlineData("status", "log")]
     [InlineData("status", "dispose")]
+    [InlineData("status", "constructor-cancel")]
+    [InlineData("status", "create-cancel")]
+    [InlineData("status", "enabled-cancel")]
+    [InlineData("status", "log-cancel")]
+    [InlineData("status", "dispose-cancel")]
     [InlineData("deprecate", "none")]
+    [InlineData("deprecate", "null")]
     [InlineData("deprecate", "constructor")]
     [InlineData("deprecate", "create")]
     [InlineData("deprecate", "enabled")]
     [InlineData("deprecate", "log")]
     [InlineData("deprecate", "dispose")]
+    [InlineData("deprecate", "constructor-cancel")]
+    [InlineData("deprecate", "create-cancel")]
+    [InlineData("deprecate", "enabled-cancel")]
+    [InlineData("deprecate", "log-cancel")]
+    [InlineData("deprecate", "dispose-cancel")]
     public async Task DiagnosticFaultPreservesCommandOutcomeAndState(string command, string fault)
     {
         using var fixture = new ProcessFixture();
         string[] arguments = command is "status"
             ? ["status", "--output", "json"]
-            : ["deprecate", "--output", "json", "--asset-id", fixture.AssetId, "--actor", "test", "--reason", "retired"];
+            :
+            [
+                "deprecate",
+                "--output",
+                "json",
+                "--asset-id",
+                fixture.AssetId,
+                "--actor",
+                "test",
+                "--reason",
+                "retired",
+            ];
 
         int exit = await Program.RunProcessAsync(arguments, (_, _) => CreateFactory(fault));
 
-        Assert.Equal(command is "deprecate" ? AssetLifecycle.Deprecated : AssetLifecycle.Placeholder, fixture.Load().Request.Lifecycle);
+        Assert.Equal(
+            command is "deprecate" ? AssetLifecycle.Deprecated : AssetLifecycle.Placeholder,
+            fixture.Load().Request.Lifecycle
+        );
         Assert.NotEmpty(fixture.Output.ToString());
         Assert.Equal(0, exit);
         Assert.False(Directory.Exists(Path.Combine(fixture.Root, ".assetctl", "runs")));
+        Assert.False(File.Exists(Path.Combine(fixture.Root, ".assetctl", "state", "daily-spend.json")));
     }
 
     /// <summary>Keeps the original pre-commit refusal classification even when diagnostic teardown also fails.</summary>
-    [Fact]
-    public async Task DisposalFaultPreservesOriginalOperationRefusal()
+    [Theory]
+    [InlineData("none")]
+    [InlineData("constructor")]
+    [InlineData("create")]
+    [InlineData("enabled")]
+    [InlineData("log")]
+    [InlineData("dispose")]
+    [InlineData("dispose-cancel")]
+    public async Task DiagnosticFaultPreservesOriginalOperationRefusal(string fault)
     {
         using var fixture = new ProcessFixture();
         byte[] before = await File.ReadAllBytesAsync(fixture.ManifestPath);
 
         int exit = await Program.RunProcessAsync(
             ["deprecate", "--asset-id", fixture.AssetId, "--actor", "test"],
-            (_, _) => CreateFactory("dispose")
+            (_, _) => CreateFactory(fault)
         );
 
         Assert.Equal(before, await File.ReadAllBytesAsync(fixture.ManifestPath));
         Assert.Equal(2, exit);
+        Assert.Contains("--reason", fixture.Error.ToString(), StringComparison.Ordinal);
     }
 
     /// <summary>Inspects actual rendered fallback output rather than treating regex sanitization as a safety proof.</summary>
@@ -82,72 +117,128 @@ public sealed class DiagnosticBoundaryRegressionTests
     }
 
     /// <summary>A failing diagnostic fallback stream must not prevent the independent required stdout result.</summary>
-    [Fact]
-    public async Task ConstructionFallbackStderrFaultPreservesReadOnlyCommand()
+    [Theory]
+    [InlineData("status")]
+    [InlineData("deprecate")]
+    public async Task ConstructionFallbackStderrFaultPreservesCommand(string command)
     {
         using var fixture = new ProcessFixture();
-        Console.SetError(new FallbackFaultWriter(fixture.Error));
+        var writer = new FallbackFaultWriter();
+        Console.SetError(writer);
 
+        string[] arguments = command is "status"
+            ? ["status", "--output", "json"]
+            :
+            [
+                "deprecate",
+                "--output",
+                "json",
+                "--asset-id",
+                fixture.AssetId,
+                "--actor",
+                "test",
+                "--reason",
+                "retired",
+            ];
         int exit = await Program.RunProcessAsync(
-            ["status", "--output", "json"],
-            (repository, logRoot) => Program.CreateLoggerFactory(repository, logRoot, _ => throw new IOException("sink unavailable"))
+            arguments,
+            (repository, logRoot) =>
+                Program.CreateLoggerFactory(repository, logRoot, _ => throw new IOException("sink unavailable"))
         );
 
         Assert.Equal(0, exit);
         Assert.NotEmpty(fixture.Output.ToString());
+        Assert.Equal(
+            command is "deprecate" ? AssetLifecycle.Deprecated : AssetLifecycle.Placeholder,
+            fixture.Load().Request.Lifecycle
+        );
+        Assert.True(writer.WriteAttempts > 0);
     }
 
-    private static FaultFactory CreateFactory(string fault) =>
-        fault is "constructor" ? throw new IOException("diagnostic constructor failure") : new FaultFactory(fault);
+    /// <summary>Preserves the original operation refusal when both diagnostic teardown and error reporting fail.</summary>
+    [Fact]
+    public async Task StderrAndDisposalFaultsPreserveOriginalOperationRefusal()
+    {
+        using var fixture = new ProcessFixture();
+        var writer = new FallbackFaultWriter();
+        Console.SetError(writer);
+        byte[] before = await File.ReadAllBytesAsync(fixture.ManifestPath);
+
+        int exit = await Program.RunProcessAsync(
+            ["deprecate", "--asset-id", fixture.AssetId, "--actor", "test"],
+            (_, _) => CreateFactory("dispose")
+        );
+
+        Assert.Equal(2, exit);
+        Assert.Equal(before, await File.ReadAllBytesAsync(fixture.ManifestPath));
+        Assert.True(writer.WriteAttempts > 0);
+    }
+
+    private static ILoggerFactory CreateFactory(string fault) =>
+        fault is "null" ? Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance
+        : fault.StartsWith("constructor", StringComparison.Ordinal) ? throw DiagnosticFault(fault)
+        : new FaultFactory(fault);
+
+    private static Exception DiagnosticFault(string fault) =>
+        fault.EndsWith("-cancel", StringComparison.Ordinal)
+            ? new OperationCanceledException("diagnostic cancellation")
+            : new IOException("diagnostic fault");
 
     private sealed class FaultFactory(string fault) : ILoggerFactory
     {
         public ILogger CreateLogger(string categoryName) =>
-            fault is "create" ? throw new IOException("diagnostic acquisition failure") : new FaultLogger(fault);
+            fault.StartsWith("create", StringComparison.Ordinal)
+                ? throw DiagnosticFault(fault)
+                : new FaultLogger(fault);
 
         public void AddProvider(ILoggerProvider provider) => throw new NotSupportedException();
 
         public void Dispose()
         {
-            if (fault is "dispose")
+            if (fault.StartsWith("dispose", StringComparison.Ordinal))
             {
-                throw new IOException("diagnostic disposal failure");
+                throw DiagnosticFault(fault);
             }
         }
     }
 
     private sealed class FaultLogger(string fault) : ILogger
     {
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => null;
 
         public bool IsEnabled(LogLevel logLevel) =>
-            fault is "enabled" ? throw new IOException("diagnostic enabled failure") : true;
+            fault.StartsWith("enabled", StringComparison.Ordinal) ? throw DiagnosticFault(fault) : true;
 
-        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter
+        )
         {
-            if (fault is "log")
+            if (fault.StartsWith("log", StringComparison.Ordinal))
             {
-                throw new IOException("diagnostic emission failure");
+                throw DiagnosticFault(fault);
             }
         }
     }
 
-    private sealed class FallbackFaultWriter(TextWriter target) : TextWriter
+    private sealed class FallbackFaultWriter : TextWriter
     {
-        public override Encoding Encoding => target.Encoding;
+        public override Encoding Encoding => Encoding.UTF8;
+
+        public int WriteAttempts { get; private set; }
 
         public override void WriteLine(string? value)
         {
-            if (value?.StartsWith("assetctl: logging degraded:", StringComparison.Ordinal) == true)
-            {
-                throw new IOException("fallback stderr unavailable");
-            }
-
-            target.WriteLine(value);
+            WriteAttempts++;
+            throw new IOException("fallback stderr unavailable");
         }
     }
 
-    private sealed class ProcessFixture : IDisposable
+    internal sealed class ProcessFixture : IDisposable
     {
         private readonly string _previousDirectory = Environment.CurrentDirectory;
         private readonly TextWriter _previousOutput = Console.Out;
@@ -162,9 +253,16 @@ public sealed class DiagnosticBoundaryRegressionTests
             Directory.CreateDirectory(Path.GetDirectoryName(ManifestPath)!);
             Directory.CreateDirectory(Path.Combine(Root, "src", "AlterCourse.Godot", "assets"));
             var manifest = new AssetManifest(
-                "1", TestData.Request(), 1,
+                "1",
+                TestData.Request(),
+                1,
                 new RightsRecord("original-project-created", "project", null, null, "test"),
-                null, null, null, null, new ApprovalRecord(null, null, null), null,
+                null,
+                null,
+                null,
+                null,
+                new ApprovalRecord(null, null, null),
+                null,
                 "config/assets/catalog/diagnostic.asset.yaml"
             );
             File.WriteAllText(ManifestPath, ManifestStore.Serialize(manifest));
@@ -173,13 +271,17 @@ public sealed class DiagnosticBoundaryRegressionTests
             Console.SetError(Error);
         }
 
-        public string Root { get; } = Path.Combine(Path.GetTempPath(), "assetctl-diagnostics-" + Guid.NewGuid().ToString("N"));
+        public string Root { get; } =
+            Path.Combine(Path.GetTempPath(), "assetctl-diagnostics-" + Guid.NewGuid().ToString("N"));
         public string AssetId { get; } = TestData.Request().Id;
         public string ManifestPath => Path.Combine(Root, "config", "assets", "catalog", "diagnostic.asset.yaml");
         public StringWriter Output { get; } = new(CultureInfo.InvariantCulture);
         public StringWriter Error { get; } = new(CultureInfo.InvariantCulture);
 
-        public AssetManifest Load()
+        public AssetManifest Load() =>
+            ManifestStore.Load(Configuration(), "config/assets/catalog/diagnostic.asset.yaml");
+
+        public EffectiveConfiguration Configuration()
         {
             using var client = new HttpClient();
             var registry = new AdapterRegistry([
@@ -189,7 +291,7 @@ public sealed class DiagnosticBoundaryRegressionTests
                 new AlterCourse.AssetCtl.Providers.ProviderAdapters.XaiImageAdapter(client),
                 new AlterCourse.AssetCtl.Review.OpenAiVisionReviewer(client),
             ]);
-            return ManifestStore.Load(new ConfigurationLoader(registry.Descriptors).Load(Root), "config/assets/catalog/diagnostic.asset.yaml");
+            return new ConfigurationLoader(registry.Descriptors).Load(Root);
         }
 
         public void Dispose()

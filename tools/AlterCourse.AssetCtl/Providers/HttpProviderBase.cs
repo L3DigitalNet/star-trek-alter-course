@@ -72,36 +72,21 @@ internal abstract class HttpProviderBase(HttpClient httpClient)
                 );
             }
 
-            byte[] json;
-            try
-            {
-                json = await ReadBoundedAsync(
-                        response.Content,
-                        context.MaximumJsonResponseBytes,
-                        ProviderErrorCategory.MalformedResponse,
-                        "Provider JSON response exceeded byte limit while streaming.",
-                        timeout.Token
-                    )
-                    .ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-            {
-                throw new ProviderException(
-                    ProviderErrorCategory.Timeout,
-                    "Provider response timed out.",
-                    retryable: true
-                );
-            }
+            byte[] json = await ReadResponseBytesAsync(
+                    response.Content,
+                    context.MaximumJsonResponseBytes,
+                    ProviderErrorCategory.MalformedResponse,
+                    cancellationToken,
+                    timeout.Token
+                )
+                .ConfigureAwait(false);
             try
             {
                 return Deserialize<T>(json);
             }
-            catch (JsonException exception)
+            catch (JsonException)
             {
-                throw new ProviderException(
-                    ProviderErrorCategory.MalformedResponse,
-                    $"Malformed provider JSON: {exception.Message}"
-                );
+                throw new ProviderException(ProviderErrorCategory.MalformedResponse, "Malformed provider JSON.");
             }
         }
     }
@@ -126,9 +111,12 @@ internal abstract class HttpProviderBase(HttpClient httpClient)
                 "provider request"
             );
         }
-        catch (AssetCtlException exception)
+        catch (AssetCtlException)
         {
-            throw new ProviderException(ProviderErrorCategory.InvalidRequest, exception.Message);
+            throw new ProviderException(
+                ProviderErrorCategory.InvalidRequest,
+                "Provider request endpoint failed policy validation."
+            );
         }
     }
 
@@ -148,11 +136,11 @@ internal abstract class HttpProviderBase(HttpClient httpClient)
         {
             throw new ProviderException(ProviderErrorCategory.Timeout, "Provider request timed out.", retryable: true);
         }
-        catch (HttpRequestException exception)
+        catch (HttpRequestException)
         {
             throw new ProviderException(
                 ProviderErrorCategory.TransientNetwork,
-                Redactor.Sanitize(exception.Message),
+                "Provider request failed at the network boundary.",
                 retryable: true
             );
         }
@@ -346,7 +334,7 @@ internal abstract class HttpProviderBase(HttpClient httpClient)
             {
                 throw new ProviderException(
                     ProviderErrorCategory.UnsafeDownload,
-                    $"Provider download host '{current.Host}' is not allowlisted."
+                    "Provider download host is not allowlisted."
                 );
             }
 
@@ -364,25 +352,14 @@ internal abstract class HttpProviderBase(HttpClient httpClient)
             }
 
             ValidateDownloadResponse(response, maximumBytes, context.MaximumRetryAfterDelayMilliseconds);
-            try
-            {
-                return await ReadBoundedAsync(
-                        response.Content,
-                        maximumBytes,
-                        ProviderErrorCategory.UnsafeDownload,
-                        "Provider download exceeded byte limit while streaming.",
-                        timeout.Token
-                    )
-                    .ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-            {
-                throw new ProviderException(
-                    ProviderErrorCategory.Timeout,
-                    "Provider download timed out.",
-                    retryable: true
-                );
-            }
+            return await ReadResponseBytesAsync(
+                    response.Content,
+                    maximumBytes,
+                    ProviderErrorCategory.UnsafeDownload,
+                    cancellationToken,
+                    timeout.Token
+                )
+                .ConfigureAwait(false);
         }
 
         throw new ProviderException(ProviderErrorCategory.UnsafeDownload, "Provider download exceeded redirect limit.");
@@ -415,11 +392,11 @@ internal abstract class HttpProviderBase(HttpClient httpClient)
         {
             throw new ProviderException(ProviderErrorCategory.Timeout, "Provider download timed out.", retryable: true);
         }
-        catch (HttpRequestException exception)
+        catch (HttpRequestException)
         {
             throw new ProviderException(
                 ProviderErrorCategory.TransientNetwork,
-                Redactor.Sanitize(exception.Message),
+                "Provider download failed at the network boundary.",
                 retryable: true
             );
         }
@@ -448,6 +425,46 @@ internal abstract class HttpProviderBase(HttpClient httpClient)
         if (response.Content.Headers.ContentLength > maximumBytes)
         {
             throw new ProviderException(ProviderErrorCategory.UnsafeDownload, "Provider download exceeds byte limit.");
+        }
+    }
+
+    private static async Task<byte[]> ReadResponseBytesAsync(
+        HttpContent content,
+        long maximumBytes,
+        ProviderErrorCategory sizeCategory,
+        CancellationToken callerToken,
+        CancellationToken timeoutToken
+    )
+    {
+        bool download = sizeCategory is ProviderErrorCategory.UnsafeDownload;
+        try
+        {
+            return await ReadBoundedAsync(
+                    content,
+                    maximumBytes,
+                    sizeCategory,
+                    download
+                        ? "Provider download exceeded byte limit while streaming."
+                        : "Provider JSON response exceeded byte limit while streaming.",
+                    timeoutToken
+                )
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!callerToken.IsCancellationRequested)
+        {
+            throw new ProviderException(
+                ProviderErrorCategory.Timeout,
+                download ? "Provider download timed out." : "Provider response timed out.",
+                retryable: true
+            );
+        }
+        catch (Exception exception) when (exception is HttpRequestException or IOException)
+        {
+            throw new ProviderException(
+                ProviderErrorCategory.TransientNetwork,
+                download ? "Provider download read failed." : "Provider response read failed.",
+                retryable: true
+            );
         }
     }
 

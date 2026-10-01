@@ -190,10 +190,7 @@ internal sealed class OpenAiVisionReviewer(HttpClient client) : HttpProviderBase
         catch (Exception exception)
             when (exception is JsonException or KeyNotFoundException or InvalidOperationException)
         {
-            throw new ProviderException(
-                ProviderErrorCategory.MalformedResponse,
-                $"Invalid semantic review: {exception.Message}"
-            );
+            throw new ProviderException(ProviderErrorCategory.MalformedResponse, "Invalid semantic review payload.");
         }
     }
 

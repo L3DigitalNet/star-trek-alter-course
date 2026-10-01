@@ -1,4 +1,5 @@
 using System.Globalization;
+using AlterCourse.AssetCtl.Diagnostics;
 using AlterCourse.AssetCtl.Generation;
 using AlterCourse.AssetCtl.Review;
 using AlterCourse.AssetCtl.Routing;
@@ -23,7 +24,9 @@ internal static class Program
         {
             string? repository = TryFindRepository();
             string? logRoot = ResolveLogRoot(arguments, repository);
-            using ILoggerFactory loggerFactory = createLoggerFactory(repository, logRoot);
+            using ILoggerFactory loggerFactory = BestEffortLoggerFactory.Create(() =>
+                createLoggerFactory(repository, logRoot)
+            );
             using var httpClient = new HttpClient(CreateProviderHandler());
             return await RunAsync(arguments, loggerFactory, httpClient).ConfigureAwait(false);
         }
@@ -41,8 +44,10 @@ internal static class Program
             ? null
             : TryLoadLogRoot(repository);
 
-    internal static ILoggerFactory CreateLoggerFactory(string? repository, string? configuredLogRoot = ".assetctl/logs") =>
-        CreateLoggerFactory(repository, configuredLogRoot, CreateConfiguredLoggerFactory);
+    internal static ILoggerFactory CreateLoggerFactory(
+        string? repository,
+        string? configuredLogRoot = ".assetctl/logs"
+    ) => CreateLoggerFactory(repository, configuredLogRoot, CreateConfiguredLoggerFactory);
 
     internal static ILoggerFactory CreateLoggerFactory(
         string? repository,
@@ -61,21 +66,16 @@ internal static class Program
             Directory.CreateDirectory(logRoot);
             return createConfiguredLoggerFactory(logRoot);
         }
-        catch (Exception exception) when (!IsProcessFatal(exception) && exception is not OperationCanceledException)
+        catch (Exception exception) when (!IsProcessFatal(exception))
         {
-            Console.Error.WriteLine(
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"assetctl: logging degraded: {Redactor.Sanitize(exception.Message)}"
-                )
-            );
+            BestEffortLoggerFactory.ReportDegradation();
             return LoggerFactory.Create(builder => builder.AddProvider(new StderrLoggerProvider()));
         }
     }
 
     private static ILoggerFactory CreateConfiguredLoggerFactory(string logRoot)
     {
-        Log.Logger = new LoggerConfiguration()
+        Serilog.ILogger logger = new LoggerConfiguration()
             .MinimumLevel.Information()
             .WriteTo.Console(
                 formatProvider: CultureInfo.InvariantCulture,
@@ -91,13 +91,13 @@ internal static class Program
                 rollOnFileSizeLimit: true
             )
             .CreateLogger();
-        return new Serilog.Extensions.Logging.SerilogLoggerFactory(Log.Logger, dispose: true);
+        return new Serilog.Extensions.Logging.SerilogLoggerFactory(logger, dispose: true);
     }
 
     internal static int ReportUnexpectedFailure(Exception exception)
     {
         _ = exception;
-        Console.Error.WriteLine("assetctl: unexpected internal failure.");
+        BestEffortLoggerFactory.WriteDiagnostic("assetctl: unexpected internal failure.");
         return 1;
     }
 
@@ -127,12 +127,14 @@ internal static class Program
         }
         catch (AssetCtlException exception)
         {
-            Console.Error.WriteLine($"assetctl: {Redactor.Sanitize(exception.Message)}");
+            BestEffortLoggerFactory.WriteDiagnostic($"assetctl: {Redactor.Sanitize(exception.Message)}");
             return exception.ExitCode;
         }
         catch (ProviderException exception)
         {
-            Console.Error.WriteLine($"assetctl: provider {exception.Category}: {Redactor.Sanitize(exception.Message)}");
+            BestEffortLoggerFactory.WriteDiagnostic(
+                $"assetctl: provider {exception.Category}: provider operation failed."
+            );
             return exception.Category is ProviderErrorCategory.Authentication or ProviderErrorCategory.Authorization
                 ? 3
                 : 4;
@@ -189,12 +191,12 @@ internal static class Program
 
     private sealed class StderrLoggerProvider : ILoggerProvider
     {
-        public Microsoft.Extensions.Logging.ILogger CreateLogger(string categoryName) => new StderrLogger(categoryName);
+        public Microsoft.Extensions.Logging.ILogger CreateLogger(string categoryName) => new StderrLogger();
 
         public void Dispose() { }
     }
 
-    private sealed class StderrLogger(string category) : Microsoft.Extensions.Logging.ILogger
+    private sealed class StderrLogger : Microsoft.Extensions.Logging.ILogger
     {
         public IDisposable? BeginScope<TState>(TState state)
             where TState : notnull => null;
@@ -211,7 +213,7 @@ internal static class Program
         {
             if (IsEnabled(logLevel))
             {
-                Console.Error.WriteLine($"{category}: {Redactor.Sanitize(formatter(state, exception))}");
+                BestEffortLoggerFactory.WriteDiagnostic($"assetctl: diagnostic {eventId.Id} ({logLevel}).");
             }
         }
     }

@@ -132,7 +132,7 @@ internal static class MechanicalValidator
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
         {
-            return Failure($"raster decode failed: {exception.Message}");
+            return Failure("raster decode failed");
         }
     }
 
@@ -235,7 +235,7 @@ internal static class MechanicalValidator
         }
         catch (Exception exception) when (exception is XmlException or InvalidOperationException or FormatException)
         {
-            return Failure($"SVG parse or render failed: {exception.Message}");
+            return Failure("SVG parse or render failed");
         }
     }
 
@@ -314,7 +314,7 @@ internal static class MechanicalValidator
                     && request.Prohibited.Contains("text", StringComparer.OrdinalIgnoreCase)
             )
             {
-                return $"prohibited SVG element '{local}'";
+                return "prohibited SVG element";
             }
 
             if (string.Equals(local, "text", StringComparison.Ordinal) && !IsSanitizedIdentifier(element))
@@ -337,7 +337,7 @@ internal static class MechanicalValidator
                     || IsExternalResource(name, value)
                 )
                 {
-                    return $"prohibited SVG attribute '{name}'";
+                    return "prohibited SVG attribute";
                 }
             }
         }

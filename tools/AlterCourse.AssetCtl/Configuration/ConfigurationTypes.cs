@@ -511,9 +511,9 @@ internal static class ConfigurationTypes
                 {
                     adapter.ValidateOptions(model.Options);
                 }
-                catch (ProviderException exception)
+                catch (ProviderException)
                 {
-                    throw new AssetCtlException($"{path}.models.{modelId}.options: {exception.Message}", 2);
+                    throw new AssetCtlException("providers.models.options: provider option validation failed.", 2);
                 }
 
                 result.Add(modelId, model);
@@ -1203,14 +1203,14 @@ internal static class ConfigurationTypes
                     );
                     if (!evaluation.IsValid)
                     {
-                        throw new AssetCtlException($"{relative}: invalid draft 2020-12 schema: {evaluation}", 2);
+                        throw new AssetCtlException("config/assets/schemas: invalid draft 2020-12 schema.", 2);
                     }
 
                     _ = JsonSchema.FromText(contents);
                 }
-                catch (JsonException exception)
+                catch (JsonException)
                 {
-                    throw new AssetCtlException($"{relative}: invalid JSON Schema document: {exception.Message}", 2);
+                    throw new AssetCtlException("config/assets/schemas: invalid JSON Schema document.", 2);
                 }
 
                 results.Add(new SchemaDocumentStatus(relative, SupportedDraft, true));
