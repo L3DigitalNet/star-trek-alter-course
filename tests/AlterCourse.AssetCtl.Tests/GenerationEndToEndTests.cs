@@ -12,6 +12,32 @@ namespace AlterCourse.AssetCtl.Tests;
 /// <summary>Exercises the offline orchestration boundary with deterministic in-memory providers.</summary>
 public sealed class GenerationEndToEndTests
 {
+    /// <summary>Failure receipts and classifications must not copy arbitrary provider exception prose.</summary>
+    [Fact]
+    public async Task GenerationDiagnosticFailureReceiptExcludesUntrustedProse()
+    {
+        const string sentinel = "/home/synthetic-owner/private/sentinel-receipt-secret";
+        var generator = new ScriptedGenerator(
+            "privacy-generator",
+            _ => throw new ProviderException(ProviderErrorCategory.MalformedResponse, sentinel)
+        );
+        using var fixture = new GenerationFixture([generator], "disabled");
+
+        ProviderException failure = await Assert.ThrowsAsync<ProviderException>(() => fixture.GenerateAsync());
+
+        Assert.Equal(ProviderErrorCategory.MalformedResponse, failure.Category);
+        Assert.DoesNotContain(sentinel, failure.Message, StringComparison.Ordinal);
+        string[] receipts = Directory.GetFiles(
+            Path.Combine(fixture.Root, fixture.Configuration.Paths.ReceiptRoot),
+            "*.json"
+        );
+        Assert.NotEmpty(receipts);
+        foreach (string receipt in receipts)
+        {
+            Assert.DoesNotContain(sentinel, await File.ReadAllTextAsync(receipt), StringComparison.Ordinal);
+        }
+    }
+
     /// <summary>Generates, reviews, publishes, receipts, then reuses the current result without provider calls.</summary>
     [Fact]
     public async Task GenerateReviewPublishAndIdempotentReuseAreEndToEnd()
