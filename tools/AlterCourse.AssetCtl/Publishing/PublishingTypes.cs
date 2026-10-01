@@ -16,6 +16,7 @@ internal static partial class PublishingTypes
         private const int OpenWriteOnly = 0x0001;
         private const int OpenCreate = 0x0040;
         private const int OpenExclusive = 0x0080;
+        private const int OpenNonBlocking = 0x0800;
         private const int OpenCloseOnExec = 0x80000;
         private const int OpenDirectory = 0x10000;
         private const int OpenNoFollow = 0x20000;
@@ -37,13 +38,32 @@ internal static partial class PublishingTypes
             public static DirectoryHandle OpenExisting(string path, string field)
             {
                 RequireLinux(field);
-                int descriptor = Open(path, OpenDirectory | OpenNoFollow | OpenCloseOnExec, 0);
+                string absolute = System.IO.Path.GetFullPath(path);
+                int descriptor = Open("/", OpenDirectory | OpenNoFollow | OpenCloseOnExec, 0);
                 if (descriptor < 0)
                 {
-                    throw new AssetCtlException($"{field}: directory is unavailable or unsafe.", 7);
+                    throw new AssetCtlException($"{field}: root directory is unavailable.", 7);
                 }
 
-                return new DirectoryHandle(new SafeFileHandle(descriptor, ownsHandle: true), path);
+                var current = new DirectoryHandle(new SafeFileHandle(descriptor, ownsHandle: true), "/");
+                try
+                {
+                    // O_NOFOLLOW applies only to the basename. Walking relative to held descriptors
+                    // admits every ancestor, rather than trusting a prior full-path symlink check.
+                    foreach (string component in absolute.Split('/', StringSplitOptions.RemoveEmptyEntries))
+                    {
+                        DirectoryHandle next = current.OpenChild(component, field);
+                        current.Dispose();
+                        current = next;
+                    }
+
+                    return current;
+                }
+                catch
+                {
+                    current.Dispose();
+                    throw;
+                }
             }
 
             public DirectoryHandle CreateChild(string leaf, string field)
@@ -79,8 +99,58 @@ internal static partial class PublishingTypes
                 );
             }
 
-            public FileStream CreateFile(string leaf, string field)
+            public FileStream OpenReadFile(
+                string leaf,
+                string field,
+                Func<SafeFileHandle, FileStream>? streamFactory = null
+            )
             {
+                int descriptor = OpenAt(Descriptor, leaf, OpenNoFollow | OpenCloseOnExec | OpenNonBlocking, 0);
+                if (descriptor < 0)
+                {
+                    throw new AssetCtlException($"{field}: file is unavailable or unsafe.", 7);
+                }
+
+                var handle = new SafeFileHandle(descriptor, ownsHandle: true);
+                try
+                {
+                    // Nonblocking open reaches regular-file admission even for substituted FIFOs.
+                    // Disable read-ahead so byte admission also bounds the actual OS reads.
+                    _ = Identity(handle);
+                    return streamFactory is null
+                        ? new FileStream(handle, FileAccess.Read, bufferSize: 1)
+                        : streamFactory(handle);
+                }
+                catch
+                {
+                    // FileStream takes ownership only after successful construction.
+                    handle.Dispose();
+                    throw;
+                }
+            }
+
+            public void DeleteFile(string leaf, string field)
+            {
+                if (UnlinkAt(Descriptor, leaf, 0) != 0)
+                {
+                    throw new AssetCtlException($"{field}: descriptor-bound cleanup failed.", 7);
+                }
+            }
+
+            public FileStream CreateFile(
+                string leaf,
+                string field,
+                Func<SafeFileHandle, FileStream>? streamFactory = null
+            ) => CreateFile(leaf, field, out _, streamFactory);
+
+            public FileStream CreateFile(
+                string leaf,
+                string field,
+                out FileIdentity? identity,
+                Func<SafeFileHandle, FileStream>? streamFactory = null
+            )
+            {
+                identity = null;
                 int descriptor = OpenAt(
                     Descriptor,
                     leaf,
@@ -92,7 +162,30 @@ internal static partial class PublishingTypes
                     throw new AssetCtlException($"{field}: file could not be created safely.", 7);
                 }
 
-                return new FileStream(new SafeFileHandle(descriptor, ownsHandle: true), FileAccess.Write);
+                var handle = new SafeFileHandle(descriptor, ownsHandle: true);
+                try
+                {
+                    identity = Identity(handle);
+                    return streamFactory is null
+                        ? new FileStream(handle, FileAccess.Write, bufferSize: 1)
+                        : streamFactory(handle);
+                }
+                catch
+                {
+                    // Retain the native handle until owned-leaf cleanup finishes. A failed
+                    // constructor never acquired stream ownership, and its error remains primary.
+                    try
+                    {
+                        using FileStream named = OpenReadFile(leaf, field);
+                        if (identity is not null && Identity(named) == identity)
+                        {
+                            DeleteFile(leaf, field);
+                        }
+                    }
+                    catch (Exception) { }
+                    handle.Dispose();
+                    throw;
+                }
             }
 
             public FileStream CreateLockedFile(string leaf, string field)
@@ -115,7 +208,15 @@ internal static partial class PublishingTypes
                     throw new AssetCtlException($"{field}: file could not be locked safely.", 7);
                 }
 
-                return new FileStream(fileHandle, FileAccess.ReadWrite);
+                try
+                {
+                    return new FileStream(fileHandle, FileAccess.ReadWrite);
+                }
+                catch
+                {
+                    fileHandle.Dispose();
+                    throw;
+                }
             }
 
             public string DescriptorPath(string leaf) => $"/proc/self/fd/{Descriptor}/{leaf}";
@@ -191,13 +292,70 @@ internal static partial class PublishingTypes
 
                 // The directory descriptor and O_NOFOLLOW bind validation to this open. A path check alone
                 // permits a replacement symlink to redirect the state write between validation and opening.
-                return new FileStream(handle, FileAccess.ReadWrite);
+                try
+                {
+                    return new FileStream(handle, FileAccess.ReadWrite);
+                }
+                catch
+                {
+                    handle.Dispose();
+                    throw;
+                }
             }
             finally
             {
                 _ = Close(directoryDescriptor);
             }
         }
+
+        [StructLayout(LayoutKind.Auto)]
+        internal readonly record struct FileIdentity(ulong Inode, uint DeviceMajor, uint DeviceMinor);
+
+        internal static FileIdentity Identity(FileStream stream) => Identity(stream.SafeFileHandle);
+
+        private static FileIdentity Identity(SafeFileHandle handle)
+        {
+            if (
+                Statx(handle, "", 0x1000, 0x7FF, out FileStat status) != 0
+                || (status.Mask & 0x103) != 0x103
+                || (status.Mode & 0xF000) != 0x8000
+            )
+            {
+                throw new AssetCtlException("Lifecycle evidence must be a regular Linux file.", 7);
+            }
+
+            return new FileIdentity(status.Inode, status.DeviceMajor, status.DeviceMinor);
+        }
+
+        // statx has a fixed Linux ABI, unlike architecture-dependent struct stat. Only identity
+        // and regular-file admission are needed; timestamps are not used as content evidence.
+        [StructLayout(LayoutKind.Explicit, Size = 256)]
+        private struct FileStat
+        {
+            [FieldOffset(0)]
+            public uint Mask;
+
+            [FieldOffset(28)]
+            public ushort Mode;
+
+            [FieldOffset(32)]
+            public ulong Inode;
+
+            [FieldOffset(136)]
+            public uint DeviceMajor;
+
+            [FieldOffset(140)]
+            public uint DeviceMinor;
+        }
+
+        [LibraryImport("libc", EntryPoint = "statx", SetLastError = true, StringMarshalling = StringMarshalling.Utf8)]
+        private static partial int Statx(
+            SafeFileHandle descriptor,
+            string path,
+            int flags,
+            uint mask,
+            out FileStat status
+        );
 
         private static void RequireLinux(string field)
         {
@@ -228,6 +386,14 @@ internal static partial class PublishingTypes
             int newDirectoryDescriptor,
             string newPath
         );
+
+        [LibraryImport(
+            "libc",
+            EntryPoint = "unlinkat",
+            SetLastError = true,
+            StringMarshalling = StringMarshalling.Utf8
+        )]
+        private static partial int UnlinkAt(int directoryDescriptor, string path, int flags);
 
         [LibraryImport("libc", EntryPoint = "flock", SetLastError = true)]
         private static partial int Flock(SafeFileHandle descriptor, int operation);
@@ -528,10 +694,10 @@ internal static partial class PublishingTypes
                 testHooks?.AfterWorkFilesStaged?.Invoke(assetStage, manifestStage);
                 transactionDirectory.EnsureStillNamed("publication transaction root");
                 (string assetHash, long assetLength, string manifestHash) = VerifyStaged(
-                    transactionDirectory.DescriptorPath("asset.stage"),
-                    transactionDirectory.DescriptorPath("manifest.stage"),
+                    transactionDirectory,
                     assetBytes,
-                    manifestText
+                    manifestText,
+                    configuration.Limits.MaximumDownloadBytes
                 );
                 return new StagedPublication(
                     transaction,
@@ -603,7 +769,7 @@ internal static partial class PublishingTypes
                     PublicationMove.InstallManifest,
                     testHooks
                 );
-                if (!NewPairMatches(journal, publication.Asset, publication.Manifest))
+                if (!NewPairMatches(configuration, journal, publication.Asset, publication.Manifest))
                 {
                     throw new AssetCtlException("Published pair does not match its staged integrity evidence.", 7);
                 }
@@ -787,18 +953,28 @@ internal static partial class PublishingTypes
         }
 
         private static (string AssetHash, long AssetLength, string ManifestHash) VerifyStaged(
-            string assetStage,
-            string manifestStage,
+            StateFile.DirectoryHandle transactionDirectory,
             byte[] expectedAssetBytes,
-            string expectedManifestText
+            string expectedManifestText,
+            long maximumAssetBytes
         )
         {
-            byte[] stagedAsset = File.ReadAllBytes(assetStage);
-            byte[] stagedManifest = File.ReadAllBytes(manifestStage);
+            string manifestStage = transactionDirectory.DescriptorPath("manifest.stage");
+            byte[] stagedAsset = global::AlterCourse.AssetCtl.Catalog.SelectedAssetReader.Read(
+                transactionDirectory,
+                "asset.stage",
+                Math.Min(expectedAssetBytes.LongLength, maximumAssetBytes)
+            );
+            byte[] expectedManifestBytes = new UTF8Encoding(false).GetBytes(expectedManifestText);
+            byte[] stagedManifest = global::AlterCourse.AssetCtl.Catalog.SelectedAssetReader.Read(
+                transactionDirectory,
+                "manifest.stage",
+                Math.Min(expectedManifestBytes.LongLength, YamlValues.MaximumBytes)
+            );
             string assetHash = Hash(stagedAsset);
             string expectedAssetHash = Hash(expectedAssetBytes);
             string manifestHash = Hash(stagedManifest);
-            string expectedManifestHash = Hash(new UTF8Encoding(false).GetBytes(expectedManifestText));
+            string expectedManifestHash = Hash(expectedManifestBytes);
             if (
                 !string.Equals(assetHash, expectedAssetHash, StringComparison.Ordinal)
                 || !string.Equals(manifestHash, expectedManifestHash, StringComparison.Ordinal)
@@ -807,7 +983,7 @@ internal static partial class PublishingTypes
                 throw new AssetCtlException("Staged publication bytes changed before verification.", 7);
             }
 
-            YamlMappingNode root = StrictYaml.LoadMapping(manifestStage);
+            YamlMappingNode root = StrictYaml.LoadBytes(manifestStage, stagedManifest);
             YamlMappingNode integrity = root.Mapping("integrity", "manifest");
             string claimedHash = integrity.Scalar("sha256", "manifest.integrity");
             long claimedLength = integrity.Long("byte_length", "manifest.integrity");
@@ -914,7 +1090,7 @@ internal static partial class PublishingTypes
                 ManifestBackupPath = manifestBackup,
             };
 
-            if (NewPairMatches(journal, asset, manifest))
+            if (NewPairMatches(configuration, journal, asset, manifest))
             {
                 Complete(journalPath, resolved, configuration);
                 return;
@@ -939,15 +1115,35 @@ internal static partial class PublishingTypes
                 allowMissing: true
             );
 
-        private static bool NewPairMatches(PublicationJournal journal, string asset, string manifest)
+        private static bool NewPairMatches(
+            EffectiveConfiguration configuration,
+            PublicationJournal journal,
+            string asset,
+            string manifest
+        )
         {
             if (!File.Exists(asset) || !File.Exists(manifest))
             {
                 return false;
             }
 
-            byte[] assetBytes = File.ReadAllBytes(asset);
-            byte[] manifestBytes = File.ReadAllBytes(manifest);
+            byte[] assetBytes;
+            byte[] manifestBytes;
+            try
+            {
+                assetBytes = global::AlterCourse.AssetCtl.Catalog.SelectedAssetReader.Read(
+                    asset,
+                    configuration.Limits.MaximumDownloadBytes
+                );
+                manifestBytes = global::AlterCourse.AssetCtl.Catalog.SelectedAssetReader.Read(
+                    manifest,
+                    YamlValues.MaximumBytes
+                );
+            }
+            catch (AssetCtlException)
+            {
+                return false;
+            }
             if (
                 assetBytes.LongLength != journal.AssetLength
                 || !string.Equals(Hash(assetBytes), journal.AssetHash, StringComparison.Ordinal)
@@ -959,7 +1155,7 @@ internal static partial class PublishingTypes
 
             try
             {
-                YamlMappingNode root = StrictYaml.LoadMapping(manifest);
+                YamlMappingNode root = StrictYaml.LoadBytes(manifest, manifestBytes);
                 YamlMappingNode integrity = root.Mapping("integrity", "manifest");
                 return string.Equals(
                         integrity.Scalar("sha256", "manifest.integrity"),

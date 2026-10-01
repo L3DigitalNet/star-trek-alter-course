@@ -8,7 +8,8 @@ namespace AlterCourse.AssetCtl.Configuration;
 /// <summary>Loads the deliberately small AssetCtl YAML dialect without resolving executable or recursive YAML features.</summary>
 internal static class YamlValues
 {
-    private const int MaximumCharacters = 1_048_576;
+    internal const int MaximumBytes = 1_048_576;
+    private const int MaximumCharacters = MaximumBytes;
     private const int MaximumDepth = 32;
     private const int MaximumNodes = 20_000;
 
@@ -24,6 +25,27 @@ internal static class YamlValues
 
             using var reader = new StreamReader(stream, detectEncodingFromByteOrderMarks: true);
             text = reader.ReadToEnd();
+        }
+
+        return LoadText(path, text);
+    }
+
+    internal static YamlMappingNode LoadBytes(string path, byte[] bytes)
+    {
+        if (bytes.LongLength > MaximumBytes)
+        {
+            throw new AssetCtlException($"{path}: YAML exceeds the byte limit.", 2);
+        }
+
+        using var reader = new StreamReader(new MemoryStream(bytes), detectEncodingFromByteOrderMarks: true);
+        return LoadText(path, reader.ReadToEnd());
+    }
+
+    internal static YamlMappingNode LoadText(string path, string text)
+    {
+        if (text.Length > MaximumCharacters)
+        {
+            throw new AssetCtlException($"{path}: YAML exceeds the character limit.", 2);
         }
 
         RejectProhibitedSyntax(path, text);

@@ -46,8 +46,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         var failureCandidates = new List<ReceiptCandidateEvidence>();
         ValidateGenerationBoundary(configuration, manifest, attempts, failureCandidates, runId);
 
-        object? existingResult = await TryExistingAsync(configuration, manifest, force, cancellationToken)
-            .ConfigureAwait(false);
+        object? existingResult = TryExisting(configuration, manifest, force, cancellationToken);
         if (existingResult is not null)
         {
             return existingResult;
@@ -221,7 +220,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         );
     }
 
-    private static async Task<object?> TryExistingAsync(
+    private static object? TryExisting(
         EffectiveConfiguration configuration,
         AssetManifest manifest,
         bool force,
@@ -235,12 +234,9 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
 
         try
         {
-            ManifestStore.VerifyIntegrity(configuration, manifest);
-            byte[] existing = await File.ReadAllBytesAsync(
-                    Path.Combine(configuration.RepositoryRoot, manifest.Request.Output.Path),
-                    cancellationToken
-                )
-                .ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            byte[] existing = ManifestStore.VerifyIntegrity(configuration, manifest);
+            cancellationToken.ThrowIfCancellationRequested();
             MechanicalValidationResult validation = MechanicalValidator.Validate(
                 manifest.Request,
                 existing,
@@ -1646,7 +1642,10 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
     )
     {
         string path = PathPolicy.ResolveReferencePath(configuration, reference.Path, allowMissing: false);
-        byte[] bytes = File.ReadAllBytes(path);
+        byte[] bytes = global::AlterCourse.AssetCtl.Catalog.SelectedAssetReader.Read(
+            path,
+            configuration.Limits.MaximumReferenceBytes
+        );
         if (
             bytes.LongLength > configuration.Limits.MaximumReferenceBytes
             || !string.Equals(

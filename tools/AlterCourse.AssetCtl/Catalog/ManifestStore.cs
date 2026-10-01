@@ -82,6 +82,15 @@ internal static class ManifestStore
         EnsurePhysicalCatalogContainment(configuration, absolute);
 
         global::YamlDotNet.RepresentationModel.YamlMappingNode root = StrictYaml.LoadMapping(absolute);
+        return LoadSnapshot(configuration, absolute, root);
+    }
+
+    internal static AssetManifest LoadSnapshot(
+        EffectiveConfiguration configuration,
+        string absolute,
+        YamlMappingNode root
+    )
+    {
         string id = ValidateHeader(root);
 
         global::AlterCourse.AssetCtl.Domain.DomainModels.AssetLifecycle lifecycle = ParseLifecycle(
@@ -547,7 +556,7 @@ internal static class ManifestStore
         Line(builder, 2, "media_type", integrity.MediaType);
     }
 
-    public static void VerifyIntegrity(
+    public static byte[] VerifyIntegrity(
         EffectiveConfiguration configuration,
         AssetManifest manifest,
         Func<string, byte[]>? readSelectedBytes = null
@@ -559,8 +568,33 @@ internal static class ManifestStore
         }
 
         string path = PathPolicy.ResolveOutputPath(configuration, manifest.Request.Output.Path, allowMissing: false);
-        // The scoped seam delegates to the actual whole-file read, allowing tests to observe admission ordering.
-        byte[] bytes = (readSelectedBytes ?? File.ReadAllBytes)(path);
+        byte[] bytes;
+        if (readSelectedBytes is null)
+        {
+            bytes = SelectedAssetReader.Read(path, configuration.Limits.MaximumDownloadBytes);
+        }
+        else
+        {
+            // The legacy regression observer runs only after pre-allocation admission. Production
+            // always uses the bounded stream loop, which also checks changing length and EOF.
+            if (new FileInfo(path).Length > configuration.Limits.MaximumDownloadBytes)
+            {
+                throw new AssetCtlException("Selected file exceeds the applicable byte limit.", 1);
+            }
+
+            bytes = readSelectedBytes(path);
+        }
+
+        VerifyIntegrity(configuration, manifest, bytes);
+        return bytes;
+    }
+
+    public static void VerifyIntegrity(EffectiveConfiguration configuration, AssetManifest manifest, byte[] bytes)
+    {
+        if (manifest.Integrity is null || bytes.LongLength > configuration.Limits.MaximumDownloadBytes)
+        {
+            throw new AssetCtlException($"{manifest.Request.Id}: selected bytes lack admitted integrity.", 1);
+        }
         string hash = Convert.ToHexStringLower(SHA256.HashData(bytes));
         if (
             !string.Equals(hash, manifest.Integrity.Sha256, StringComparison.Ordinal)

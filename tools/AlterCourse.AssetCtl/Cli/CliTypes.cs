@@ -145,10 +145,7 @@ internal static class CliTypes
                 return;
             }
 
-            ManifestStore.VerifyIntegrity(configuration, manifest);
-            byte[] bytes = File.ReadAllBytes(
-                PathPolicy.ResolveOutputPath(configuration, manifest.Request.Output.Path, allowMissing: false)
-            );
+            byte[] bytes = ManifestStore.VerifyIntegrity(configuration, manifest);
             global::AlterCourse.AssetCtl.Domain.DomainModels.MechanicalValidationResult validation =
                 MechanicalValidator.Validate(
                     manifest.Request,
@@ -361,8 +358,9 @@ internal static class CliTypes
                 )
             )
             {
-                byte[] bytes = File.ReadAllBytes(
-                    Path.Combine(configuration.RepositoryRoot, manifest.Request.Output.Path)
+                byte[] bytes = global::AlterCourse.AssetCtl.Catalog.SelectedAssetReader.Read(
+                    PathPolicy.ResolveOutputPath(configuration, manifest.Request.Output.Path, allowMissing: false),
+                    configuration.Limits.MaximumDownloadBytes
                 );
                 if (
                     !string.Equals(
@@ -443,10 +441,7 @@ internal static class CliTypes
             List<object> results = [];
             foreach (global::AlterCourse.AssetCtl.Domain.DomainModels.AssetManifest manifest in selected)
             {
-                ManifestStore.VerifyIntegrity(configuration, manifest);
-                byte[] bytes = File.ReadAllBytes(
-                    PathPolicy.ResolveOutputPath(configuration, manifest.Request.Output.Path, allowMissing: false)
-                );
+                byte[] bytes = ManifestStore.VerifyIntegrity(configuration, manifest);
                 global::AlterCourse.AssetCtl.Domain.DomainModels.MechanicalValidationResult mechanical =
                     MechanicalValidator.Validate(
                         manifest.Request,
@@ -472,8 +467,8 @@ internal static class CliTypes
             return new { valid = true, assets = results };
         }
 
-        private static object Approve(EffectiveConfiguration configuration, CliOptions options)
-            => ApproveObserved(configuration, options);
+        private static object Approve(EffectiveConfiguration configuration, CliOptions options) =>
+            ApproveObserved(configuration, options);
 
         internal static object ApproveObserved(
             EffectiveConfiguration configuration,
@@ -497,15 +492,16 @@ internal static class CliTypes
                 };
             }
 
-            (string actor, string note) = ValidateApprovalEligibility(configuration, manifest, options);
+            using var boundary = new global::AlterCourse.AssetCtl.Publishing.LifecycleBoundary(configuration, manifest);
+            (string actor, string note, byte[] bytes) = ValidateApprovalEligibility(
+                configuration,
+                manifest,
+                options,
+                boundary
+            );
             observation?.EvidenceValidated?.Invoke();
 
-            string assetPath = PathPolicy.ResolveOutputPath(
-                configuration,
-                manifest.Request.Output.Path,
-                allowMissing: false
-            );
-            string beforeHash = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(assetPath)));
+            string beforeHash = Convert.ToHexStringLower(SHA256.HashData(bytes));
             global::AlterCourse.AssetCtl.Domain.DomainModels.AssetManifest approved = manifest with
             {
                 Revision = manifest.Revision + 1,
@@ -523,25 +519,43 @@ internal static class CliTypes
                 };
             }
 
-            ManifestMutation.WriteCas(configuration, manifest, approved, observation);
-            string afterHash = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(assetPath)));
-            if (!string.Equals(beforeHash, afterHash, StringComparison.Ordinal))
+            ManifestMutation.Outcome outcome = ManifestMutation.WriteCas(
+                configuration,
+                manifest,
+                approved,
+                observation,
+                boundary
+            );
+            return ApprovalResult(approved, beforeHash, outcome);
+        }
+
+        private static object ApprovalResult(AssetManifest approved, string sha256, ManifestMutation.Outcome outcome)
+        {
+            if (outcome.ReportingDegraded)
             {
-                throw new AssetCtlException("Approval changed asset bytes; manifest update was refused.", 7);
+                return new
+                {
+                    asset_id = approved.Request.Id,
+                    lifecycle = "approved",
+                    sha256,
+                    committed = true,
+                    reporting_degraded = true,
+                };
             }
 
             return new
             {
                 asset_id = approved.Request.Id,
                 lifecycle = "approved",
-                sha256 = afterHash,
+                sha256,
             };
         }
 
-        private static (string Actor, string Note) ValidateApprovalEligibility(
+        private static (string Actor, string Note, byte[] Bytes) ValidateApprovalEligibility(
             EffectiveConfiguration configuration,
             AssetManifest manifest,
-            CliOptions options
+            CliOptions options,
+            global::AlterCourse.AssetCtl.Publishing.LifecycleBoundary boundary
         )
         {
             if (manifest.Request.Lifecycle != AssetLifecycle.Candidate)
@@ -562,7 +576,8 @@ internal static class CliTypes
                 throw new AssetCtlException("--confirm-approved-asset must exactly equal the asset ID.", 8);
             }
 
-            ApprovalPolicy.Validate(configuration, manifest);
+            byte[] bytes = boundary.ReadSelected();
+            ApprovalPolicy.Validate(configuration, manifest, bytes);
             if (
                 manifest.Rights.Classification is "unknown" or "unreviewed-generated-placeholder"
                 || string.IsNullOrWhiteSpace(manifest.Rights.License)
@@ -575,7 +590,7 @@ internal static class CliTypes
                 );
             }
 
-            return (actor, note);
+            return (actor, note, bytes);
         }
 
         private static object Deprecate(EffectiveConfiguration configuration, CliOptions options)
