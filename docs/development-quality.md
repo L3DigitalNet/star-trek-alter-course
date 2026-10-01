@@ -72,9 +72,19 @@ dotnet run --project tools/AlterCourse.AssetCtl -- generate \
   --output json
 ```
 
-Selected bytes and manifest are one recoverable publication unit. Staging, journal/lease, ownership, and rollback/recovery preserve the pair across supported failures; this is not a claim of one atomic two-file filesystem operation or universal power-loss durability. Secure descriptor-bound state/publication currently requires Linux.
+Selected bytes and manifest are one recoverable publication unit. Publication admits the destination parents, file identities, bounded snapshots, and mutable lifecycle/semantic ownership before replacement or recovery. Selected-file reads reject oversize input before allocation and reject shortened or growing snapshots; verification and approval validate the same admitted bytes. Lifecycle replacement retains admitted Linux parents and rechecks manifest revision, selected evidence, and stage ownership before commitment.
+
+Secure descriptor-bound reads, lifecycle mutation, and publication currently require Linux with `openat`/`statx` and mounted procfs. Cooperating writers hold the asset lock. These checks do not authenticate arbitrary same-UID rewrites, provide an atomic revision comparison against such writers, replace two files simultaneously, or guarantee universal power-loss durability.
 
 Approved assets are immutable: replacement uses a new semantic ID and `supersedes`. Approval or deprecation of an approved asset requires explicit current owner instruction. Approval requires exact-ID confirmation, actor, note, unchanged hash, passing validation, and complete non-placeholder rights data. Automated review cannot supply owner authorization or legal clearance.
+
+### Reporting and recovery
+
+Optional diagnostic construction, emission, and disposal failures preserve the command outcome; fallback stderr is best effort. Default diagnostics use stable context and failure categories instead of arbitrary exception prose or exception objects. Required stdout has a separate contract: a write or flush failure returns exit **9**. After a proven mutation, stderr identifies the commit and `reporting-degraded` when available. A receipt-write failure after generation publication can also return exit 9 while retaining the proven commit. Neither result establishes rollback.
+
+Before retrying a mutation after degraded reporting, inspect `status`, the selected manifest and asset, and any receipt under the configured receipt root (default `.assetctl/runs`). A receipt's `rollback: not-established` means rollback was not proven. Do not infer unchanged state from a nonzero exit or absent output, or automatically rerun generation or approval.
+
+Publication recovery uses version-1 authority evidence to corroborate owned transaction/file identities and mutable lifecycle/semantic ownership. Legacy version-0 journals in ignored local state lack this evidence and are refused and quarantined. This local recovery-state version does not change tracked manifest or receipt formats. Preserve and manually inspect quarantined journals and predecessor/stage/backup artifacts; quarantine does not authorize deletion of unproven artifacts. Avoid blind cleanup of `.assetctl/` or publication backups to unblock a retry. The [targeted correction record](reviews/assetctl-boundaries-2026-09-30.md) links the implementation and regression evidence.
 
 ## Deep validation
 

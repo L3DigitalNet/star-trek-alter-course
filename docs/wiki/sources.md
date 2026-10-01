@@ -35,6 +35,12 @@ The [authority map](../README.md) distinguishes documents outside the wiki. This
 
 ## Review record
 
+### AssetCtl boundary correction follow-up — 2026-09-30
+
+[Bug #141](https://github.com/L3DigitalNet/star-trek-alter-course/issues/141) owns the implementation follow-up identified by the post-remediation review below. The [targeted correction record](../reviews/assetctl-boundaries-2026-09-30.md) traces integrated source `d6fab0c16b56c8bac3fe7dd263461a68abdbaaea` to bounded selected reads, descriptor-bound lifecycle commitment, admitted publication/recovery ownership, isolated optional diagnostics, and truthful required-output/receipt failures. The [operator runbook](../development-quality.md#reporting-and-recovery) describes state inspection before retry and manual handling of legacy quarantined journals.
+
+The earlier September 30 observations remain historical evidence of the correction targets; PR #140 did not fix them. Focused candidate execution is recorded separately from the integrated full-suite RED: 500 passed, eight SVG diagnostic-detail failures, 508 total, no skips, exit 1. Corrected source `d9e25d2f2eca2b2c396af6936b0c1cdb3009d21e` passed all 511 AssetCtl cases with exit 0 and no failures/skips; scoped native follow-up confirmed the corrected boundaries. Final canonical verification and hosted admission remain pending. This targeted tooling review changes no gameplay contract, release, compatibility activation policy, or enforcement mechanism and does not recertify all 18 binding ADRs. Bug #139 remains a separate enforcement follow-up. The latest full gameplay-semantic sweep remains **2026-09-26**, with the next due **2026-10-03**.
+
 ### Post-remediation repository review — 2026-09-30
 
 [Documentation PR #140](https://github.com/L3DigitalNet/star-trek-alter-course/pull/140) reviews `dev` at `9352855551b6906fc608bca2fcff773d0a49ab87` after ADR adoption and R1–R3 remediation. It reconciles current versus historical implementation language, Q-14 with the already adopted compatibility amendment, the branch-check summary, and adoption provenance. No runtime, test, schema, dependency, ADR decision, enforcement mechanism, or release state changes accompany this editorial work.

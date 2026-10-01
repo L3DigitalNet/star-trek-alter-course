@@ -120,7 +120,13 @@ Committed defaults disable external generation and spend. Local deterministic SV
 
 Routine placeholder/candidate work stays within policy. Approval and deprecation of approved assets require explicit current owner instruction and tool confirmations. Approved replacement uses a new semantic ID and supersession, not silent overwrite. Validation or an AI score cannot supply human authorization or legal clearance.
 
-Assets and manifests form one recoverable publication unit, with validated staging, ownership, journal/lease, and rollback/recovery machinery. That is not simultaneous atomic replacement of two separate files or universal power-loss durability. Current secure descriptor-bound state/publication requires Linux; portability must preserve equivalent safety rather than reduce it to earlier path-string checks.
+Assets and manifests form one recoverable publication unit. Selected-file admission bounds allocation and consumption, checks regular-file identity, and rejects shortened or growing snapshots. Verification and approval use the same admitted bytes. Lifecycle mutation retains admitted parents and manifest/selected evidence through replacement; publication and recovery require corroborated file identities, mutable lifecycle, and semantic pair ownership before destructive work.
+
+Version-1 ignored recovery state supplies an authority envelope that corroborates this ownership; it does not authenticate arbitrary same-UID rewrites. Legacy version-0 journals are refused and quarantined without deleting unproven predecessor artifacts. Operators must inspect those artifacts manually. These are local recovery-state versions, not changes to tracked manifests or receipts.
+
+Current descriptor-bound reads, lifecycle mutation, and publication require Linux `openat`/`statx` with mounted procfs and cooperating writers holding the asset lock. They do not provide an atomic revision comparison against arbitrary same-UID writers, simultaneous replacement of two files, or universal power-loss durability. Portability must preserve equivalent safety.
+
+Optional diagnostics preserve operation outcomes. Required stdout or post-publication receipt failure can return exit 9 with a known commit and degraded reporting; an unproven rollback is reported as `not-established`. Inspect selected state and available receipts before retrying. The [operator runbook](../development-quality.md#reporting-and-recovery) and [targeted correction record](../reviews/assetctl-boundaries-2026-09-30.md) retain recovery guidance and evidence limits.
 
 Tracked credential configuration stores environment-variable names only. The caller/launch boundary resolves credentials; values must not enter fixtures, manifests, output, or logs. Canonical verification remains offline and never generates or approves assets.
 
