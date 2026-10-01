@@ -17,7 +17,8 @@ internal static class Program
     // The executable and fault-injection tests share this boundary, including factory teardown after command dispatch.
     internal static async Task<int> RunProcessAsync(
         string[] arguments,
-        Func<string?, string?, ILoggerFactory> createLoggerFactory
+        Func<string?, string?, ILoggerFactory> createLoggerFactory,
+        Action<Exception>? unexpectedFailureObserved = null
     )
     {
         try
@@ -32,6 +33,7 @@ internal static class Program
         }
         catch (Exception exception) when (!IsProcessFatal(exception) && exception is not OperationCanceledException)
         {
+            unexpectedFailureObserved?.Invoke(exception);
             return ReportUnexpectedFailure(exception);
         }
     }

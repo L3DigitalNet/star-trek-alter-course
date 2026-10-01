@@ -148,11 +148,14 @@ public sealed class DiagnosticPrivacyRegressionTests
             schema
         );
 
+        Exception? unexpected = null;
         int exit = await Program.RunProcessAsync(
             ["validate-config", "--output", "json"],
-            (_, _) => Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance
+            (_, _) => Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance,
+            failure => unexpected = failure
         );
 
+        Assert.True(unexpected is null, unexpected?.ToString());
         Assert.Equal(2, exit);
         Assert.Contains(
             "config/assets/schemas: invalid draft 2020-12 schema",

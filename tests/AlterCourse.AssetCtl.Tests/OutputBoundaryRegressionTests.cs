@@ -70,7 +70,7 @@ public sealed class OutputBoundaryRegressionTests
         int exit = await Program.RunProcessAsync(Arguments(command, fixture), (_, _) => NullLoggerFactory.Instance);
 
         AssetManifest current = fixture.Load();
-        Assert.Equal(0, exit);
+        Assert.Equal(9, exit);
         Assert.True(writer.Attempts > 0);
         Assert.Contains("committed", fixture.Error.ToString(), StringComparison.Ordinal);
         Assert.Contains("reporting-degraded", fixture.Error.ToString(), StringComparison.Ordinal);
@@ -96,7 +96,7 @@ public sealed class OutputBoundaryRegressionTests
 
         int exit = await Program.RunProcessAsync(["status", "--output", "json"], (_, _) => NullLoggerFactory.Instance);
 
-        Assert.Equal(1, exit);
+        Assert.Equal(9, exit);
         Assert.True(writer.Attempts > 0);
         Assert.Equal(before, await File.ReadAllBytesAsync(fixture.ManifestPath));
         Assert.Contains("result-output-unavailable", fixture.Error.ToString(), StringComparison.Ordinal);
@@ -122,12 +122,14 @@ public sealed class OutputBoundaryRegressionTests
         Assert.Equal(before, await File.ReadAllBytesAsync(fixture.ManifestPath));
     }
 
-    /// <summary>Help remains valid when optional log configuration discovery encounters a missing file.</summary>
+    /// <summary>Help remains valid when optional log configuration discovery encounters an unreadable file entry.</summary>
     [Fact]
     public async Task HelpSurvivesOptionalLogConfigurationIoFailure()
     {
         using var fixture = new DiagnosticBoundaryRegressionTests.ProcessFixture();
-        File.Delete(Path.Combine(fixture.Root, "config", "assets", "providers.yaml"));
+        string providerPath = Path.Combine(fixture.Root, "config", "assets", "providers.yaml");
+        File.Delete(providerPath);
+        Directory.CreateDirectory(providerPath);
 
         int exit = await Program.RunProcessAsync(["help"], (_, _) => NullLoggerFactory.Instance);
 

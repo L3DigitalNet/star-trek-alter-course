@@ -15,12 +15,17 @@ internal static class YamlValues
 
     public static YamlMappingNode LoadMapping(string path)
     {
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        return LoadMapping(path, stream, MaximumBytes);
+    }
+
+    internal static YamlMappingNode LoadMapping(string path, Stream stream, int maximumBytes)
+    {
         string text;
-        using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
         {
-            if (stream.Length > MaximumCharacters)
+            if (stream.Length > maximumBytes)
             {
-                throw new AssetCtlException($"{path}: YAML exceeds the {MaximumCharacters}-byte limit.", 2);
+                throw new AssetCtlException($"{path}: YAML exceeds the {maximumBytes}-byte limit.", 2);
             }
 
             using var reader = new StreamReader(stream, detectEncodingFromByteOrderMarks: true);
