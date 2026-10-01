@@ -169,6 +169,61 @@ public sealed class PublicationObjectBoundaryTests : IDisposable
         Assert.Single(Directory.EnumerateFiles(Path.Combine(root, "quarantine")));
     }
 
+    /// <summary>Legacy recovery quarantines its locator while preserving the interrupted publication artifacts.</summary>
+    [Fact]
+    public void LegacyJournalQuarantinePreservesInterruptedPublicationArtifacts()
+    {
+        EffectiveConfiguration configuration = Configuration();
+        byte[] oldBytes = "legacy-predecessor"u8.ToArray();
+        AssetManifest old = Manifest(oldBytes, 1);
+        WritePair(oldBytes, old);
+        byte[] oldManifestBytes = File.ReadAllBytes(Path.Combine(Root, old.ManifestPath));
+        Interrupt(configuration, old);
+        string journalRoot = Path.Combine(Root, ".assetctl/state/publish-transactions");
+        string journalPath = Directory.GetFiles(journalRoot, "*.json").Single();
+        System.Text.Json.Nodes.JsonNode journal = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(journalPath))!;
+        string transaction = journal["transaction_id"]!.GetValue<string>();
+        System.Text.Json.Nodes.JsonObject legacy = LegacyJournal(journal);
+        string assetStage = Path.Combine(Root, legacy["asset_stage_path"]!.GetValue<string>());
+        File.Delete(Path.Combine(Path.GetDirectoryName(assetStage)!, "authority.json"));
+        File.WriteAllText(journalPath, legacy.ToJsonString(JsonOptions.Stable));
+        byte[] legacyBytes = File.ReadAllBytes(journalPath);
+        string[] retainedPaths =
+        [
+            Path.Combine(Root, legacy["asset_backup_path"]!.GetValue<string>()),
+            assetStage,
+            Path.Combine(Root, legacy["manifest_stage_path"]!.GetValue<string>()),
+            Path.Combine(Root, old.ManifestPath),
+        ];
+        Dictionary<string, byte[]> retainedBytes = retainedPaths.ToDictionary(
+            path => path,
+            File.ReadAllBytes,
+            StringComparer.Ordinal
+        );
+        Assert.Equal(oldBytes, retainedBytes[retainedPaths[0]]);
+        Assert.Equal(oldManifestBytes, retainedBytes[retainedPaths[3]]);
+        Assert.False(File.Exists(Path.Combine(Root, old.Request.Output.Path)));
+        string manifestBackup = Path.Combine(Root, legacy["manifest_backup_path"]!.GetValue<string>());
+        Assert.False(File.Exists(manifestBackup));
+
+        AssetCtlException failure = Assert.Throws<AssetCtlException>(() =>
+            AtomicPublisher.RecoverPending(configuration)
+        );
+
+        Assert.Equal(7, failure.ExitCode);
+        Assert.Equal("Publication journal is invalid and was quarantined.", failure.Message);
+        Assert.False(File.Exists(journalPath));
+        string quarantined = Assert.Single(Directory.GetFiles(Path.Combine(journalRoot, "quarantine")));
+        Assert.Matches($"^{transaction}\\.[0-9a-f]{{32}}\\.invalid$", Path.GetFileName(quarantined));
+        Assert.Equal(legacyBytes, File.ReadAllBytes(quarantined));
+        foreach (string path in retainedPaths)
+        {
+            Assert.Equal(retainedBytes[path], File.ReadAllBytes(path));
+        }
+        Assert.False(File.Exists(Path.Combine(Root, old.Request.Output.Path)));
+        Assert.False(File.Exists(manifestBackup));
+    }
+
     /// <summary>A journal edited after interruption cannot replace transaction-owned authority.</summary>
     [Fact]
     public void ChangedRecoveryLocatorPreservesPredecessorAndUnrelatedFiles()
@@ -359,6 +414,33 @@ public sealed class PublicationObjectBoundaryTests : IDisposable
         Assert.Equal(next, File.ReadAllBytes(stage + ".retained"));
         Assert.Equal(oldBytes, File.ReadAllBytes(Path.Combine(Root, old.Request.Output.Path)));
         Assert.Equal(1, ManifestStore.Load(configuration, old.ManifestPath).Revision);
+    }
+
+    private static System.Text.Json.Nodes.JsonObject LegacyJournal(System.Text.Json.Nodes.JsonNode journal)
+    {
+        var legacy = new System.Text.Json.Nodes.JsonObject();
+        // Pre-authority journals had only these locator fields; absent authority_version deserializes as version zero.
+        foreach (
+            string field in new[]
+            {
+                "transaction_id",
+                "asset_path",
+                "manifest_path",
+                "asset_stage_path",
+                "manifest_stage_path",
+                "asset_backup_path",
+                "manifest_backup_path",
+                "asset_existed",
+                "manifest_existed",
+                "asset_hash",
+                "asset_length",
+                "manifest_hash",
+            }
+        )
+        {
+            legacy[field] = journal[field]!.DeepClone();
+        }
+        return legacy;
     }
 
     private static void Interrupt(EffectiveConfiguration configuration, AssetManifest old)
