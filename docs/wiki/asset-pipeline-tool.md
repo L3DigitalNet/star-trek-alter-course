@@ -6,7 +6,7 @@ description: 'Implementation specification for a configuration-driven AI-assiste
 doc_type: 'spec'
 status: 'active'
 created: '2026-09-01'
-updated: '2026-09-26'
+updated: '2026-09-30'
 reviewed: '2026-09-26'
 owner: 'project-maintainers'
 consumer: 'agent'
@@ -1072,8 +1072,15 @@ Marks an asset deprecated with an actor and reason. Approved assets require the 
 | 6    | Budget refusal                                                |
 | 7    | Filesystem, integrity, or publish failure                     |
 | 8    | Protected lifecycle operation refused                         |
+| 9    | Required result output unavailable                            |
 
 Provider-specific errors MUST be normalized into stable application categories while retaining a redacted diagnostic summary in the run receipt.
+
+### Required result output
+
+Failure to write required command-result stdout MUST return exit code `9` (`result-output-unavailable`) for both read-only and mutating commands, including when a mutation has already committed successfully. When stderr is writable, the tool MUST emit a bounded diagnostic identifying degraded result reporting and state that the operation completed or committed only when that disposition is known; it MUST NOT imply rollback. If both stdout and stderr are unavailable, exit `9` alone does not establish the operation's disposition. Before retrying a mutation, callers MUST inspect the resulting state or run receipt.
+
+Optional diagnostics, including logging, remain best-effort: their failure MUST preserve the original command outcome. Genuine operation errors before commit MUST retain their existing exit codes. Successful command-result shapes and exit codes remain unchanged.
 
 ## Core domain model
 
