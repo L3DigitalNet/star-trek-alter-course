@@ -22,19 +22,26 @@ public sealed class SelectedAssetReadBoundaryTests
     {
         using var fixture = new LifecycleBoundaryFixture(new byte[9], maximumBytes: 8);
         AssetManifest manifest = mismatchedIntegrity
-            ? fixture.Manifest with { Integrity = fixture.Manifest.Integrity! with { ByteLength = 8 } }
+            ? fixture.Manifest with
+            {
+                Integrity = fixture.Manifest.Integrity! with { ByteLength = 8 },
+            }
             : fixture.Manifest;
         List<long> materializedLengths = [];
 
         Exception? failure = Record.Exception(() =>
-            ManifestStore.VerifyIntegrity(fixture.Configuration, manifest, path =>
-            {
-                // This is the original BCL read, not a simulated allocation. Nine bytes are sufficient
-                // to prove that configured admission did not precede full materialization.
-                byte[] bytes = File.ReadAllBytes(path);
-                materializedLengths.Add(bytes.LongLength);
-                return bytes;
-            })
+            ManifestStore.VerifyIntegrity(
+                fixture.Configuration,
+                manifest,
+                path =>
+                {
+                    // This is the original BCL read, not a simulated allocation. Nine bytes are sufficient
+                    // to prove that configured admission did not precede full materialization.
+                    byte[] bytes = File.ReadAllBytes(path);
+                    materializedLengths.Add(bytes.LongLength);
+                    return bytes;
+                }
+            )
         );
 
         Assert.Empty(materializedLengths);

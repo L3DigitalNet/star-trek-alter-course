@@ -64,15 +64,17 @@ internal sealed class LifecycleBoundaryFixture : IDisposable
     public string ManifestPath => Path.Combine(Root, Manifest.ManifestPath);
 
     public CliOptions ApprovalOptions(bool dryRun = false) =>
-        CliOptions.Parse(
-            [
-                "--asset-id", Manifest.Request.Id,
-                "--approved-by", "fixture-owner",
-                "--approval-note", "fixture-review",
-                "--confirm-approved-asset", Manifest.Request.Id,
-                .. dryRun ? DryRunArguments : [],
-            ]
-        );
+        CliOptions.Parse([
+            "--asset-id",
+            Manifest.Request.Id,
+            "--approved-by",
+            "fixture-owner",
+            "--approval-note",
+            "fixture-review",
+            "--confirm-approved-asset",
+            Manifest.Request.Id,
+            .. dryRun ? DryRunArguments : [],
+        ]);
 
     public void Dispose()
     {
