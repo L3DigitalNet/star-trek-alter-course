@@ -19,9 +19,13 @@ public sealed class OutputBoundaryRegressionTests
     [InlineData("status", "none")]
     [InlineData("status", "enabled")]
     [InlineData("status", "log")]
+    [InlineData("status", "cancel-enabled")]
+    [InlineData("status", "cancel-log")]
     [InlineData("deprecate", "none")]
     [InlineData("deprecate", "enabled")]
     [InlineData("deprecate", "log")]
+    [InlineData("deprecate", "cancel-enabled")]
+    [InlineData("deprecate", "cancel-log")]
     public async Task DirectLoggerFaultPreservesCommandOutcome(string command, string fault)
     {
         using var fixture = new DiagnosticBoundaryRegressionTests.ProcessFixture();
@@ -61,9 +65,24 @@ public sealed class OutputBoundaryRegressionTests
     [Theory]
     [InlineData("deprecate")]
     [InlineData("generate")]
+    [InlineData("approve")]
     public async Task RequiredStdoutFailureAfterCommitPreservesAppliedOutcome(string command)
     {
         using var fixture = new DiagnosticBoundaryRegressionTests.ProcessFixture();
+        if (command is "approve")
+        {
+            using var candidate = new LifecycleBoundaryFixture();
+            AssetRequest request = TestData.Request(AssetFormat.Svg) with { Lifecycle = AssetLifecycle.Candidate };
+            AssetManifest manifest = fixture.Load() with
+            {
+                Request = request,
+                Integrity = candidate.Manifest.Integrity,
+            };
+            string selected = Path.Combine(fixture.Root, request.Output.Path);
+            Directory.CreateDirectory(Path.GetDirectoryName(selected)!);
+            await File.WriteAllBytesAsync(selected, candidate.Bytes);
+            await File.WriteAllTextAsync(fixture.ManifestPath, ManifestStore.Serialize(manifest));
+        }
         var writer = new BrokenOutput();
         Console.SetOut(writer);
 
@@ -77,6 +96,10 @@ public sealed class OutputBoundaryRegressionTests
         if (command is "deprecate")
         {
             Assert.Equal(AssetLifecycle.Deprecated, current.Request.Lifecycle);
+        }
+        else if (command is "approve")
+        {
+            Assert.Equal(AssetLifecycle.Approved, current.Request.Lifecycle);
         }
         else
         {
@@ -101,6 +124,34 @@ public sealed class OutputBoundaryRegressionTests
         Assert.Equal(before, await File.ReadAllBytesAsync(fixture.ManifestPath));
         Assert.Contains("result-output-unavailable", fixture.Error.ToString(), StringComparison.Ordinal);
         Assert.DoesNotContain("committed", fixture.Error.ToString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>Two unavailable receipt sinks cannot make installed publication look rolled back or fully reported.</summary>
+    [Fact]
+    public async Task ReceiptFailureAfterPublicationReportsCommitWithoutCommandCompletionClaim()
+    {
+        using var fixture = new DiagnosticBoundaryRegressionTests.ProcessFixture();
+        using var client = new HttpClient();
+        AdapterRegistry registry = CreateRegistry(client);
+        EffectiveConfiguration configuration = new ConfigurationLoader(registry.Descriptors).Load(fixture.Root);
+        string receipts = Path.Combine(fixture.Root, configuration.Paths.ReceiptRoot);
+        string work = Path.Combine(fixture.Root, configuration.Paths.WorkRoot);
+        Directory.CreateDirectory(Path.GetDirectoryName(receipts)!);
+        Directory.CreateDirectory(work);
+        await File.WriteAllTextAsync(receipts, "blocked");
+        await File.WriteAllTextAsync(Path.Combine(work, "receipt-fallback"), "blocked");
+
+        int exit = await Program.RunProcessAsync(Arguments("generate", fixture), (_, _) => NullLoggerFactory.Instance);
+
+        Assert.Equal(9, exit);
+        Assert.NotNull(fixture.Load().Integrity);
+        Assert.Contains(
+            "mutation committed; receipt-output-unavailable",
+            fixture.Error.ToString(),
+            StringComparison.Ordinal
+        );
+        Assert.DoesNotContain("command completed", fixture.Error.ToString(), StringComparison.Ordinal);
+        Assert.Empty(fixture.Output.ToString());
     }
 
     /// <summary>Refusal occurs before any result write and retains the original classification despite a broken stdout.</summary>
@@ -139,36 +190,76 @@ public sealed class OutputBoundaryRegressionTests
 
     /// <summary>Inspects real error-channel output for unknown arguments, keys, and parser-source text.</summary>
     [Theory]
-    [InlineData("argument")]
-    [InlineData("option")]
-    [InlineData("yaml-key")]
-    [InlineData("yaml-parser")]
-    public async Task UntrustedInputIsNotCopiedToStderr(string kind)
+    [MemberData(nameof(UntrustedInputs))]
+    public async Task UntrustedInputIsNotCopiedToStderr(string kind, string untrusted)
     {
         using var fixture = new DiagnosticBoundaryRegressionTests.ProcessFixture();
         string[] arguments = ["status", "--output", "json"];
         if (kind is "argument")
         {
-            arguments = ["status", Sentinel];
+            arguments = ["status", untrusted];
         }
         else if (kind is "option")
         {
-            arguments = ["status", "--" + Sentinel];
+            arguments = ["status", "--" + untrusted];
         }
         else
         {
             string path = Path.Combine(fixture.Root, "config", "assets", "assetctl.yaml");
             string addition = kind is "yaml-key"
-                ? JsonSerializer.Serialize(Sentinel) + ": true\n"
-                : "broken: [\"" + Sentinel + "\"\n";
+                ? JsonSerializer.Serialize(untrusted) + ": true\n"
+                : "broken: [" + JsonSerializer.Serialize(untrusted) + "\n";
             await File.AppendAllTextAsync(path, addition);
         }
 
         int exit = await Program.RunProcessAsync(arguments, (_, _) => NullLoggerFactory.Instance);
 
         Assert.Equal(2, exit);
-        Assert.DoesNotContain(Sentinel, fixture.Error.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("sentinel", fixture.Error.ToString(), StringComparison.Ordinal);
         Assert.DoesNotContain(fixture.Root, fixture.Error.ToString(), StringComparison.Ordinal);
+        Assert.True(fixture.Error.ToString().Length < 512);
+    }
+
+    /// <summary>Supplies synthetic path, credential, URL, and large-message payloads at each raw-input producer.</summary>
+    public static TheoryData<string, string> UntrustedInputs
+    {
+        get
+        {
+            var values = new TheoryData<string, string>();
+            foreach (string kind in new[] { "argument", "option", "yaml-key", "yaml-parser" })
+            {
+                foreach (
+                    string payload in new[]
+                    {
+                        Sentinel,
+                        "sentinel-plain-credential",
+                        "api_key='sentinel-quoted-credential'",
+                        "api_key=sentinel-raw-credential",
+                        "nested https://synthetic.invalid/image?token=sentinel-signed-secret text",
+                        "inner stack Data " + new string('x', 10_000) + "sentinel-large-message",
+                    }
+                )
+                {
+                    values.Add(kind, payload);
+                }
+            }
+            return values;
+        }
+    }
+
+    /// <summary>Repeated real process validation cannot mutate shared schema registration authority.</summary>
+    [Fact]
+    public async Task RepeatedReadOnlyProcessValidationUsesIndependentSchemaRegistries()
+    {
+        using var fixture = new DiagnosticBoundaryRegressionTests.ProcessFixture();
+        for (int invocation = 0; invocation < 2; invocation++)
+        {
+            int exit = await Program.RunProcessAsync(
+                ["validate-config", "--output", "json"],
+                (_, _) => NullLoggerFactory.Instance
+            );
+            Assert.Equal(0, exit);
+        }
     }
 
     /// <summary>Exposes the real schema failure before the outer process catch can replace its classification.</summary>
@@ -205,6 +296,20 @@ public sealed class OutputBoundaryRegressionTests
         {
             "status" => ["status", "--output", "json"],
             "generate" => ["generate", "--output", "json", "--asset-id", fixture.AssetId, "--offline"],
+            "approve" =>
+            [
+                "approve",
+                "--output",
+                "json",
+                "--asset-id",
+                fixture.AssetId,
+                "--approved-by",
+                "test",
+                "--approval-note",
+                "reviewed",
+                "--confirm-approved-asset",
+                fixture.AssetId,
+            ],
             _ =>
             [
                 "deprecate",
@@ -224,13 +329,7 @@ public sealed class OutputBoundaryRegressionTests
         ILogger<AlterCourse.AssetCtl.Cli.CliTypes.CommandApp> logger
     )
     {
-        var registry = new AdapterRegistry([
-            new LocalPlaceholderGenerator(),
-            new RecraftImageAdapter(client),
-            new OpenAiImageAdapter(client),
-            new XaiImageAdapter(client),
-            new OpenAiVisionReviewer(client),
-        ]);
+        AdapterRegistry registry = CreateRegistry(client);
         var router = new AssetRouter(registry);
         return new(
             new ConfigurationLoader(registry.Descriptors),
@@ -240,6 +339,15 @@ public sealed class OutputBoundaryRegressionTests
         );
     }
 
+    private static AdapterRegistry CreateRegistry(HttpClient client) =>
+        new([
+            new LocalPlaceholderGenerator(),
+            new RecraftImageAdapter(client),
+            new OpenAiImageAdapter(client),
+            new XaiImageAdapter(client),
+            new OpenAiVisionReviewer(client),
+        ]);
+
     private sealed class DirectLogger(string fault) : ILogger<AlterCourse.AssetCtl.Cli.CliTypes.CommandApp>
     {
         public List<string> Rendered { get; } = [];
@@ -248,7 +356,12 @@ public sealed class OutputBoundaryRegressionTests
             where TState : notnull => null;
 
         public bool IsEnabled(LogLevel logLevel) =>
-            fault is "enabled" ? throw new IOException("synthetic logger fault") : true;
+            fault switch
+            {
+                "enabled" => throw new IOException("synthetic logger fault"),
+                "cancel-enabled" => throw new OperationCanceledException("synthetic diagnostic cancellation"),
+                _ => true,
+            };
 
         public void Log<TState>(
             LogLevel logLevel,
@@ -261,6 +374,10 @@ public sealed class OutputBoundaryRegressionTests
             if (fault is "log")
             {
                 throw new IOException("synthetic logger fault");
+            }
+            if (fault is "cancel-log")
+            {
+                throw new OperationCanceledException("synthetic diagnostic cancellation");
             }
             Rendered.Add(formatter(state, exception));
         }

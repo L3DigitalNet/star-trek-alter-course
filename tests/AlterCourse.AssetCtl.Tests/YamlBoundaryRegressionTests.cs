@@ -40,20 +40,6 @@ public sealed class YamlBoundaryRegressionTests
     private sealed class GrowingStream(byte[] bytes, long reportedLength) : MemoryStream(bytes)
     {
         public override long Length => reportedLength;
-        public int Consumed { get; private set; }
-
-        public override int Read(Span<byte> buffer)
-        {
-            int read = base.Read(buffer);
-            Consumed += read;
-            return read;
-        }
-
-        public override int Read(byte[] buffer, int offset, int count)
-        {
-            int read = base.Read(buffer, offset, count);
-            Consumed += read;
-            return read;
-        }
+        public long Consumed => Position;
     }
 }

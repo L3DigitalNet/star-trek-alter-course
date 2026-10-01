@@ -113,7 +113,8 @@ public sealed class CliAndLifecycleTests
         );
 
         Assert.Equal(2, exception.ExitCode);
-        Assert.Contains("--offine", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("Unknown option", exception.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("--offine", exception.Message, StringComparison.Ordinal);
     }
 
     /// <summary>Derives Godot resource paths from the configured asset root.</summary>

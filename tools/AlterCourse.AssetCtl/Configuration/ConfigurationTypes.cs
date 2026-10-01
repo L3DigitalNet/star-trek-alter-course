@@ -285,9 +285,9 @@ internal static class ConfigurationTypes
             )
             {
                 string id = pair.Key.AsScalar("providers key");
-                if (!providers.TryAdd(id, ReadProvider(id, pair.Value.AsMapping($"providers.{id}"), policy)))
+                if (!providers.TryAdd(id, ReadProvider(id, pair.Value.AsMapping("providers[]"), policy)))
                 {
-                    throw new AssetCtlException($"providers.{id}: duplicate provider.", 2);
+                    throw new AssetCtlException("providers: duplicate provider.", 2);
                 }
             }
 
@@ -296,7 +296,7 @@ internal static class ConfigurationTypes
 
         private ProviderInstance ReadProvider(string id, YamlMappingNode node, AssetCtlPolicy policy)
         {
-            string path = $"providers.{id}";
+            const string path = "providers[]";
             node.RequireOnly(
                 path,
                 "adapter",
@@ -311,7 +311,7 @@ internal static class ConfigurationTypes
             string adapterId = node.Scalar("adapter", path);
             if (!adapters.TryGetValue(adapterId, out IAdapterDescriptor? adapter))
             {
-                throw new AssetCtlException($"{path}.adapter: unregistered adapter '{adapterId}'.", 2);
+                throw new AssetCtlException($"{path}.adapter: unregistered adapter.", 2);
             }
 
             HashSet<string> endpointHosts = ReadEndpointHosts(node.OptionalSequence("endpoint_hosts", path), path);
@@ -393,7 +393,7 @@ internal static class ConfigurationTypes
                 ProviderEndpointPolicy.ValidateHost(host, $"{path}.endpoint_hosts");
                 if (!result.Add(host))
                 {
-                    throw new AssetCtlException($"{path}.endpoint_hosts: duplicate host '{host}'.", 2);
+                    throw new AssetCtlException($"{path}.endpoint_hosts: duplicate host.", 2);
                 }
             }
 
@@ -419,7 +419,7 @@ internal static class ConfigurationTypes
                 AssetLifecycle lifecycle = ParseLifecycle(value, $"{path}.allowed_lifecycles")!.Value;
                 if (!result.Add(lifecycle))
                 {
-                    throw new AssetCtlException($"{path}.allowed_lifecycles: duplicate lifecycle '{value}'.", 2);
+                    throw new AssetCtlException($"{path}.allowed_lifecycles: duplicate lifecycle.", 2);
                 }
             }
 
@@ -497,12 +497,12 @@ internal static class ConfigurationTypes
             foreach (KeyValuePair<YamlNode, YamlNode> pair in nodes.Children)
             {
                 string modelId = pair.Key.AsScalar($"{path}.models key");
-                ModelProfile model = ReadModel(path, modelId, pair.Value.AsMapping($"{path}.models.{modelId}"));
+                ModelProfile model = ReadModel(path, modelId, pair.Value.AsMapping($"{path}.models[]"));
                 AssetCapability[] unsupported = model.Capabilities.Except(adapter.SupportedCapabilities).ToArray();
                 if (unsupported.Length != 0)
                 {
                     throw new AssetCtlException(
-                        $"{path}.models.{modelId}: adapter does not support {string.Join(", ", unsupported)}.",
+                        $"{path}.models[]: adapter does not support {string.Join(", ", unsupported)}.",
                         2
                     );
                 }
@@ -524,7 +524,7 @@ internal static class ConfigurationTypes
 
         private static ModelProfile ReadModel(string providerPath, string id, YamlMappingNode node)
         {
-            string path = $"{providerPath}.models.{id}";
+            string path = $"{providerPath}.models[]";
             node.RequireOnly(path, "model", "capabilities", "economics", "options");
             var capabilities = new HashSet<AssetCapability>();
             foreach (string value in YamlValues.Strings(node.Sequence("capabilities", path), $"{path}.capabilities"))
@@ -567,10 +567,7 @@ internal static class ConfigurationTypes
                 is not ("fixed-output" or "provider-calculated" or "quality-and-resolution" or "token-usage")
             )
             {
-                throw new AssetCtlException(
-                    $"{path}.economics.pricing_basis: unknown pricing basis '{pricingBasis}'.",
-                    2
-                );
+                throw new AssetCtlException($"{path}.economics.pricing_basis: unknown pricing basis.", 2);
             }
 
             return (cost, pricingBasis);
@@ -589,7 +586,7 @@ internal static class ConfigurationTypes
                 )
                 {
                     string key = pair.Key.AsScalar($"{modelPath}.options key");
-                    options.Add(key, pair.Value.AsScalar($"{modelPath}.options.{key}"));
+                    options.Add(key, pair.Value.AsScalar($"{modelPath}.options[]"));
                 }
             }
 
@@ -628,10 +625,7 @@ internal static class ConfigurationTypes
                 .FirstOrDefault();
             if (duplicate is not null)
             {
-                throw new AssetCtlException(
-                    $"routing: route id '{duplicate}' is duplicated across routes and review_routes.",
-                    2
-                );
+                throw new AssetCtlException("routing: route id is duplicated across routes and review_routes.", 2);
             }
 
             return (routes, reviewRoutes);
@@ -664,7 +658,7 @@ internal static class ConfigurationTypes
                 string id = node.Scalar("id", path);
                 if (!ids.Add(id))
                 {
-                    throw new AssetCtlException($"{path}.id: duplicate route '{id}'.", 2);
+                    throw new AssetCtlException($"{path}.id: duplicate route.", 2);
                 }
 
                 global::AlterCourse.AssetCtl.Domain.DomainModels.RouteTarget[] targets = YamlValues
@@ -744,7 +738,7 @@ internal static class ConfigurationTypes
             {
                 if (!result.Add(ParseErrorCategory(value, path)))
                 {
-                    throw new AssetCtlException($"{path}: duplicate error category '{value}'.", 2);
+                    throw new AssetCtlException($"{path}: duplicate error category.", 2);
                 }
             }
 
@@ -764,7 +758,7 @@ internal static class ConfigurationTypes
                 || !provider.Models.ContainsKey(parts[1])
             )
             {
-                throw new AssetCtlException($"{path}.targets: unknown target '{value}'.", 2);
+                throw new AssetCtlException($"{path}.targets: unknown target.", 2);
             }
 
             return new RouteTarget(parts[0], parts[1]);
@@ -792,7 +786,7 @@ internal static class ConfigurationTypes
             )
             {
                 string id = pair.Key.AsScalar("quality_tiers key");
-                string path = $"quality_tiers.{id}";
+                const string path = "quality_tiers[]";
                 YamlMappingNode node = pair.Value.AsMapping(path);
                 node.RequireOnly(
                     path,
@@ -852,22 +846,23 @@ internal static class ConfigurationTypes
             {
                 string relative = Path.GetRelativePath(root, path);
                 global::YamlDotNet.RepresentationModel.YamlMappingNode document = Load(root, relative, hashes);
-                document.RequireOnly(relative, "schema_version", "id", "summary", "required", "prohibited");
-                RequireVersion(document, relative);
-                string id = document.Scalar("id", relative);
+                const string context = "style profile";
+                document.RequireOnly(context, "schema_version", "id", "summary", "required", "prohibited");
+                RequireVersion(document, context);
+                string id = document.Scalar("id", context);
                 if (
                     !result.TryAdd(
                         id,
                         new StyleProfile(
                             id,
-                            document.Scalar("summary", relative),
-                            YamlValues.Strings(document.OptionalSequence("required", relative), relative),
-                            YamlValues.Strings(document.OptionalSequence("prohibited", relative), relative)
+                            document.Scalar("summary", context),
+                            YamlValues.Strings(document.OptionalSequence("required", context), context),
+                            YamlValues.Strings(document.OptionalSequence("prohibited", context), context)
                         )
                     )
                 )
                 {
-                    throw new AssetCtlException($"{relative}: duplicate style id '{id}'.", 2);
+                    throw new AssetCtlException("style profile: duplicate style id.", 2);
                 }
             }
 
@@ -895,10 +890,10 @@ internal static class ConfigurationTypes
 
         private static YamlMappingNode Load(string root, string relativePath, IDictionary<string, string> hashes)
         {
-            string path = PathPolicy.ResolveUnder(root, relativePath, relativePath, allowMissing: false);
-            byte[] bytes = File.ReadAllBytes(path);
+            string path = PathPolicy.ResolveUnder(root, relativePath, "configuration source", allowMissing: false);
+            byte[] bytes = StrictYaml.ReadBytes(path);
             hashes.Add(relativePath, Convert.ToHexStringLower(SHA256.HashData(bytes)));
-            return StrictYaml.LoadMapping(path);
+            return StrictYaml.LoadBytes("configuration YAML", bytes);
         }
 
         private static void RequireVersion(YamlMappingNode node, string path)
@@ -924,7 +919,7 @@ internal static class ConfigurationTypes
                 "image.vectorize" => AssetCapability.ImageVectorize,
                 "review.semantic" => AssetCapability.ReviewSemantic,
                 "review.reference-comparison" => AssetCapability.ReviewReferenceComparison,
-                _ => throw new AssetCtlException($"{path}: unknown capability '{value}'.", 2),
+                _ => throw new AssetCtlException($"{path}: unknown capability.", 2),
             };
 
         public static SemanticReviewPolicy ParseSemanticReviewPolicy(string value, string path) =>
@@ -934,7 +929,7 @@ internal static class ConfigurationTypes
                 "when-available" => SemanticReviewPolicy.WhenAvailable,
                 "required" => SemanticReviewPolicy.Required,
                 _ => throw new AssetCtlException(
-                    $"{path}.semantic_review: expected disabled, when-available, or required; found '{value}'.",
+                    $"{path}.semantic_review: expected disabled, when-available, or required.",
                     2
                 ),
             };
@@ -944,10 +939,7 @@ internal static class ConfigurationTypes
             {
                 "required" => OutputTransparency.Required,
                 "optional" => OutputTransparency.Optional,
-                _ => throw new AssetCtlException(
-                    $"{path}.transparency: expected required or optional; found '{value}'.",
-                    2
-                ),
+                _ => throw new AssetCtlException($"{path}.transparency: expected required or optional.", 2),
             };
 
         private static string SemanticReviewValue(SemanticReviewPolicy value) =>
@@ -974,7 +966,7 @@ internal static class ConfigurationTypes
                 "unsafe-download" => ProviderErrorCategory.UnsafeDownload,
                 "unsupported-output" => ProviderErrorCategory.UnsupportedOutput,
                 "validation" => ProviderErrorCategory.Validation,
-                _ => throw new AssetCtlException($"{path}: unknown error category '{value}'.", 2),
+                _ => throw new AssetCtlException($"{path}: unknown error category.", 2),
             };
 
         private static AssetLifecycle? ParseLifecycle(string? value, string path) =>
@@ -985,7 +977,7 @@ internal static class ConfigurationTypes
                 "candidate" => AssetLifecycle.Candidate,
                 "approved" => AssetLifecycle.Approved,
                 "deprecated" => AssetLifecycle.Deprecated,
-                _ => throw new AssetCtlException($"{path}.lifecycle: unknown lifecycle '{value}'.", 2),
+                _ => throw new AssetCtlException($"{path}.lifecycle: unknown lifecycle.", 2),
             };
 
         private static AssetFormat? ParseFormat(string? value, string path) =>
@@ -994,7 +986,7 @@ internal static class ConfigurationTypes
                 null => null,
                 "svg" => AssetFormat.Svg,
                 "png" => AssetFormat.Png,
-                _ => throw new AssetCtlException($"{path}.format: unknown format '{value}'.", 2),
+                _ => throw new AssetCtlException($"{path}.format: unknown format.", 2),
             };
     }
 
@@ -1075,7 +1067,7 @@ internal static class ConfigurationTypes
             string candidate = ResolveUnder(repositoryRoot, repositoryRelativePath, field, allowMissing);
             if (!IsContained(allowedRoot, candidate))
             {
-                throw new AssetCtlException($"{field}: path is outside configured root '{configuredRoot}'.", 2);
+                throw new AssetCtlException($"{field}: path is outside configured root.", 2);
             }
 
             EnsurePhysicalContainment(allowedRoot, candidate, field, allowMissing);
@@ -1172,47 +1164,13 @@ internal static class ConfigurationTypes
                 allowMissing: false
             );
             var results = new List<SchemaDocumentStatus>();
+            // Schema construction registers $id values. Keep a validation invocation's registrations
+            // local so repeated read-only commands cannot collide with an earlier command's catalog.
+            var buildOptions = new BuildOptions { SchemaRegistry = new SchemaRegistry() };
             foreach (string path in Directory.EnumerateFiles(schemaRoot, "*.json").Order(StringComparer.Ordinal))
             {
                 string relative = Path.GetRelativePath(repositoryRoot, path);
-                try
-                {
-                    string contents = File.ReadAllText(path);
-                    using var parsed = JsonDocument.Parse(
-                        contents,
-                        new JsonDocumentOptions
-                        {
-                            AllowTrailingCommas = false,
-                            CommentHandling = JsonCommentHandling.Disallow,
-                        }
-                    );
-                    JsonElement document = parsed.RootElement;
-                    string? dialect =
-                        document.TryGetProperty("$schema", out JsonElement dialectElement)
-                        && dialectElement.ValueKind == JsonValueKind.String
-                            ? dialectElement.GetString()
-                            : null;
-                    if (!string.Equals(dialect, SupportedDraft, StringComparison.Ordinal))
-                    {
-                        throw new AssetCtlException($"{relative}.$schema: expected '{SupportedDraft}'.", 2);
-                    }
-
-                    EvaluationResults evaluation = MetaSchemas.Draft202012.Evaluate(
-                        document,
-                        new EvaluationOptions { OutputFormat = OutputFormat.List }
-                    );
-                    if (!evaluation.IsValid)
-                    {
-                        throw new AssetCtlException("config/assets/schemas: invalid draft 2020-12 schema.", 2);
-                    }
-
-                    _ = JsonSchema.FromText(contents);
-                }
-                catch (JsonException)
-                {
-                    throw new AssetCtlException("config/assets/schemas: invalid JSON Schema document.", 2);
-                }
-
+                ValidateSchemaDocument(File.ReadAllText(path), buildOptions);
                 results.Add(new SchemaDocumentStatus(relative, SupportedDraft, true));
             }
 
@@ -1222,6 +1180,51 @@ internal static class ConfigurationTypes
             }
 
             return results;
+        }
+
+        private static void ValidateSchemaDocument(string contents, BuildOptions buildOptions)
+        {
+            try
+            {
+                using var parsed = JsonDocument.Parse(
+                    contents,
+                    new JsonDocumentOptions
+                    {
+                        AllowTrailingCommas = false,
+                        CommentHandling = JsonCommentHandling.Disallow,
+                    }
+                );
+                JsonElement document = parsed.RootElement;
+                string? dialect =
+                    document.ValueKind == JsonValueKind.Object
+                    && document.TryGetProperty("$schema", out JsonElement dialectElement)
+                    && dialectElement.ValueKind == JsonValueKind.String
+                        ? dialectElement.GetString()
+                        : null;
+                if (!string.Equals(dialect, SupportedDraft, StringComparison.Ordinal))
+                {
+                    throw new AssetCtlException($"config/assets/schemas.$schema: expected '{SupportedDraft}'.", 2);
+                }
+
+                EvaluationResults evaluation = MetaSchemas.Draft202012.Evaluate(
+                    document,
+                    new EvaluationOptions { OutputFormat = OutputFormat.List }
+                );
+                if (!evaluation.IsValid)
+                {
+                    throw new AssetCtlException("config/assets/schemas: invalid draft 2020-12 schema.", 2);
+                }
+
+                _ = JsonSchema.FromText(contents, buildOptions);
+            }
+            catch (JsonException)
+            {
+                throw new AssetCtlException("config/assets/schemas: invalid JSON Schema document.", 2);
+            }
+            catch (JsonSchemaException)
+            {
+                throw new AssetCtlException("config/assets/schemas: invalid draft 2020-12 schema.", 2);
+            }
         }
     }
 }

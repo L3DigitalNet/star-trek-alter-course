@@ -1,4 +1,5 @@
 using System.Globalization;
+using AlterCourse.AssetCtl.Catalog;
 using YamlDotNet.Core;
 using YamlDotNet.Core.Events;
 using YamlDotNet.RepresentationModel;
@@ -13,30 +14,36 @@ internal static class YamlValues
     private const int MaximumDepth = 32;
     private const int MaximumNodes = 20_000;
 
-    public static YamlMappingNode LoadMapping(string path)
+    public static YamlMappingNode LoadMapping(string path) => LoadBytes("YAML input", ReadBytes(path));
+
+    internal static byte[] ReadBytes(string path)
     {
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-        return LoadMapping(path, stream, MaximumBytes);
+        return ReadSnapshot("YAML input", stream, MaximumBytes);
     }
 
-    internal static YamlMappingNode LoadMapping(string path, Stream stream, int maximumBytes)
-    {
-        string text;
-        {
-            if (stream.Length > maximumBytes)
-            {
-                throw new AssetCtlException($"{path}: YAML exceeds the {maximumBytes}-byte limit.", 2);
-            }
+    internal static YamlMappingNode LoadMapping(string path, Stream stream, int maximumBytes) =>
+        LoadBytes(path, ReadSnapshot(path, stream, maximumBytes));
 
-            using var reader = new StreamReader(stream, detectEncodingFromByteOrderMarks: true);
-            text = reader.ReadToEnd();
+    private static byte[] ReadSnapshot(string path, Stream stream, int maximumBytes)
+    {
+        byte[] bytes;
+        try
+        {
+            bytes = SelectedAssetReader.Read(stream, maximumBytes);
+        }
+        catch (AssetCtlException)
+        {
+            throw new AssetCtlException($"{path}: YAML byte snapshot exceeds bounds or changed during reading.", 2);
         }
 
-        return LoadText(path, text);
+        return bytes;
     }
 
     internal static YamlMappingNode LoadBytes(string path, byte[] bytes)
     {
+        // Snapshot callers may supply absolute manifest/stage paths. Their identity is never diagnostic payload.
+        path = "YAML input";
         if (bytes.LongLength > MaximumBytes)
         {
             throw new AssetCtlException($"{path}: YAML exceeds the byte limit.", 2);
@@ -59,9 +66,9 @@ internal static class YamlValues
         {
             yaml.Load(new StringReader(text));
         }
-        catch (YamlException exception)
+        catch (YamlException)
         {
-            throw new AssetCtlException($"{path}: invalid or duplicate-key YAML: {exception.Message}", 2);
+            throw new AssetCtlException($"{path}: invalid or duplicate-key YAML.", 2);
         }
 
         if (yaml.Documents.Count != 1 || yaml.Documents[0].RootNode is not YamlMappingNode root)
@@ -93,9 +100,9 @@ internal static class YamlValues
                 }
             }
         }
-        catch (YamlException exception)
+        catch (YamlException)
         {
-            throw new AssetCtlException($"{path}: invalid YAML: {exception.Message}", 2);
+            throw new AssetCtlException($"{path}: invalid YAML.", 2);
         }
     }
 
@@ -125,7 +132,7 @@ internal static class YamlValues
 
                     if (!keys.Add(key.Value))
                     {
-                        throw new AssetCtlException($"{path}: duplicate key '{key.Value}'.", 2);
+                        throw new AssetCtlException($"{path}: duplicate mapping key.", 2);
                     }
 
                     ValidateTree(pair.Value, depth + 1, ref count, path);
@@ -159,7 +166,7 @@ internal static class YamlValues
             string key = ((YamlScalarNode)pair.Key).Value!;
             if (!allowed.Contains(key))
             {
-                throw new AssetCtlException($"{path}.{key}: unknown key.", 2);
+                throw new AssetCtlException($"{path}: unknown mapping key.", 2);
             }
         }
     }

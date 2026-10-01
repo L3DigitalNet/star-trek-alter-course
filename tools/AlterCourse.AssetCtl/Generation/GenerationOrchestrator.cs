@@ -19,9 +19,11 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         bool force,
         bool dryRun,
         bool offline,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        CommandCommitState? commit = null
     )
     {
+        commit ??= new CommandCommitState();
         using var assetLock = AssetLock.Acquire(configuration, manifest.Request.Id);
         manifest = ManifestMutation.ReloadForMutation(configuration, manifest);
         string runId = Guid.NewGuid().ToString();
@@ -76,6 +78,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
                 attempts,
                 failureCandidates,
                 offline,
+                commit,
                 cancellationToken
             )
             .ConfigureAwait(false);
@@ -89,6 +92,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         List<object> attempts,
         List<ReceiptCandidateEvidence> failureCandidates,
         bool offline,
+        CommandCommitState commit,
         CancellationToken cancellationToken
     )
     {
@@ -132,10 +136,12 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
                 inputs.PromptHash,
                 inputs.RequestHash,
                 runId,
-                plan.EstimatedMaximumCost
+                plan.EstimatedMaximumCost,
+                commit
             );
         }
-        catch (Exception exception) when (exception is AssetCtlException or ProviderException or IOException)
+        catch (Exception exception)
+            when (!commit.IsCommitted && exception is AssetCtlException or ProviderException or IOException)
         {
             WriteFailureReceiptUnlessWritten(
                 configuration,
@@ -368,11 +374,11 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
             }
             catch (ProviderException exception)
             {
-                RecordFallback(attempts, route, target, exception.Category, exception.Message);
+                RecordFallback(attempts, route, target, exception.Category);
             }
             catch (AssetCtlException exception) when (exception.ExitCode == 1)
             {
-                RecordFallback(attempts, route, target, ProviderErrorCategory.Validation, exception.Message);
+                RecordFallback(attempts, route, target, ProviderErrorCategory.Validation);
             }
         }
 
@@ -383,8 +389,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         List<object> events,
         RouteDefinition route,
         PlannedTarget target,
-        ProviderErrorCategory category,
-        string diagnostic
+        ProviderErrorCategory category
     )
     {
         events.Add(
@@ -394,12 +399,12 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
                 target.ProviderId,
                 target.ModelProfileId,
                 category,
-                diagnostic = SanitizeReceiptDiagnostic(diagnostic),
+                diagnostic = ProviderFailureDiagnostic(category),
             }
         );
         if (!AllowsFallback(route, category))
         {
-            throw new ProviderException(category, SanitizeReceiptDiagnostic(diagnostic));
+            throw new ProviderException(category, ProviderFailureDiagnostic(category));
         }
 
         events.Add(
@@ -634,7 +639,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
                         target.ProviderId,
                         target.ModelProfileId,
                         category = exception.Category,
-                        diagnostic = SanitizeReceiptDiagnostic(exception.Message),
+                        diagnostic = ReceiptFailureDiagnostic(exception),
                     }
                 );
                 if (!AllowsFallback(route, exception.Category))
@@ -652,11 +657,14 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
             }
         }
 
-        throw lastFailure
-            ?? new ProviderException(
-                ProviderErrorCategory.Validation,
-                "No independent semantic reviewer is available for the actual generator family."
-            );
+        throw lastFailure ?? NoReviewerFailure(events);
+    }
+
+    private static ProviderException NoReviewerFailure(List<object> events)
+    {
+        const string diagnostic = "No independent semantic reviewer is available for the actual generator family.";
+        events.Add(new { event_type = "review-unavailable", diagnostic });
+        return new ProviderException(ProviderErrorCategory.Validation, diagnostic);
     }
 
     // AssetRouter binds the initial family; fallback candidates need runtime rebinding before review spend.
@@ -710,7 +718,8 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         string promptHash,
         string requestHash,
         string runId,
-        decimal? estimatedCostUsd
+        decimal? estimatedCostUsd,
+        CommandCommitState commit
     )
     {
         (GeneratedCandidate Candidate, MechanicalValidationResult Mechanical, SemanticReviewResult? Review) selected =
@@ -746,7 +755,8 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
             requestHash,
             promptHash,
             runId,
-            bytes
+            bytes,
+            commit
         );
         return Result(configuration, generated, receipt, existing: false);
     }
@@ -761,7 +771,8 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         string requestHash,
         string promptHash,
         string runId,
-        byte[] bytes
+        byte[] bytes,
+        CommandCommitState commit
     )
     {
         AtomicPublisher.PublicationResult publication;
@@ -774,6 +785,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
                 generated.ManifestPath,
                 ManifestStore.Serialize(generated)
             );
+            commit.MarkCommitted();
         }
         catch (Exception exception) when (exception is AssetCtlException or IOException)
         {
@@ -791,25 +803,34 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
                     promptHash,
                     runId,
                     null,
-                    SanitizeReceiptDiagnostic(exception.Message)
+                    ReceiptFailureDiagnostic(exception)
                 )
             );
             exception.Data["AlterCourse.AssetCtl.ReceiptWritten"] = true;
             throw;
         }
 
-        return WritePublishedReceipt(
-            configuration,
-            generated,
-            plan,
-            outcome,
-            attempts,
-            integrity,
-            requestHash,
-            promptHash,
-            runId,
-            publication
-        );
+        try
+        {
+            return WritePublishedReceipt(
+                configuration,
+                generated,
+                plan,
+                outcome,
+                attempts,
+                integrity,
+                requestHash,
+                promptHash,
+                runId,
+                publication
+            );
+        }
+        catch (Exception exception) when (exception is AssetCtlException or IOException)
+        {
+            // Both receipt sinks failed after publication. Classify only this independent reporting step;
+            // the command boundary retains the proven commit without inventing rollback or completion.
+            throw new ReceiptReportingException();
+        }
     }
 
     private static string WritePublishedReceipt(
@@ -859,7 +880,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
                     promptHash,
                     runId,
                     publication,
-                    $"primary receipt write failed: {SanitizeReceiptDiagnostic(exception.Message)}"
+                    $"primary receipt write failed: {ReceiptFailureDiagnostic(exception)}"
                 )
             );
         }
@@ -1011,7 +1032,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
             published = publication?.Published ?? false,
             recovered_pending_transactions = publication?.RecoveredPendingTransactions ?? 0,
             active_transactions_skipped = publication?.ActiveTransactionsSkipped ?? 0,
-            rollback = publication?.Rollback ?? "completed-or-no-change",
+            rollback = publication?.Rollback ?? "not-established",
             failure,
             repository_path = publication?.Published == true ? generated.Request.Output.Path : null,
             godot_path = publication?.Published == true
@@ -1103,7 +1124,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
             selection = new
             {
                 status = "failure",
-                reason = SanitizeReceiptDiagnostic(exception.Message),
+                reason = ReceiptFailureDiagnostic(exception),
                 candidate = (int?)null,
                 selected_sha256 = (string?)null,
             },
@@ -1112,8 +1133,8 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
                 published = false,
                 recovered_pending_transactions = 0,
                 active_transactions_skipped = 0,
-                rollback = "completed-or-no-change",
-                failure = SanitizeReceiptDiagnostic(exception.Message),
+                rollback = "not-established",
+                failure = ReceiptFailureDiagnostic(exception),
                 repository_path = (string?)null,
                 godot_path = (string?)null,
                 manifest_path = (string?)null,
@@ -1139,7 +1160,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
                     new
                     {
                         receipt,
-                        primary_receipt_failure = SanitizeReceiptDiagnostic(exception.Message),
+                        primary_receipt_failure = ReceiptFailureDiagnostic(exception),
                         authoritative = false,
                     }
                 );
@@ -1288,23 +1309,41 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
                 started_at = started,
                 duration_milliseconds = stopwatch.ElapsedMilliseconds,
                 category = exception.Category,
-                diagnostic = SanitizeReceiptDiagnostic(exception.Message),
+                diagnostic = ReceiptFailureDiagnostic(exception),
             }
         );
 
-    private static string SanitizeReceiptDiagnostic(string diagnostic)
-    {
-        string sanitized = Redactor.Sanitize(diagnostic);
-        int query = sanitized.IndexOf('?', StringComparison.Ordinal);
-        if (query < 0)
+    // Receipts retain route/category evidence, but exception prose and nested objects are not provenance.
+    private static string ReceiptFailureDiagnostic(Exception failure) =>
+        failure switch
         {
-            return sanitized;
-        }
+            ProviderException provider => ProviderFailureDiagnostic(provider.Category),
+            AssetCtlException { ExitCode: 1 } => "validation-policy-failed",
+            AssetCtlException { ExitCode: 2 } => "input-policy-failed",
+            AssetCtlException { ExitCode: 6 } => "spending-policy-failed",
+            AssetCtlException { ExitCode: 7 } => "integrity-or-concurrency-policy-failed",
+            AssetCtlException { ExitCode: 8 } => "lifecycle-policy-failed",
+            IOException => "local-io-failed",
+            _ => "operation-failed",
+        };
 
-        // Provider diagnostics can embed a signed URL inside prose, so whole-value URL redaction is insufficient.
-        int end = sanitized.IndexOfAny([' ', '\r', '\n', '"', '\''], query);
-        return end < 0 ? sanitized[..query] + "?[REDACTED]" : sanitized[..query] + "?[REDACTED]" + sanitized[end..];
-    }
+    private static string ProviderFailureDiagnostic(ProviderErrorCategory category) =>
+        category switch
+        {
+            ProviderErrorCategory.Authentication => "provider-authentication-failed",
+            ProviderErrorCategory.Authorization => "provider-authorization-failed",
+            ProviderErrorCategory.RateLimit => "provider-rate-limit",
+            ProviderErrorCategory.InsufficientBalance => "provider-balance-refusal",
+            ProviderErrorCategory.Timeout => "provider-timeout",
+            ProviderErrorCategory.TransientNetwork => "provider-network-failed",
+            ProviderErrorCategory.InvalidRequest => "provider-invalid-request",
+            ProviderErrorCategory.ProviderServer => "provider-server-failed",
+            ProviderErrorCategory.UnsafeDownload => "provider-unsafe-download",
+            ProviderErrorCategory.MalformedResponse => "provider-malformed-response",
+            ProviderErrorCategory.UnsupportedOutput => "provider-unsupported-output",
+            ProviderErrorCategory.Validation => "provider-validation-failed",
+            _ => "provider-operation-failed",
+        };
 
     private static TimeSpan RetryDelay(RouteRetryPolicy retry, ProviderException exception, string runId, int attempt)
     {
@@ -1655,7 +1694,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
             )
         )
         {
-            throw new AssetCtlException($"Reference '{reference.Path}' exceeds limits or has changed.", 1);
+            throw new AssetCtlException("manifest.references: reference exceeds limits or has changed.", 1);
         }
 
         string extension = Path.GetExtension(path).ToLowerInvariant();
@@ -1663,7 +1702,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         {
             ".png" => SKEncodedImageFormat.Png,
             ".jpg" or ".jpeg" => SKEncodedImageFormat.Jpeg,
-            _ => throw new AssetCtlException($"Reference '{reference.Path}' has an unsupported media extension.", 1),
+            _ => throw new AssetCtlException("manifest.references: reference has an unsupported media extension.", 1),
         };
         using var codec = SKCodec.Create(new SKMemoryStream(bytes));
         if (
@@ -1677,7 +1716,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
             )
         )
         {
-            throw new AssetCtlException($"Reference '{reference.Path}' failed media or dimension policy.", 1);
+            throw new AssetCtlException("manifest.references: reference failed media or dimension policy.", 1);
         }
 
         var decodeInfo = new SKImageInfo(
@@ -1689,7 +1728,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         using var bitmap = new SKBitmap(decodeInfo);
         if (codec.GetPixels(decodeInfo, bitmap.GetPixels()) is not SKCodecResult.Success)
         {
-            throw new AssetCtlException($"Reference '{reference.Path}' failed full image decode.", 1);
+            throw new AssetCtlException("manifest.references: reference failed full image decode.", 1);
         }
 
         string mediaType = expectedFormat == SKEncodedImageFormat.Png ? "image/png" : "image/jpeg";

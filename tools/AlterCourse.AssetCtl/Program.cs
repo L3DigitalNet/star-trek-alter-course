@@ -149,7 +149,7 @@ internal static class Program
         {
             return RepositoryLocator.Find(Environment.CurrentDirectory);
         }
-        catch (AssetCtlException)
+        catch (Exception exception) when (BestEffortLoggerFactory.IsNonfatal(exception))
         {
             return null;
         }
@@ -174,7 +174,7 @@ internal static class Program
             ]);
             return new ConfigurationLoader(registry.Descriptors).Load(repository).Paths.LogRoot;
         }
-        catch (AssetCtlException)
+        catch (Exception exception) when (BestEffortLoggerFactory.IsNonfatal(exception))
         {
             return null;
         }

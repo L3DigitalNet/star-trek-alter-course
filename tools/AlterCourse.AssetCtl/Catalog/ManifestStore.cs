@@ -65,7 +65,7 @@ internal static class ManifestStore
             .FirstOrDefault(group => group.Count() > 1);
         if (duplicateOutput is not null)
         {
-            throw new AssetCtlException($"Duplicate asset output '{duplicateOutput.Key}'.", 2);
+            throw new AssetCtlException("Duplicate catalog asset output.", 2);
         }
 
         return manifests;
@@ -202,7 +202,7 @@ internal static class ManifestStore
         string style = visual.Scalar("style_profile", "manifest.visual");
         if (!configuration.Styles.ContainsKey(style))
         {
-            throw new AssetCtlException($"manifest.visual.style_profile: unknown style '{style}'.", 2);
+            throw new AssetCtlException("manifest.visual.style_profile: unknown style.", 2);
         }
 
         YamlMappingNode constraints = root.Mapping("constraints", "manifest");
@@ -212,12 +212,12 @@ internal static class ManifestStore
         string qualityTier = root.Scalar("quality_tier", "manifest");
         if (!configuration.QualityTiers.ContainsKey(qualityTier))
         {
-            throw new AssetCtlException($"manifest.quality_tier: unknown quality tier '{qualityTier}'.", 2);
+            throw new AssetCtlException("manifest.quality_tier: unknown quality tier.", 2);
         }
         string kind = root.Scalar("kind", "manifest");
         if (!AssetKinds.Contains(kind))
         {
-            throw new AssetCtlException($"manifest.kind: unsupported '{kind}'.", 2);
+            throw new AssetCtlException("manifest.kind: unsupported kind.", 2);
         }
         GenerationProvenance? generation = ReadGeneration(root.OptionalMapping("generation", "manifest"), qualityTier);
 
@@ -295,7 +295,7 @@ internal static class ManifestStore
         {
             "svg" => AssetFormat.Svg,
             "png" => AssetFormat.Png,
-            string value => throw new AssetCtlException($"manifest.output.format: unsupported '{value}'.", 2),
+            _ => throw new AssetCtlException("manifest.output.format: unsupported format.", 2),
         };
         if (!outputPath.EndsWith('.' + format.ToString().ToLowerInvariant(), StringComparison.Ordinal))
         {
@@ -914,7 +914,7 @@ internal static class ManifestStore
     {
         if (!string.Equals(actual, expected, StringComparison.Ordinal))
         {
-            throw new AssetCtlException($"{path}: unsupported version '{actual}'.", 2);
+            throw new AssetCtlException($"{path}: unsupported version.", 2);
         }
     }
 
@@ -996,7 +996,7 @@ internal static class ManifestStore
             "candidate" => AssetLifecycle.Candidate,
             "approved" => AssetLifecycle.Approved,
             "deprecated" => AssetLifecycle.Deprecated,
-            _ => throw new AssetCtlException($"manifest.lifecycle: unknown '{value}'.", 2),
+            _ => throw new AssetCtlException("manifest.lifecycle: unknown lifecycle.", 2),
         };
 
     private static string Lifecycle(AssetLifecycle value) => value.ToString().ToLowerInvariant();
