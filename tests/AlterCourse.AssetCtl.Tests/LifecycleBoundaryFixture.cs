@@ -6,6 +6,8 @@ namespace AlterCourse.AssetCtl.Tests;
 /// <summary>Provides isolated Linux filesystem objects and a credential-free candidate for boundary tests.</summary>
 internal sealed class LifecycleBoundaryFixture : IDisposable
 {
+    private static readonly string[] DryRunArguments = ["--dry-run"];
+
     public LifecycleBoundaryFixture(byte[]? bytes = null, long maximumBytes = 1_000_000)
     {
         Root = Path.Combine(Path.GetTempPath(), "assetctl-lifecycle-boundary-" + Guid.NewGuid().ToString("N"));
@@ -68,7 +70,7 @@ internal sealed class LifecycleBoundaryFixture : IDisposable
                 "--approved-by", "fixture-owner",
                 "--approval-note", "fixture-review",
                 "--confirm-approved-asset", Manifest.Request.Id,
-                .. dryRun ? new[] { "--dry-run" } : [],
+                .. dryRun ? DryRunArguments : [],
             ]
         );
 
