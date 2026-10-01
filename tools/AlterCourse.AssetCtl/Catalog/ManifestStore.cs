@@ -547,7 +547,11 @@ internal static class ManifestStore
         Line(builder, 2, "media_type", integrity.MediaType);
     }
 
-    public static void VerifyIntegrity(EffectiveConfiguration configuration, AssetManifest manifest)
+    public static void VerifyIntegrity(
+        EffectiveConfiguration configuration,
+        AssetManifest manifest,
+        Func<string, byte[]>? readSelectedBytes = null
+    )
     {
         if (manifest.Integrity is null)
         {
@@ -555,7 +559,8 @@ internal static class ManifestStore
         }
 
         string path = PathPolicy.ResolveOutputPath(configuration, manifest.Request.Output.Path, allowMissing: false);
-        byte[] bytes = File.ReadAllBytes(path);
+        // The scoped seam delegates to the actual whole-file read, allowing tests to observe admission ordering.
+        byte[] bytes = (readSelectedBytes ?? File.ReadAllBytes)(path);
         string hash = Convert.ToHexStringLower(SHA256.HashData(bytes));
         if (
             !string.Equals(hash, manifest.Integrity.Sha256, StringComparison.Ordinal)

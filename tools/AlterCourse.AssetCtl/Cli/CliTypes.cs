@@ -473,6 +473,13 @@ internal static class CliTypes
         }
 
         private static object Approve(EffectiveConfiguration configuration, CliOptions options)
+            => ApproveObserved(configuration, options);
+
+        internal static object ApproveObserved(
+            EffectiveConfiguration configuration,
+            CliOptions options,
+            ManifestMutation.Observation? observation = null
+        )
         {
             global::AlterCourse.AssetCtl.Domain.DomainModels.AssetManifest manifest = ResolveManifest(
                 configuration,
@@ -491,6 +498,7 @@ internal static class CliTypes
             }
 
             (string actor, string note) = ValidateApprovalEligibility(configuration, manifest, options);
+            observation?.EvidenceValidated?.Invoke();
 
             string assetPath = PathPolicy.ResolveOutputPath(
                 configuration,
@@ -515,7 +523,7 @@ internal static class CliTypes
                 };
             }
 
-            ManifestMutation.WriteCas(configuration, manifest, approved);
+            ManifestMutation.WriteCas(configuration, manifest, approved, observation);
             string afterHash = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(assetPath)));
             if (!string.Equals(beforeHash, afterHash, StringComparison.Ordinal))
             {

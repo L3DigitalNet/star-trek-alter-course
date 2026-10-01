@@ -5,6 +5,14 @@ namespace AlterCourse.AssetCtl.Publishing;
 
 internal static class ManifestMutation
 {
+    // These per-call seams expose filesystem interleavings without process-wide mutable hooks.
+    // Normal callers leave them absent and retain the same operation ordering.
+    internal sealed record Observation(
+        Action? EvidenceValidated = null,
+        Action<string, string>? BeforeReplacement = null,
+        Action? Replaced = null
+    );
+
     public static AssetManifest ReloadForMutation(EffectiveConfiguration configuration, AssetManifest observed)
     {
         AssetManifest current = ManifestStore.Load(configuration, observed.ManifestPath);
@@ -18,7 +26,12 @@ internal static class ManifestMutation
         EnsureSameVersion(expected, current);
     }
 
-    public static void WriteCas(EffectiveConfiguration configuration, AssetManifest expected, AssetManifest replacement)
+    public static void WriteCas(
+        EffectiveConfiguration configuration,
+        AssetManifest expected,
+        AssetManifest replacement,
+        Observation? observation = null
+    )
     {
         string path = PathPolicy.ResolveUnder(
             configuration.RepositoryRoot,
@@ -32,7 +45,9 @@ internal static class ManifestMutation
         {
             // This comparison occurs while the per-asset lock is held; every lifecycle writer must share that lock.
             EnsureCurrent(configuration, expected);
+            observation?.BeforeReplacement?.Invoke(stage, path);
             File.Move(stage, path, overwrite: true);
+            observation?.Replaced?.Invoke();
         }
         finally
         {
