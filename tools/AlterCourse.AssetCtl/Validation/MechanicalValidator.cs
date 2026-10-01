@@ -180,16 +180,7 @@ internal static class MechanicalValidator
     {
         try
         {
-            var settings = new XmlReaderSettings
-            {
-                DtdProcessing = DtdProcessing.Prohibit,
-                XmlResolver = null,
-                MaxCharactersInDocument = 1_048_576,
-                MaxCharactersFromEntities = 0,
-            };
-            using var source = new MemoryStream(bytes, writable: false);
-            using var reader = XmlReader.Create(source, settings);
-            var document = XDocument.Load(reader, LoadOptions.None);
+            XDocument document = LoadSvgDocument(bytes);
             if (document.Nodes().OfType<XProcessingInstruction>().Any())
                 return Failure("SVG processing instructions are prohibited");
             global::System.Xml.Linq.XElement? root = document.Root;
@@ -233,10 +224,28 @@ internal static class MechanicalValidator
 
             return new MechanicalValidationResult(true, "image/svg+xml", width, height, true, [], normalized, previews);
         }
+        catch (SvgTargetRenderException)
+        {
+            return Failure("target-size SVG render or preview failed");
+        }
         catch (Exception exception) when (exception is XmlException or InvalidOperationException or FormatException)
         {
             return Failure("SVG parse or render failed");
         }
+    }
+
+    private static XDocument LoadSvgDocument(byte[] bytes)
+    {
+        var settings = new XmlReaderSettings
+        {
+            DtdProcessing = DtdProcessing.Prohibit,
+            XmlResolver = null,
+            MaxCharactersInDocument = 1_048_576,
+            MaxCharactersFromEntities = 0,
+        };
+        using var source = new MemoryStream(bytes, writable: false);
+        using var reader = XmlReader.Create(source, settings);
+        return XDocument.Load(reader, LoadOptions.None);
     }
 
     private static bool TryGetViewBox(XElement root, out double width, out double height)
@@ -314,7 +323,15 @@ internal static class MechanicalValidator
                     && request.Prohibited.Contains("text", StringComparer.OrdinalIgnoreCase)
             )
             {
-                return "prohibited SVG element";
+                return local switch
+                {
+                    "script" => "prohibited SVG element: script",
+                    "foreignObject" => "prohibited SVG element: foreignObject",
+                    "image" => "prohibited SVG element: image",
+                    "feImage" => "prohibited SVG element: feImage",
+                    "text" => "prohibited SVG element: text",
+                    _ => "prohibited SVG element",
+                };
             }
 
             if (string.Equals(local, "text", StringComparison.Ordinal) && !IsSanitizedIdentifier(element))
@@ -337,13 +354,25 @@ internal static class MechanicalValidator
                     || IsExternalResource(name, value)
                 )
                 {
-                    return "prohibited SVG attribute";
+                    return ProhibitedSvgAttributeFinding(name);
                 }
             }
         }
 
         return null;
     }
+
+    private static string ProhibitedSvgAttributeFinding(string name) =>
+        name switch
+        {
+            "onclick" => "prohibited SVG attribute: onclick",
+            "base" => "prohibited SVG attribute: base",
+            "href" => "prohibited SVG attribute: href",
+            "src" => "prohibited SVG attribute: src",
+            "fill" => "prohibited SVG attribute: fill",
+            "stroke" => "prohibited SVG attribute: stroke",
+            _ => "prohibited SVG attribute",
+        };
 
     private static bool IsSanitizedIdentifier(XElement element)
     {
@@ -406,7 +435,7 @@ internal static class MechanicalValidator
             canvas.Clear(SKColors.Transparent);
             if (svg.Picture is null)
             {
-                throw new InvalidOperationException("target-size SVG render surface was unavailable");
+                throw new SvgTargetRenderException();
             }
 
             canvas.Scale(Math.Min(size / (float)width, size / (float)height));
@@ -414,18 +443,19 @@ internal static class MechanicalValidator
             canvas.Flush();
             if (!HasVisiblePixel(bitmap))
             {
-                throw new InvalidOperationException("target-size SVG render produced no visible pixels");
+                throw new SvgTargetRenderException();
             }
 
             using var image = SKImage.FromBitmap(bitmap);
-            using SKData data =
-                image.Encode(SKEncodedImageFormat.Png, 100)
-                ?? throw new InvalidOperationException("target-size SVG preview encoding failed");
+            using SKData data = image.Encode(SKEncodedImageFormat.Png, 100) ?? throw new SvgTargetRenderException();
             previews.Add(size, data.ToArray());
         }
 
         return previews;
     }
+
+    // Renderer exceptions may contain source content. This marker identifies only our closed target-render refusals.
+    private sealed class SvgTargetRenderException : Exception;
 
     private static bool HasVisiblePixel(SKBitmap bitmap)
     {

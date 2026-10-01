@@ -18,7 +18,8 @@ internal static class YamlValues
 
     internal static byte[] ReadBytes(string path)
     {
-        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        // Keep the bounded reader's EOF probe from prefetching growth beyond its one-byte allowance.
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 1);
         return ReadSnapshot("YAML input", stream, MaximumBytes);
     }
 

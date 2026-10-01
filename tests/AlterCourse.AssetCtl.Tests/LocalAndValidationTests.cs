@@ -140,6 +140,30 @@ public sealed class LocalAndValidationTests
         Assert.Contains("fill", string.Join("; ", result.Findings), StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>Reports closed SVG names while excluding arbitrary names and resource values.</summary>
+    [Theory]
+    [InlineData("<sentinel-secret/>", "prohibited SVG element")]
+    [InlineData("<path onsentinel-secret='credential-value'/>", "prohibited SVG attribute")]
+    [InlineData(
+        "<path fill='url(https://sentinel-secret.example/a?token=credential-value)'/>",
+        "prohibited SVG attribute: fill"
+    )]
+    public void SvgFindingsExcludeUntrustedNamesAndValues(string body, string expected)
+    {
+        string svg = $"<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'>{body}</svg>";
+        MechanicalValidationResult result = MechanicalValidator.Validate(
+            TestData.Request(AssetFormat.Svg),
+            Encoding.UTF8.GetBytes(svg),
+            1_000_000,
+            1_000_000
+        );
+
+        Assert.False(result.Passed);
+        Assert.Equal([expected], result.Findings);
+        Assert.DoesNotContain("sentinel-secret", string.Join("; ", result.Findings), StringComparison.Ordinal);
+        Assert.DoesNotContain("credential-value", string.Join("; ", result.Findings), StringComparison.Ordinal);
+    }
+
     /// <summary>Preserves local fragment URL references used by safe SVG gradients.</summary>
     [Fact]
     public void SvgAllowsLocalFragmentResources()
