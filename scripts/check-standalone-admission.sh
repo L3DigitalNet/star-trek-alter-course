@@ -52,7 +52,7 @@ jq -e --slurp --arg repository "${repository}" --argjson number "${number}" '
   .target.kind == "pull_request" and .target.repository == $repository and
   .target.number == $number and (.steps | type) == "array" and
   (.gaps | type) == "array" and
-  .item.kind == "pull_request" and .item.number == $number and
+  .item.kind == "PR" and .item.number == $number and
   .item.state == "open" and .item.merged != true and .item.relationship == "Standalone" and
   ((.item.governing_issue // 0) == 0)
 ' <<< "${receipt}" > /dev/null

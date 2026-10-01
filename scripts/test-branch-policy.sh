@@ -107,8 +107,10 @@ chmod +x .agents/skills/github-workflow/bin/gh-workflow mock-bin/gh
 export PATH="${fixture}/mock-bin:${PATH}"
 export MOCK_RECEIPT="${fixture}/receipt.json" MOCK_CHECK="${fixture}/check.json"
 export MOCK_SNAPSHOT="${fixture}/snapshot.json" MOCK_READ_MARKER="${fixture}/read-marker"
+# The package receipt uses distinct target and item discriminators; the predicate
+# in scripts/check-standalone-admission.sh must preserve that wire contract.
 cat > receipt-good.json << 'JSON'
-{"schema_version":"1","command":"receipt","result":"clear","target":{"kind":"pull_request","number":42,"repository":"L3DigitalNet/star-trek-alter-course"},"gate":null,"findings":[],"steps":[],"item":{"kind":"pull_request","number":42,"state":"open","relationship":"Standalone"},"gaps":["a governing issue link"]}
+{"schema_version":"1","command":"receipt","result":"clear","target":{"kind":"pull_request","number":42,"repository":"L3DigitalNet/star-trek-alter-course"},"gate":null,"findings":[],"steps":[],"item":{"kind":"PR","number":42,"state":"open","relationship":"Standalone"},"gaps":["a governing issue link"]}
 JSON
 jq '.command = "check" | .gate = "ready" | del(.item, .gaps)' receipt-good.json > check-good.json
 jq -n --arg sha "${base}" '{number:42,state:"open",draft:true,body:"$(touch malicious-executed)",head:{sha:$sha,ref:"standalone/prose-maintenance"},base:{ref:"dev",repo:{full_name:"L3DigitalNet/star-trek-alter-course"}}}' > snapshot-good.json
@@ -143,6 +145,9 @@ for phase in structural ready post-merge; do
   expect_fail standalone_route
 done
 for mutation in \
+  '.item.kind = "pull_request"' \
+  '.item.kind = "issue"' \
+  '.target.kind = "PR"' \
   'del(.item.relationship)' \
   '.item.relationship = "Final" | .item.governing_issue = 9' \
   '.item.governing_issue = 9' \
