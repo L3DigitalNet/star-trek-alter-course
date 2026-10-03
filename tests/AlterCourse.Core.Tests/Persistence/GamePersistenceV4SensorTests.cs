@@ -336,11 +336,8 @@ public sealed class GamePersistenceV4SensorTests
     /// The measured vertex saturates contacts, report history, work correlations, identity widths, times, positions,
     /// and escaped names. The derived ceiling then adds complete maximum encodings for every omitted bounded shape;
     /// adding whole alternatives instead of their deltas deliberately overcounts mutually exclusive states.
-    /// The canonical gate always runs this; mutation runs filter it out because Stryker's per-probe coverage cost
-    /// across the 109 MB validation loop dominated capture time (stryker-mutator/stryker-net#3878).
     /// </remarks>
     [Fact]
-    [Trait("Mutation", "Excluded")]
     public void MaximumWidthReportWorldFitsCompactSaveEnvelope()
     {
         (GameSimulation baseline, ShipDefinitionCatalog catalog, FactionDefinitionCatalog factionCatalog) =
