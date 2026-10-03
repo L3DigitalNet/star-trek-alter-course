@@ -63,52 +63,32 @@ public sealed class ReceiptFailureBoundaryTests
 
     /// <summary>
     /// A failure receipt that cannot be written, or that only reaches the fallback, never replaces the original
-    /// pre-commit refusal: lifecycle (8, boundary validation) and budget (6, plan construction) reach the receipt
-    /// step through different catch sites.
+    /// pre-commit refusal. Lifecycle refusal (8) comes from boundary validation and the no-route refusal (5) from plan
+    /// construction, so both failure-receipt catch sites are covered.
     /// </summary>
     [Theory]
     [InlineData(true, false, 8)]
     [InlineData(true, true, 8)]
     [InlineData(false, true, 8)]
-    [InlineData(true, true, 6)]
-    [InlineData(false, true, 6)]
+    [InlineData(true, true, 5)]
+    [InlineData(false, true, 5)]
     public async Task FailureReceiptSinkFailurePreservesRefusal(bool denyPrimary, bool denyFallback, int expectedExit)
     {
         using var fixture = new DiagnosticBoundaryRegressionTests.ProcessFixture();
-        if (expectedExit == 8)
-        {
-            AssetManifest manifest = fixture.Load();
-            await File.WriteAllTextAsync(
-                fixture.ManifestPath,
-                ManifestStore.Serialize(
-                    manifest with
-                    {
-                        Request = manifest.Request with { Lifecycle = AssetLifecycle.Deprecated },
-                    }
-                )
-            );
-        }
-        else
-        {
-            // The local placeholder is the only offline route; any nonzero price exceeds the 0.00 spend limits.
-            string providers = Path.Combine(fixture.Root, "config/assets/providers.yaml");
-            string original = await File.ReadAllTextAsync(providers);
-            string priced = original.Replace(
-                "estimated_cost_per_output: 0.00",
-                "estimated_cost_per_output: 0.01",
-                StringComparison.Ordinal
-            );
-            Assert.NotEqual(original, priced, StringComparer.Ordinal);
-            await File.WriteAllTextAsync(providers, priced);
-        }
+        await PrepareRefusal(fixture, expectedExit);
         byte[] before = await File.ReadAllBytesAsync(fixture.ManifestPath);
         EffectiveConfiguration configuration = fixture.Configuration();
+        // Calibration: with writable sinks the same invocation must already produce expectedExit, so the faulted run
+        // below proves preservation of the genuine refusal rather than of some unrelated earlier failure.
+        Assert.Equal(expectedExit, await RunGenerate(fixture));
+        Directory.Delete(Path.Combine(fixture.Root, configuration.Paths.ReceiptRoot), recursive: true);
+        Assert.False(Directory.Exists(FallbackRoot(fixture, configuration)));
         using DeniedDirectory? primary = BlockPrimary(fixture, configuration, denyPrimary);
         using DeniedDirectory? fallback = denyFallback
             ? new DeniedDirectory(FallbackRoot(fixture, configuration))
             : null;
 
-        int exit = await Program.RunProcessAsync(Arguments(fixture), (_, _) => NullLoggerFactory.Instance);
+        int exit = await RunGenerate(fixture);
 
         Assert.Equal(expectedExit, exit);
         Assert.Equal(before, await File.ReadAllBytesAsync(fixture.ManifestPath));
@@ -127,23 +107,100 @@ public sealed class ReceiptFailureBoundaryTests
     }
 
     /// <summary>
-    /// Candidate retention failure keeps the original validation refusal and still writes the attempt evidence, without
-    /// claiming a retained path that was never written.
+    /// Candidate retention failure keeps the original refusal and still writes the attempt evidence, without claiming
+    /// a retained path that was never written.
     /// </summary>
     [Fact]
     public async Task RetentionIoFailurePreservesRefusalAndReceiptEvidence()
     {
         using var fixture = new DiagnosticBoundaryRegressionTests.ProcessFixture();
+        EffectiveConfiguration configuration = fixture.Configuration();
+        string receiptRoot = Path.Combine(fixture.Root, configuration.Paths.ReceiptRoot);
+        // Calibration: the same invalid candidates without retention yield the genuine refusal and its receipt reason.
+        (Exception genuine, string genuineReason) = await RunInvalidCandidates(fixture, configuration, retain: false);
+        Directory.Delete(receiptRoot, recursive: true);
+
+        (Exception failure, string reason) = await RunInvalidCandidates(fixture, configuration, retain: true);
+
+        Assert.IsType(genuine.GetType(), failure);
+        Assert.Equal((genuine as AssetCtlException)?.ExitCode, (failure as AssetCtlException)?.ExitCode);
+        Assert.Equal((genuine as ProviderException)?.Category, (failure as ProviderException)?.Category);
+        Assert.Equal(genuineReason, reason);
+        Assert.NotEqual("local-io-failed", reason, StringComparer.Ordinal);
+        Assert.Null(fixture.Load().Integrity);
+        using var parsed = JsonDocument.Parse(
+            await File.ReadAllTextAsync(Assert.Single(Directory.GetFiles(receiptRoot, "*.json")))
+        );
+        Assert.True(parsed.RootElement.GetProperty("attempts").GetArrayLength() > 1);
+        JsonElement[] candidates = [.. parsed.RootElement.GetProperty("candidates").EnumerateArray()];
+        Assert.NotEmpty(candidates);
+        Assert.All(
+            candidates,
+            candidate =>
+            {
+                Assert.Equal(64, candidate.GetProperty("sha256").GetString()!.Length);
+                Assert.Equal(JsonValueKind.Null, candidate.GetProperty("retained_path").ValueKind);
+            }
+        );
+    }
+
+    private static async Task PrepareRefusal(DiagnosticBoundaryRegressionTests.ProcessFixture fixture, int expectedExit)
+    {
+        if (expectedExit == 8)
+        {
+            AssetManifest manifest = fixture.Load();
+            await File.WriteAllTextAsync(
+                    fixture.ManifestPath,
+                    ManifestStore.Serialize(
+                        manifest with
+                        {
+                            Request = manifest.Request with { Lifecycle = AssetLifecycle.Deprecated },
+                            // A deprecated manifest without its record is refused at load (exit 1), never reaching
+                            // the lifecycle boundary this case targets.
+                            Deprecation = new DeprecationRecord(
+                                "maintainer",
+                                new DateTimeOffset(2026, 9, 1, 10, 0, 0, TimeSpan.Zero),
+                                "superseded"
+                            ),
+                        }
+                    )
+                )
+                .ConfigureAwait(false);
+        }
+        else
+        {
+            // Pricing the only offline route above the 0.00 spend limits leaves the router no eligible target.
+            string providers = Path.Combine(fixture.Root, "config/assets/providers.yaml");
+            string original = await File.ReadAllTextAsync(providers).ConfigureAwait(false);
+            string priced = original.Replace(
+                "estimated_cost_per_output: 0.00",
+                "estimated_cost_per_output: 0.01",
+                StringComparison.Ordinal
+            );
+            Assert.NotEqual(original, priced, StringComparer.Ordinal);
+            await File.WriteAllTextAsync(providers, priced).ConfigureAwait(false);
+        }
+    }
+
+    private static async Task<(Exception Failure, string Reason)> RunInvalidCandidates(
+        DiagnosticBoundaryRegressionTests.ProcessFixture fixture,
+        EffectiveConfiguration configuration,
+        bool retain
+    )
+    {
         string policy = Path.Combine(fixture.Root, "config/assets/assetctl.yaml");
-        string original = await File.ReadAllTextAsync(policy);
-        string retaining = original.Replace(
-            "retain_unselected_candidates: false",
-            "retain_unselected_candidates: true",
+        string original = await File.ReadAllTextAsync(policy).ConfigureAwait(false);
+        string updated = original.Replace(
+            $"retain_unselected_candidates: {(!retain).ToString().ToLowerInvariant()}",
+            $"retain_unselected_candidates: {retain.ToString().ToLowerInvariant()}",
             StringComparison.Ordinal
         );
-        Assert.NotEqual(original, retaining, StringComparer.Ordinal);
-        await File.WriteAllTextAsync(policy, retaining);
-        EffectiveConfiguration configuration = fixture.Configuration();
+        Assert.Contains(
+            $"retain_unselected_candidates: {retain.ToString().ToLowerInvariant()}",
+            updated,
+            StringComparison.Ordinal
+        );
+        await File.WriteAllTextAsync(policy, updated).ConfigureAwait(false);
         using var client = new HttpClient();
         var registry = new AdapterRegistry([
             new InvalidCandidateGenerator(Path.Combine(fixture.Root, configuration.Paths.WorkRoot)),
@@ -160,32 +217,16 @@ public sealed class ReceiptFailureBoundaryTests
             NullLogger<AlterCourse.AssetCtl.Cli.CliTypes.CommandApp>.Instance
         );
 
-        Exception? failure = await Record.ExceptionAsync(() =>
-            app.RunAsync(Arguments(fixture), CancellationToken.None)
+        Exception failure = Assert.IsAssignableFrom<Exception>(
+            await Record
+                .ExceptionAsync(() => app.RunAsync(Arguments(fixture), CancellationToken.None))
+                .ConfigureAwait(false)
         );
-
-        ProviderException refusal = Assert.IsType<ProviderException>(failure);
-        Assert.Equal(ProviderErrorCategory.Validation, refusal.Category);
-        Assert.Null(fixture.Load().Integrity);
         string receipt = Assert.Single(
             Directory.GetFiles(Path.Combine(fixture.Root, configuration.Paths.ReceiptRoot), "*.json")
         );
-        using var parsed = JsonDocument.Parse(await File.ReadAllTextAsync(receipt));
-        Assert.True(parsed.RootElement.GetProperty("attempts").GetArrayLength() > 1);
-        Assert.Equal(
-            "provider-validation-failed",
-            parsed.RootElement.GetProperty("selection").GetProperty("reason").GetString()
-        );
-        JsonElement[] candidates = [.. parsed.RootElement.GetProperty("candidates").EnumerateArray()];
-        Assert.NotEmpty(candidates);
-        Assert.All(
-            candidates,
-            candidate =>
-            {
-                Assert.Equal(64, candidate.GetProperty("sha256").GetString()!.Length);
-                Assert.Equal(JsonValueKind.Null, candidate.GetProperty("retained_path").ValueKind);
-            }
-        );
+        using var parsed = JsonDocument.Parse(await File.ReadAllTextAsync(receipt).ConfigureAwait(false));
+        return (failure, parsed.RootElement.GetProperty("selection").GetProperty("reason").GetString()!);
     }
 
     /// <summary>
@@ -219,6 +260,9 @@ public sealed class ReceiptFailureBoundaryTests
         Assert.False(publication.GetProperty("published").GetBoolean());
         Assert.Equal("local-io-failed", publication.GetProperty("failure").GetString());
     }
+
+    private static Task<int> RunGenerate(DiagnosticBoundaryRegressionTests.ProcessFixture fixture) =>
+        Program.RunProcessAsync(Arguments(fixture), (_, _) => NullLoggerFactory.Instance);
 
     private static string[] Arguments(DiagnosticBoundaryRegressionTests.ProcessFixture fixture) =>
         ["generate", "--output", "json", "--asset-id", fixture.AssetId, "--offline"];
@@ -286,7 +330,9 @@ public sealed class ReceiptFailureBoundaryTests
     }
 
     // Replaces the offline placeholder: emits undecodable bytes so every candidate fails mechanical validation, and
-    // turns the work root into a regular file so candidate retention under it fails with IOException.
+    // places a regular file at <work_root>/<run_id>, the failure-retention directory, so retention fails with
+    // IOException. Blocking only that run directory leaves every other work-root user (publication staging, the
+    // receipt fallback) intact, so the refusal stays the one the calibration run observes.
     private sealed class InvalidCandidateGenerator(string workRoot) : IAssetGenerator
     {
         private readonly LocalPlaceholderGenerator _descriptor = new();
@@ -303,9 +349,12 @@ public sealed class ReceiptFailureBoundaryTests
             CancellationToken cancellationToken
         )
         {
-            if (!File.Exists(workRoot))
+            Directory.CreateDirectory(workRoot);
+            string runDirectory = Path.Combine(workRoot, context.RunId);
+            if (!File.Exists(runDirectory))
             {
-                await File.WriteAllTextAsync(workRoot, "blocked retention", cancellationToken).ConfigureAwait(false);
+                await File.WriteAllTextAsync(runDirectory, "blocked retention", cancellationToken)
+                    .ConfigureAwait(false);
             }
             return new GenerationBatchResult(
                 [new GeneratedCandidate(0, "invalid image"u8.ToArray(), "image/png", null, 0m)],
