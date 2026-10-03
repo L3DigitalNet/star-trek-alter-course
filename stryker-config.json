@@ -3,6 +3,7 @@
 		"solution": "AlterCourse.sln",
 		"project": "src/AlterCourse.Core/AlterCourse.Core.csproj",
 		"test-projects": ["tests/AlterCourse.Core.Tests/AlterCourse.Core.Tests.csproj"],
+		"test-case-filter": "Mutation!=Excluded",
 		"reporters": ["cleartext", "html"]
 	}
 }
