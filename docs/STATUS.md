@@ -2,13 +2,13 @@
 
 ## Current snapshot
 
+- Bug #141 is Done; PR #144 merged into `dev` as `98d2e70`; post-merge Verify `37106769083` passed. Core 1411, AssetCtl 530.
+- AssetCtl native guard requires Linux x86-64 (exit 7 otherwise); raw pre-commit local I/O failures keep exit 1 per the binding rule.
+- Stryker [#3878](https://github.com/stryker-mutator/stryker-net/issues/3878): the 109 MB test was not the coverage cost; PR #146 reverted its exclusion. Full run is 68-77 min.
+- The full gameplay-semantic sweep (last 2026-09-26) is due 2026-10-03 and not yet performed. No release, tag, or main promotion occurred.
 - Bug #135 is Done/closed; PR #138 merged into `dev` at 2026-09-30T23:12:01Z as `826f326`, with its tree identical to tested `d3f32bf`.
-- Candidate `5a1b8ea` passed rexec verification: Core 1411, AssetCtl 324, Godot 1+2+106, smoke, and zero build warnings or test failures/skips.
 - R1 bounds native content reads; R2 strictly admits UTF-16 text; R3 preserves finite withdrawal displacement and deterministic save continuation.
 - [Remediation evidence](reviews/adr-remediation-2026-09-30.md) and [PR #138](https://github.com/L3DigitalNet/star-trek-alter-course/pull/138) own final receipts.
-- Native/two Claude reviews, follow-ups and five PR #138 checks passed; mutation 75.60%. Execution `5921171255` and Ready `5921229076` own details.
-- Post-merge hosted Verify `36789819736` completed successfully; `gh run watch` exited 0.
-- Removed 14 worktrees and 15 local branches after clean status, patch/tree proof, archived receipts, branch-history bundle, and successful rexec release.
 - PR #138/#137 remote branches were auto-deleted; the owner explicitly authorized GitHub deletion of PR #134's legacy branch, now verified absent.
 - [Bug #139](https://github.com/L3DigitalNet/star-trek-alter-course/issues/139) is Blocked pending owner disposition; workflow enforcement changes require escalation.
 - All 18 ADRs bind after PR #137 merged `7e2df74`; Task #136 is Done and PR #134 closed superseded. Reconciliation changed no source.
