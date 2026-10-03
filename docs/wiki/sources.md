@@ -6,7 +6,7 @@ description: 'Coverage index of architectural records, game contracts, implement
 doc_type: 'index'
 status: 'active'
 created: '2026-09-06'
-updated: '2026-09-30'
+updated: '2026-10-03'
 tags:
   - 'design'
   - 'architecture'
@@ -39,7 +39,7 @@ The [authority map](../README.md) distinguishes documents outside the wiki. This
 
 [Bug #141](https://github.com/L3DigitalNet/star-trek-alter-course/issues/141) owns the implementation follow-up identified by the post-remediation review below. The [targeted correction record](../reviews/assetctl-boundaries-2026-09-30.md) traces integrated source `d6fab0c16b56c8bac3fe7dd263461a68abdbaaea` to bounded selected reads, descriptor-bound lifecycle commitment, admitted publication/recovery ownership, isolated optional diagnostics, and truthful required-output/receipt failures. The [operator runbook](../development-quality.md#reporting-and-recovery) describes state inspection before retry and manual handling of legacy quarantined journals.
 
-The earlier September 30 observations remain historical evidence of the correction targets; PR #140 did not fix them. Focused candidate execution is recorded separately from the integrated full-suite RED: 500 passed, eight SVG diagnostic-detail failures, 508 total, no skips, exit 1. Corrected source `d9e25d2f2eca2b2c396af6936b0c1cdb3009d21e` passed all 511 AssetCtl cases with exit 0 and no failures/skips; scoped native follow-up confirmed the corrected boundaries. Final canonical verification and hosted admission remain pending. This targeted tooling review changes no gameplay contract, release, compatibility activation policy, or enforcement mechanism and does not recertify all 18 binding ADRs. Bug #139 remains a separate enforcement follow-up. The latest full gameplay-semantic sweep remains **2026-09-26**, with the next due **2026-10-03**.
+The earlier September 30 observations remain historical evidence of the correction targets; PR #140 did not fix them. Focused candidate execution is recorded separately from the integrated full-suite RED: 500 passed, eight SVG diagnostic-detail failures, 508 total, no skips, exit 1. Corrected source `d9e25d2f2eca2b2c396af6936b0c1cdb3009d21e` passed all 511 AssetCtl cases with exit 0 and no failures/skips; scoped native follow-up confirmed the corrected boundaries. On October 3 the opposite-provider review's four confirmed findings (receipt-sink outcome replacement, the Linux x86-64 native ABI, and legacy quarantine evidence) and a verifier-found post-spend receipt gap were reproduced and corrected; the record lists their RED/GREEN and canonical evidence, and the [tool contract](asset-pipeline-tool.md) now qualifies native support as Linux x86-64. Hosted admission belongs to PR #144. This targeted tooling review changes no gameplay contract, release, compatibility activation policy, or enforcement mechanism and does not recertify all 18 binding ADRs. Bug #139 remains a separate enforcement follow-up. The latest full gameplay-semantic sweep remains **2026-09-26**, with the next due **2026-10-03**.
 
 ### Post-remediation repository review — 2026-09-30
 
