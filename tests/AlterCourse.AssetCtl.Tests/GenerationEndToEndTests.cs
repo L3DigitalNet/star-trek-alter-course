@@ -12,6 +12,74 @@ namespace AlterCourse.AssetCtl.Tests;
 /// <summary>Exercises the offline orchestration boundary with deterministic in-memory providers.</summary>
 public sealed class GenerationEndToEndTests
 {
+    /// <summary>A refused recovery with retained evidence cannot prove the rollback disposition recorded by its caller.</summary>
+    [Fact]
+    public async Task RecoveryRefusalReceiptDoesNotClaimCompletedRollback()
+    {
+        var generator = new ScriptedGenerator("recovery-refusal", request => Success(request.Request));
+        using var fixture = new GenerationFixture([generator], "disabled");
+        string journals = Path.Combine(fixture.Root, fixture.Configuration.Paths.StateRoot, "publish-transactions");
+        Directory.CreateDirectory(journals);
+        await File.WriteAllTextAsync(Path.Combine(journals, "unresolved.json"), "{incomplete");
+        string evidence = Path.Combine(
+            fixture.Root,
+            fixture.Configuration.Paths.WorkRoot,
+            "publish",
+            "unresolved-evidence"
+        );
+        Directory.CreateDirectory(Path.GetDirectoryName(evidence)!);
+        await File.WriteAllTextAsync(evidence, "retained predecessor evidence");
+
+        AssetCtlException failure = await Assert.ThrowsAsync<AssetCtlException>(() => fixture.GenerateAsync());
+
+        Assert.Equal(7, failure.ExitCode);
+        Assert.Equal(1, generator.Calls);
+        Assert.Equal("retained predecessor evidence", await File.ReadAllTextAsync(evidence));
+        string receipt = Assert.Single(
+            Directory.GetFiles(Path.Combine(fixture.Root, fixture.Configuration.Paths.ReceiptRoot), "*.json")
+        );
+        using var parsed = JsonDocument.Parse(await File.ReadAllTextAsync(receipt));
+        Assert.Equal(
+            "not-established",
+            parsed.RootElement.GetProperty("publication").GetProperty("rollback").GetString()
+        );
+    }
+
+    /// <summary>Failure receipts and classifications must not copy arbitrary provider exception prose.</summary>
+    [Fact]
+    public async Task GenerationDiagnosticFailureReceiptExcludesUntrustedProse()
+    {
+        const string sentinel = "/home/synthetic-owner/private/sentinel-receipt-secret";
+        var original = new ProviderException(
+            ProviderErrorCategory.MalformedResponse,
+            sentinel
+                + " api_key='sentinel-quoted' api_key=sentinel-raw embedded https://synthetic.invalid/a?token=sentinel-signed "
+                + new string('x', 10_000)
+        );
+        original.Data["sentinel-data"] = new IOException("sentinel-nested-io");
+        var generator = new ScriptedGenerator("privacy-generator", _ => throw original);
+        using var fixture = new GenerationFixture([generator], "disabled");
+
+        ProviderException failure = await Assert.ThrowsAsync<ProviderException>(() => fixture.GenerateAsync());
+
+        Assert.Equal(ProviderErrorCategory.MalformedResponse, failure.Category);
+        Assert.DoesNotContain(sentinel, failure.Message, StringComparison.Ordinal);
+        string[] receipts = Directory.GetFiles(
+            Path.Combine(fixture.Root, fixture.Configuration.Paths.ReceiptRoot),
+            "*.json"
+        );
+        Assert.NotEmpty(receipts);
+        foreach (string receipt in receipts)
+        {
+            string rendered = await File.ReadAllTextAsync(receipt);
+            Assert.DoesNotContain("sentinel", rendered, StringComparison.Ordinal);
+            Assert.DoesNotContain(fixture.Root, rendered, StringComparison.Ordinal);
+            using var parsed = JsonDocument.Parse(rendered);
+            string diagnostic = parsed.RootElement.GetProperty("selection").GetProperty("reason").GetString()!;
+            Assert.True(diagnostic.Length < 128);
+        }
+    }
+
     /// <summary>Generates, reviews, publishes, receipts, then reuses the current result without provider calls.</summary>
     [Fact]
     public async Task GenerateReviewPublishAndIdempotentReuseAreEndToEnd()

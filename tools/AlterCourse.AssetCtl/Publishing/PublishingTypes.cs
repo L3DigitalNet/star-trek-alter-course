@@ -16,6 +16,7 @@ internal static partial class PublishingTypes
         private const int OpenWriteOnly = 0x0001;
         private const int OpenCreate = 0x0040;
         private const int OpenExclusive = 0x0080;
+        private const int OpenNonBlocking = 0x0800;
         private const int OpenCloseOnExec = 0x80000;
         private const int OpenDirectory = 0x10000;
         private const int OpenNoFollow = 0x20000;
@@ -34,16 +35,37 @@ internal static partial class PublishingTypes
 
             public string Path { get; }
 
+            public FileIdentity ObjectIdentity => StateFile.Identity(_handle, directory: true);
+
             public static DirectoryHandle OpenExisting(string path, string field)
             {
-                RequireLinux(field);
-                int descriptor = Open(path, OpenDirectory | OpenNoFollow | OpenCloseOnExec, 0);
+                RequireSupportedPlatform(field);
+                string absolute = System.IO.Path.GetFullPath(path);
+                int descriptor = Open("/", OpenDirectory | OpenNoFollow | OpenCloseOnExec, 0);
                 if (descriptor < 0)
                 {
-                    throw new AssetCtlException($"{field}: directory is unavailable or unsafe.", 7);
+                    throw new AssetCtlException($"{field}: root directory is unavailable.", 7);
                 }
 
-                return new DirectoryHandle(new SafeFileHandle(descriptor, ownsHandle: true), path);
+                var current = new DirectoryHandle(new SafeFileHandle(descriptor, ownsHandle: true), "/");
+                try
+                {
+                    // O_NOFOLLOW applies only to the basename. Walking relative to held descriptors
+                    // admits every ancestor, rather than trusting a prior full-path symlink check.
+                    foreach (string component in absolute.Split('/', StringSplitOptions.RemoveEmptyEntries))
+                    {
+                        DirectoryHandle next = current.OpenChild(component, field);
+                        current.Dispose();
+                        current = next;
+                    }
+
+                    return current;
+                }
+                catch
+                {
+                    current.Dispose();
+                    throw;
+                }
             }
 
             public DirectoryHandle CreateChild(string leaf, string field)
@@ -79,8 +101,58 @@ internal static partial class PublishingTypes
                 );
             }
 
-            public FileStream CreateFile(string leaf, string field)
+            public FileStream OpenReadFile(
+                string leaf,
+                string field,
+                Func<SafeFileHandle, FileStream>? streamFactory = null
+            )
             {
+                int descriptor = OpenAt(Descriptor, leaf, OpenNoFollow | OpenCloseOnExec | OpenNonBlocking, 0);
+                if (descriptor < 0)
+                {
+                    throw new AssetCtlException($"{field}: file is unavailable or unsafe.", 7);
+                }
+
+                var handle = new SafeFileHandle(descriptor, ownsHandle: true);
+                try
+                {
+                    // Nonblocking open reaches regular-file admission even for substituted FIFOs.
+                    // Disable read-ahead so byte admission also bounds the actual OS reads.
+                    _ = Identity(handle);
+                    return streamFactory is null
+                        ? new FileStream(handle, FileAccess.Read, bufferSize: 1)
+                        : streamFactory(handle);
+                }
+                catch
+                {
+                    // FileStream takes ownership only after successful construction.
+                    handle.Dispose();
+                    throw;
+                }
+            }
+
+            public void DeleteFile(string leaf, string field)
+            {
+                if (UnlinkAt(Descriptor, leaf, 0) != 0)
+                {
+                    throw new AssetCtlException($"{field}: descriptor-bound cleanup failed.", 7);
+                }
+            }
+
+            public FileStream CreateFile(
+                string leaf,
+                string field,
+                Func<SafeFileHandle, FileStream>? streamFactory = null
+            ) => CreateFile(leaf, field, out _, streamFactory);
+
+            public FileStream CreateFile(
+                string leaf,
+                string field,
+                out FileIdentity? identity,
+                Func<SafeFileHandle, FileStream>? streamFactory = null
+            )
+            {
+                identity = null;
                 int descriptor = OpenAt(
                     Descriptor,
                     leaf,
@@ -92,7 +164,30 @@ internal static partial class PublishingTypes
                     throw new AssetCtlException($"{field}: file could not be created safely.", 7);
                 }
 
-                return new FileStream(new SafeFileHandle(descriptor, ownsHandle: true), FileAccess.Write);
+                var handle = new SafeFileHandle(descriptor, ownsHandle: true);
+                try
+                {
+                    identity = Identity(handle);
+                    return streamFactory is null
+                        ? new FileStream(handle, FileAccess.Write, bufferSize: 1)
+                        : streamFactory(handle);
+                }
+                catch
+                {
+                    // Retain the native handle until owned-leaf cleanup finishes. A failed
+                    // constructor never acquired stream ownership, and its error remains primary.
+                    try
+                    {
+                        using FileStream named = OpenReadFile(leaf, field);
+                        if (identity is not null && Identity(named) == identity)
+                        {
+                            DeleteFile(leaf, field);
+                        }
+                    }
+                    catch (Exception) { }
+                    handle.Dispose();
+                    throw;
+                }
             }
 
             public FileStream CreateLockedFile(string leaf, string field)
@@ -115,7 +210,40 @@ internal static partial class PublishingTypes
                     throw new AssetCtlException($"{field}: file could not be locked safely.", 7);
                 }
 
-                return new FileStream(fileHandle, FileAccess.ReadWrite);
+                try
+                {
+                    return new FileStream(fileHandle, FileAccess.ReadWrite);
+                }
+                catch
+                {
+                    fileHandle.Dispose();
+                    throw;
+                }
+            }
+
+            public FileStream OpenLockedFile(string leaf, string field)
+            {
+                int descriptor = OpenAt(
+                    Descriptor,
+                    leaf,
+                    OpenReadWrite | OpenCreate | OpenNoFollow | OpenNonBlocking | OpenCloseOnExec,
+                    0x180
+                );
+                if (descriptor < 0)
+                    throw new AssetCtlException($"{field}: lock file is unavailable or unsafe.", 7);
+                var handle = new SafeFileHandle(descriptor, ownsHandle: true);
+                try
+                {
+                    _ = StateFile.Identity(handle);
+                    if (Flock(handle, LockExclusive | LockNonBlocking) != 0)
+                        throw new IOException("Publication transaction is active.");
+                    return new FileStream(handle, FileAccess.ReadWrite, bufferSize: 1);
+                }
+                catch
+                {
+                    handle.Dispose();
+                    throw;
+                }
             }
 
             public string DescriptorPath(string leaf) => $"/proc/self/fd/{Descriptor}/{leaf}";
@@ -161,7 +289,7 @@ internal static partial class PublishingTypes
 
         public static FileStream OpenLockedLeaf(string directory, string leaf, string field)
         {
-            RequireLinux(field);
+            RequireSupportedPlatform(field);
 
             int directoryDescriptor = Open(directory, OpenDirectory | OpenNoFollow | OpenCloseOnExec, 0);
             if (directoryDescriptor < 0)
@@ -191,7 +319,15 @@ internal static partial class PublishingTypes
 
                 // The directory descriptor and O_NOFOLLOW bind validation to this open. A path check alone
                 // permits a replacement symlink to redirect the state write between validation and opening.
-                return new FileStream(handle, FileAccess.ReadWrite);
+                try
+                {
+                    return new FileStream(handle, FileAccess.ReadWrite);
+                }
+                catch
+                {
+                    handle.Dispose();
+                    throw;
+                }
             }
             finally
             {
@@ -199,11 +335,84 @@ internal static partial class PublishingTypes
             }
         }
 
-        private static void RequireLinux(string field)
+        [StructLayout(LayoutKind.Auto)]
+        internal readonly record struct FileIdentity(ulong Inode, uint DeviceMajor, uint DeviceMinor);
+
+        internal static FileIdentity Identity(FileStream stream) => Identity(stream.SafeFileHandle);
+
+        private static FileIdentity Identity(SafeFileHandle handle, bool directory = false)
         {
-            if (!OperatingSystem.IsLinux())
+            RequireSupportedPlatform("Lifecycle evidence");
+            if (
+                Statx(handle, "", 0x1000, 0x7FF, out FileStat status) != 0
+                || (status.Mask & 0x103) != 0x103
+                || (status.Mode & 0xF000) != (directory ? 0x4000 : 0x8000)
+            )
+            {
+                throw new AssetCtlException("Lifecycle evidence must be a regular Linux file.", 7);
+            }
+
+            return new FileIdentity(status.Inode, status.DeviceMajor, status.DeviceMinor);
+        }
+
+        // statx has a fixed Linux ABI, unlike architecture-dependent struct stat. Only identity
+        // and regular-file admission are needed; timestamps are not used as content evidence.
+        [StructLayout(LayoutKind.Explicit, Size = 256)]
+        private struct FileStat
+        {
+            [FieldOffset(0)]
+            public uint Mask;
+
+            [FieldOffset(28)]
+            public ushort Mode;
+
+            [FieldOffset(32)]
+            public ulong Inode;
+
+            [FieldOffset(136)]
+            public uint DeviceMajor;
+
+            [FieldOffset(140)]
+            public uint DeviceMinor;
+        }
+
+        [LibraryImport("libc", EntryPoint = "statx", SetLastError = true, StringMarshalling = StringMarshalling.Utf8)]
+        private static partial int Statx(
+            SafeFileHandle descriptor,
+            string path,
+            int flags,
+            uint mask,
+            out FileStat status
+        );
+
+        // Admission for every libc call in StateFile. OpenExisting and OpenLockedLeaf are the only
+        // descriptor sources (DirectoryHandle's constructor is private), and Identity guards statx
+        // for callers holding an arbitrary FileStream, so each native call is reached only after
+        // this check. A new native entry point must call it before its first libc call.
+        private static void RequireSupportedPlatform(string field) =>
+            RequireSupportedPlatform(field, OperatingSystem.IsLinux(), RuntimeInformation.ProcessArchitecture);
+
+        // The open-flag constants at the top of StateFile are the Linux x86-64 (asm-generic) values.
+        // On Linux Arm and Arm64, 0x10000 and 0x20000 mean O_DIRECT and O_LARGEFILE, so the same
+        // calls would succeed while silently dropping O_DIRECTORY and O_NOFOLLOW: a symlink
+        // substitution would then be followed instead of refused. Admitting only the validated
+        // ABI turns that silent loss into a refusal. ProcessArchitecture, not OSArchitecture, is
+        // the ABI that libc is called through (an x64 process under emulation uses x64 headers).
+        // Per-architecture constant tables were rejected: no other ABI is executed or tested.
+        internal static void RequireSupportedPlatform(string field, bool isLinux, Architecture processArchitecture)
+        {
+            if (!isLinux)
             {
                 throw new AssetCtlException($"{field}: secure descriptor-bound state access requires Linux.", 7);
+            }
+
+            if (processArchitecture != Architecture.X64)
+            {
+                throw new AssetCtlException(
+                    $"{field}: secure descriptor-bound state access requires an x64 process; "
+                        + $"{processArchitecture} is not a validated native ABI.",
+                    7
+                );
             }
         }
 
@@ -228,6 +437,14 @@ internal static partial class PublishingTypes
             int newDirectoryDescriptor,
             string newPath
         );
+
+        [LibraryImport(
+            "libc",
+            EntryPoint = "unlinkat",
+            SetLastError = true,
+            StringMarshalling = StringMarshalling.Utf8
+        )]
+        private static partial int UnlinkAt(int directoryDescriptor, string path, int flags);
 
         [LibraryImport("libc", EntryPoint = "flock", SetLastError = true)]
         private static partial int Flock(SafeFileHandle descriptor, int operation);
@@ -354,7 +571,7 @@ internal static partial class PublishingTypes
                 manifestText,
                 testHooks
             );
-            PublishPrepared(configuration, publication, testHooks);
+            PublishPrepared(publication, testHooks);
             return new PublicationResult(
                 true,
                 recovery.RecoveredTransactions,
@@ -378,119 +595,100 @@ internal static partial class PublishingTypes
             Directory.CreateDirectory(Path.GetDirectoryName(manifest)!);
 
             StagedPublication staged = StagePublication(configuration, assetBytes, manifestText, testHooks);
+            PublicationBoundary? admission = null;
             try
             {
-                string assetBackup = asset + $".assetctl-backup-{staged.TransactionId}";
-                string manifestBackup = manifest + $".assetctl-backup-{staged.TransactionId}";
-
-                (bool assetExisted, bool manifestExisted) = ValidateExistingState(
-                    configuration,
-                    assetRelativePath,
-                    manifestRelativePath,
-                    asset,
-                    manifest,
-                    staged.ManifestStage
-                );
-
-                var journal = new PublicationJournal(
-                    staged.TransactionId,
-                    Path.GetRelativePath(configuration.RepositoryRoot, asset),
-                    Path.GetRelativePath(configuration.RepositoryRoot, manifest),
-                    Path.GetRelativePath(configuration.RepositoryRoot, staged.AssetStage),
-                    Path.GetRelativePath(configuration.RepositoryRoot, staged.ManifestStage),
-                    Path.GetRelativePath(configuration.RepositoryRoot, assetBackup),
-                    Path.GetRelativePath(configuration.RepositoryRoot, manifestBackup),
-                    assetExisted,
-                    manifestExisted,
-                    staged.AssetHash,
-                    staged.AssetLength,
-                    staged.ManifestHash
-                );
-                string journalPath = WriteJournal(configuration, journal);
-                PublicationJournal resolvedJournal = journal with
-                {
-                    AssetStagePath = staged.AssetStage,
-                    ManifestStagePath = staged.ManifestStage,
-                    AssetBackupPath = assetBackup,
-                    ManifestBackupPath = manifestBackup,
-                };
-                return new PreparedPublication(
-                    asset,
-                    manifest,
-                    journalPath,
-                    resolvedJournal,
-                    journal,
-                    staged.TransactionRoot,
-                    staged.LeasePath,
-                    staged.Lease,
-                    staged.TransactionDirectory
-                );
+                admission = new PublicationBoundary(configuration, asset, manifest, staged.TransactionDirectory);
+                PublicationJournal journal = CreateJournal(configuration, staged, admission, assetRelativePath);
+                // The ignored state journal is only a recovery locator. A separately owned transaction
+                // envelope, admitted objects, and mutable-lifecycle semantic ownership authorize mutation.
+                admission.WriteAuthority(journal);
+                string journalPath = admission.WriteJournal(journal);
+                return new PreparedPublication(journalPath, journal, staged, admission);
             }
             catch
             {
-                DisposeStaged(staged);
+                admission?.Dispose();
+                try
+                {
+                    DisposeStaged(staged);
+                }
+                catch (Exception) { }
                 throw;
             }
         }
 
+        private static PublicationJournal CreateJournal(
+            EffectiveConfiguration configuration,
+            StagedPublication staged,
+            PublicationBoundary admission,
+            string assetRelativePath
+        )
+        {
+            string asset = Path.Combine(admission.AssetParent.Path, admission.AssetLeaf);
+            string manifest = Path.Combine(admission.ManifestParent.Path, admission.ManifestLeaf);
+            FileEvidence? oldAsset = admission.ReadAsset();
+            FileEvidence? oldManifest = admission.ReadManifest();
+            if (oldManifest is null)
+            {
+                throw new AssetCtlException("Publication requires its owning manifest predecessor.", 7);
+            }
+            FileEvidence candidateAsset = admission.ReadStage("asset.stage", configuration.Limits.MaximumDownloadBytes);
+            FileEvidence candidateManifest = admission.ReadStage("manifest.stage", YamlValues.MaximumBytes);
+            if (
+                candidateAsset.Identity != staged.AssetIdentity
+                || candidateManifest.Identity != staged.ManifestIdentity
+            )
+                throw new AssetCtlException("Publication stage ownership changed before admission.", 7);
+            string assetId = PublicationBoundary.ValidateManifest(
+                "manifest.stage",
+                staged.TransactionDirectory,
+                null,
+                assetRelativePath
+            );
+            PublicationBoundary.ValidateManifest(
+                admission.ManifestLeaf,
+                admission.ManifestParent,
+                assetId,
+                assetRelativePath
+            );
+            return new PublicationJournal(
+                staged.TransactionId,
+                Path.GetRelativePath(configuration.RepositoryRoot, asset),
+                Path.GetRelativePath(configuration.RepositoryRoot, manifest),
+                Path.GetRelativePath(configuration.RepositoryRoot, staged.AssetStage),
+                Path.GetRelativePath(configuration.RepositoryRoot, staged.ManifestStage),
+                Path.GetRelativePath(configuration.RepositoryRoot, asset) + $".assetctl-backup-{staged.TransactionId}",
+                Path.GetRelativePath(configuration.RepositoryRoot, manifest)
+                    + $".assetctl-backup-{staged.TransactionId}",
+                oldAsset is not null,
+                true,
+                staged.AssetHash,
+                staged.AssetLength,
+                staged.ManifestHash,
+                1,
+                assetId,
+                admission.AssetParent.ObjectIdentity,
+                admission.ManifestParent.ObjectIdentity,
+                staged.TransactionDirectory.ObjectIdentity,
+                oldAsset,
+                oldManifest,
+                candidateAsset,
+                candidateManifest
+            );
+        }
+
         private static void DisposeStaged(StagedPublication staged)
         {
-            staged.Lease.Dispose();
+            DeleteOwnedIdentity(staged.TransactionDirectory, "asset.stage", staged.AssetIdentity);
+            DeleteOwnedIdentity(staged.TransactionDirectory, "manifest.stage", staged.ManifestIdentity);
+            DeleteOwnedIdentity(staged.TransactionDirectory, LeaseFileName, staged.LeaseIdentity);
+            try
+            {
+                staged.Lease.Dispose();
+            }
+            catch (Exception) { }
             staged.TransactionDirectory.Dispose();
-            DeleteTree(staged.TransactionRoot);
-        }
-
-        private static (bool AssetExisted, bool ManifestExisted) ValidateExistingState(
-            EffectiveConfiguration configuration,
-            string assetRelativePath,
-            string manifestRelativePath,
-            string asset,
-            string manifest,
-            string stagedManifestPath
-        )
-        {
-            bool assetExisted = File.Exists(asset);
-            bool manifestExisted = File.Exists(manifest);
-            if (assetExisted && !manifestExisted)
-            {
-                throw new AssetCtlException("Existing asset and manifest do not form a complete publish pair.", 7);
-            }
-
-            if (!assetExisted && manifestExisted)
-            {
-                ValidateManifestOnlyOrRepairState(
-                    configuration,
-                    assetRelativePath,
-                    manifestRelativePath,
-                    stagedManifestPath
-                );
-            }
-
-            return (assetExisted, manifestExisted);
-        }
-
-        private static void ValidateManifestOnlyOrRepairState(
-            EffectiveConfiguration configuration,
-            string assetRelativePath,
-            string manifestRelativePath,
-            string stagedManifestPath
-        )
-        {
-            AssetManifest existing = ManifestStore.Load(configuration, manifestRelativePath);
-            YamlMappingNode staged = StrictYaml.LoadMapping(stagedManifestPath);
-            string stagedId = staged.Scalar("id", "manifest");
-            string stagedOutput = staged.Mapping("output", "manifest").Scalar("path", "manifest.output");
-            if (
-                !string.Equals(existing.Request.Id, stagedId, StringComparison.Ordinal)
-                || !string.Equals(existing.Request.Output.Path, assetRelativePath, StringComparison.Ordinal)
-                || !string.Equals(stagedOutput, assetRelativePath, StringComparison.Ordinal)
-            )
-            {
-                throw new AssetCtlException(
-                    "Existing manifest does not authorize publication or repair of this output.",
-                    7
-                );
-            }
         }
 
         private static StagedPublication StagePublication(
@@ -505,21 +703,18 @@ internal static partial class PublishingTypes
             string transactionRoot = transactionDirectory.Path;
             string leasePath = Path.Combine(transactionRoot, LeaseFileName);
             FileStream? lease = null;
+            StateFile.FileIdentity? leaseIdentity = null;
+            StateFile.FileIdentity? assetIdentity = null;
+            StateFile.FileIdentity? manifestIdentity = null;
             string assetStage = Path.Combine(transactionRoot, "asset.stage");
             string manifestStage = Path.Combine(transactionRoot, "manifest.stage");
             try
             {
                 testHooks?.BeforeWorkFilesWritten?.Invoke(transactionRoot);
                 transactionDirectory.EnsureStillNamed("publication transaction root");
-                lease = transactionDirectory.CreateLockedFile(LeaseFileName, "publication lease");
-                JsonSerializer.Serialize(
-                    lease,
-                    new { process_id = Environment.ProcessId, acquired_at = DateTimeOffset.UtcNow },
-                    JournalJsonOptions
-                );
-                lease.Flush(flushToDisk: true);
-                WriteDurable(transactionDirectory, "asset.stage", assetBytes, "staged asset");
-                WriteDurable(
+                (lease, leaseIdentity) = CreatePublicationLease(transactionDirectory);
+                assetIdentity = WriteDurable(transactionDirectory, "asset.stage", assetBytes, "staged asset");
+                manifestIdentity = WriteDurable(
                     transactionDirectory,
                     "manifest.stage",
                     new UTF8Encoding(false).GetBytes(manifestText),
@@ -528,10 +723,10 @@ internal static partial class PublishingTypes
                 testHooks?.AfterWorkFilesStaged?.Invoke(assetStage, manifestStage);
                 transactionDirectory.EnsureStillNamed("publication transaction root");
                 (string assetHash, long assetLength, string manifestHash) = VerifyStaged(
-                    transactionDirectory.DescriptorPath("asset.stage"),
-                    transactionDirectory.DescriptorPath("manifest.stage"),
+                    transactionDirectory,
                     assetBytes,
-                    manifestText
+                    manifestText,
+                    configuration.Limits.MaximumDownloadBytes
                 );
                 return new StagedPublication(
                     transaction,
@@ -543,14 +738,52 @@ internal static partial class PublishingTypes
                     manifestHash,
                     leasePath,
                     lease,
-                    transactionDirectory
+                    transactionDirectory,
+                    assetIdentity.Value,
+                    manifestIdentity.Value,
+                    leaseIdentity.Value
                 );
             }
             catch
             {
-                lease?.Dispose();
+                DeleteOwnedIdentity(transactionDirectory, "asset.stage", assetIdentity);
+                DeleteOwnedIdentity(transactionDirectory, "manifest.stage", manifestIdentity);
+                DeleteOwnedIdentity(transactionDirectory, LeaseFileName, leaseIdentity);
+                try
+                {
+                    lease?.Dispose();
+                }
+                catch (Exception) { }
                 transactionDirectory.Dispose();
-                DeleteTree(transactionRoot);
+                throw;
+            }
+        }
+
+        private static (FileStream Stream, StateFile.FileIdentity Identity) CreatePublicationLease(
+            StateFile.DirectoryHandle directory
+        )
+        {
+            FileStream stream = directory.CreateLockedFile(LeaseFileName, "publication lease");
+            StateFile.FileIdentity? identity = null;
+            try
+            {
+                identity = StateFile.Identity(stream);
+                JsonSerializer.Serialize(
+                    stream,
+                    new { process_id = Environment.ProcessId, acquired_at = DateTimeOffset.UtcNow },
+                    JournalJsonOptions
+                );
+                stream.Flush(flushToDisk: true);
+                return (stream, identity.Value);
+            }
+            catch
+            {
+                DeleteOwnedIdentity(directory, LeaseFileName, identity);
+                try
+                {
+                    stream.Dispose();
+                }
+                catch (Exception) { }
                 throw;
             }
         }
@@ -574,53 +807,83 @@ internal static partial class PublishingTypes
             return publishDirectory.CreateChild(transaction, "publication transaction root");
         }
 
-        private static void PublishPrepared(
-            EffectiveConfiguration configuration,
-            PreparedPublication publication,
-            PublicationTestHooks? testHooks
-        )
+        private static void PublishPrepared(PreparedPublication publication, PublicationTestHooks? testHooks)
         {
             PublicationJournal journal = publication.Journal;
+            PublicationBoundary boundary = publication.Boundary;
             try
             {
-                // The journal becomes durable before the first rename. Recovery can therefore distinguish a complete
-                // new pair from every partial sequence and deterministically finish or restore the previous pair.
-                if (journal.AssetExisted)
-                {
-                    Move(publication.Asset, journal.AssetBackupPath, PublicationMove.BackupAsset, testHooks);
-                }
-
-                if (journal.ManifestExisted)
-                {
-                    Move(publication.Manifest, journal.ManifestBackupPath, PublicationMove.BackupManifest, testHooks);
-                }
-
-                MoveStaged(publication, "asset.stage", publication.Asset, PublicationMove.InstallAsset, testHooks);
-                MoveStaged(
-                    publication,
-                    "manifest.stage",
-                    publication.Manifest,
-                    PublicationMove.InstallManifest,
-                    testHooks
-                );
-                if (!NewPairMatches(journal, publication.Asset, publication.Manifest))
-                {
-                    throw new AssetCtlException("Published pair does not match its staged integrity evidence.", 7);
-                }
-
-                Complete(publication.JournalPath, journal, configuration);
+                boundary.ValidateAuthority(journal);
+                InstallPrepared(publication, testHooks);
+                boundary.Recover(journal);
             }
             catch (SimulatedPublicationInterruptionException)
             {
-                // Tests use this exception to model process loss: production never catches an actual terminated process,
-                // so retaining the journal and files is necessary to exercise next-publish recovery faithfully.
+                // This test-only exception represents process loss, so recovery evidence must survive.
                 throw;
             }
             catch
             {
-                RecoverJournal(configuration, publication.JournalPath, publication.RecoveryJournal);
-                throw;
+                if (!publication.Committed)
+                {
+                    // Rollback uses the admitted parents even if their old names now resolve elsewhere.
+                    // A secondary recovery/cleanup failure must never replace the original refusal.
+                    try
+                    {
+                        boundary.Recover(journal);
+                    }
+                    catch (Exception) { }
+                    throw;
+                }
+                // Successful manifest replacement commits publication. Reporting and cleanup failures
+                // after that point leave recoverable evidence rather than claiming refusal or rollback.
             }
+        }
+
+        private static void InstallPrepared(PreparedPublication publication, PublicationTestHooks? testHooks)
+        {
+            PublicationJournal journal = publication.Journal;
+            PublicationBoundary boundary = publication.Boundary;
+            if (journal.AssetExisted)
+            {
+                boundary.Move(
+                    boundary.AssetParent,
+                    boundary.AssetLeaf,
+                    boundary.AssetParent,
+                    boundary.AssetBackupLeaf(journal),
+                    journal.AssetPredecessor!,
+                    PublicationMove.BackupAsset,
+                    testHooks
+                );
+            }
+            boundary.Move(
+                boundary.ManifestParent,
+                boundary.ManifestLeaf,
+                boundary.ManifestParent,
+                boundary.ManifestBackupLeaf(journal),
+                journal.ManifestPredecessor!,
+                PublicationMove.BackupManifest,
+                testHooks
+            );
+            boundary.Move(
+                boundary.TransactionDirectory,
+                "asset.stage",
+                boundary.AssetParent,
+                boundary.AssetLeaf,
+                journal.AssetCandidate!,
+                PublicationMove.InstallAsset,
+                testHooks
+            );
+            boundary.Move(
+                boundary.TransactionDirectory,
+                "manifest.stage",
+                boundary.ManifestParent,
+                boundary.ManifestLeaf,
+                journal.ManifestCandidate!,
+                PublicationMove.InstallManifest,
+                testHooks,
+                () => publication.Committed = true
+            );
         }
 
         internal static PublicationRecoveryResult RecoverPending(
@@ -644,43 +907,33 @@ internal static partial class PublishingTypes
                     journal = ReadJournal(path);
                     ValidateJournal(path, journal);
                 }
-                catch (Exception exception) when (exception is JsonException or InvalidDataException)
+                catch (Exception exception)
+                    when (exception is JsonException or InvalidDataException or AssetCtlException)
                 {
-                    string quarantined = QuarantineJournal(journalRoot, path, testHooks);
-                    throw new AssetCtlException(
-                        $"Publication journal '{Path.GetFileName(path)}' is invalid and was quarantined as "
-                            + $"'{Path.GetFileName(quarantined)}': {exception.Message}",
-                        7
-                    );
+                    _ = QuarantineJournal(journalRoot, path, testHooks);
+                    throw new AssetCtlException("Publication journal is invalid and was quarantined.", 7);
                 }
 
-                FileStream? recoveryLease = TryAcquireRecoveryLease(configuration, journal.TransactionId);
-                if (recoveryLease is null)
-                {
-                    active++;
-                    continue;
-                }
-
+                RecoveryLease? recoveryLease = null;
                 try
                 {
-                    RecoverJournal(configuration, path, journal);
+                    recoveryLease = TryAcquireRecoveryLease(configuration, journal.TransactionId);
+                    if (recoveryLease is null)
+                    {
+                        active++;
+                        continue;
+                    }
+                    RecoverJournal(configuration, path, journal, recoveryLease.Directory);
                     recovered++;
                 }
-                catch (AssetCtlException exception)
+                catch (AssetCtlException)
                 {
-                    string quarantined = QuarantineJournal(journalRoot, path, testHooks);
-                    throw new AssetCtlException(
-                        $"Publication journal '{Path.GetFileName(path)}' was unsafe and was quarantined as "
-                            + $"'{Path.GetFileName(quarantined)}': {exception.Message}",
-                        7
-                    );
+                    _ = QuarantineJournal(journalRoot, path, testHooks);
+                    throw new AssetCtlException("Publication journal is unsafe and was quarantined.", 7);
                 }
                 finally
                 {
-                    string leasePath = recoveryLease.Name;
-                    recoveryLease.Dispose();
-                    DeleteIfExists(leasePath);
-                    DeleteEmptyTransactionDirectory(leasePath, configuration);
+                    recoveryLease?.Dispose();
                 }
             }
 
@@ -694,13 +947,10 @@ internal static partial class PublishingTypes
                 throw new InvalidDataException("journal must be a regular file inside the configured state root");
             }
 
-            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-            if (stream.Length is <= 0 or > MaximumJournalBytes)
-            {
-                throw new InvalidDataException($"journal length must be from 1 to {MaximumJournalBytes} bytes");
-            }
-
-            return JsonSerializer.Deserialize<PublicationJournal>(stream, JournalJsonOptions)
+            byte[] bytes = global::AlterCourse.AssetCtl.Catalog.SelectedAssetReader.Read(path, MaximumJournalBytes);
+            if (bytes.Length == 0)
+                throw new InvalidDataException("empty journal");
+            return JsonSerializer.Deserialize<PublicationJournal>(bytes, JournalJsonOptions)
                 ?? throw new JsonException("empty journal");
         }
 
@@ -722,35 +972,91 @@ internal static partial class PublishingTypes
                 || journal.AssetLength < 0
                 || !IsSha256(journal.AssetHash)
                 || !IsSha256(journal.ManifestHash)
+                || journal.AuthorityVersion != 1
+                || string.IsNullOrWhiteSpace(journal.AssetId)
+                || journal.ManifestPredecessor is null
+                || journal.AssetCandidate is null
+                || journal.ManifestCandidate is null
+                || journal.AssetExisted != (journal.AssetPredecessor is not null)
+                || !journal.ManifestExisted
             )
             {
                 throw new InvalidDataException("journal fields do not satisfy the publication contract");
             }
         }
 
-        private static FileStream? TryAcquireRecoveryLease(EffectiveConfiguration configuration, string transactionId)
+        private static RecoveryLease? TryAcquireRecoveryLease(
+            EffectiveConfiguration configuration,
+            string transactionId
+        )
         {
-            string workRoot = PathPolicy.ResolveUnder(
-                configuration.RepositoryRoot,
-                configuration.Paths.WorkRoot,
-                "work_root",
-                allowMissing: true
+            string transactionRoot = ResolveWorkPath(
+                configuration,
+                Path.Combine(configuration.Paths.WorkRoot, "publish", transactionId)
             );
-            string publishRoot = EnsureFixedDirectory(workRoot, "publish", "publication staging root");
-            string transactionRoot = Path.Combine(publishRoot, transactionId);
-            AssetLock.RejectReparsePoint(transactionRoot, "publication transaction root");
-            Directory.CreateDirectory(transactionRoot);
-            AssetLock.RejectReparsePoint(transactionRoot, "publication transaction root");
-            string leasePath = Path.Combine(transactionRoot, LeaseFileName);
+            var directory = StateFile.DirectoryHandle.OpenExisting(transactionRoot, "publication recovery transaction");
             try
             {
-                return StateFile.OpenLockedLeaf(transactionRoot, LeaseFileName, "publication recovery lease");
+                FileStream stream = directory.OpenLockedFile(LeaseFileName, "publication recovery lease");
+                return new RecoveryLease(directory, stream);
             }
             catch (IOException)
             {
-                // An operating-system lock, rather than journal age, distinguishes a live publisher from a crashed one.
-                // Wall-clock stale policies can destroy a slow but active transaction after clock skew or provider delay.
+                // Kernel lease contention distinguishes an active publisher without a clock-age policy.
+                directory.Dispose();
                 return null;
+            }
+            catch
+            {
+                directory.Dispose();
+                throw;
+            }
+        }
+
+        private sealed class RecoveryLease : IDisposable
+        {
+            private readonly FileStream _stream;
+            private readonly StateFile.FileIdentity _identity;
+
+            public RecoveryLease(StateFile.DirectoryHandle directory, FileStream stream)
+            {
+                Directory = directory;
+                _stream = stream;
+                try
+                {
+                    _identity = StateFile.Identity(stream);
+                }
+                catch
+                {
+                    try
+                    {
+                        stream.Dispose();
+                    }
+                    catch (Exception) { }
+                    throw;
+                }
+            }
+
+            public StateFile.DirectoryHandle Directory { get; }
+
+            public void Dispose()
+            {
+                try
+                {
+                    using FileStream named = Directory.OpenReadFile(
+                        LeaseFileName,
+                        "publication recovery lease cleanup"
+                    );
+                    if (StateFile.Identity(named) == _identity)
+                        Directory.DeleteFile(LeaseFileName, "publication recovery lease cleanup");
+                }
+                catch (Exception) { }
+                try
+                {
+                    _stream.Dispose();
+                }
+                catch (Exception) { }
+                Directory.Dispose();
             }
         }
 
@@ -787,18 +1093,28 @@ internal static partial class PublishingTypes
         }
 
         private static (string AssetHash, long AssetLength, string ManifestHash) VerifyStaged(
-            string assetStage,
-            string manifestStage,
+            StateFile.DirectoryHandle transactionDirectory,
             byte[] expectedAssetBytes,
-            string expectedManifestText
+            string expectedManifestText,
+            long maximumAssetBytes
         )
         {
-            byte[] stagedAsset = File.ReadAllBytes(assetStage);
-            byte[] stagedManifest = File.ReadAllBytes(manifestStage);
+            string manifestStage = transactionDirectory.DescriptorPath("manifest.stage");
+            byte[] stagedAsset = global::AlterCourse.AssetCtl.Catalog.SelectedAssetReader.Read(
+                transactionDirectory,
+                "asset.stage",
+                Math.Min(expectedAssetBytes.LongLength, maximumAssetBytes)
+            );
+            byte[] expectedManifestBytes = new UTF8Encoding(false).GetBytes(expectedManifestText);
+            byte[] stagedManifest = global::AlterCourse.AssetCtl.Catalog.SelectedAssetReader.Read(
+                transactionDirectory,
+                "manifest.stage",
+                Math.Min(expectedManifestBytes.LongLength, YamlValues.MaximumBytes)
+            );
             string assetHash = Hash(stagedAsset);
             string expectedAssetHash = Hash(expectedAssetBytes);
             string manifestHash = Hash(stagedManifest);
-            string expectedManifestHash = Hash(new UTF8Encoding(false).GetBytes(expectedManifestText));
+            string expectedManifestHash = Hash(expectedManifestBytes);
             if (
                 !string.Equals(assetHash, expectedAssetHash, StringComparison.Ordinal)
                 || !string.Equals(manifestHash, expectedManifestHash, StringComparison.Ordinal)
@@ -807,7 +1123,7 @@ internal static partial class PublishingTypes
                 throw new AssetCtlException("Staged publication bytes changed before verification.", 7);
             }
 
-            YamlMappingNode root = StrictYaml.LoadMapping(manifestStage);
+            YamlMappingNode root = StrictYaml.LoadBytes(manifestStage, stagedManifest);
             YamlMappingNode integrity = root.Mapping("integrity", "manifest");
             string claimedHash = integrity.Scalar("sha256", "manifest.integrity");
             long claimedLength = integrity.Long("byte_length", "manifest.integrity");
@@ -820,42 +1136,6 @@ internal static partial class PublishingTypes
             }
 
             return (assetHash, stagedAsset.LongLength, manifestHash);
-        }
-
-        private static void Move(
-            string source,
-            string destination,
-            PublicationMove move,
-            PublicationTestHooks? testHooks
-        )
-        {
-            testHooks?.BeforeMove?.Invoke(move);
-            File.Move(source, destination);
-            testHooks?.AfterMove?.Invoke(move);
-        }
-
-        private static void MoveStaged(
-            PreparedPublication publication,
-            string sourceLeaf,
-            string destination,
-            PublicationMove move,
-            PublicationTestHooks? testHooks
-        )
-        {
-            testHooks?.BeforeMove?.Invoke(move);
-            publication.TransactionDirectory.MoveTo(sourceLeaf, destination, "publication staging move");
-            testHooks?.AfterMove?.Invoke(move);
-        }
-
-        private static string WriteJournal(EffectiveConfiguration configuration, PublicationJournal journal)
-        {
-            string root = JournalRoot(configuration);
-            Directory.CreateDirectory(root);
-            string path = Path.Combine(root, journal.TransactionId + ".json");
-            string stage = path + ".tmp";
-            WriteDurable(stage, JsonSerializer.SerializeToUtf8Bytes(journal, JournalJsonOptions));
-            File.Move(stage, path);
-            return path;
         }
 
         private static string JournalRoot(EffectiveConfiguration configuration)
@@ -889,45 +1169,16 @@ internal static partial class PublishingTypes
         private static void RecoverJournal(
             EffectiveConfiguration configuration,
             string journalPath,
-            PublicationJournal journal
+            PublicationJournal journal,
+            StateFile.DirectoryHandle transaction
         )
         {
             string asset = PathPolicy.ResolveOutputPath(configuration, journal.AssetPath, allowMissing: true);
             string manifest = PathPolicy.ResolveManifestPath(configuration, journal.ManifestPath, allowMissing: true);
-            string assetStage = ResolveWorkPath(configuration, journal.AssetStagePath);
-            string manifestStage = ResolveWorkPath(configuration, journal.ManifestStagePath);
-            string assetBackup = PathPolicy.ResolveOutputPath(
-                configuration,
-                journal.AssetBackupPath,
-                allowMissing: true
-            );
-            string manifestBackup = PathPolicy.ResolveManifestPath(
-                configuration,
-                journal.ManifestBackupPath,
-                allowMissing: true
-            );
-            PublicationJournal resolved = journal with
-            {
-                AssetStagePath = assetStage,
-                ManifestStagePath = manifestStage,
-                AssetBackupPath = assetBackup,
-                ManifestBackupPath = manifestBackup,
-            };
-
-            if (NewPairMatches(journal, asset, manifest))
-            {
-                Complete(journalPath, resolved, configuration);
-                return;
-            }
-
-            // A backup's presence proves that its old live file already moved. Without a backup, the old
-            // file is still live and must not be deleted merely because the paired move was interrupted.
-            RestoreOldFile(asset, assetBackup, journal.AssetExisted);
-            RestoreOldFile(manifest, manifestBackup, journal.ManifestExisted);
-            DeleteIfExists(assetStage);
-            DeleteIfExists(manifestStage);
-            DeleteIfExists(journalPath);
-            DeleteEmptyTransactionDirectory(assetStage, configuration);
+            using var boundary = new PublicationBoundary(configuration, asset, manifest, transaction);
+            boundary.SetJournal(journalPath, journal);
+            boundary.ValidateAuthority(journal);
+            boundary.Recover(journal);
         }
 
         private static string ResolveWorkPath(EffectiveConfiguration configuration, string path) =>
@@ -939,103 +1190,51 @@ internal static partial class PublishingTypes
                 allowMissing: true
             );
 
-        private static bool NewPairMatches(PublicationJournal journal, string asset, string manifest)
-        {
-            if (!File.Exists(asset) || !File.Exists(manifest))
-            {
-                return false;
-            }
-
-            byte[] assetBytes = File.ReadAllBytes(asset);
-            byte[] manifestBytes = File.ReadAllBytes(manifest);
-            if (
-                assetBytes.LongLength != journal.AssetLength
-                || !string.Equals(Hash(assetBytes), journal.AssetHash, StringComparison.Ordinal)
-                || !string.Equals(Hash(manifestBytes), journal.ManifestHash, StringComparison.Ordinal)
-            )
-            {
-                return false;
-            }
-
-            try
-            {
-                YamlMappingNode root = StrictYaml.LoadMapping(manifest);
-                YamlMappingNode integrity = root.Mapping("integrity", "manifest");
-                return string.Equals(
-                        integrity.Scalar("sha256", "manifest.integrity"),
-                        journal.AssetHash,
-                        StringComparison.Ordinal
-                    )
-                    && integrity.Long("byte_length", "manifest.integrity") == journal.AssetLength;
-            }
-            catch (AssetCtlException)
-            {
-                return false;
-            }
-        }
-
-        private static void RestoreOldFile(string live, string backup, bool existed)
-        {
-            if (!existed)
-            {
-                DeleteIfExists(live);
-                DeleteIfExists(backup);
-                return;
-            }
-
-            if (File.Exists(backup))
-            {
-                DeleteIfExists(live);
-                File.Move(backup, live);
-            }
-        }
-
-        private static void Complete(
-            string journalPath,
-            PublicationJournal journal,
-            EffectiveConfiguration configuration
+        private static StateFile.FileIdentity WriteDurable(
+            StateFile.DirectoryHandle directory,
+            string leaf,
+            byte[] bytes,
+            string field
         )
         {
-            DeleteIfExists(journal.AssetStagePath);
-            DeleteIfExists(journal.ManifestStagePath);
-            DeleteIfExists(journal.AssetBackupPath);
-            DeleteIfExists(journal.ManifestBackupPath);
-            DeleteIfExists(journalPath);
-            DeleteEmptyTransactionDirectory(journal.AssetStagePath, configuration);
-        }
-
-        private static void DeleteEmptyTransactionDirectory(string assetStage, EffectiveConfiguration configuration)
-        {
-            string workRoot = PathPolicy.ResolveUnder(
-                configuration.RepositoryRoot,
-                configuration.Paths.WorkRoot,
-                "work_root",
-                allowMissing: true
-            );
-            string? transactionRoot = Path.GetDirectoryName(assetStage);
-            if (
-                transactionRoot is not null
-                && transactionRoot.StartsWith(workRoot + Path.DirectorySeparatorChar, StringComparison.Ordinal)
-                && Directory.Exists(transactionRoot)
-                && !Directory.EnumerateFileSystemEntries(transactionRoot).Any()
-            )
+            FileStream? stream = null;
+            StateFile.FileIdentity? identity = null;
+            try
             {
-                Directory.Delete(transactionRoot);
+                stream = directory.CreateFile(leaf, field, out identity);
+                stream.Write(bytes);
+                stream.Flush(flushToDisk: true);
+                stream.Dispose();
+                stream = null;
+                return identity!.Value;
+            }
+            catch
+            {
+                try
+                {
+                    stream?.Dispose();
+                }
+                catch (Exception) { }
+                DeleteOwnedIdentity(directory, leaf, identity);
+                throw;
             }
         }
 
-        private static void WriteDurable(string path, byte[] bytes)
+        private static void DeleteOwnedIdentity(
+            StateFile.DirectoryHandle directory,
+            string leaf,
+            StateFile.FileIdentity? identity
+        )
         {
-            using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
-            stream.Write(bytes);
-            stream.Flush(flushToDisk: true);
-        }
-
-        private static void WriteDurable(StateFile.DirectoryHandle directory, string leaf, byte[] bytes, string field)
-        {
-            using FileStream stream = directory.CreateFile(leaf, field);
-            stream.Write(bytes);
-            stream.Flush(flushToDisk: true);
+            if (identity is null)
+                return;
+            try
+            {
+                using FileStream named = directory.OpenReadFile(leaf, "publication stage cleanup");
+                if (StateFile.Identity(named) == identity)
+                    directory.DeleteFile(leaf, "publication stage cleanup");
+            }
+            catch (Exception) { }
         }
 
         private static string Hash(byte[] bytes) => Convert.ToHexStringLower(SHA256.HashData(bytes));
@@ -1043,22 +1242,9 @@ internal static partial class PublishingTypes
         private static bool IsSha256(string? value) =>
             value is { Length: 64 } && value.All(character => character is >= '0' and <= '9' or >= 'a' and <= 'f');
 
-        private static void DeleteTree(string path)
-        {
-            if (Directory.Exists(path))
-            {
-                Directory.Delete(path, recursive: true);
-            }
-        }
-
-        private static void DeleteIfExists(string path)
-        {
-            if (File.Exists(path))
-            {
-                File.Delete(path);
-            }
-        }
-
+        // Version-zero legacy journals contain only assertions and cannot authorize destructive recovery.
+        // They are quarantined; operators must preserve and inspect their predecessor artifacts manually.
+        // This version applies only to ignored local recovery state, not selected manifests or receipts.
         private sealed record PublicationJournal(
             string TransactionId,
             string AssetPath,
@@ -1071,59 +1257,483 @@ internal static partial class PublishingTypes
             bool ManifestExisted,
             string AssetHash,
             long AssetLength,
-            string ManifestHash
+            string ManifestHash,
+            int AuthorityVersion = 0,
+            string? AssetId = null,
+            StateFile.FileIdentity AssetParentIdentity = default,
+            StateFile.FileIdentity ManifestParentIdentity = default,
+            StateFile.FileIdentity TransactionIdentity = default,
+            FileEvidence? AssetPredecessor = null,
+            FileEvidence? ManifestPredecessor = null,
+            FileEvidence? AssetCandidate = null,
+            FileEvidence? ManifestCandidate = null
         );
 
-        private sealed class PreparedPublication : IDisposable
+        private sealed record FileEvidence(StateFile.FileIdentity Identity, string Hash, long Length);
+
+        /// <summary>
+        /// Pins Linux publication parents and admits owned file snapshots before any rename or cleanup.
+        /// The envelope corroborates a journal; neither authenticates arbitrary same-UID rewrites of all
+        /// evidence. Cooperating callers retain AssetLock, and renameat is not a two-file revision CAS.
+        /// </summary>
+        private sealed class PublicationBoundary : IDisposable
         {
-            public PreparedPublication(
+            private readonly EffectiveConfiguration _configuration;
+            private readonly StateFile.DirectoryHandle _journalParent;
+            private string? _journalLeaf;
+            private FileEvidence? _journalEvidence;
+            private FileEvidence? _authorityEvidence;
+            private readonly FileEvidence? _leaseEvidence;
+
+            public PublicationBoundary(
+                EffectiveConfiguration configuration,
                 string asset,
                 string manifest,
-                string journalPath,
-                PublicationJournal journal,
-                PublicationJournal recoveryJournal,
-                string transactionRoot,
-                string leasePath,
-                FileStream lease,
                 StateFile.DirectoryHandle transactionDirectory
             )
             {
-                Asset = asset;
-                Manifest = manifest;
-                JournalPath = journalPath;
-                Journal = journal;
-                RecoveryJournal = recoveryJournal;
-                _transactionRoot = transactionRoot;
-                _leasePath = leasePath;
-                _lease = lease;
+                _configuration = configuration;
                 TransactionDirectory = transactionDirectory;
+                AssetLeaf = Path.GetFileName(asset);
+                ManifestLeaf = Path.GetFileName(manifest);
+                AssetParent = StateFile.DirectoryHandle.OpenExisting(
+                    Path.GetDirectoryName(asset)!,
+                    "publication asset parent"
+                );
+                try
+                {
+                    ManifestParent = StateFile.DirectoryHandle.OpenExisting(
+                        Path.GetDirectoryName(manifest)!,
+                        "publication manifest parent"
+                    );
+                    try
+                    {
+                        string journalRoot = JournalRoot(configuration);
+                        Directory.CreateDirectory(journalRoot);
+                        _leaseEvidence = ReadEvidence(
+                            TransactionDirectory,
+                            LeaseFileName,
+                            MaximumJournalBytes
+                        )?.Evidence;
+                        _journalParent = StateFile.DirectoryHandle.OpenExisting(
+                            journalRoot,
+                            "publication journal parent"
+                        );
+                    }
+                    catch
+                    {
+                        ManifestParent.Dispose();
+                        throw;
+                    }
+                }
+                catch
+                {
+                    AssetParent.Dispose();
+                    throw;
+                }
             }
 
-            private readonly string _transactionRoot;
-            private readonly string _leasePath;
-            private readonly FileStream _lease;
-
-            public string Asset { get; }
-
-            public string Manifest { get; }
-
-            public string JournalPath { get; }
-
-            public PublicationJournal Journal { get; }
-
-            public PublicationJournal RecoveryJournal { get; }
-
+            public StateFile.DirectoryHandle AssetParent { get; }
+            public StateFile.DirectoryHandle ManifestParent { get; }
             public StateFile.DirectoryHandle TransactionDirectory { get; }
+            public string AssetLeaf { get; }
+            public string ManifestLeaf { get; }
+
+            public string AssetBackupLeaf(PublicationJournal journal) =>
+                AssetLeaf + ".assetctl-backup-" + journal.TransactionId;
+
+            public string ManifestBackupLeaf(PublicationJournal journal) =>
+                ManifestLeaf + ".assetctl-backup-" + journal.TransactionId;
+
+            public FileEvidence? ReadAsset() =>
+                ReadEvidence(AssetParent, AssetLeaf, _configuration.Limits.MaximumDownloadBytes)?.Evidence;
+
+            public FileEvidence? ReadManifest() =>
+                ReadEvidence(ManifestParent, ManifestLeaf, YamlValues.MaximumBytes)?.Evidence;
+
+            public FileEvidence ReadStage(string leaf, long limit) =>
+                ReadEvidence(TransactionDirectory, leaf, limit)?.Evidence ?? throw Unsafe();
+
+            public void WriteAuthority(PublicationJournal journal)
+            {
+                byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(journal, JournalJsonOptions);
+                StateFile.FileIdentity identity = WriteDurable(
+                    TransactionDirectory,
+                    "authority.json",
+                    bytes,
+                    "publication authority"
+                );
+                _authorityEvidence = new FileEvidence(identity, Hash(bytes), bytes.LongLength);
+            }
+
+            public string WriteJournal(PublicationJournal journal)
+            {
+                string leaf = journal.TransactionId + ".json";
+                string stage = leaf + ".tmp";
+                WriteDurable(
+                    _journalParent,
+                    stage,
+                    JsonSerializer.SerializeToUtf8Bytes(journal, JournalJsonOptions),
+                    "publication journal"
+                );
+                if (ReadEvidence(_journalParent, leaf, MaximumJournalBytes) is not null)
+                    throw Unsafe();
+                _journalParent.MoveTo(stage, _journalParent, leaf, "publication journal install");
+                return Path.Combine(_journalParent.Path, leaf);
+            }
+
+            public void SetJournal(string path, PublicationJournal journal)
+            {
+                _journalLeaf = Path.GetFileName(path);
+                FileSnapshot snapshot =
+                    ReadEvidence(_journalParent, _journalLeaf, MaximumJournalBytes) ?? throw Unsafe();
+                if (
+                    !snapshot
+                        .Bytes.AsSpan()
+                        .SequenceEqual(JsonSerializer.SerializeToUtf8Bytes(journal, JournalJsonOptions))
+                )
+                    throw Unsafe();
+                _journalEvidence = snapshot.Evidence;
+            }
+
+            public static string ValidateManifest(
+                string leaf,
+                StateFile.DirectoryHandle parent,
+                string? assetId,
+                string assetPath
+            )
+            {
+                FileSnapshot snapshot = ReadEvidence(parent, leaf, YamlValues.MaximumBytes) ?? throw Unsafe();
+                return ValidateManifest(snapshot, assetId, assetPath);
+            }
+
+            private static string ValidateManifest(FileSnapshot snapshot, string? assetId, string assetPath)
+            {
+                YamlMappingNode root = StrictYaml.LoadBytes("publication manifest", snapshot.Bytes);
+                string id = root.Scalar("id", "manifest");
+                string lifecycle = root.Scalar("lifecycle", "manifest");
+                if (
+                    lifecycle is not ("placeholder" or "candidate")
+                    || assetId is not null && !string.Equals(id, assetId, StringComparison.Ordinal)
+                    || !string.Equals(
+                        root.Mapping("output", "manifest").Scalar("path", "manifest.output"),
+                        assetPath,
+                        StringComparison.Ordinal
+                    )
+                )
+                    throw new AssetCtlException(
+                        "Publication recovery requires mutable lifecycle and semantic pair ownership.",
+                        7
+                    );
+                return id;
+            }
+
+            public void ValidateAuthority(PublicationJournal journal)
+            {
+                if (
+                    journal.AuthorityVersion != 1
+                    || journal.TransactionIdentity != TransactionDirectory.ObjectIdentity
+                    || journal.AssetParentIdentity != AssetParent.ObjectIdentity
+                    || journal.ManifestParentIdentity != ManifestParent.ObjectIdentity
+                    || !JournalPathsMatch(journal)
+                    || journal.ManifestPredecessor is null
+                    || journal.AssetCandidate is null
+                    || journal.ManifestCandidate is null
+                    || journal.AssetExisted != (journal.AssetPredecessor is not null)
+                    || !journal.ManifestExisted
+                    || !string.Equals(journal.AssetCandidate.Hash, journal.AssetHash, StringComparison.Ordinal)
+                    || journal.AssetCandidate.Length != journal.AssetLength
+                    || !string.Equals(journal.ManifestCandidate.Hash, journal.ManifestHash, StringComparison.Ordinal)
+                )
+                    throw Unsafe();
+                FileSnapshot envelope =
+                    ReadEvidence(TransactionDirectory, "authority.json", MaximumJournalBytes) ?? throw Unsafe();
+                if (
+                    !envelope
+                        .Bytes.AsSpan()
+                        .SequenceEqual(JsonSerializer.SerializeToUtf8Bytes(journal, JournalJsonOptions))
+                    || _authorityEvidence is not null && envelope.Evidence != _authorityEvidence
+                )
+                    throw Unsafe();
+                _authorityEvidence ??= envelope.Evidence;
+                ValidateFiles(journal);
+            }
+
+            private bool JournalPathsMatch(PublicationJournal journal)
+            {
+                string relativeTransaction = Path.GetRelativePath(
+                    _configuration.RepositoryRoot,
+                    TransactionDirectory.Path
+                );
+                return string.Equals(
+                        journal.AssetPath,
+                        Path.GetRelativePath(_configuration.RepositoryRoot, Path.Combine(AssetParent.Path, AssetLeaf)),
+                        StringComparison.Ordinal
+                    )
+                    && string.Equals(
+                        journal.ManifestPath,
+                        Path.GetRelativePath(
+                            _configuration.RepositoryRoot,
+                            Path.Combine(ManifestParent.Path, ManifestLeaf)
+                        ),
+                        StringComparison.Ordinal
+                    )
+                    && string.Equals(
+                        journal.AssetStagePath,
+                        Path.Combine(relativeTransaction, "asset.stage"),
+                        StringComparison.Ordinal
+                    )
+                    && string.Equals(
+                        journal.ManifestStagePath,
+                        Path.Combine(relativeTransaction, "manifest.stage"),
+                        StringComparison.Ordinal
+                    )
+                    && string.Equals(
+                        journal.AssetBackupPath,
+                        journal.AssetPath + ".assetctl-backup-" + journal.TransactionId,
+                        StringComparison.Ordinal
+                    )
+                    && string.Equals(
+                        journal.ManifestBackupPath,
+                        journal.ManifestPath + ".assetctl-backup-" + journal.TransactionId,
+                        StringComparison.Ordinal
+                    );
+            }
+
+            private bool ValidateFiles(PublicationJournal journal)
+            {
+                FileSnapshot? asset = ReadEvidence(AssetParent, AssetLeaf, _configuration.Limits.MaximumDownloadBytes);
+                FileSnapshot? manifest = ReadEvidence(ManifestParent, ManifestLeaf, YamlValues.MaximumBytes);
+                FileSnapshot? assetBackup = ReadEvidence(
+                    AssetParent,
+                    AssetBackupLeaf(journal),
+                    _configuration.Limits.MaximumDownloadBytes
+                );
+                FileSnapshot? manifestBackup = ReadEvidence(
+                    ManifestParent,
+                    ManifestBackupLeaf(journal),
+                    YamlValues.MaximumBytes
+                );
+                FileSnapshot? assetStage = ReadEvidence(
+                    TransactionDirectory,
+                    "asset.stage",
+                    _configuration.Limits.MaximumDownloadBytes
+                );
+                FileSnapshot? manifestStage = ReadEvidence(
+                    TransactionDirectory,
+                    "manifest.stage",
+                    YamlValues.MaximumBytes
+                );
+                Admit(asset, journal.AssetPredecessor, journal.AssetCandidate);
+                Admit(manifest, journal.ManifestPredecessor, journal.ManifestCandidate);
+                Admit(assetBackup, journal.AssetPredecessor);
+                Admit(manifestBackup, journal.ManifestPredecessor);
+                Admit(assetStage, journal.AssetCandidate);
+                Admit(manifestStage, journal.ManifestCandidate);
+                bool complete =
+                    asset?.Evidence == journal.AssetCandidate && manifest?.Evidence == journal.ManifestCandidate;
+                if (
+                    !complete
+                    && journal.AssetPredecessor is not null
+                    && asset?.Evidence != journal.AssetPredecessor
+                    && assetBackup?.Evidence != journal.AssetPredecessor
+                )
+                    throw Unsafe();
+                if (
+                    !complete
+                    && manifest?.Evidence != journal.ManifestPredecessor
+                    && manifestBackup?.Evidence != journal.ManifestPredecessor
+                )
+                    throw Unsafe();
+                // Validate every available manifest snapshot independently. A correct hash in a forged
+                // journal cannot authorize an approved/deprecated or differently owned live/backup pair.
+                foreach (FileSnapshot? snapshot in new[] { manifest, manifestBackup, manifestStage })
+                    if (snapshot is not null)
+                        ValidateManifest(snapshot, journal.AssetId, journal.AssetPath);
+                return complete;
+            }
+
+            public void Move(
+                StateFile.DirectoryHandle source,
+                string sourceLeaf,
+                StateFile.DirectoryHandle target,
+                string targetLeaf,
+                FileEvidence evidence,
+                PublicationMove move,
+                PublicationTestHooks? hooks,
+                Action? committed = null
+            )
+            {
+                hooks?.BeforeMove?.Invoke(move);
+                AssetParent.EnsureStillNamed("publication asset parent");
+                ManifestParent.EnsureStillNamed("publication manifest parent");
+                TransactionDirectory.EnsureStillNamed("publication transaction parent");
+                _journalParent.EnsureStillNamed("publication journal parent");
+                Require(source, sourceLeaf, evidence);
+                if (ReadEvidence(target, targetLeaf, Limit(target, targetLeaf)) is not null)
+                    throw Unsafe();
+                source.MoveTo(sourceLeaf, target, targetLeaf, "publication move");
+                committed?.Invoke();
+                hooks?.AfterMove?.Invoke(move);
+            }
+
+            public void Recover(PublicationJournal journal)
+            {
+                ValidateAuthority(journal);
+                bool complete = ValidateFiles(journal);
+                if (!complete)
+                {
+                    Restore(
+                        AssetParent,
+                        AssetLeaf,
+                        AssetBackupLeaf(journal),
+                        journal.AssetPredecessor,
+                        journal.AssetCandidate!
+                    );
+                    Restore(
+                        ManifestParent,
+                        ManifestLeaf,
+                        ManifestBackupLeaf(journal),
+                        journal.ManifestPredecessor,
+                        journal.ManifestCandidate!
+                    );
+                }
+                DeleteOwned(TransactionDirectory, "asset.stage", journal.AssetCandidate);
+                DeleteOwned(TransactionDirectory, "manifest.stage", journal.ManifestCandidate);
+                DeleteOwned(AssetParent, AssetBackupLeaf(journal), journal.AssetPredecessor);
+                DeleteOwned(ManifestParent, ManifestBackupLeaf(journal), journal.ManifestPredecessor);
+                // Remove the locator last. If cleanup stops midway, remaining owned evidence permits
+                // another bounded recovery; an incomplete envelope will be quarantined without mutation.
+                DeleteOwned(TransactionDirectory, "authority.json", _authorityEvidence);
+                if (_journalLeaf is not null)
+                    DeleteOwned(_journalParent, _journalLeaf, _journalEvidence);
+            }
+
+            private void Restore(
+                StateFile.DirectoryHandle parent,
+                string liveLeaf,
+                string backupLeaf,
+                FileEvidence? predecessor,
+                FileEvidence candidate
+            )
+            {
+                FileSnapshot? live = ReadEvidence(parent, liveLeaf, Limit(parent, liveLeaf));
+                FileSnapshot? backup = ReadEvidence(parent, backupLeaf, Limit(parent, backupLeaf));
+                if (predecessor is null)
+                {
+                    if (live is not null)
+                        DeleteOwned(parent, liveLeaf, candidate);
+                    return;
+                }
+                if (backup is not null)
+                {
+                    Require(parent, backupLeaf, predecessor);
+                    if (live is not null)
+                        DeleteOwned(parent, liveLeaf, candidate);
+                    parent.MoveTo(backupLeaf, parent, liveLeaf, "publication predecessor restore");
+                }
+                else if (live?.Evidence != predecessor)
+                    throw Unsafe();
+            }
+
+            public void DeleteLease() => DeleteOwned(TransactionDirectory, LeaseFileName, _leaseEvidence);
+
+            private long Limit(StateFile.DirectoryHandle parent, string leaf) =>
+                ReferenceEquals(parent, AssetParent)
+                || ReferenceEquals(parent, TransactionDirectory)
+                    && string.Equals(leaf, "asset.stage", StringComparison.Ordinal)
+                    ? _configuration.Limits.MaximumDownloadBytes
+                : ReferenceEquals(parent, _journalParent) || leaf is "authority.json" or LeaseFileName
+                    ? MaximumJournalBytes
+                : YamlValues.MaximumBytes;
+
+            private void Require(StateFile.DirectoryHandle parent, string leaf, FileEvidence expected)
+            {
+                if (ReadEvidence(parent, leaf, Limit(parent, leaf))?.Evidence != expected)
+                    throw Unsafe();
+            }
+
+            private void DeleteOwned(StateFile.DirectoryHandle parent, string leaf, FileEvidence? expected)
+            {
+                FileSnapshot? snapshot = ReadEvidence(parent, leaf, Limit(parent, leaf));
+                if (snapshot is null)
+                    return;
+                if (expected is null || snapshot.Evidence != expected)
+                    throw Unsafe();
+                parent.DeleteFile(leaf, "publication owned cleanup");
+            }
+
+            private static void Admit(FileSnapshot? actual, FileEvidence? first, FileEvidence? second = null)
+            {
+                if (actual is not null && actual.Evidence != first && actual.Evidence != second)
+                    throw Unsafe();
+            }
+
+            private static FileSnapshot? ReadEvidence(StateFile.DirectoryHandle parent, string leaf, long limit)
+            {
+                try
+                {
+                    _ = File.GetAttributes(parent.DescriptorPath(leaf));
+                }
+                catch (FileNotFoundException)
+                {
+                    return null;
+                }
+                using FileStream stream = parent.OpenReadFile(leaf, "publication evidence");
+                StateFile.FileIdentity identity = StateFile.Identity(stream);
+                byte[] bytes = global::AlterCourse.AssetCtl.Catalog.SelectedAssetReader.Read(stream, limit);
+                return new FileSnapshot(new FileEvidence(identity, Hash(bytes), bytes.LongLength), bytes);
+            }
+
+            private static AssetCtlException Unsafe() =>
+                new("Publication transaction ownership evidence is unavailable or changed.", 7);
 
             public void Dispose()
             {
-                _lease.Dispose();
-                TransactionDirectory.Dispose();
-                DeleteIfExists(_leasePath);
-                if (Directory.Exists(_transactionRoot) && !Directory.EnumerateFileSystemEntries(_transactionRoot).Any())
+                _journalParent.Dispose();
+                ManifestParent.Dispose();
+                AssetParent.Dispose();
+            }
+
+            private sealed record FileSnapshot(FileEvidence Evidence, byte[] Bytes);
+        }
+
+        private sealed class PreparedPublication : IDisposable
+        {
+            private readonly StagedPublication _staged;
+
+            public PreparedPublication(
+                string journalPath,
+                PublicationJournal journal,
+                StagedPublication staged,
+                PublicationBoundary boundary
+            )
+            {
+                Journal = journal;
+                _staged = staged;
+                Boundary = boundary;
+                boundary.SetJournal(journalPath, journal);
+            }
+
+            public PublicationJournal Journal { get; }
+            public PublicationBoundary Boundary { get; }
+            public bool Committed { get; set; }
+
+            public void Dispose()
+            {
+                // Disposal is auxiliary after commitment, and must preserve any primary publication error.
+                try
                 {
-                    Directory.Delete(_transactionRoot);
+                    Boundary.DeleteLease();
                 }
+                catch (Exception) { }
+                try
+                {
+                    _staged.Lease.Dispose();
+                }
+                catch (Exception) { }
+                Boundary.Dispose();
+                _staged.TransactionDirectory.Dispose();
             }
         }
 
@@ -1137,7 +1747,10 @@ internal static partial class PublishingTypes
             string ManifestHash,
             string LeasePath,
             FileStream Lease,
-            StateFile.DirectoryHandle TransactionDirectory
+            StateFile.DirectoryHandle TransactionDirectory,
+            StateFile.FileIdentity AssetIdentity,
+            StateFile.FileIdentity ManifestIdentity,
+            StateFile.FileIdentity LeaseIdentity
         );
     }
 

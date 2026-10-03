@@ -76,9 +76,9 @@ internal sealed class FileSpendLedger : ISpendLedger
             return JsonSerializer.Deserialize<Dictionary<string, decimal>>(File.ReadAllText(_ledgerPath))
                 ?? throw new JsonException("ledger root was null");
         }
-        catch (JsonException exception)
+        catch (JsonException)
         {
-            throw new AssetCtlException($"daily spending ledger is invalid: {exception.Message}", 7);
+            throw new AssetCtlException("daily spending ledger is invalid JSON.", 7);
         }
     }
 }

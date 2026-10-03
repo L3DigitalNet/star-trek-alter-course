@@ -1,4 +1,5 @@
 using System.Globalization;
+using AlterCourse.AssetCtl.Diagnostics;
 using AlterCourse.AssetCtl.Generation;
 using AlterCourse.AssetCtl.Review;
 using AlterCourse.AssetCtl.Routing;
@@ -11,18 +12,28 @@ namespace AlterCourse.AssetCtl;
 
 internal static class Program
 {
-    public static async Task<int> Main(string[] arguments)
+    public static Task<int> Main(string[] arguments) => RunProcessAsync(arguments, CreateLoggerFactory);
+
+    // The executable and fault-injection tests share this boundary, including factory teardown after command dispatch.
+    internal static async Task<int> RunProcessAsync(
+        string[] arguments,
+        Func<string?, string?, ILoggerFactory> createLoggerFactory,
+        Action<Exception>? unexpectedFailureObserved = null
+    )
     {
         try
         {
             string? repository = TryFindRepository();
             string? logRoot = ResolveLogRoot(arguments, repository);
-            using ILoggerFactory loggerFactory = CreateLoggerFactory(repository, logRoot);
+            using ILoggerFactory loggerFactory = BestEffortLoggerFactory.Create(() =>
+                createLoggerFactory(repository, logRoot)
+            );
             using var httpClient = new HttpClient(CreateProviderHandler());
             return await RunAsync(arguments, loggerFactory, httpClient).ConfigureAwait(false);
         }
         catch (Exception exception) when (!IsProcessFatal(exception) && exception is not OperationCanceledException)
         {
+            unexpectedFailureObserved?.Invoke(exception);
             return ReportUnexpectedFailure(exception);
         }
     }
@@ -35,7 +46,16 @@ internal static class Program
             ? null
             : TryLoadLogRoot(repository);
 
-    internal static ILoggerFactory CreateLoggerFactory(string? repository, string? configuredLogRoot = ".assetctl/logs")
+    internal static ILoggerFactory CreateLoggerFactory(
+        string? repository,
+        string? configuredLogRoot = ".assetctl/logs"
+    ) => CreateLoggerFactory(repository, configuredLogRoot, CreateConfiguredLoggerFactory);
+
+    internal static ILoggerFactory CreateLoggerFactory(
+        string? repository,
+        string? configuredLogRoot,
+        Func<string, ILoggerFactory> createConfiguredLoggerFactory
+    )
     {
         if (repository is null || configuredLogRoot is null)
         {
@@ -46,41 +66,40 @@ internal static class Program
         {
             string logRoot = PathPolicy.ResolveUnder(repository, configuredLogRoot, "log_root", allowMissing: true);
             Directory.CreateDirectory(logRoot);
-            Log.Logger = new LoggerConfiguration()
-                .MinimumLevel.Information()
-                .WriteTo.Console(
-                    formatProvider: CultureInfo.InvariantCulture,
-                    restrictedToMinimumLevel: LogEventLevel.Information,
-                    standardErrorFromLevel: LogEventLevel.Verbose
-                )
-                .WriteTo.File(
-                    new JsonFormatter(renderMessage: true, formatProvider: CultureInfo.InvariantCulture),
-                    Path.Combine(logRoot, "assetctl-.json"),
-                    rollingInterval: RollingInterval.Day,
-                    retainedFileCountLimit: 7,
-                    fileSizeLimitBytes: 4 * 1024 * 1024,
-                    rollOnFileSizeLimit: true
-                )
-                .CreateLogger();
-            return new Serilog.Extensions.Logging.SerilogLoggerFactory(Log.Logger, dispose: true);
+            return createConfiguredLoggerFactory(logRoot);
         }
-        catch (Exception exception) when (!IsProcessFatal(exception) && exception is not OperationCanceledException)
+        catch (Exception exception) when (!IsProcessFatal(exception))
         {
-            // Diagnostics must never control routing or publication; a broken sink degrades to the safe stderr fallback.
-            Console.Error.WriteLine(
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"assetctl: logging degraded: {Redactor.Sanitize(exception.Message)}"
-                )
-            );
+            BestEffortLoggerFactory.ReportDegradation();
             return LoggerFactory.Create(builder => builder.AddProvider(new StderrLoggerProvider()));
         }
+    }
+
+    private static ILoggerFactory CreateConfiguredLoggerFactory(string logRoot)
+    {
+        Serilog.ILogger logger = new LoggerConfiguration()
+            .MinimumLevel.Information()
+            .WriteTo.Console(
+                formatProvider: CultureInfo.InvariantCulture,
+                restrictedToMinimumLevel: LogEventLevel.Information,
+                standardErrorFromLevel: LogEventLevel.Verbose
+            )
+            .WriteTo.File(
+                new JsonFormatter(renderMessage: true, formatProvider: CultureInfo.InvariantCulture),
+                Path.Combine(logRoot, "assetctl-.json"),
+                rollingInterval: RollingInterval.Day,
+                retainedFileCountLimit: 7,
+                fileSizeLimitBytes: 4 * 1024 * 1024,
+                rollOnFileSizeLimit: true
+            )
+            .CreateLogger();
+        return new Serilog.Extensions.Logging.SerilogLoggerFactory(logger, dispose: true);
     }
 
     internal static int ReportUnexpectedFailure(Exception exception)
     {
         _ = exception;
-        Console.Error.WriteLine("assetctl: unexpected internal failure.");
+        BestEffortLoggerFactory.WriteDiagnostic("assetctl: unexpected internal failure.");
         return 1;
     }
 
@@ -110,12 +129,14 @@ internal static class Program
         }
         catch (AssetCtlException exception)
         {
-            Console.Error.WriteLine($"assetctl: {Redactor.Sanitize(exception.Message)}");
+            BestEffortLoggerFactory.WriteDiagnostic($"assetctl: {Redactor.Sanitize(exception.Message)}");
             return exception.ExitCode;
         }
         catch (ProviderException exception)
         {
-            Console.Error.WriteLine($"assetctl: provider {exception.Category}: {Redactor.Sanitize(exception.Message)}");
+            BestEffortLoggerFactory.WriteDiagnostic(
+                $"assetctl: provider {exception.Category}: provider operation failed."
+            );
             return exception.Category is ProviderErrorCategory.Authentication or ProviderErrorCategory.Authorization
                 ? 3
                 : 4;
@@ -128,7 +149,7 @@ internal static class Program
         {
             return RepositoryLocator.Find(Environment.CurrentDirectory);
         }
-        catch (AssetCtlException)
+        catch (Exception exception) when (BestEffortLoggerFactory.IsNonfatal(exception))
         {
             return null;
         }
@@ -153,7 +174,7 @@ internal static class Program
             ]);
             return new ConfigurationLoader(registry.Descriptors).Load(repository).Paths.LogRoot;
         }
-        catch (AssetCtlException)
+        catch (Exception exception) when (BestEffortLoggerFactory.IsNonfatal(exception))
         {
             return null;
         }
@@ -172,12 +193,12 @@ internal static class Program
 
     private sealed class StderrLoggerProvider : ILoggerProvider
     {
-        public Microsoft.Extensions.Logging.ILogger CreateLogger(string categoryName) => new StderrLogger(categoryName);
+        public Microsoft.Extensions.Logging.ILogger CreateLogger(string categoryName) => new StderrLogger();
 
         public void Dispose() { }
     }
 
-    private sealed class StderrLogger(string category) : Microsoft.Extensions.Logging.ILogger
+    private sealed class StderrLogger : Microsoft.Extensions.Logging.ILogger
     {
         public IDisposable? BeginScope<TState>(TState state)
             where TState : notnull => null;
@@ -194,7 +215,7 @@ internal static class Program
         {
             if (IsEnabled(logLevel))
             {
-                Console.Error.WriteLine($"{category}: {Redactor.Sanitize(formatter(state, exception))}");
+                BestEffortLoggerFactory.WriteDiagnostic($"assetctl: diagnostic {eventId.Id} ({logLevel}).");
             }
         }
     }

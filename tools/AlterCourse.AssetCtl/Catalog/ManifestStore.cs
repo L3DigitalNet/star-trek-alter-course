@@ -65,7 +65,7 @@ internal static class ManifestStore
             .FirstOrDefault(group => group.Count() > 1);
         if (duplicateOutput is not null)
         {
-            throw new AssetCtlException($"Duplicate asset output '{duplicateOutput.Key}'.", 2);
+            throw new AssetCtlException("Duplicate catalog asset output.", 2);
         }
 
         return manifests;
@@ -82,6 +82,15 @@ internal static class ManifestStore
         EnsurePhysicalCatalogContainment(configuration, absolute);
 
         global::YamlDotNet.RepresentationModel.YamlMappingNode root = StrictYaml.LoadMapping(absolute);
+        return LoadSnapshot(configuration, absolute, root);
+    }
+
+    internal static AssetManifest LoadSnapshot(
+        EffectiveConfiguration configuration,
+        string absolute,
+        YamlMappingNode root
+    )
+    {
         string id = ValidateHeader(root);
 
         global::AlterCourse.AssetCtl.Domain.DomainModels.AssetLifecycle lifecycle = ParseLifecycle(
@@ -193,7 +202,7 @@ internal static class ManifestStore
         string style = visual.Scalar("style_profile", "manifest.visual");
         if (!configuration.Styles.ContainsKey(style))
         {
-            throw new AssetCtlException($"manifest.visual.style_profile: unknown style '{style}'.", 2);
+            throw new AssetCtlException("manifest.visual.style_profile: unknown style.", 2);
         }
 
         YamlMappingNode constraints = root.Mapping("constraints", "manifest");
@@ -203,12 +212,12 @@ internal static class ManifestStore
         string qualityTier = root.Scalar("quality_tier", "manifest");
         if (!configuration.QualityTiers.ContainsKey(qualityTier))
         {
-            throw new AssetCtlException($"manifest.quality_tier: unknown quality tier '{qualityTier}'.", 2);
+            throw new AssetCtlException("manifest.quality_tier: unknown quality tier.", 2);
         }
         string kind = root.Scalar("kind", "manifest");
         if (!AssetKinds.Contains(kind))
         {
-            throw new AssetCtlException($"manifest.kind: unsupported '{kind}'.", 2);
+            throw new AssetCtlException("manifest.kind: unsupported kind.", 2);
         }
         GenerationProvenance? generation = ReadGeneration(root.OptionalMapping("generation", "manifest"), qualityTier);
 
@@ -286,7 +295,7 @@ internal static class ManifestStore
         {
             "svg" => AssetFormat.Svg,
             "png" => AssetFormat.Png,
-            string value => throw new AssetCtlException($"manifest.output.format: unsupported '{value}'.", 2),
+            _ => throw new AssetCtlException("manifest.output.format: unsupported format.", 2),
         };
         if (!outputPath.EndsWith('.' + format.ToString().ToLowerInvariant(), StringComparison.Ordinal))
         {
@@ -547,7 +556,11 @@ internal static class ManifestStore
         Line(builder, 2, "media_type", integrity.MediaType);
     }
 
-    public static void VerifyIntegrity(EffectiveConfiguration configuration, AssetManifest manifest)
+    public static byte[] VerifyIntegrity(
+        EffectiveConfiguration configuration,
+        AssetManifest manifest,
+        Func<string, byte[]>? readSelectedBytes = null
+    )
     {
         if (manifest.Integrity is null)
         {
@@ -555,7 +568,33 @@ internal static class ManifestStore
         }
 
         string path = PathPolicy.ResolveOutputPath(configuration, manifest.Request.Output.Path, allowMissing: false);
-        byte[] bytes = File.ReadAllBytes(path);
+        byte[] bytes;
+        if (readSelectedBytes is null)
+        {
+            bytes = SelectedAssetReader.Read(path, configuration.Limits.MaximumDownloadBytes);
+        }
+        else
+        {
+            // The legacy regression observer runs only after pre-allocation admission. Production
+            // always uses the bounded stream loop, which also checks changing length and EOF.
+            if (new FileInfo(path).Length > configuration.Limits.MaximumDownloadBytes)
+            {
+                throw new AssetCtlException("Selected file exceeds the applicable byte limit.", 1);
+            }
+
+            bytes = readSelectedBytes(path);
+        }
+
+        VerifyIntegrity(configuration, manifest, bytes);
+        return bytes;
+    }
+
+    public static void VerifyIntegrity(EffectiveConfiguration configuration, AssetManifest manifest, byte[] bytes)
+    {
+        if (manifest.Integrity is null || bytes.LongLength > configuration.Limits.MaximumDownloadBytes)
+        {
+            throw new AssetCtlException($"{manifest.Request.Id}: selected bytes lack admitted integrity.", 1);
+        }
         string hash = Convert.ToHexStringLower(SHA256.HashData(bytes));
         if (
             !string.Equals(hash, manifest.Integrity.Sha256, StringComparison.Ordinal)
@@ -875,7 +914,7 @@ internal static class ManifestStore
     {
         if (!string.Equals(actual, expected, StringComparison.Ordinal))
         {
-            throw new AssetCtlException($"{path}: unsupported version '{actual}'.", 2);
+            throw new AssetCtlException($"{path}: unsupported version.", 2);
         }
     }
 
@@ -957,7 +996,7 @@ internal static class ManifestStore
             "candidate" => AssetLifecycle.Candidate,
             "approved" => AssetLifecycle.Approved,
             "deprecated" => AssetLifecycle.Deprecated,
-            _ => throw new AssetCtlException($"manifest.lifecycle: unknown '{value}'.", 2),
+            _ => throw new AssetCtlException("manifest.lifecycle: unknown lifecycle.", 2),
         };
 
     private static string Lifecycle(AssetLifecycle value) => value.ToString().ToLowerInvariant();

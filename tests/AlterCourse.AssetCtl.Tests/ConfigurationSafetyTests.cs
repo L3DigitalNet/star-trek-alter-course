@@ -154,7 +154,7 @@ public sealed class ConfigurationSafetyTests
         }
     }
 
-    /// <summary>Reports unknown configuration keys with their precise logical path.</summary>
+    /// <summary>Reports unknown configuration keys at their trusted containing mapping.</summary>
     [Fact]
     public void UnknownKeysArePathSpecific()
     {
@@ -163,7 +163,8 @@ public sealed class ConfigurationSafetyTests
         {
             global::YamlDotNet.RepresentationModel.YamlMappingNode root = StrictYaml.LoadMapping(path);
             AssetCtlException exception = Assert.Throws<AssetCtlException>(() => root.RequireOnly("root", "known"));
-            Assert.Contains("root.extra", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("root: unknown mapping key", exception.Message, StringComparison.Ordinal);
+            Assert.DoesNotContain("extra", exception.Message, StringComparison.Ordinal);
         }
         finally
         {

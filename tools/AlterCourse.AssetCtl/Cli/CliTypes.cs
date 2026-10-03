@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text.Json;
+using AlterCourse.AssetCtl.Diagnostics;
 using AlterCourse.AssetCtl.Generation;
 using AlterCourse.AssetCtl.Routing;
 using AlterCourse.AssetCtl.Validation;
@@ -47,8 +48,7 @@ internal static class CliTypes
         {
             if (arguments.Length == 0 || arguments[0] is "help" or "--help" or "-h")
             {
-                Console.Out.WriteLine(Usage);
-                return arguments.Length == 0 ? 2 : 0;
+                return WriteRequiredOutput(Usage, committed: false, arguments.Length == 0 ? 2 : 0);
             }
 
             var options = CliOptions.Parse(arguments[1..]);
@@ -62,8 +62,56 @@ internal static class CliTypes
             string repository = RepositoryLocator.Find(Environment.CurrentDirectory);
             global::AlterCourse.AssetCtl.Domain.DomainModels.EffectiveConfiguration configuration =
                 configurationLoader.Load(repository);
-            LogCommand(logger, arguments[0], null);
-            object result = arguments[0] switch
+            try
+            {
+                LogCommand(logger, arguments[0], null);
+            }
+            catch (Exception exception) when (BestEffortLoggerFactory.IsNonfatal(exception))
+            {
+                BestEffortLoggerFactory.ReportDegradation();
+            }
+
+            var commit = new CommandCommitState();
+            object result;
+            try
+            {
+                result = await DispatchAsync(configuration, options, arguments[0], commit, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (ReceiptReportingException) when (commit.IsCommitted)
+            {
+                BestEffortLoggerFactory.WriteDiagnostic(
+                    "assetctl: mutation committed; receipt-output-unavailable; reporting-degraded."
+                );
+                return 9;
+            }
+            catch (Exception exception) when (commit.IsCommitted && BestEffortLoggerFactory.IsNonfatal(exception))
+            {
+                BestEffortLoggerFactory.WriteDiagnostic("assetctl: mutation committed; subsequent operation failed.");
+                throw;
+            }
+
+            try
+            {
+                string rendered = string.Equals(output, "json", StringComparison.Ordinal)
+                    ? JsonSerializer.Serialize(result, JsonOptions.Stable)
+                    : Human(arguments[0], result);
+                return WriteRequiredOutput(rendered, commit.IsCommitted, successExit: 0);
+            }
+            catch (Exception exception) when (BestEffortLoggerFactory.IsNonfatal(exception))
+            {
+                return ReportOutputFailure(commit.IsCommitted);
+            }
+        }
+
+        private async Task<object> DispatchAsync(
+            EffectiveConfiguration configuration,
+            CliOptions options,
+            string command,
+            CommandCommitState commit,
+            CancellationToken cancellationToken
+        ) =>
+            command switch
             {
                 "validate-config" => ValidateConfig(configuration),
                 "doctor" => Doctor(configuration, options),
@@ -77,24 +125,38 @@ internal static class CliTypes
                         options.Flag("force"),
                         options.Flag("dry-run"),
                         options.Flag("offline"),
-                        cancellationToken
+                        cancellationToken,
+                        commit
                     )
                     .ConfigureAwait(false),
                 "verify" => Verify(configuration, options),
-                "approve" => Approve(configuration, options),
-                "deprecate" => Deprecate(configuration, options),
-                _ => throw new AssetCtlException($"Unknown command '{arguments[0]}'.", 2),
+                "approve" => ApproveObserved(configuration, options, commit: commit),
+                "deprecate" => DeprecateObserved(configuration, options, commit),
+                _ => throw new AssetCtlException("Unknown command.", 2),
             };
-            if (string.Equals(output, "json", StringComparison.Ordinal))
-            {
-                Console.Out.WriteLine(JsonSerializer.Serialize(result, JsonOptions.Stable));
-            }
-            else
-            {
-                Console.Out.WriteLine(Human(arguments[0], result));
-            }
 
-            return 0;
+        private static int WriteRequiredOutput(string rendered, bool committed, int successExit)
+        {
+            try
+            {
+                Console.Out.WriteLine(rendered);
+                Console.Out.Flush();
+                return successExit;
+            }
+            catch (Exception exception) when (BestEffortLoggerFactory.IsNonfatal(exception))
+            {
+                return ReportOutputFailure(committed);
+            }
+        }
+
+        private static int ReportOutputFailure(bool committed)
+        {
+            BestEffortLoggerFactory.WriteDiagnostic(
+                committed
+                    ? "assetctl: command completed and committed; result-output-unavailable; reporting-degraded."
+                    : "assetctl: command completed; result-output-unavailable; reporting-degraded."
+            );
+            return 9;
         }
 
         private static object ValidateConfig(EffectiveConfiguration configuration)
@@ -145,10 +207,7 @@ internal static class CliTypes
                 return;
             }
 
-            ManifestStore.VerifyIntegrity(configuration, manifest);
-            byte[] bytes = File.ReadAllBytes(
-                PathPolicy.ResolveOutputPath(configuration, manifest.Request.Output.Path, allowMissing: false)
-            );
+            byte[] bytes = ManifestStore.VerifyIntegrity(configuration, manifest);
             global::AlterCourse.AssetCtl.Domain.DomainModels.MechanicalValidationResult validation =
                 MechanicalValidator.Validate(
                     manifest.Request,
@@ -361,8 +420,9 @@ internal static class CliTypes
                 )
             )
             {
-                byte[] bytes = File.ReadAllBytes(
-                    Path.Combine(configuration.RepositoryRoot, manifest.Request.Output.Path)
+                byte[] bytes = global::AlterCourse.AssetCtl.Catalog.SelectedAssetReader.Read(
+                    PathPolicy.ResolveOutputPath(configuration, manifest.Request.Output.Path, allowMissing: false),
+                    configuration.Limits.MaximumDownloadBytes
                 );
                 if (
                     !string.Equals(
@@ -443,10 +503,7 @@ internal static class CliTypes
             List<object> results = [];
             foreach (global::AlterCourse.AssetCtl.Domain.DomainModels.AssetManifest manifest in selected)
             {
-                ManifestStore.VerifyIntegrity(configuration, manifest);
-                byte[] bytes = File.ReadAllBytes(
-                    PathPolicy.ResolveOutputPath(configuration, manifest.Request.Output.Path, allowMissing: false)
-                );
+                byte[] bytes = ManifestStore.VerifyIntegrity(configuration, manifest);
                 global::AlterCourse.AssetCtl.Domain.DomainModels.MechanicalValidationResult mechanical =
                     MechanicalValidator.Validate(
                         manifest.Request,
@@ -472,7 +529,15 @@ internal static class CliTypes
             return new { valid = true, assets = results };
         }
 
-        private static object Approve(EffectiveConfiguration configuration, CliOptions options)
+        private static object Approve(EffectiveConfiguration configuration, CliOptions options) =>
+            ApproveObserved(configuration, options);
+
+        internal static object ApproveObserved(
+            EffectiveConfiguration configuration,
+            CliOptions options,
+            ManifestMutation.Observation? observation = null,
+            CommandCommitState? commit = null
+        )
         {
             global::AlterCourse.AssetCtl.Domain.DomainModels.AssetManifest manifest = ResolveManifest(
                 configuration,
@@ -490,14 +555,16 @@ internal static class CliTypes
                 };
             }
 
-            (string actor, string note) = ValidateApprovalEligibility(configuration, manifest, options);
-
-            string assetPath = PathPolicy.ResolveOutputPath(
+            using var boundary = new global::AlterCourse.AssetCtl.Publishing.LifecycleBoundary(configuration, manifest);
+            (string actor, string note, byte[] bytes) = ValidateApprovalEligibility(
                 configuration,
-                manifest.Request.Output.Path,
-                allowMissing: false
+                manifest,
+                options,
+                boundary
             );
-            string beforeHash = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(assetPath)));
+            observation?.EvidenceValidated?.Invoke();
+
+            string beforeHash = Convert.ToHexStringLower(SHA256.HashData(bytes));
             global::AlterCourse.AssetCtl.Domain.DomainModels.AssetManifest approved = manifest with
             {
                 Revision = manifest.Revision + 1,
@@ -515,25 +582,44 @@ internal static class CliTypes
                 };
             }
 
-            ManifestMutation.WriteCas(configuration, manifest, approved);
-            string afterHash = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(assetPath)));
-            if (!string.Equals(beforeHash, afterHash, StringComparison.Ordinal))
+            ManifestMutation.Outcome outcome = ManifestMutation.WriteCas(
+                configuration,
+                manifest,
+                approved,
+                observation,
+                boundary
+            );
+            commit?.MarkCommitted();
+            return ApprovalResult(approved, beforeHash, outcome);
+        }
+
+        private static object ApprovalResult(AssetManifest approved, string sha256, ManifestMutation.Outcome outcome)
+        {
+            if (outcome.ReportingDegraded)
             {
-                throw new AssetCtlException("Approval changed asset bytes; manifest update was refused.", 7);
+                return new
+                {
+                    asset_id = approved.Request.Id,
+                    lifecycle = "approved",
+                    sha256,
+                    committed = true,
+                    reporting_degraded = true,
+                };
             }
 
             return new
             {
                 asset_id = approved.Request.Id,
                 lifecycle = "approved",
-                sha256 = afterHash,
+                sha256,
             };
         }
 
-        private static (string Actor, string Note) ValidateApprovalEligibility(
+        private static (string Actor, string Note, byte[] Bytes) ValidateApprovalEligibility(
             EffectiveConfiguration configuration,
             AssetManifest manifest,
-            CliOptions options
+            CliOptions options,
+            global::AlterCourse.AssetCtl.Publishing.LifecycleBoundary boundary
         )
         {
             if (manifest.Request.Lifecycle != AssetLifecycle.Candidate)
@@ -554,7 +640,8 @@ internal static class CliTypes
                 throw new AssetCtlException("--confirm-approved-asset must exactly equal the asset ID.", 8);
             }
 
-            ApprovalPolicy.Validate(configuration, manifest);
+            byte[] bytes = boundary.ReadSelected();
+            ApprovalPolicy.Validate(configuration, manifest, bytes);
             if (
                 manifest.Rights.Classification is "unknown" or "unreviewed-generated-placeholder"
                 || string.IsNullOrWhiteSpace(manifest.Rights.License)
@@ -567,10 +654,17 @@ internal static class CliTypes
                 );
             }
 
-            return (actor, note);
+            return (actor, note, bytes);
         }
 
-        private static object Deprecate(EffectiveConfiguration configuration, CliOptions options)
+        private static object Deprecate(EffectiveConfiguration configuration, CliOptions options) =>
+            DeprecateObserved(configuration, options, commit: null);
+
+        private static object DeprecateObserved(
+            EffectiveConfiguration configuration,
+            CliOptions options,
+            CommandCommitState? commit
+        )
         {
             global::AlterCourse.AssetCtl.Domain.DomainModels.AssetManifest manifest = ResolveManifest(
                 configuration,
@@ -619,6 +713,7 @@ internal static class CliTypes
             }
 
             ManifestMutation.WriteCas(configuration, manifest, deprecated);
+            commit?.MarkCommitted();
             return new
             {
                 asset_id = deprecated.Request.Id,
@@ -645,7 +740,7 @@ internal static class CliTypes
             return ManifestStore
                     .LoadAll(configuration)
                     .SingleOrDefault(manifest => string.Equals(manifest.Request.Id, id, StringComparison.Ordinal))
-                ?? throw new AssetCtlException($"Asset '{id}' was not found.", 1);
+                ?? throw new AssetCtlException("Selected asset was not found in the catalog.", 1);
         }
 
         private static string RequiredText(CliOptions options, string key)
@@ -729,7 +824,7 @@ internal static class CliTypes
                 string value = arguments[index];
                 if (!value.StartsWith("--", StringComparison.Ordinal) || value.Length == 2)
                 {
-                    throw new AssetCtlException($"Unexpected argument '{value}'.", 2);
+                    throw new AssetCtlException("Unexpected positional argument.", 2);
                 }
 
                 string key = value[2..];
@@ -741,7 +836,7 @@ internal static class CliTypes
 
                 if (!result.TryAdd(key, optionValue))
                 {
-                    throw new AssetCtlException($"Duplicate option '--{key}'.", 2);
+                    throw new AssetCtlException("Duplicate command option.", 2);
                 }
             }
 
@@ -766,13 +861,13 @@ internal static class CliTypes
         {
             if (!AllowedByCommand.TryGetValue(command, out IReadOnlySet<string>? allowed))
             {
-                return;
+                throw new AssetCtlException("Unknown command.", 2);
             }
 
             string? unknown = _values.Keys.FirstOrDefault(key => !allowed.Contains(key));
             if (unknown is not null)
             {
-                throw new AssetCtlException($"Unknown option '--{unknown}' for command '{command}'.", 2);
+                throw new AssetCtlException($"Unknown option for command '{command}'.", 2);
             }
         }
 

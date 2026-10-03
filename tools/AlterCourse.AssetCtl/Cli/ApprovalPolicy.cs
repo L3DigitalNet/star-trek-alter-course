@@ -5,15 +5,12 @@ namespace AlterCourse.AssetCtl.Cli;
 
 internal static class ApprovalPolicy
 {
-    public static void Validate(EffectiveConfiguration configuration, AssetManifest manifest)
+    public static byte[] Validate(EffectiveConfiguration configuration, AssetManifest manifest) =>
+        Validate(configuration, manifest, ManifestStore.VerifyIntegrity(configuration, manifest));
+
+    internal static byte[] Validate(EffectiveConfiguration configuration, AssetManifest manifest, byte[] bytes)
     {
-        ManifestStore.VerifyIntegrity(configuration, manifest);
-        string assetPath = PathPolicy.ResolveOutputPath(
-            configuration,
-            manifest.Request.Output.Path,
-            allowMissing: false
-        );
-        byte[] bytes = File.ReadAllBytes(assetPath);
+        ManifestStore.VerifyIntegrity(configuration, manifest, bytes);
         MechanicalValidationResult mechanical = MechanicalValidator.Validate(
             manifest.Request,
             bytes,
@@ -30,6 +27,8 @@ internal static class ApprovalPolicy
         {
             ValidateSemanticEvidence(configuration, manifest, tier, mechanical.NormalizedBytes);
         }
+
+        return bytes;
     }
 
     private static void ValidateSemanticEvidence(

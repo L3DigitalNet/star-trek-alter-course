@@ -362,20 +362,20 @@ public sealed class ConfigurationContractTests
         "providers.yaml",
         "providers:\n  local-placeholder:\n    adapter:",
         "providers:\n  local-placeholder: []\n  replacement-local-placeholder:\n    adapter:",
-        "providers.local-placeholder"
+        "providers[]"
     )]
     [InlineData(
         "providers.yaml",
         "      default:\n        model:",
         "      default: []\n      replacement-default:\n        model:",
-        "providers.local-placeholder.models.default"
+        "providers[].models[]"
     )]
     [InlineData("routing.yaml", "routes:\n  - id:", "routes:\n  - malformed\n  - id:", "routes[0]")]
     [InlineData(
         "quality-tiers.yaml",
         "  disposable:\n    candidates:",
         "  disposable: []\n  replacement-disposable:\n    candidates:",
-        "quality_tiers.disposable"
+        "quality_tiers[]"
     )]
     public void ConfigurationCollectionsRejectWrongNodeKinds(
         string relativePath,
@@ -422,7 +422,7 @@ public sealed class ConfigurationContractTests
             AssetCtlException exception = Assert.Throws<AssetCtlException>(() => Loader().Load(root));
 
             Assert.Equal(2, exception.ExitCode);
-            Assert.Contains("options.supported_sizes", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("options[]", exception.Message, StringComparison.Ordinal);
         }
         finally
         {
@@ -620,7 +620,8 @@ public sealed class ConfigurationContractTests
             );
 
             Assert.Equal(2, exception.ExitCode);
-            Assert.Contains("unexpected", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("provider option validation failed", exception.Message, StringComparison.Ordinal);
+            Assert.DoesNotContain("unexpected", exception.Message, StringComparison.Ordinal);
         }
         finally
         {
@@ -640,8 +641,8 @@ public sealed class ConfigurationContractTests
                 providers,
                 File.ReadAllText(providers)
                     .Replace(
-                        "          effective_date: \"2026-09-01\"",
-                        "          pricing_basis: \"wishful-thinking\"\n          effective_date: \"2026-09-01\"",
+                        "          estimated_cost_per_output: 0.00\n          effective_date: \"2026-09-01\"",
+                        "          estimated_cost_per_output: 0.00\n          pricing_basis: \"wishful-thinking\"\n          effective_date: \"2026-09-01\"",
                         StringComparison.Ordinal
                     )
             );

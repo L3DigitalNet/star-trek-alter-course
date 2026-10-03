@@ -6,7 +6,7 @@ description: 'Implementation specification for a configuration-driven AI-assiste
 doc_type: 'spec'
 status: 'active'
 created: '2026-09-01'
-updated: '2026-09-26'
+updated: '2026-10-03'
 reviewed: '2026-09-26'
 owner: 'project-maintainers'
 consumer: 'agent'
@@ -38,6 +38,10 @@ license: 'MIT'
 > **Tool reference and requirements.** This is the detailed contract for the repository development tool, not game-mechanics design or proof that every planned phase or provider is implemented. The [design wiki](README.md) owns game design; [Content, assets, and persistence](content-assets-and-persistence.md) owns the gameplay-facing asset policy. Runtime and current-state evidence belongs in its owning content and status pages. If this document disagrees with the wiki, the wiki governs and this document is corrected.
 
 Date: 2026-09-01
+
+Contract amendment — 2026-09-30: reconcile selected-byte admission, lifecycle commitment, publication recovery ownership, and diagnostic/result failure disposition with the bounded corrections under ADRs 0008 and 0017. This amendment changes ignored local recovery compatibility and failure reporting; it does not change gameplay, saves, manifest or receipt formats, admission/spend/rights policy, or owner-controlled lifecycle authority. It is not full verification or live-provider qualification.
+
+Contract amendment — 2026-10-03: qualify the native filesystem boundary as Linux x86-64 and require refusal with exit code `7` on any other operating system or process architecture before native access. This amendment does not change any other guarantee, limit, format, or exit-code meaning, and it is not qualification of any other operating system or architecture.
 
 ## Executive summary
 
@@ -1072,8 +1076,17 @@ Marks an asset deprecated with an actor and reason. Approved assets require the 
 | 6    | Budget refusal                                                |
 | 7    | Filesystem, integrity, or publish failure                     |
 | 8    | Protected lifecycle operation refused                         |
+| 9    | Required result or post-commit receipt output unavailable     |
 
 Provider-specific errors MUST be normalized into stable application categories while retaining a redacted diagnostic summary in the run receipt.
+
+### Required result output
+
+Failure to write required command-result stdout MUST return exit code `9` (`result-output-unavailable`) for both read-only and mutating commands, including when a mutation has already committed successfully. When stderr is writable, the tool MUST emit a bounded diagnostic identifying degraded result reporting and state that the operation completed or committed only when that disposition is known; it MUST NOT imply rollback. If both stdout and stderr are unavailable, exit `9` alone does not establish the operation's disposition. Before retrying a mutation, callers MUST inspect the resulting state or run receipt.
+
+Generation publication and receipt writing are separate boundaries. If publication has committed and both the primary and fallback receipt writes fail, the command MUST return exit `9` with `receipt-output-unavailable` in bounded stderr when writable. That diagnostic MUST report the known mutation commitment without claiming that the whole command completed or that rollback occurred. A successful fallback receipt preserves the normal command result and identifies the primary receipt failure in the receipt. This additional use of exit `9` does not make every receipt failure a result-output failure: an operation refusal before commitment retains its original exit code even if its failure receipt cannot be written.
+
+Optional diagnostics, including logging, remain best-effort: their failure MUST preserve the original command outcome. Genuine operation errors before commit MUST retain their existing exit codes. Successful command-result shapes and exit codes remain unchanged.
 
 ## Core domain model
 
@@ -1301,20 +1314,30 @@ then generation MUST return the existing asset without external calls unless `--
 
 A per-asset lock under `.assetctl/state/locks/` MUST prevent two agents from publishing the same asset concurrently. Locks MUST contain process and timestamp diagnostics and MUST have a safe stale-lock recovery policy.
 
+Generation and lifecycle mutation MUST hold that lock through their supported mutation boundary. Publication recovery MUST use its transaction lease to distinguish an active publisher from an abandoned transaction; elapsed time alone MUST NOT authorize recovery of a live transaction.
+
 Different asset IDs MAY generate concurrently subject to configured global concurrency and budget limits.
 
 ### Publishing and rollback
 
 Publishing modifies an asset file and a manifest. The tool MUST:
 
-- stage normalized output and manifest in the work directory;
-- verify hashes before publication;
-- create parent directories safely;
-- use same-filesystem temporary files and atomic rename where supported;
-- preserve previous placeholder or candidate files until both new files are ready;
-- roll back to the previous pair if either replacement fails;
-- never leave a manifest claiming an output hash that was not published;
-- refuse symlink traversal outside configured roots.
+- stage normalized output and manifest in the work directory and admit their regular-file identities and bounded byte snapshots;
+- bind destination, transaction, and journal parents to opened directory descriptors; check that required parents remain named before publication moves, and refuse substituted parents or files;
+- verify candidate and predecessor identities, hashes, lengths, semantic asset ID/output-path ownership, and mutable `placeholder` or `candidate` lifecycle before mutation or recovery;
+- create parent directories safely and use same-filesystem staging and atomic rename for each individual replacement;
+- preserve owned predecessor files until the intended pair is ready, and attempt ownership-checked rollback if replacement fails before commitment;
+- commit when the selected manifest replacement succeeds, after the selected asset replacement; subsequent reporting or cleanup failure MUST NOT be described as a precommit refusal or rollback;
+- refuse recovery or cleanup that would move, replace, or delete an artifact whose ownership evidence is missing or changed, retaining inspectable artifacts when safe recovery cannot be established;
+- refuse symlink traversal and non-regular selected, staged, or evidence files rather than redirecting reads or writes through them.
+
+New publication journals use local recovery authority version `1`. The journal is a locator, not sufficient mutation authority: a separate `authority.json` in the transaction directory MUST corroborate its admitted transaction/parent identities and predecessor/candidate file identities, hashes, and lengths. Recovery MUST apply bounded content and semantic/lifecycle checks to available live, backup, and staged manifests before completing or restoring a pair. A complete owned candidate pair permits cleanup; an incomplete pair permits restoration only when the owned predecessors can be established. A secondary rollback or cleanup failure MUST preserve the primary operation failure.
+
+Legacy version `0` journals lack that ownership evidence. They MUST be refused and quarantined without destructive automatic recovery; predecessor, staged, and backup artifacts remain for operator inspection. Operators MUST preserve and inspect those artifacts and the current selected pair before retrying or manually repairing an interrupted legacy transaction. The authority version applies only to ignored `.assetctl/` recovery state, not the tracked manifest or run-receipt format, and does not authenticate evidence against arbitrary rewrites by the same operating-system user.
+
+Lifecycle replacement MUST bind the manifest parent and regular-file identity, compare its revision and serialized semantic snapshot, and validate a staged replacement before its final descriptor-relative rename. Approval MUST validate integrity and mechanical/approval policy against one immutable selected-byte snapshot, then recheck the named selected identity and bytes before committing. Successful manifest rename is the lifecycle commitment boundary; later diagnostics or cleanup MUST NOT turn an applied transition into refusal. Precommit stage creation, write, flush, or close failure MUST preserve the original manifest and primary failure, and cleanup MUST remove only the owned stage.
+
+These boundaries implement recoverable paired publication on Linux x86-64 using `openat`, `statx`, descriptor-relative operations, and mounted procfs, with locks for cooperating writers. Linux x86-64 — a Linux operating system with .NET process architecture `X64` — is the only supported platform for these native filesystem boundaries. On any other operating system or process architecture the tool MUST refuse with exit code `7` before any native filesystem operation, rather than emulating or reinterpreting the native ABI; supporting another platform requires equivalent safety and recovery evidence. These boundaries do not promise simultaneous atomic replacement of two files, universal sudden-power-loss durability, or an atomic revision compare-and-swap against arbitrary same-user writers. Interrupted or unsafe publication can retain a partial pair and recovery evidence; failure reporting MUST state only the disposition actually established. [ADR 0017](../adr/0017-generate-assets-outside-the-game-through-bounded-validated-publication.md) owns this architectural boundary.
 
 The tool MUST NOT touch unrelated Godot files or `.godot/imported` state.
 
@@ -1323,6 +1346,8 @@ The tool MUST NOT touch unrelated Godot files or `.godot/imported` state.
 ### Mechanical validation is mandatory
 
 Every selected asset MUST pass mechanical validation. AI review can supplement but never replace it.
+
+Selected-file reads MUST admit an opened regular file without symlink redirection, reject its reported length above the configured byte limit before allocating the snapshot, and independently bound consumption and require complete EOF. Shortened, growing, or length-inconsistent input MUST be refused. Integrity and mechanical checks for one verification or approval decision MUST use the same byte snapshot; separate whole-file reads MUST NOT allow those checks to validate different contents. This byte boundary does not replace format, dimension, pixel, or normalization checks.
 
 Common checks include:
 
@@ -1562,6 +1587,8 @@ The tool MUST prefer inline bytes or base64 responses when provider support make
 
 YAML parsing MUST reject custom tags, duplicate keys, anchors, aliases, and unbounded recursive structures. JSON parsing MUST use bounded streams and explicit DTOs. Provider response text MUST be treated as untrusted data.
 
+YAML file admission MUST bound bytes before allocation and independently detect short or growing reads before parsing. The current YAML dialect caps input at 1 MiB, tree depth at 32, and nodes at 20,000; its character limit is also 1,048,576. Publication journals and authority envelopes are capped at 64 KiB. Selected asset snapshots use the configured maximum-download-byte limit. Parser diagnostics MUST use fixed input context and failure classification rather than echoing source text or unrestricted parser exception prose.
+
 ### SVG safety
 
 SVG sanitization requirements in this specification are security requirements, not optional style checks.
@@ -1576,7 +1603,7 @@ Operational logging MUST conform to ADR 0008 in addition to the redaction requir
 - The default development configuration MUST use a human-readable console sink and a bounded structured rolling-file sink beneath `.assetctl/logs/`. Tests that assert diagnostics SHOULD use an in-memory or collecting sink.
 - Structured fields SHOULD include stable command, run, asset, route, provider, model-profile, attempt, error-classification, and elapsed-duration identifiers where applicable.
 - Logs SHOULD use stable identifiers and hashes instead of copying full prompts, reference material, image bytes, provider response bodies, or other large or rights-sensitive content. The manifest and run receipt remain the specified provenance locations for the final prompt and detailed attempt evidence.
-- Logging sink failure MUST NOT change routing, scoring, selection, lifecycle, or publish semantics and MUST NOT leave partially applied tracked state. A sink failure may be surfaced as an operational diagnostic through a safe fallback path.
+- Optional diagnostic failure during configuration discovery, logger construction/creation, enablement checks, scope creation/disposal, emission, factory disposal, or stderr fallback MUST preserve the command's operation outcome, refusal, or cancellation. It MUST NOT change routing, scoring, selection, lifecycle, or publish semantics. A nonfatal sink failure may be surfaced through bounded best-effort stderr; failure of that fallback MUST NOT recurse or alter required stdout.
 - Logs are diagnostics, not authority. The tool MUST NOT decide whether generation, validation, review, approval, or publication occurred by querying a log sink.
 
 Logs and receipts MUST redact:
@@ -1588,6 +1615,8 @@ Logs and receipts MUST redact:
 - local paths outside the repository when not required for diagnosis.
 
 A redaction regression test MUST cover each provider adapter. Run receipts remain a separate provenance contract and MUST NOT be treated as a Serilog sink or reconstructed from log events.
+
+Arbitrary external exception messages, inner exceptions, stacks, data dictionaries, provider bodies, signed queries, and parser source excerpts MUST NOT be passed to logs, stderr, or receipt failure summaries. Pattern-based redaction alone is insufficient admission for that prose. External failures MUST map to closed application-owned classifications while retaining applicable trusted command, route, provider/model-profile, attempt, status, and policy context. Unexpected internal failures MUST use a fixed diagnostic summary. Process-fatal failures are outside the best-effort diagnostic guarantee.
 
 ## Rights, licensing, and project legal boundaries
 
@@ -1653,6 +1682,8 @@ Each generation attempt writes `.assetctl/runs/<run-id>.json` containing:
 - redacted errors;
 - publish and rollback result.
 
+Receipt publication fields MUST distinguish a known commit from an operation failure and use `rollback: not-established` when restoration was not proven; a caught exception is not proof of rollback. Receipt sink failure after a known commit MUST preserve that commitment and follow the [required result output](#required-result-output) disposition rather than inventing rollback or successful whole-command completion.
+
 Receipts are ignored by Git because they can be numerous and provider-specific. The committed manifest carries the durable selected summary. Receipts are provenance and execution evidence rather than an operational logging sink; diagnostic logs remain independently bounded and non-authoritative under ADR 0008.
 
 ### No database
@@ -1712,7 +1743,7 @@ Unit tests MUST cover:
 - retry eligibility and bounds;
 - structured-log and receipt redaction;
 - logging sink isolation from command semantics;
-- atomic publish rollback decisions.
+- ownership-checked publication rollback decisions.
 
 ### Adapter contract tests
 
@@ -1758,10 +1789,10 @@ A complete fake-provider integration test MUST exercise:
 
 ```text
 manifest -> route -> candidate generation -> validation -> review -> selection
--> atomic publish -> manifest update -> JSON result
+-> recoverable paired publish -> manifest update -> JSON result
 ```
 
-It MUST also prove rollback when manifest publication fails after asset staging.
+It MUST also prove restoration of the owned predecessor pair when manifest publication fails after asset staging, refusal/preservation when recovery ownership cannot be established, legacy-journal quarantine without destructive recovery, and truthful post-commit reporting. Boundary regressions MUST cover parent/file substitution, stage I/O and cleanup failures, selected-read allocation/consumption caps, optional diagnostics, and required stdout/receipt failure.
 
 ### Local adapter golden tests
 
@@ -1883,7 +1914,7 @@ Deliver:
 - lifecycle policy and approved protection;
 - local placeholder generator;
 - mechanical SVG and PNG validation;
-- atomic publication and receipts;
+- recoverable paired publication and receipts;
 - xUnit unit, golden, integration, and boundary tests;
 - canonical gate integration.
 
@@ -1964,7 +1995,7 @@ The complete asset pipeline is accepted when all of the following are true:
 - Multiple candidates are mechanically filtered, semantically reviewed according to tier, and deterministically selected.
 - Missing credentials, disabled spend, provider failure, rate limiting, and validation failure follow configured fallback behavior.
 - Unknown price and over-budget operations fail closed.
-- Selected assets and manifests publish together with rollback protection.
+- Selected assets and manifests form one recoverable publication unit with ownership-checked rollback and truthful failure disposition.
 - Every committed generated asset has a valid manifest and matching SHA-256 hash.
 - SVG sanitization rejects active content, external references, and prohibited embedded content.
 - Raster validation fully decodes files, enforces pixel limits, verifies alpha requirements, and strips unwanted metadata.
@@ -2033,10 +2064,19 @@ Repository decisions and policy:
 - [ADR 0005: Use JSON and schema validation for domain content](../adr/0005-use-json-and-schema-validation-for-domain-content.md)
 - [ADR 0008: Use structured observability with Serilog](../adr/0008-use-structured-observability-with-serilog.md)
 - [ADR 0009: Use layered testing and architecture conformance](../adr/0009-use-layered-testing-and-architecture-conformance.md)
+- [ADR 0017: Generate assets outside the game through bounded validated publication](../adr/0017-generate-assets-outside-the-game-through-bounded-validated-publication.md)
 - [Development quality](../development-quality.md)
 - [Repository .NET SDK pin](../../global.json)
 - [Repository licensing policy](../../LICENSE.md)
 - [Repository legal notice](../../LEGAL.md)
+
+Implemented correction boundaries and regression evidence:
+
+- [Publication ownership and recovery](../../tools/AlterCourse.AssetCtl/Publishing/PublishingTypes.cs), [publication object-boundary regressions](../../tests/AlterCourse.AssetCtl.Tests/PublicationObjectBoundaryTests.cs), and [recovery regressions](../../tests/AlterCourse.AssetCtl.Tests/PublicationRecoveryTests.cs).
+- [Lifecycle admission](../../tools/AlterCourse.AssetCtl/Publishing/LifecycleBoundary.cs), [manifest commitment](../../tools/AlterCourse.AssetCtl/Publishing/ManifestMutation.cs), and [lifecycle boundary regressions](../../tests/AlterCourse.AssetCtl.Tests/LifecycleBoundaryRegressionTests.cs).
+- [Selected snapshot reader](../../tools/AlterCourse.AssetCtl/Catalog/SelectedAssetReader.cs), [bounded YAML admission](../../tools/AlterCourse.AssetCtl/Configuration/YamlValues.cs), and [selected-read boundary regressions](../../tests/AlterCourse.AssetCtl.Tests/SelectedAssetReadBoundaryTests.cs).
+- [Command/result boundary](../../tools/AlterCourse.AssetCtl/Cli/CliTypes.cs), [generation receipts](../../tools/AlterCourse.AssetCtl/Generation/GenerationOrchestrator.cs), and [output boundary regressions](../../tests/AlterCourse.AssetCtl.Tests/OutputBoundaryRegressionTests.cs).
+- [Diagnostic isolation](../../tools/AlterCourse.AssetCtl/Diagnostics/BestEffortLoggerFactory.cs), [process composition](../../tools/AlterCourse.AssetCtl/Program.cs), [diagnostic boundary regressions](../../tests/AlterCourse.AssetCtl.Tests/DiagnosticBoundaryRegressionTests.cs), and [diagnostic privacy regressions](../../tests/AlterCourse.AssetCtl.Tests/DiagnosticPrivacyRegressionTests.cs).
 
 Current provider documentation reviewed on 2026-09-01:
 

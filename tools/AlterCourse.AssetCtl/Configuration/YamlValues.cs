@@ -1,4 +1,5 @@
 using System.Globalization;
+using AlterCourse.AssetCtl.Catalog;
 using YamlDotNet.Core;
 using YamlDotNet.Core.Events;
 using YamlDotNet.RepresentationModel;
@@ -8,22 +9,56 @@ namespace AlterCourse.AssetCtl.Configuration;
 /// <summary>Loads the deliberately small AssetCtl YAML dialect without resolving executable or recursive YAML features.</summary>
 internal static class YamlValues
 {
-    private const int MaximumCharacters = 1_048_576;
+    internal const int MaximumBytes = 1_048_576;
+    private const int MaximumCharacters = MaximumBytes;
     private const int MaximumDepth = 32;
     private const int MaximumNodes = 20_000;
 
-    public static YamlMappingNode LoadMapping(string path)
-    {
-        string text;
-        using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
-        {
-            if (stream.Length > MaximumCharacters)
-            {
-                throw new AssetCtlException($"{path}: YAML exceeds the {MaximumCharacters}-byte limit.", 2);
-            }
+    public static YamlMappingNode LoadMapping(string path) => LoadBytes("YAML input", ReadBytes(path));
 
-            using var reader = new StreamReader(stream, detectEncodingFromByteOrderMarks: true);
-            text = reader.ReadToEnd();
+    internal static byte[] ReadBytes(string path)
+    {
+        // Keep the bounded reader's EOF probe from prefetching growth beyond its one-byte allowance.
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 1);
+        return ReadSnapshot("YAML input", stream, MaximumBytes);
+    }
+
+    internal static YamlMappingNode LoadMapping(string path, Stream stream, int maximumBytes) =>
+        LoadBytes(path, ReadSnapshot(path, stream, maximumBytes));
+
+    private static byte[] ReadSnapshot(string path, Stream stream, int maximumBytes)
+    {
+        byte[] bytes;
+        try
+        {
+            bytes = SelectedAssetReader.Read(stream, maximumBytes);
+        }
+        catch (AssetCtlException)
+        {
+            throw new AssetCtlException($"{path}: YAML byte snapshot exceeds bounds or changed during reading.", 2);
+        }
+
+        return bytes;
+    }
+
+    internal static YamlMappingNode LoadBytes(string path, byte[] bytes)
+    {
+        // Snapshot callers may supply absolute manifest/stage paths. Their identity is never diagnostic payload.
+        path = "YAML input";
+        if (bytes.LongLength > MaximumBytes)
+        {
+            throw new AssetCtlException($"{path}: YAML exceeds the byte limit.", 2);
+        }
+
+        using var reader = new StreamReader(new MemoryStream(bytes), detectEncodingFromByteOrderMarks: true);
+        return LoadText(path, reader.ReadToEnd());
+    }
+
+    internal static YamlMappingNode LoadText(string path, string text)
+    {
+        if (text.Length > MaximumCharacters)
+        {
+            throw new AssetCtlException($"{path}: YAML exceeds the character limit.", 2);
         }
 
         RejectProhibitedSyntax(path, text);
@@ -32,9 +67,9 @@ internal static class YamlValues
         {
             yaml.Load(new StringReader(text));
         }
-        catch (YamlException exception)
+        catch (YamlException)
         {
-            throw new AssetCtlException($"{path}: invalid or duplicate-key YAML: {exception.Message}", 2);
+            throw new AssetCtlException($"{path}: invalid or duplicate-key YAML.", 2);
         }
 
         if (yaml.Documents.Count != 1 || yaml.Documents[0].RootNode is not YamlMappingNode root)
@@ -66,9 +101,9 @@ internal static class YamlValues
                 }
             }
         }
-        catch (YamlException exception)
+        catch (YamlException)
         {
-            throw new AssetCtlException($"{path}: invalid YAML: {exception.Message}", 2);
+            throw new AssetCtlException($"{path}: invalid YAML.", 2);
         }
     }
 
@@ -98,7 +133,7 @@ internal static class YamlValues
 
                     if (!keys.Add(key.Value))
                     {
-                        throw new AssetCtlException($"{path}: duplicate key '{key.Value}'.", 2);
+                        throw new AssetCtlException($"{path}: duplicate mapping key.", 2);
                     }
 
                     ValidateTree(pair.Value, depth + 1, ref count, path);
@@ -132,7 +167,7 @@ internal static class YamlValues
             string key = ((YamlScalarNode)pair.Key).Value!;
             if (!allowed.Contains(key))
             {
-                throw new AssetCtlException($"{path}.{key}: unknown key.", 2);
+                throw new AssetCtlException($"{path}: unknown mapping key.", 2);
             }
         }
     }
