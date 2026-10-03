@@ -261,6 +261,50 @@ public sealed class ReceiptFailureBoundaryTests
         Assert.Equal("local-io-failed", publication.GetProperty("failure").GetString());
     }
 
+    /// <summary>
+    /// A permission-denied step after provider spend but before commit (success-path candidate retention) still
+    /// writes the failure receipt listing the billed attempts, classified as local I/O, while the command keeps its
+    /// existing exit code 1.
+    /// </summary>
+    [Fact]
+    public async Task PermissionDeniedPostSpendStepRecordsAttempts()
+    {
+        // Calibration: the same offline run with a writable work root commits (exit 0), so the faulted run below
+        // fails only because of the injected denial, after the generation attempt has already been made.
+        using (var calibration = new DiagnosticBoundaryRegressionTests.ProcessFixture())
+        {
+            Assert.Equal(0, await RunGenerate(calibration));
+            Assert.NotNull(calibration.Load().Integrity);
+        }
+
+        using var fixture = new DiagnosticBoundaryRegressionTests.ProcessFixture();
+        EffectiveConfiguration configuration = fixture.Configuration();
+        // The work root holds only candidate retention, publication staging, and the receipt fallback; the lock
+        // lives under state_root and the primary receipt under receipt_root, so denying it makes the first
+        // post-spend write (retaining the selected candidate under <work_root>/<run_id>) raise
+        // UnauthorizedAccessException before publication starts, while the primary receipt sink stays writable.
+        using var denied = new DeniedDirectory(Path.Combine(fixture.Root, configuration.Paths.WorkRoot));
+
+        int exit = await RunGenerate(fixture);
+
+        Assert.Equal(1, exit);
+        Assert.Null(fixture.Load().Integrity);
+        Assert.Empty(fixture.Output.ToString());
+        string receiptRoot = Path.Combine(fixture.Root, configuration.Paths.ReceiptRoot);
+        Assert.True(Directory.Exists(receiptRoot), "No failure receipt was written for the billed attempt.");
+        using var parsed = JsonDocument.Parse(
+            await File.ReadAllTextAsync(Assert.Single(Directory.GetFiles(receiptRoot, "*.json")))
+        );
+        // attempts[0] is the invocation record; anything beyond it is provider attempt evidence.
+        Assert.True(parsed.RootElement.GetProperty("attempts").GetArrayLength() > 1);
+        Assert.Equal(
+            "local-io-failed",
+            parsed.RootElement.GetProperty("publication").GetProperty("failure").GetString()
+        );
+        Assert.Equal("local-io-failed", parsed.RootElement.GetProperty("selection").GetProperty("reason").GetString());
+        Assert.False(parsed.RootElement.GetProperty("publication").GetProperty("published").GetBoolean());
+    }
+
     private static Task<int> RunGenerate(DiagnosticBoundaryRegressionTests.ProcessFixture fixture) =>
         Program.RunProcessAsync(Arguments(fixture), (_, _) => NullLoggerFactory.Instance);
 
