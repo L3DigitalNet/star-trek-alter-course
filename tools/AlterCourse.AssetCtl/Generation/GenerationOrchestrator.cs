@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using AlterCourse.AssetCtl.Cli;
+using AlterCourse.AssetCtl.Diagnostics;
 using AlterCourse.AssetCtl.Providers;
 using AlterCourse.AssetCtl.Routing;
 using AlterCourse.AssetCtl.Validation;
@@ -787,24 +788,26 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
             );
             commit.MarkCommitted();
         }
-        catch (Exception exception) when (exception is AssetCtlException or IOException)
+        // Path-based publisher EACCES is UnauthorizedAccessException, not IOException: same pre-commit I/O failure.
+        catch (Exception exception) when (exception is AssetCtlException or IOException or UnauthorizedAccessException)
         {
             WriteReceiptWithFallback(
                 configuration,
                 runId,
-                CreateReceipt(
-                    configuration,
-                    generated,
-                    plan,
-                    outcome,
-                    attempts,
-                    integrity,
-                    requestHash,
-                    promptHash,
-                    runId,
-                    null,
-                    ReceiptFailureDiagnostic(exception)
-                )
+                () =>
+                    CreateReceipt(
+                        configuration,
+                        generated,
+                        plan,
+                        outcome,
+                        attempts,
+                        integrity,
+                        requestHash,
+                        promptHash,
+                        runId,
+                        null,
+                        ReceiptFailureDiagnostic(exception)
+                    )
             );
             exception.Data["AlterCourse.AssetCtl.ReceiptWritten"] = true;
             throw;
@@ -825,7 +828,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
                 publication
             );
         }
-        catch (Exception exception) when (exception is AssetCtlException or IOException)
+        catch (Exception exception) when (IsReceiptReportingFailure(exception))
         {
             // Both receipt sinks failed after publication. Classify only this independent reporting step;
             // the command boundary retains the proven commit without inventing rollback or completion.
@@ -863,7 +866,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         {
             return ReceiptWriter.Write(configuration, runId, receipt);
         }
-        catch (Exception exception) when (exception is AssetCtlException or IOException)
+        catch (Exception exception) when (IsReceiptReportingFailure(exception))
         {
             // Publication is authoritative once AtomicPublisher returns; a provenance sink failure cannot undo it.
             return WriteFallbackReceipt(
@@ -1087,6 +1090,9 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         configuration.Policy.RetainUnselectedCandidates
         || candidate.CreationOrder == outcome.Selected.Candidate.CreationOrder;
 
+    // Every caller invokes this from a catch block and then rethrows the original failure, so the whole step,
+    // including candidate retention and receipt construction, must be unable to throw a reporting failure: anything
+    // escaping here would replace the refusal (exit 4/6/7/8, provider categories) with an unexpected exit 1.
     private static void WriteFailureReceipt(
         EffectiveConfiguration configuration,
         AssetManifest manifest,
@@ -1097,62 +1103,78 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         Exception exception
     )
     {
-        RetainFailureCandidates(configuration, runId, candidates);
-        string requestHash = ConfigurationLoader.Hash(JsonSerializer.Serialize(manifest.Request, JsonOptions.Stable));
-        object receipt = new
-        {
-            command = "generate",
-            invocation = attempts.Count == 0 ? null : attempts[0],
-            run_id = runId,
-            asset_id = manifest.Request.Id,
-            semantic_request = manifest.Request,
-            request_sha256 = requestHash,
-            repository_state_sha256 = RepositoryStateHash(configuration, manifest.ManifestPath, requestHash),
-            effective_configuration_hash = configuration.EffectiveHash,
-            contributing_file_hashes = configuration.FileHashes,
-            estimated_cost_basis = plan?.Targets.Select(target => new
+        HashSet<int> retained = RetainFailureCandidates(configuration, runId, candidates);
+        WriteReceiptWithFallback(
+            configuration,
+            runId,
+            () =>
             {
-                target.RouteId,
-                target.ProviderId,
-                target.ModelProfileId,
-                target.EstimatedMaximumCost,
-            }),
-            estimated_maximum_cost_usd = plan?.EstimatedMaximumCost,
-            plan,
-            attempts,
-            candidates = FailureReceiptCandidates(configuration, runId, candidates),
-            selection = new
-            {
-                status = "failure",
-                reason = ReceiptFailureDiagnostic(exception),
-                candidate = (int?)null,
-                selected_sha256 = (string?)null,
-            },
-            publication = new
-            {
-                published = false,
-                recovered_pending_transactions = 0,
-                active_transactions_skipped = 0,
-                rollback = "not-established",
-                failure = ReceiptFailureDiagnostic(exception),
-                repository_path = (string?)null,
-                godot_path = (string?)null,
-                manifest_path = (string?)null,
-            },
-            authoritative = false,
-        };
-        WriteReceiptWithFallback(configuration, runId, receipt);
+                string requestHash = ConfigurationLoader.Hash(
+                    JsonSerializer.Serialize(manifest.Request, JsonOptions.Stable)
+                );
+                return new
+                {
+                    command = "generate",
+                    invocation = attempts.Count == 0 ? null : attempts[0],
+                    run_id = runId,
+                    asset_id = manifest.Request.Id,
+                    semantic_request = manifest.Request,
+                    request_sha256 = requestHash,
+                    repository_state_sha256 = RepositoryStateHash(configuration, manifest.ManifestPath, requestHash),
+                    effective_configuration_hash = configuration.EffectiveHash,
+                    contributing_file_hashes = configuration.FileHashes,
+                    estimated_cost_basis = plan?.Targets.Select(target => new
+                    {
+                        target.RouteId,
+                        target.ProviderId,
+                        target.ModelProfileId,
+                        target.EstimatedMaximumCost,
+                    }),
+                    estimated_maximum_cost_usd = plan?.EstimatedMaximumCost,
+                    plan,
+                    attempts,
+                    candidates = FailureReceiptCandidates(configuration, runId, candidates, retained),
+                    selection = new
+                    {
+                        status = "failure",
+                        reason = ReceiptFailureDiagnostic(exception),
+                        candidate = (int?)null,
+                        selected_sha256 = (string?)null,
+                    },
+                    publication = new
+                    {
+                        published = false,
+                        recovered_pending_transactions = 0,
+                        active_transactions_skipped = 0,
+                        rollback = "not-established",
+                        failure = ReceiptFailureDiagnostic(exception),
+                        repository_path = (string?)null,
+                        godot_path = (string?)null,
+                        manifest_path = (string?)null,
+                    },
+                    authoritative = false,
+                };
+            }
+        );
     }
 
-    private static void WriteReceiptWithFallback(EffectiveConfiguration configuration, string runId, object receipt)
+    // Best-effort failure receipt: never throws a reporting failure (see IsReceiptReportingFailure). The receipt is
+    // built inside the guard because construction (hashing, path resolution) can fail as well, and a failure there
+    // must not escape into the caller's catch block either.
+    private static void WriteReceiptWithFallback(
+        EffectiveConfiguration configuration,
+        string runId,
+        Func<object> createReceipt
+    )
     {
         try
         {
-            ReceiptWriter.Write(configuration, runId, receipt);
-        }
-        catch (Exception exception) when (exception is AssetCtlException or IOException)
-        {
+            object receipt = createReceipt();
             try
+            {
+                ReceiptWriter.Write(configuration, runId, receipt);
+            }
+            catch (Exception exception) when (IsReceiptReportingFailure(exception))
             {
                 WriteFallbackReceipt(
                     configuration,
@@ -1165,10 +1187,10 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
                     }
                 );
             }
-            catch (Exception fallbackException) when (fallbackException is AssetCtlException or IOException)
-            {
-                // A provenance sink must not replace the provider, validation, budget, or publication failure.
-            }
+        }
+        catch (Exception reportingFailure) when (IsReceiptReportingFailure(reportingFailure))
+        {
+            // A provenance sink must not replace the provider, validation, budget, or publication failure.
         }
     }
 
@@ -1323,9 +1345,19 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
             AssetCtlException { ExitCode: 6 } => "spending-policy-failed",
             AssetCtlException { ExitCode: 7 } => "integrity-or-concurrency-policy-failed",
             AssetCtlException { ExitCode: 8 } => "lifecycle-policy-failed",
-            IOException => "local-io-failed",
+            IOException or UnauthorizedAccessException => "local-io-failed",
             _ => "operation-failed",
         };
+
+    // Receipts are provenance about an outcome that already exists: a committed publication or an operation failure.
+    // Any sink failure is therefore absorbed here, except cancellation and process-fatal failures, which keep their
+    // command-boundary policy. A concrete-type filter (AssetCtlException or IOException) is not enough: on Linux a
+    // permission-denied sink raises UnauthorizedAccessException, which would escape and replace the real outcome
+    // with exit 1.
+    // SCOPE: only receipt construction, candidate retention, and the two receipt sinks use this filter; operation
+    // failures keep their own narrow filters.
+    private static bool IsReceiptReportingFailure(Exception exception) =>
+        BestEffortLoggerFactory.IsNonfatal(exception) && exception is not OperationCanceledException;
 
     private static string ProviderFailureDiagnostic(ProviderErrorCategory category) =>
         category switch
@@ -1607,17 +1639,20 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
         }
     }
 
+    // retained_path names only a candidate file RetainFailureCandidates actually wrote; reporting the planned path
+    // after a retention failure would claim retained evidence that does not exist.
     private static IEnumerable<object> FailureReceiptCandidates(
         EffectiveConfiguration configuration,
         string runId,
-        IReadOnlyList<ReceiptCandidateEvidence> candidates
+        IReadOnlyList<ReceiptCandidateEvidence> candidates,
+        HashSet<int> retained
     ) =>
         candidates.Select(
             (item, index) =>
                 new
                 {
                     item.Candidate.CreationOrder,
-                    retained_path = configuration.Policy.RetainUnselectedCandidates
+                    retained_path = retained.Contains(index)
                         ? FailureCandidatePath(configuration, runId, item.Candidate, index)
                         : null,
                     sha256 = Convert.ToHexStringLower(SHA256.HashData(item.Candidate.Bytes)),
@@ -1630,27 +1665,38 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
                 }
         );
 
-    private static void RetainFailureCandidates(
+    // Returns the candidate indices whose bytes were written. Retention is part of the best-effort failure receipt:
+    // it stops at the first reporting failure instead of throwing, so the receipt (with hashes and attempt evidence)
+    // is still written and the caller's original refusal is the exception that propagates.
+    private static HashSet<int> RetainFailureCandidates(
         EffectiveConfiguration configuration,
         string runId,
         IReadOnlyList<ReceiptCandidateEvidence> candidates
     )
     {
+        HashSet<int> retained = [];
         if (!configuration.Policy.RetainUnselectedCandidates)
         {
-            return;
+            return retained;
         }
 
-        for (int index = 0; index < candidates.Count; index++)
+        try
         {
-            ReceiptCandidateEvidence item = candidates[index];
-            string path = Path.Combine(
-                configuration.RepositoryRoot,
-                FailureCandidatePath(configuration, runId, item.Candidate, index)
-            );
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            File.WriteAllBytes(path, item.Candidate.Bytes);
+            for (int index = 0; index < candidates.Count; index++)
+            {
+                ReceiptCandidateEvidence item = candidates[index];
+                string path = Path.Combine(
+                    configuration.RepositoryRoot,
+                    FailureCandidatePath(configuration, runId, item.Candidate, index)
+                );
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                File.WriteAllBytes(path, item.Candidate.Bytes);
+                retained.Add(index);
+            }
         }
+        catch (Exception exception) when (IsReceiptReportingFailure(exception)) { }
+
+        return retained;
     }
 
     private static string FailureCandidatePath(
