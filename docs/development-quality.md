@@ -86,8 +86,6 @@ Mutation testing is intentionally outside the fast gate. Run it when simulation 
 
 Stryker is pinned but has no mutation-score threshold until an evidence-based baseline exists.
 
-Mutation runs filter out tests marked `[Trait("Mutation", "Excluded")]` through `test-case-filter` in `stryker-config.json`. The canonical gate still runs them. Reserve the trait for maximum-shape tests whose coverage-capture cost is measured as dominant, such as the 109 MB compact-save envelope test ([stryker-net#3878](https://github.com/stryker-mutator/stryker-net/issues/3878)); mutants that only such a test would kill are reported as surviving or uncovered instead of being hidden.
-
 ## Testing framework availability
 
 xUnit supports ordinary .NET tests; vendored GdUnit4 runs current Godot integration. The [architecture-testing admission](dependency-admission/architecture-testing.md) adds CsCheck for bounded scheduler/power/shield invariants and ArchUnitNET for durable namespace rules beyond the project graph. Specialized behavioral and IL probes remain alongside them. Both packages stay Core-test-only.
