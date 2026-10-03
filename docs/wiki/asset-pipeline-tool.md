@@ -6,7 +6,7 @@ description: 'Implementation specification for a configuration-driven AI-assiste
 doc_type: 'spec'
 status: 'active'
 created: '2026-09-01'
-updated: '2026-09-30'
+updated: '2026-10-03'
 reviewed: '2026-09-26'
 owner: 'project-maintainers'
 consumer: 'agent'
@@ -40,6 +40,8 @@ license: 'MIT'
 Date: 2026-09-01
 
 Contract amendment — 2026-09-30: reconcile selected-byte admission, lifecycle commitment, publication recovery ownership, and diagnostic/result failure disposition with the bounded corrections under ADRs 0008 and 0017. This amendment changes ignored local recovery compatibility and failure reporting; it does not change gameplay, saves, manifest or receipt formats, admission/spend/rights policy, or owner-controlled lifecycle authority. It is not full verification or live-provider qualification.
+
+Contract amendment — 2026-10-03: qualify the native filesystem boundary as Linux x86-64 and require refusal with exit code `7` on any other operating system or process architecture before native access. This amendment does not change any other guarantee, limit, format, or exit-code meaning, and it is not qualification of any other operating system or architecture.
 
 ## Executive summary
 
@@ -1335,7 +1337,7 @@ Legacy version `0` journals lack that ownership evidence. They MUST be refused a
 
 Lifecycle replacement MUST bind the manifest parent and regular-file identity, compare its revision and serialized semantic snapshot, and validate a staged replacement before its final descriptor-relative rename. Approval MUST validate integrity and mechanical/approval policy against one immutable selected-byte snapshot, then recheck the named selected identity and bytes before committing. Successful manifest rename is the lifecycle commitment boundary; later diagnostics or cleanup MUST NOT turn an applied transition into refusal. Precommit stage creation, write, flush, or close failure MUST preserve the original manifest and primary failure, and cleanup MUST remove only the owned stage.
 
-These boundaries implement recoverable paired publication on Linux using `openat`, `statx`, descriptor-relative operations, and mounted procfs, with locks for cooperating writers. They do not promise simultaneous atomic replacement of two files, universal sudden-power-loss durability, or an atomic revision compare-and-swap against arbitrary same-user writers. Interrupted or unsafe publication can retain a partial pair and recovery evidence; failure reporting MUST state only the disposition actually established. [ADR 0017](../adr/0017-generate-assets-outside-the-game-through-bounded-validated-publication.md) owns this architectural boundary.
+These boundaries implement recoverable paired publication on Linux x86-64 using `openat`, `statx`, descriptor-relative operations, and mounted procfs, with locks for cooperating writers. Linux x86-64 — a Linux operating system with .NET process architecture `X64` — is the only supported platform for these native filesystem boundaries. On any other operating system or process architecture the tool MUST refuse with exit code `7` before any native filesystem operation, rather than emulating or reinterpreting the native ABI; supporting another platform requires equivalent safety and recovery evidence. These boundaries do not promise simultaneous atomic replacement of two files, universal sudden-power-loss durability, or an atomic revision compare-and-swap against arbitrary same-user writers. Interrupted or unsafe publication can retain a partial pair and recovery evidence; failure reporting MUST state only the disposition actually established. [ADR 0017](../adr/0017-generate-assets-outside-the-game-through-bounded-validated-publication.md) owns this architectural boundary.
 
 The tool MUST NOT touch unrelated Godot files or `.godot/imported` state.
 
