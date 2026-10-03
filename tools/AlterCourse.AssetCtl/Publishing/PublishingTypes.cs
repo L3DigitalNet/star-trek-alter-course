@@ -39,7 +39,7 @@ internal static partial class PublishingTypes
 
             public static DirectoryHandle OpenExisting(string path, string field)
             {
-                RequireLinux(field);
+                RequireSupportedPlatform(field);
                 string absolute = System.IO.Path.GetFullPath(path);
                 int descriptor = Open("/", OpenDirectory | OpenNoFollow | OpenCloseOnExec, 0);
                 if (descriptor < 0)
@@ -289,7 +289,7 @@ internal static partial class PublishingTypes
 
         public static FileStream OpenLockedLeaf(string directory, string leaf, string field)
         {
-            RequireLinux(field);
+            RequireSupportedPlatform(field);
 
             int directoryDescriptor = Open(directory, OpenDirectory | OpenNoFollow | OpenCloseOnExec, 0);
             if (directoryDescriptor < 0)
@@ -342,6 +342,7 @@ internal static partial class PublishingTypes
 
         private static FileIdentity Identity(SafeFileHandle handle, bool directory = false)
         {
+            RequireSupportedPlatform("Lifecycle evidence");
             if (
                 Statx(handle, "", 0x1000, 0x7FF, out FileStat status) != 0
                 || (status.Mask & 0x103) != 0x103
@@ -384,11 +385,34 @@ internal static partial class PublishingTypes
             out FileStat status
         );
 
-        private static void RequireLinux(string field)
+        // Admission for every libc call in StateFile. OpenExisting and OpenLockedLeaf are the only
+        // descriptor sources (DirectoryHandle's constructor is private), and Identity guards statx
+        // for callers holding an arbitrary FileStream, so each native call is reached only after
+        // this check. A new native entry point must call it before its first libc call.
+        private static void RequireSupportedPlatform(string field) =>
+            RequireSupportedPlatform(field, OperatingSystem.IsLinux(), RuntimeInformation.ProcessArchitecture);
+
+        // The open-flag constants at the top of StateFile are the Linux x86-64 (asm-generic) values.
+        // On Linux Arm and Arm64, 0x10000 and 0x20000 mean O_DIRECT and O_LARGEFILE, so the same
+        // calls would succeed while silently dropping O_DIRECTORY and O_NOFOLLOW: a symlink
+        // substitution would then be followed instead of refused. Admitting only the validated
+        // ABI turns that silent loss into a refusal. ProcessArchitecture, not OSArchitecture, is
+        // the ABI that libc is called through (an x64 process under emulation uses x64 headers).
+        // Per-architecture constant tables were rejected: no other ABI is executed or tested.
+        internal static void RequireSupportedPlatform(string field, bool isLinux, Architecture processArchitecture)
         {
-            if (!OperatingSystem.IsLinux())
+            if (!isLinux)
             {
                 throw new AssetCtlException($"{field}: secure descriptor-bound state access requires Linux.", 7);
+            }
+
+            if (processArchitecture != Architecture.X64)
+            {
+                throw new AssetCtlException(
+                    $"{field}: secure descriptor-bound state access requires an x64 process; "
+                        + $"{processArchitecture} is not a validated native ABI.",
+                    7
+                );
             }
         }
 
