@@ -141,8 +141,7 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
                 commit
             );
         }
-        catch (Exception exception)
-            when (!commit.IsCommitted && exception is AssetCtlException or ProviderException or IOException)
+        catch (Exception exception) when (!commit.IsCommitted && IsGenerationOperationFailure(exception))
         {
             WriteFailureReceiptUnlessWritten(
                 configuration,
@@ -156,6 +155,14 @@ internal sealed class GenerationOrchestrator(AdapterRegistry adapters, AssetRout
             throw;
         }
     }
+
+    // Publish's pre-commit steps (candidate retention, manifest currency check) run after provider spend, so a
+    // failure this filter rejects leaves billed attempts with no failure receipt. Linux EACCES from path-based
+    // File/Directory calls is UnauthorizedAccessException, not IOException, and must be listed explicitly. The list
+    // stays closed rather than reusing IsReceiptReportingFailure: any other exception is an unexpected internal
+    // failure, not an operation failure, and must not be reclassified. Callers rethrow, so exit codes are unchanged.
+    private static bool IsGenerationOperationFailure(Exception exception) =>
+        exception is AssetCtlException or ProviderException or IOException or UnauthorizedAccessException;
 
     private GenerationPlan BuildPlan(EffectiveConfiguration configuration, AssetRequest request, bool offline)
     {
